@@ -39,7 +39,7 @@ struct squat_trie_build_context {
 	struct dotlock *dotlock;
 
 	uint32_t first_uid;
-	unsigned int compress_nodes:1;
+	bool compress_nodes:1;
 };
 
 struct squat_trie_iterate_node {
@@ -163,11 +163,7 @@ static void squat_trie_close_fd(struct squat_trie *trie)
 		trie->mmap_base = NULL;
 		trie->mmap_size = 0;
 	}
-	if (trie->fd != -1) {
-		if (close(trie->fd) < 0)
-			i_error("close(%s) failed: %m", trie->path);
-		trie->fd = -1;
-	}
+	i_close_fd_path(&trie->fd, trie->path);
 }
 
 static void squat_trie_close(struct squat_trie *trie)
@@ -336,7 +332,7 @@ static int squat_trie_lock(struct squat_trie *trie, int lock_type,
 }
 
 static void
-node_make_squential(struct squat_trie *trie, struct squat_node *node, int level)
+node_make_sequential(struct squat_trie *trie, struct squat_node *node, int level)
 {
 	const unsigned int alloc_size =
 		NODE_CHILDREN_ALLOC_SIZE(SEQUENTIAL_COUNT);
@@ -377,7 +373,7 @@ node_add_child(struct squat_trie *trie, struct squat_node *node,
 	i_assert(node->leaf_string_length == 0);
 
 	if (node->want_sequential) {
-		node_make_squential(trie, node, level);
+		node_make_sequential(trie, node, level);
 
 		if (chr < SEQUENTIAL_COUNT)
 			return chr;
@@ -661,7 +657,7 @@ node_split_string(struct squat_trie_build_context *ctx, struct squat_node *node)
 
 	/* make a copy of the leaf string and convert to normal node by
 	   removing it. */
-	str = t_malloc(leafstr_len);
+	str = t_malloc_no0(leafstr_len);
 	if (!NODE_IS_DYNAMIC_LEAF(node))
 		memcpy(str, node->children.static_leaf_string, leafstr_len);
 	else {
@@ -895,7 +891,7 @@ squat_data_normalize(struct squat_trie *trie, const unsigned char *data,
 	unsigned char *dest;
 	unsigned int i;
 
-	dest = t_malloc(size);
+	dest = t_malloc_no0(size);
 	for (i = 0; i < size; i++) {
 		if (data[i] == replacement_utf8[0] && i + 2 < size &&
 		    data[i+1] == replacement_utf8[1] &&
@@ -925,7 +921,7 @@ squat_trie_build_more_real(struct squat_trie_build_context *ctx,
 
 	uid = uid * 2 + (type == SQUAT_INDEX_TYPE_HEADER ? 1 : 0);
 
-	char_lengths = t_malloc(size);
+	char_lengths = t_malloc_no0(size);
 	data = squat_data_normalize(trie, input, size);
 	for (i = 0; i < size; i++) {
 		char_lengths[i] = uni_utf8_char_bytes(input[i]);
@@ -1642,7 +1638,7 @@ static int squat_trie_write(struct squat_trie_build_context *ctx)
 			}
 		}
 
-		output = o_stream_create_fd(fd, 0, FALSE);
+		output = o_stream_create_fd(fd, 0);
 		o_stream_cork(output);
 		o_stream_nsend(output, &trie->hdr, sizeof(trie->hdr));
 	} else {
@@ -1656,7 +1652,7 @@ static int squat_trie_write(struct squat_trie_build_context *ctx)
 			if (squat_trie_write_lock(ctx) < 0)
 				return -1;
 		}
-		output = o_stream_create_fd(trie->fd, 0, FALSE);
+		output = o_stream_create_fd(trie->fd, 0);
 		o_stream_cork(output);
 
 		if (trie->hdr.used_file_size != 0)
@@ -1682,7 +1678,7 @@ static int squat_trie_write(struct squat_trie_build_context *ctx)
 		(void)o_stream_seek(output, 0);
 		o_stream_nsend(output, &trie->hdr, sizeof(trie->hdr));
 	}
-	if (o_stream_nfinish(output) < 0) {
+	if (o_stream_finish(output) < 0) {
 		i_error("write(%s) failed: %s", path,
 			o_stream_get_error(output));
 		ret = -1;

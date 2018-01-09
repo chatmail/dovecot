@@ -13,7 +13,13 @@
 
 #define STRCONCAT_BUFSIZE 512
 
+enum _str_trim_sides {
+	STR_TRIM_LEFT = BIT(0),
+	STR_TRIM_RIGHT = BIT(1),
+};
+
 const unsigned char uchar_nul = '\0';
+const unsigned char *uchar_empty_ptr = &uchar_nul;
 
 volatile int timing_safety_unoptimization;
 
@@ -83,10 +89,8 @@ char *p_strndup(pool_t pool, const void *str, size_t max_chars)
 	char *mem;
 	size_t len;
 
+	i_assert(str != NULL);
 	i_assert(max_chars != (size_t)-1);
-
-	if (str == NULL)
-		return NULL;
 
 	len = 0;
 	while (len < max_chars && ((const char *) str)[len] != '\0')
@@ -172,8 +176,7 @@ char *vstrconcat(const char *str1, va_list args, size_t *ret_len)
         char *temp;
 	size_t bufsize, i, len;
 
-	if (str1 == NULL)
-		return NULL;
+	i_assert(str1 != NULL);
 
 	str = str1;
 	bufsize = STRCONCAT_BUFSIZE;
@@ -208,12 +211,13 @@ char *p_strconcat(pool_t pool, const char *str1, ...)
 	char *temp, *ret;
         size_t len;
 
+	i_assert(str1 != NULL);
+
 	va_start(args, str1);
 
 	if (pool->datastack_pool) {
 		ret = vstrconcat(str1, args, &len);
-		if (ret != NULL)
-			t_buffer_alloc(len);
+		t_buffer_alloc(len);
 	} else {
 		temp = vstrconcat(str1, args, &len);
 		ret = p_malloc(pool, len);
@@ -246,6 +250,7 @@ const char *t_strdup_until(const void *start, const void *end)
 
 const char *t_strndup(const void *str, size_t max_chars)
 {
+	i_assert(str != NULL);
 	return p_strndup(unsafe_data_stack_pool, str, max_chars);
 }
 
@@ -272,11 +277,12 @@ const char *t_strconcat(const char *str1, ...)
 	const char *ret;
         size_t len;
 
+	i_assert(str1 != NULL);
+
 	va_start(args, str1);
 
 	ret = vstrconcat(str1, args, &len);
-	if (ret != NULL)
-		t_buffer_alloc(len);
+	t_buffer_alloc(len);
 
 	va_end(args);
         return ret;
@@ -303,7 +309,7 @@ const char *t_str_replace(const char *str, char from, char to)
 		return str;
 
 	len = strlen(str);
-	out = t_malloc(len + 1);
+	out = t_malloc_no0(len + 1);
 	for (i = 0; i < len; i++) {
 		if (str[i] == from)
 			out[i] = to;
@@ -360,42 +366,70 @@ const char *t_str_ucase(const char *str)
 	return str_ucase(t_strdup_noconst(str));
 }
 
-#if 0 /* FIXME: wait for v2.3 due to a collision with pigeonhole */
-const char *t_str_trim(const char *str, const char *chars)
+static void str_trim_parse(const char *str,
+	const char *chars, enum _str_trim_sides sides,
+	const char **begin_r, const char **end_r)
 {
-	const char *p, *pend, *begin;
+	const char *p, *pend, *begin, *end;
+
+	*begin_r = *end_r = NULL;
 
 	pend = str + strlen(str);
 	if (pend == str)
-		return "";
+		return;
 
 	p = str;
-	while (p < pend && strchr(chars, *p) != NULL)
-		p++;
+	if ((sides & STR_TRIM_LEFT) != 0) {
+		while (p < pend && strchr(chars, *p) != NULL)
+			p++;
+		if (p == pend)
+			return;
+	}
 	begin = p;
 
-	p = pend - 1;
-	while (p > begin && strchr(chars, *p) != NULL)
-		p--;
+	p = pend;
+	if ((sides & STR_TRIM_RIGHT) != 0) {
+		while (p > begin && strchr(chars, *(p-1)) != NULL)
+			p--;
+		if (p == begin)
+			return;
+	}
+	end = p;
 
-	if (p <= begin)
-		return "";
-	return t_strdup_until(begin, p+1);
+	*begin_r = begin;
+	*end_r = end;
 }
-#endif
+
+const char *t_str_trim(const char *str, const char *chars)
+{
+	const char *begin, *end;
+
+	str_trim_parse(str, chars,
+		STR_TRIM_LEFT | STR_TRIM_RIGHT, &begin, &end);
+	if (begin == NULL)
+		return "";
+	return t_strdup_until(begin, end);
+}
+
+const char *p_str_trim(pool_t pool, const char *str, const char *chars)
+{
+	const char *begin, *end;
+
+	str_trim_parse(str, chars,
+		STR_TRIM_LEFT | STR_TRIM_RIGHT, &begin, &end);
+	if (begin == NULL)
+		return "";
+	return p_strdup_until(pool, begin, end);
+}
 
 const char *str_ltrim(const char *str, const char *chars)
 {
-	const char *p;
+	const char *begin, *end;
 
-	if (*str == '\0')
+	str_trim_parse(str, chars, STR_TRIM_LEFT, &begin, &end);
+	if (begin == NULL)
 		return "";
-
-	p = str;
-	while (*p != '\0' && strchr(chars, *p) != NULL)
-		p++;
-
-	return p;
+	return begin;
 }
 
 const char *t_str_ltrim(const char *str, const char *chars)
@@ -403,20 +437,29 @@ const char *t_str_ltrim(const char *str, const char *chars)
 	return t_strdup(str_ltrim(str, chars));
 }
 
+const char *p_str_ltrim(pool_t pool, const char *str, const char *chars)
+{
+	return p_strdup(pool, str_ltrim(str, chars));
+}
+
 const char *t_str_rtrim(const char *str, const char *chars)
 {
-	const char *p, *pend;
+	const char *begin, *end;
 
-	pend = str + strlen(str);
-	if (pend == str)
+	str_trim_parse(str, chars, STR_TRIM_RIGHT, &begin, &end);
+	if (begin == NULL)
 		return "";
+	return t_strdup_until(begin, end);
+}
 
-	p = pend - 1;
-	while (p > str && strchr(chars, *p) != NULL)
-		p--;
-	if (p <= str)
+const char *p_str_rtrim(pool_t pool, const char *str, const char *chars)
+{
+	const char *begin, *end;
+
+	str_trim_parse(str, chars, STR_TRIM_RIGHT, &begin, &end);
+	if (begin == NULL)
 		return "";
-	return t_strdup_until(str, p+1);
+	return p_strdup_until(pool, begin, end);
 }
 
 int null_strcmp(const char *s1, const char *s2)
@@ -456,19 +499,9 @@ int i_memcasecmp(const void *p1, const void *p2, size_t size)
         return 0;
 }
 
-int bsearch_strcmp(const char *key, const char *const *member)
-{
-	return strcmp(key, *member);
-}
-
 int i_strcmp_p(const char *const *p1, const char *const *p2)
 {
 	return strcmp(*p1, *p2);
-}
-
-int bsearch_strcasecmp(const char *key, const char *const *member)
-{
-	return strcasecmp(key, *member);
 }
 
 int i_strcasecmp_p(const char *const *p1, const char *const *p2)
@@ -492,13 +525,11 @@ bool mem_equals_timing_safe(const void *p1, const void *p2, size_t size)
 }
 
 static char **
-split_str(pool_t pool, const char *data, const char *separators, int spaces)
+split_str_slow(pool_t pool, const char *data, const char *separators, bool spaces)
 {
         char **array;
 	char *str;
         unsigned int count, alloc_count, new_alloc_count;
-
-	i_assert(*separators != '\0');
 
 	if (spaces) {
 		/* skip leading separators */
@@ -549,6 +580,51 @@ split_str(pool_t pool, const char *data, const char *separators, int spaces)
         return array;
 }
 
+static char **
+split_str_fast(pool_t pool, const char *data, char sep)
+{
+	char **array, *str;
+	unsigned int count, alloc_count, new_alloc_count;
+
+	if (*data == '\0')
+		return p_new(pool, char *, 1);
+
+	str = p_strdup(pool, data);
+
+	alloc_count = 32;
+	array = p_new(pool, char *, alloc_count);
+
+	array[0] = str; count = 1;
+	while ((str = strchr(str, sep)) != NULL) {
+		/* separator found */
+		if (count+1 >= alloc_count) {
+			new_alloc_count = nearest_power(alloc_count+1);
+			array = p_realloc(pool, array,
+					  sizeof(char *) * alloc_count,
+					  sizeof(char *) *
+					  new_alloc_count);
+			alloc_count = new_alloc_count;
+		}
+		*str++ = '\0';
+		array[count++] = str;
+	}
+	i_assert(count < alloc_count);
+	i_assert(array[count] == NULL);
+
+	return array;
+}
+
+static char **
+split_str(pool_t pool, const char *data, const char *separators, bool spaces)
+{
+	i_assert(*separators != '\0');
+
+	if (separators[1] == '\0' && !spaces)
+		return split_str_fast(pool, data, separators[0]);
+	else
+		return split_str_slow(pool, data, separators, spaces);
+}
+
 const char **t_strsplit(const char *data, const char *separators)
 {
 	return (const char **)split_str(unsafe_data_stack_pool, data,
@@ -570,47 +646,6 @@ char **p_strsplit_spaces(pool_t pool, const char *data,
 			 const char *separators)
 {
 	return split_str(pool, data, separators, TRUE);
-}
-
-const char **t_strsplit_tab(const char *data)
-{
-        const char **array;
-	char *dest;
-        unsigned int i, array_idx, array_size, dest_size;
-
-	if (*data == '\0')
-		return t_new(const char *, 1);
-
-	array_size = 1;
-	dest_size = 128;
-	dest = t_buffer_get(dest_size+1);
-	for (i = 0; data[i] != '\0'; i++) {
-		if (i >= dest_size) {
-			dest_size = nearest_power(dest_size+1);
-			dest = t_buffer_reget(dest, dest_size+1);
-		}
-		if (data[i] != '\t')
-			dest[i] = data[i];
-		else {
-			dest[i] = '\0';
-			array_size++;
-		}
-	}
-	i_assert(i <= dest_size);
-	dest[i] = '\0';
-	t_buffer_alloc(i+1);
-	dest_size = i;
-
-	array = t_new(const char *, array_size + 1);
-	array[0] = dest; array_idx = 1;
-
-	for (i = 0; i < dest_size; i++) {
-		if (dest[i] == '\0')
-			array[array_idx++] = dest+i+1;
-	}
-	i_assert(array_idx == array_size);
-	array[array_idx] = NULL;
-        return array;
 }
 
 void p_strsplit_free(pool_t pool, char **arr)
@@ -653,7 +688,7 @@ p_strarray_join_n(pool_t pool, const char *const *arr, unsigned int arr_len,
 			str = t_buffer_reget(str, alloc_len);
 		}
 
-		if (pos != 0) {
+		if (i != 0) {
 			memcpy(str + pos, separator, sep_len);
 			pos += sep_len;
 		}
@@ -733,7 +768,7 @@ const char **p_strarray_dup(pool_t pool, const char *const *arr)
 
 const char *dec2str(uintmax_t number)
 {
-	return dec2str_buf(t_malloc(MAX_INT_STRLEN), number);
+	return dec2str_buf(t_malloc_no0(MAX_INT_STRLEN), number);
 }
 
 char *dec2str_buf(char buffer[STATIC_ARRAY MAX_INT_STRLEN], uintmax_t number)

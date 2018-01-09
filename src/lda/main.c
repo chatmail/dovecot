@@ -4,10 +4,9 @@
 #include "lib-signals.h"
 #include "ioloop.h"
 #include "env-util.h"
-#include "fd-set-nonblock.h"
 #include "istream.h"
 #include "istream-seekable.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "safe-mkstemp.h"
 #include "eacces-error.h"
 #include "ipwd.h"
@@ -17,6 +16,7 @@
 #include "unichar.h"
 #include "rfc822-parser.h"
 #include "message-address.h"
+#include "smtp-address.h"
 #include "settings-parser.h"
 #include "master-service.h"
 #include "master-service-settings.h"
@@ -26,12 +26,14 @@
 #include "mail-deliver.h"
 #include "mail-send.h"
 #include "mbox-from.h"
+#include "smtp-submit-settings.h"
 #include "lda-settings.h"
 
 #include <stdio.h>
 #include <sysexits.h>
 
-#define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
+#define DEFAULT_ENVELOPE_SENDER \
+	SMTP_ADDRESS_LITERAL("MAILER-DAEMON", NULL)
 
 /* After buffer grows larger than this, create a temporary file to /tmp
    where to read the mail. */
@@ -42,46 +44,6 @@ static const char *wanted_headers[] = {
 	NULL
 };
 
-static const char *escape_local_part(const char *local_part)
-{
-	const char *p;
-
-	/* if local_part isn't dot-atom-text, we need to return quoted-string
-	   dot-atom-text = 1*atext *("." 1*atext) */
-	for (p = local_part; *p != '\0'; p++) {
-		if (!IS_ATEXT(*p) && *p != '.')
-			break;
-	}
-	if (*p != '\0' || *local_part == '.' ||
-	    (p != local_part && p[-1] == '.'))
-		local_part = t_strdup_printf("\"%s\"", str_escape(local_part));
-	return local_part;
-}
-
-static const char *address_sanitize(const char *address)
-{
-	struct message_address *addr;
-	const char *ret, *mailbox;
-	pool_t pool;
-
-	pool = pool_alloconly_create("address sanitizer", 256);
-	addr = message_address_parse(pool, (const unsigned char *)address,
-				     strlen(address), 1, FALSE);
-
-	if (addr == NULL || addr->mailbox == NULL || addr->domain == NULL ||
-	    *addr->mailbox == '\0')
-		ret = DEFAULT_ENVELOPE_SENDER;
-	else {
-		mailbox = escape_local_part(addr->mailbox);
-		if (*addr->domain == '\0')
-			ret = t_strdup(mailbox);
-		else
-			ret = t_strdup_printf("%s@%s", mailbox, addr->domain);
-	}
-	pool_unref(&pool);
-	return ret;
-}
-
 static int seekable_fd_callback(const char **path_r, void *context)
 {
 	struct mail_deliver_context *ctx = context;
@@ -89,7 +51,7 @@ static int seekable_fd_callback(const char **path_r, void *context)
 	int fd;
 
 	path = t_str_new(128);
-	mail_user_set_get_temp_prefix(path, ctx->dest_user->set);
+	mail_user_set_get_temp_prefix(path, ctx->rcpt_user->set);
 	fd = safe_mkstemp(path, 0600, (uid_t)-1, (gid_t)-1);
 	if (fd == -1) {
 		i_error("safe_mkstemp(%s) failed: %m", str_c(path));
@@ -113,6 +75,7 @@ create_raw_stream(struct mail_deliver_context *ctx,
 {
 	struct istream *input, *input2, *input_list[2];
 	const unsigned char *data;
+	const char *error;
 	char *sender = NULL;
 	size_t i, size;
 	int ret, tz;
@@ -120,14 +83,14 @@ create_raw_stream(struct mail_deliver_context *ctx,
 	*mtime_r = (time_t)-1;
 	fd_set_nonblock(fd, FALSE);
 
-	input = i_stream_create_fd(fd, 4096, FALSE);
+	input = i_stream_create_fd(fd, 4096);
 	input->blocking = TRUE;
 	/* If input begins with a From-line, drop it */
-	ret = i_stream_read_data(input, &data, &size, 5);
-	if (ret > 0 && size >= 5 && memcmp(data, "From ", 5) == 0) {
+	ret = i_stream_read_bytes(input, &data, &size, 5);
+	if (ret > 0 && memcmp(data, "From ", 5) == 0) {
 		/* skip until the first LF */
 		i_stream_skip(input, 5);
-		while (i_stream_read_data(input, &data, &size, 0) > 0) {
+		while (i_stream_read_more(input, &data, &size) > 0) {
 			for (i = 0; i < size; i++) {
 				if (data[i] == '\n')
 					break;
@@ -142,10 +105,16 @@ create_raw_stream(struct mail_deliver_context *ctx,
 		}
 	}
 
-	if (sender != NULL && ctx->src_envelope_sender == NULL) {
+	if (sender != NULL && ctx->mail_from == NULL) {
+		struct smtp_address *mail_from = NULL;
 		/* use the envelope sender from From_-line, but only if it
 		   hasn't been specified with -f already. */
-		ctx->src_envelope_sender = p_strdup(ctx->pool, sender);
+		if (smtp_address_parse_mailbox(ctx->pool,
+			sender, 0, &mail_from, &error) < 0) {
+			i_warning("Failed to parse address from `From_'-line: %s",
+				  error);
+		}
+		ctx->mail_from = mail_from;
 	}
 	i_free(sender);
 
@@ -172,27 +141,27 @@ lda_raw_mail_open(struct mail_deliver_context *ctx, const char *path)
 	struct mailbox_transaction_context *t;
 	struct mail *mail;
 	struct mailbox_header_lookup_ctx *headers_ctx;
+	const struct smtp_address *mail_from;
 	struct istream *input;
 	void **sets;
-	const char *envelope_sender;
 	time_t mtime;
 	int ret;
 
 	sets = master_service_settings_get_others(master_service);
 	raw_mail_user =
-		raw_storage_create_from_set(ctx->dest_user->set_info, sets[0]);
+		raw_storage_create_from_set(ctx->rcpt_user->set_info, sets[0]);
 
-	envelope_sender = ctx->src_envelope_sender != NULL ?
-		ctx->src_envelope_sender : DEFAULT_ENVELOPE_SENDER;
+	mail_from = ctx->mail_from != NULL ?
+		ctx->mail_from : DEFAULT_ENVELOPE_SENDER;
 	if (path == NULL) {
 		input = create_raw_stream(ctx, 0, &mtime);
 		i_stream_set_name(input, "stdin");
 		ret = raw_mailbox_alloc_stream(raw_mail_user, input, mtime,
-					       envelope_sender, &box);
+					       smtp_address_encode(mail_from), &box);
 		i_stream_unref(&input);
 	} else {
 		ret = raw_mailbox_alloc_path(raw_mail_user, path, (time_t)-1,
-					     envelope_sender, &box);
+					     smtp_address_encode(mail_from), &box);
 	}
 	if (ret < 0) {
 		i_fatal("Can't open delivery mail as raw: %s",
@@ -200,7 +169,7 @@ lda_raw_mail_open(struct mail_deliver_context *ctx, const char *path)
 	}
 	mail_user_unref(&raw_mail_user);
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	headers_ctx = mailbox_header_lookup_init(box, wanted_headers);
 	mail = mail_alloc(t, 0, headers_ctx);
 	mailbox_header_lookup_unref(&headers_ctx);
@@ -209,27 +178,41 @@ lda_raw_mail_open(struct mail_deliver_context *ctx, const char *path)
 }
 
 static void
-lda_set_dest_addr(struct mail_deliver_context *ctx, const char *user,
-		  const char *destaddr_source)
+lda_set_rcpt_to(struct mail_deliver_context *ctx,
+		const struct smtp_address *rcpt_to, const char *user,
+		const char *rcpt_to_source)
 {
-	if (ctx->dest_addr == NULL &&
+	const char *error;
+
+	if (rcpt_to == NULL &&
 	    *ctx->set->lda_original_recipient_header != '\0') {
-		ctx->dest_addr = mail_deliver_get_address(ctx->src_mail,
+		rcpt_to = mail_deliver_get_address(ctx->src_mail,
 					ctx->set->lda_original_recipient_header);
-		destaddr_source = t_strconcat(
+		rcpt_to_source = t_strconcat(
 			ctx->set->lda_original_recipient_header, " header", NULL);
 	}
-	if (ctx->dest_addr == NULL) {
-		ctx->dest_addr = strchr(user, '@') != NULL ? user :
-			t_strconcat(user, "@", ctx->set->hostname, NULL);
-		destaddr_source = "user@hostname";
-	}
-	if (ctx->final_dest_addr == NULL)
-		ctx->final_dest_addr = ctx->dest_addr;
+	if (rcpt_to == NULL) {
+		struct smtp_address *user_addr;
 
-	if (ctx->dest_user->mail_debug) {
+		if (smtp_address_parse_username(ctx->pool, user,
+			&user_addr, &error) < 0) {
+			i_fatal_status(EX_USAGE,
+				"Cannot obtain SMTP address from username `%s': %s",
+				user, error);
+		}
+		if (user_addr->domain == NULL)
+			user_addr->domain = ctx->set->hostname;
+		rcpt_to = user_addr;
+		rcpt_to_source = "user@hostname";
+	}
+
+	ctx->rcpt_params.orcpt.addr = rcpt_to;
+	if (ctx->rcpt_to == NULL)
+		ctx->rcpt_to = rcpt_to;
+
+	if (ctx->rcpt_user->mail_debug) {
 		i_debug("Destination address: %s (source: %s)",
-			ctx->dest_addr, destaddr_source);
+			smtp_address_encode_path(rcpt_to), rcpt_to_source);
 	}
 }
 
@@ -268,6 +251,7 @@ static void print_help(void)
 int main(int argc, char *argv[])
 {
 	const struct setting_parser_info *set_roots[] = {
+		&smtp_submit_setting_parser_info,
 		&lda_setting_parser_info,
 		NULL
 	};
@@ -275,11 +259,14 @@ int main(int argc, char *argv[])
 	enum mail_storage_service_flags service_flags = 0;
 	const char *user, *errstr, *path;
 	struct lda_settings *lda_set;
+	struct smtp_submit_settings *smtp_set;
+	struct smtp_address *rcpt_to, *final_rcpt_to, *mail_from;
 	struct mail_storage_service_ctx *storage_service;
 	struct mail_storage_service_user *service_user;
 	struct mail_storage_service_input service_input;
+	const struct var_expand_table *var_table;
 	struct mail_storage *storage;
-	const char *user_source = "", *destaddr_source = "";
+	const char *user_source = "", *rcpt_to_source = "";
 	uid_t process_euid;
 	bool stderr_rejection = FALSE;
 	int ret, c;
@@ -307,23 +294,30 @@ int main(int argc, char *argv[])
 
 	master_service = master_service_init("lda",
 		MASTER_SERVICE_FLAG_STANDALONE |
-		MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR,
+		MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR |
+		MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME,
 		&argc, &argv, "a:d:ef:m:p:r:");
 
 	i_zero(&ctx);
 	ctx.session = mail_deliver_session_init();
 	ctx.pool = ctx.session->pool;
-	ctx.dest_mailbox_name = "INBOX";
-	ctx.timeout_secs = LDA_SUBMISSION_TIMEOUT_SECS;
+	ctx.rcpt_default_mailbox = "INBOX";
 	path = NULL;
 
 	user = getenv("USER");
+	mail_from = final_rcpt_to = rcpt_to = NULL;
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
 		case 'a':
 			/* original recipient address */
-			ctx.dest_addr = optarg;
-			destaddr_source = "-a parameter";
+			if (smtp_address_parse_path(ctx.pool, optarg,
+				SMTP_ADDRESS_PARSE_FLAG_ALLOW_LOCALPART |
+					SMTP_ADDRESS_PARSE_FLAG_BRACKETS_OPTIONAL,
+				&rcpt_to, &errstr) < 0) {
+				i_fatal_status(EX_USAGE,
+					"Invalid -a parameter: %s", errstr);
+			}
+			rcpt_to_source = "-a parameter";
 			break;
 		case 'd':
 			/* destination user */
@@ -335,8 +329,12 @@ int main(int argc, char *argv[])
 			break;
 		case 'f':
 			/* envelope sender address */
-			ctx.src_envelope_sender =
-				p_strdup(ctx.pool, address_sanitize(optarg));
+			if (smtp_address_parse_path(ctx.pool, optarg,
+				SMTP_ADDRESS_PARSE_FLAG_BRACKETS_OPTIONAL,
+				&mail_from, &errstr) < 0) {
+				i_fatal_status(EX_USAGE,
+					"Invalid -f parameter: %s", errstr);
+			}
 			break;
 		case 'm':
 			/* destination mailbox.
@@ -347,16 +345,25 @@ int main(int argc, char *argv[])
 					i_fatal("Mailbox name not UTF-8: %s",
 						optarg);
 				}
-				ctx.dest_mailbox_name = optarg;
+				ctx.rcpt_default_mailbox = optarg;
 			} T_END;
 			break;
 		case 'p':
 			/* input path */
-			path = t_abspath(optarg);
+			if (t_abspath(optarg, &path, &errstr) < 0) {
+				i_fatal("t_abspath(%s) failed: %s",
+					optarg, errstr);
+			}
 			break;
 		case 'r':
 			/* final recipient address */
-			ctx.final_dest_addr = optarg;
+			if (smtp_address_parse_path(ctx.pool, optarg,
+				SMTP_ADDRESS_PARSE_FLAG_ALLOW_LOCALPART |
+				SMTP_ADDRESS_PARSE_FLAG_BRACKETS_OPTIONAL,
+				&final_rcpt_to, &errstr) < 0) {
+				i_fatal_status(EX_USAGE,
+					"Invalid -a parameter: %s", errstr);
+			}
 			break;
 		default:
 			print_help();
@@ -413,7 +420,7 @@ int main(int argc, char *argv[])
 	   _lookup() and _next(), but don't bother) */
 	ctx.delivery_time_started = ioloop_timeval;
 	ret = mail_storage_service_lookup_next(storage_service, &service_input,
-					       &service_user, &ctx.dest_user,
+					       &service_user, &ctx.rcpt_user,
 					       &errstr);
 	if (ret <= 0) {
 		if (ret < 0)
@@ -424,19 +431,33 @@ int main(int argc, char *argv[])
 #ifdef SIGXFSZ
         lib_signals_ignore(SIGXFSZ, TRUE);
 #endif
-	lda_set = mail_storage_service_user_get_set(service_user)[1];
-	settings_var_expand(&lda_setting_parser_info, lda_set,
-			    ctx.dest_user->pool,
-			    mail_user_var_expand_table(ctx.dest_user));
+	var_table = mail_user_var_expand_table(ctx.rcpt_user);
+	smtp_set = mail_storage_service_user_get_set(service_user)[1];
+	lda_set = mail_storage_service_user_get_set(service_user)[2];
+	ret = settings_var_expand(
+		&lda_setting_parser_info,
+		lda_set, ctx.rcpt_user->pool, var_table,
+		&errstr);
+	if (ret > 0) {
+		ret = settings_var_expand(
+			&smtp_submit_setting_parser_info,
+			smtp_set, ctx.rcpt_user->pool, var_table,
+			&errstr);
+	}
+	if (ret <= 0)
+		i_fatal("Failed to expand settings: %s", errstr);
 	ctx.set = lda_set;
+	ctx.smtp_set = smtp_set;
 
-	if (ctx.dest_user->mail_debug && *user_source != '\0') {
+	if (ctx.rcpt_user->mail_debug && *user_source != '\0') {
 		i_debug("userdb lookup skipped, username taken from %s",
 			user_source);
 	}
 
 	ctx.src_mail = lda_raw_mail_open(&ctx, path);
-	lda_set_dest_addr(&ctx, user, destaddr_source);
+	ctx.mail_from = mail_from;
+	ctx.rcpt_to = final_rcpt_to;
+	lda_set_rcpt_to(&ctx, rcpt_to, user, rcpt_to_source);
 
 	if (mail_deliver(&ctx, &storage) < 0) {
 		if (ctx.tempfail_error != NULL) {
@@ -472,7 +493,7 @@ int main(int argc, char *argv[])
 
 		if (stderr_rejection)
 			return EX_NOPERM;
-		ret = mail_send_rejection(&ctx, user, errstr);
+		ret = mail_send_rejection(&ctx, ctx.rcpt_to, errstr);
 		if (ret != 0)
 			return ret < 0 ? EX_TEMPFAIL : ret;
 		/* ok, rejection sent */
@@ -488,7 +509,7 @@ int main(int argc, char *argv[])
 		mailbox_free(&box);
 	}
 
-	mail_user_unref(&ctx.dest_user);
+	mail_user_unref(&ctx.rcpt_user);
 	mail_deliver_session_deinit(&ctx.session);
 
 	mail_storage_service_user_unref(&service_user);

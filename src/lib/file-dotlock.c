@@ -21,7 +21,7 @@
 #define DEFAULT_LOCK_SUFFIX ".lock"
 
 /* 0.1 .. 0.2msec */
-#define LOCK_RANDOM_USLEEP_TIME (100000 + (unsigned int)rand() % 100000)
+#define LOCK_RANDOM_USLEEP_TIME (100000 + (unsigned int)i_rand() % 100000)
 /* Maximum 3 second wait between dotlock checks */
 #define LOCK_MAX_WAIT_USECS (1000000 * 3)
 
@@ -70,10 +70,10 @@ struct lock_info {
 	time_t last_change;
 	unsigned int wait_usecs;
 
-	unsigned int have_pid:1;
-	unsigned int pid_read:1;
-	unsigned int use_io_notify:1;
-	unsigned int lock_stated:1;
+	bool have_pid:1;
+	bool pid_read:1;
+	bool use_io_notify:1;
+	bool lock_stated:1;
 };
 
 static struct dotlock *

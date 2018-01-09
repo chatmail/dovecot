@@ -22,6 +22,7 @@ enum setting_type {
 	SET_UINT,
 	SET_UINT_OCT,
 	SET_TIME,
+	SET_TIME_MSECS,
 	SET_SIZE,
 	SET_IN_PORT, /* internet port */
 	SET_STR,
@@ -61,6 +62,10 @@ struct setting_define {
 	{ SET_TIME + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE( \
 		((struct struct_name *)0)->name, unsigned int), \
 	  #name, offsetof(struct struct_name, name), NULL }
+#define SETTING_DEFINE_STRUCT_TIME_MSECS(name, struct_name) \
+	{ SET_TIME_MSECS + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE( \
+		((struct struct_name *)0)->name, unsigned int), \
+	  #name, offsetof(struct struct_name, name), NULL }
 #define SETTING_DEFINE_STRUCT_STR(name, struct_name) \
 	{ SET_STR + COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE( \
 		((struct struct_name *)0)->name, const char *), \
@@ -82,6 +87,7 @@ struct setting_parser_info {
 	const struct setting_parser_info *parent;
 
 	bool (*check_func)(void *set, pool_t pool, const char **error_r);
+	bool (*expand_check_func)(void *set, pool_t pool, const char **error_r);
 	const struct setting_parser_info *const *dependencies;
 	struct dynamic_settings_parser *dynamic_parsers;
 
@@ -174,24 +180,26 @@ bool settings_check(const struct setting_parser_info *info, pool_t pool,
 void settings_parse_set_expanded(struct setting_parser_context *ctx,
 				 bool is_expanded);
 /* Mark all the parsed settings with given keys as being already expanded. */
-void settings_parse_set_key_expandeded(struct setting_parser_context *ctx,
-				       pool_t pool, const char *key);
-void settings_parse_set_keys_expandeded(struct setting_parser_context *ctx,
-					pool_t pool, const char *const *keys);
+void settings_parse_set_key_expanded(struct setting_parser_context *ctx,
+				     pool_t pool, const char *key);
+void settings_parse_set_keys_expanded(struct setting_parser_context *ctx,
+				      pool_t pool, const char *const *keys);
 /* Update variable string pointers to skip over the '1' or '0'.
    This is mainly useful when you want to run settings_parser_check() without
    actually knowing what the variables are. */
 void settings_parse_var_skip(struct setting_parser_context *ctx);
 /* Expand all unexpanded variables using the given table. Update the string
-   pointers so that they can be used without skipping over the '1'. */
-void settings_var_expand(const struct setting_parser_info *info,
-			 void *set, pool_t pool,
-			 const struct var_expand_table *table);
-void settings_var_expand_with_funcs(const struct setting_parser_info *info,
-				    void *set, pool_t pool,
-				    const struct var_expand_table *table,
-				    const struct var_expand_func_table *func_table,
-				    void *func_context);
+   pointers so that they can be used without skipping over the '1'.
+   Returns the same as var_expand(). */
+int settings_var_expand(const struct setting_parser_info *info,
+			void *set, pool_t pool,
+			const struct var_expand_table *table,
+			const char **error_r);
+int settings_var_expand_with_funcs(const struct setting_parser_info *info,
+				   void *set, pool_t pool,
+				   const struct var_expand_table *table,
+				   const struct var_expand_func_table *func_table,
+				   void *func_context, const char **error_r);
 /* Go through all the settings and return the first one that has an unexpanded
    setting containing the given %key. */
 bool settings_vars_have_key(const struct setting_parser_info *info, void *set,

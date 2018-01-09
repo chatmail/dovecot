@@ -29,19 +29,26 @@ void io_stream_init(struct iostream_private *stream)
 
 void io_stream_ref(struct iostream_private *stream)
 {
+	i_assert(stream->refcount > 0);
+
 	stream->refcount++;
 }
 
-void io_stream_unref(struct iostream_private *stream)
+bool io_stream_unref(struct iostream_private *stream)
 {
-	const struct iostream_destroy_callback *dc;
-
 	i_assert(stream->refcount > 0);
 	if (--stream->refcount != 0)
-		return;
+		return TRUE;
 
 	stream->close(stream, FALSE);
 	stream->destroy(stream);
+	return FALSE;
+}
+
+void io_stream_free(struct iostream_private *stream)
+{
+	const struct iostream_destroy_callback *dc;
+
 	if (array_is_created(&stream->destroy_callbacks)) {
 		array_foreach(&stream->destroy_callbacks, dc)
 			dc->callback(dc->context);
@@ -105,8 +112,11 @@ void io_stream_set_error(struct iostream_private *stream,
 void io_stream_set_verror(struct iostream_private *stream,
 			  const char *fmt, va_list args)
 {
+	/* one of the parameters may be the old stream->error, so don't free
+	   it before the new error is created. */
+	char *error = i_strdup_vprintf(fmt, args);
 	i_free(stream->error);
-	stream->error = i_strdup_vprintf(fmt, args);
+	stream->error = error;
 }
 
 const char *io_stream_get_disconnect_reason(struct istream *input,

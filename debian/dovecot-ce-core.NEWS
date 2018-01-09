@@ -1,0 +1,152 @@
+dovecot (1:2.2.21-1) unstable; urgency=medium
+
+  This release disables the dovecot.socket systemd unit by default. The unit is
+  disabled only if the dovecot.service unit is already enabled, making sure
+  that dovecot will start on system boot. If you are upgrading dovecot and
+  previously relied on dovecot.socket and dovecot.service being both enabled,
+  please re-enable dovecot.socket manually using
+
+     systemctl enable dovecot.socket
+
+  Future package updates will not disable the socket unit again. For details
+  regarding this decision, please see Debian bugs #803915 and #814999.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Fri, 19 Feb 2016 16:54:27 +0200
+
+dovecot (1:2.1.7-7) unstable; urgency=high
+
+  If you are upgrading from stable or the earlier 2.1.7 packages in testing,
+  you are advised to  backup your configuration files before continuing.
+  Carefully read /usr/share/doc/dovecot-core/README.Debian.gz for important
+  information about problems that might affect your upgrade.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 04 Feb 2013 16:27:17 -0500
+
+dovecot (1:2.0.5-1) experimental; urgency=low
+
+  * A lot of settings have changed. Dovecot v2.0 can still use most of
+    the v1.x configuration files, but it logs a lot of warnings at
+    startup. A quick and easy way to convert your old config file to
+    v2.0 format is:
+
+    doveconf -n -c dovecot-1.conf > dovecot-2.conf
+
+    This command logs a warning about each obsolete setting it
+    converts to the new format. You can either go through the warnings
+    to figure out what changes exactly were done, or you can simply
+    trust doveconf and replace your old config with the newly
+    generated one.
+
+  * Dovecot uses two system users for internal purposes now by
+    default: "dovenull" and "dovecot". "dovenull" user is used by
+    completely untrustworthy processes, while "dovecot" user is used
+    for slightly more trusted processes.
+
+  * In conf.d/10-mail.conf, the default mail_location is set to
+    mbox:~/mail:INBOX=/var/mail/%u
+    This has to be set because Dovecots auto-detection of mailboxes fails
+    when a user has no mail.  I tried to provide a reasonable default
+    but advanced users will certainly want to change this.
+
+    Related to this, you might see an error in the logs about dovecot not
+    being able to chgrp certain files.  This is because the default user
+    mailboxes in Debian belong to group mail which dovecot is not part of
+    (nor should be.)  The Debian package has been patched so that the error
+    will not be fatal but for a more permanent solution, see here:
+    http://wiki2.dovecot.org/Errors/ChgrpNoPerm  for some discussion.  Or
+    you can set mail_location (and the equivalent settings in your MDA) so
+    that mailboxes are in the users home directory.
+
+  * No more convert plugin, use dsync instead
+
+  * No more expire-tool, use doveadm expunge instead. Also expire
+    configuration is different.
+
+  * Post-login scripts are configured differently and need to be modified
+
+  * Quota warnings are configured differently and the script may need
+    to be modified (most environment settings like $USER are gone)
+
+  * Global ACL filenames now require namespace prefix (e.g. if you use
+    "INBOX." prefix, /etc/acls/foo needs to be renamed to
+    /etc/acls/INBOX.foo
+
+  * Maildir: Permissions for newly created mail files are no longer
+    copied from dovecot-shared file, but instead from the mail
+    directory (e.g. for "foo" mailbox, they're taken from
+    ~/Maildir/.foo directory)
+
+  * dbox: v2.0 format is slightly different, but backwards
+    compatible. The main problem is that v2.0 no longer supports
+    maildir-dbox hybrid resulting from "fast Maildir migration". If
+    you have any Maildir files in your dbox, you need to convert them
+    somehow (some examples). You might also consider using dsync to
+    get rid of the old unused metadata in your dbox files.
+
+
+  * Pre-login and post-login CAPABILITY reply is now
+    different. Dovecot expects clients to recognize new automatically
+    sent capabilities. This should work with all commonly used
+    clients, but some rarely used clients might have problems. Either
+    get the client fixed, or set imap_capability manually.
+
+  * ManageSieve protocol was assigned an official port by IANA:
+    4190. This is used by Pigeonhole by default now. If you want to
+    listen also on the old 2000 port, see the example in
+    /usr/share/doc/dovecot-common/wiki/ManageSieve.Configuration.txt.gz
+
+  * deliver binary was renamed to dovecot-lda (but a symlink still
+    exists for now)
+
+  * deliver -n parameter was replaced by lda_mailbox_autocreate
+    setting. The default also changed to "no".
+
+  * deliver -s parameter was replaced by lda_mailbox_autosubscribe
+    setting. The default is "no", as before.
+
+ -- Marco Nenciarini <mnencia@debian.org>  Mon, 18 Oct 2010 12:59:14 +0200
+
+dovecot (1:1.0.12-1) unstable; urgency=low
+
+  * mail_extra_groups=mail setting is often used insecurely to give Dovecot
+    access to create dotlocks to /var/mail directory. The setting has been
+    replaced by mail_privileged_group and mail_access_groups.
+    Read also: http://dovecot.org/list/dovecot/2008-March/029196.html
+
+ -- Fabio Tranchitella <kobold@debian.org>  Thu, 06 Mar 2008 15:46:03 +0100
+
+dovecot (1.0.beta3-1) unstable; urgency=low
+
+  * Starting from this release, dovecot-lda is included in dovecot-common.
+    The previous executable deliver has been removed from the upstream 
+    source package.
+  * Other new features recently added include
+    + vpopmail support
+    + quota support
+    + GSSAPI support
+  * All these new features mean there are some configuration file changes 
+    please review the default /etc/dovecot/dovecot.conf and merge in any
+    new bits.  (If you don't use any new features, your configuration should
+    remain compatible.)
+
+ -- Fabio Tranchitella <kobold@debian.org>  Fri, 17 Feb 2006 17:05:37 +0000
+
+dovecot (1.0.alpha4-1) unstable; urgency=low
+
+  * This is the 1.0alpha branch.  Once again there have been incompatible 
+    changes to the syntax of /etc/dovecot/dovecot.conf. 
+  * The dovecot-common package now includes the zlib plugin for compressed
+    mboxen.  Make sure you have mail_use_modules=yes in imap and/or pop3 
+    section in /etc/dovecot/dovecot.conf if you want to use this.
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 20 Jul 2005 06:30:37 -0400
+
+dovecot (0.99.20050712-1) unstable; urgency=low
+
+  * This is the 1.0stable development branch.  There have been major 
+    changes and new features have been added so check your configuration 
+    carefully.  In particular, /etc/dovecot/dovecot-mysql.conf and 
+    /etc/dovecot/dovecot-pgsql.conf have been replaced by
+    /etc/dovecot/dovecot-sql.conf .
+
+ -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 20 Jul 2005 06:30:37 -0400

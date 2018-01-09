@@ -109,9 +109,9 @@ void notify_connection_create(int fd, bool fifo)
 	conn->refcount = 1;
 	conn->fd = fd;
 	conn->io = io_add(fd, IO_READ, notify_input, conn);
-	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
+	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE);
 	if (!fifo) {
-		conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+		conn->output = o_stream_create_fd(fd, (size_t)-1);
 		o_stream_set_no_error_handling(conn->output, TRUE);
 	}
 
@@ -125,8 +125,7 @@ static void notify_connection_unref(struct notify_connection *conn)
 		return;
 
 	i_stream_destroy(&conn->input);
-	if (conn->output != NULL)
-		o_stream_destroy(&conn->output);
+	o_stream_destroy(&conn->output);
 	i_free(conn);
 }
 
@@ -141,8 +140,7 @@ static void notify_connection_destroy(struct notify_connection *conn)
 
 	io_remove(&conn->io);
 	i_stream_close(conn->input);
-	if (conn->output != NULL)
-		o_stream_close(conn->output);
+	o_stream_close(conn->output);
 	net_disconnect(conn->fd);
 	conn->fd = -1;
 

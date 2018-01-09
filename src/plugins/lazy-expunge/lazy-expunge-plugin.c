@@ -45,8 +45,8 @@ struct lazy_expunge_mail_user {
 struct lazy_expunge_mailbox_list {
 	union mailbox_list_module_context module_ctx;
 
-	unsigned int allow_rename:1;
-	unsigned int internal_namespace:1;
+	bool allow_rename:1;
+	bool internal_namespace:1;
 };
 
 struct lazy_expunge_transaction {
@@ -59,6 +59,7 @@ struct lazy_expunge_transaction {
 	HASH_TABLE(const char *, void *) guids;
 
 	char *delayed_errstr;
+	char *delayed_internal_errstr;
 	enum mail_error delayed_error;
 
 	bool copy_only_last_instance;
@@ -175,7 +176,7 @@ lazy_expunge_count_in_transaction(struct lazy_expunge_transaction *lt,
 	return refcount-1;
 }
 
-static int lazy_expunge_mail_is_last_instace(struct mail *_mail)
+static int lazy_expunge_mail_is_last_instance(struct mail *_mail)
 {
 	struct lazy_expunge_transaction *lt =
 		LAZY_EXPUNGE_CONTEXT(_mail->transaction);
@@ -189,7 +190,7 @@ static int lazy_expunge_mail_is_last_instace(struct mail *_mail)
 			/* already expunged - just ignore it */
 			return 0;
 		}
-		mail_storage_set_critical(_mail->box->storage,
+		mail_set_critical(_mail,
 			"lazy_expunge: Couldn't lookup message's refcount: %s",
 			errstr);
 		return -1;
@@ -214,14 +215,14 @@ static int lazy_expunge_mail_is_last_instace(struct mail *_mail)
 				/* already expunged - just ignore it */
 				return 0;
 			}
-			mail_storage_set_critical(_mail->box->storage,
+			mail_set_critical(_mail,
 				"lazy_expunge: Couldn't lookup message's GUID: %s", errstr);
 			return -1;
 		}
 		if (*value == '\0') {
 			/* GUIDs not supported by backend, but refcounts are?
 			   not with our current backends. */
-			mail_storage_set_critical(_mail->box->storage,
+			mail_set_critical(_mail,
 				"lazy_expunge: Message unexpectedly has no GUID");
 			return -1;
 		}
@@ -271,6 +272,8 @@ static void lazy_expunge_set_error(struct lazy_expunge_transaction *lt,
 		return;
 	lt->delayed_error = error;
 	lt->delayed_errstr = i_strdup(errstr);
+	lt->delayed_internal_errstr =
+		i_strdup(mail_storage_get_last_internal_error(storage, NULL));
 }
 
 static void lazy_expunge_mail_expunge(struct mail *_mail)
@@ -315,7 +318,7 @@ static void lazy_expunge_mail_expunge(struct mail *_mail)
 		   immediately. */
 		if (moving)
 			ret = 0;
-		else if ((ret = lazy_expunge_mail_is_last_instace(_mail)) < 0) {
+		else if ((ret = lazy_expunge_mail_is_last_instance(_mail)) < 0) {
 			lazy_expunge_set_error(lt, _mail->box->storage);
 			return;
 		}
@@ -329,14 +332,14 @@ static void lazy_expunge_mail_expunge(struct mail *_mail)
 		lt->dest_box = mailbox_open_or_create(luser->lazy_ns->list,
 						      _mail->box, &error);
 		if (lt->dest_box == NULL) {
-			mail_storage_set_critical(_mail->box->storage,
+			mail_set_critical(_mail,
 				"lazy_expunge: Couldn't open expunge mailbox: "
 				"%s", error);
 			lazy_expunge_set_error(lt, _mail->box->storage);
 			return;
 		}
 		if (mailbox_sync(lt->dest_box, 0) < 0) {
-			mail_storage_set_critical(_mail->box->storage,
+			mail_set_critical(_mail,
 				"lazy_expunge: Couldn't sync expunge mailbox");
 			lazy_expunge_set_error(lt, lt->dest_box->storage);
 			mailbox_free(&lt->dest_box);
@@ -344,7 +347,8 @@ static void lazy_expunge_mail_expunge(struct mail *_mail)
 		}
 
 		lt->dest_trans = mailbox_transaction_begin(lt->dest_box,
-					  MAILBOX_TRANSACTION_FLAG_EXTERNAL);
+					  MAILBOX_TRANSACTION_FLAG_EXTERNAL,
+					  __func__);
 	}
 
 	save_ctx = mailbox_save_alloc(lt->dest_trans);
@@ -371,7 +375,8 @@ static int lazy_expunge_copy(struct mail_save_context *ctx, struct mail *_mail)
 
 static struct mailbox_transaction_context *
 lazy_expunge_transaction_begin(struct mailbox *box,
-			       enum mailbox_transaction_flags flags)
+			       enum mailbox_transaction_flags flags,
+			       const char *reason)
 {
 	struct lazy_expunge_mail_user *luser =
 		LAZY_EXPUNGE_USER_CONTEXT(box->list->ns->user);
@@ -379,7 +384,7 @@ lazy_expunge_transaction_begin(struct mailbox *box,
 	struct mailbox_transaction_context *t;
 	struct lazy_expunge_transaction *lt;
 
-	t = mbox->super.transaction_begin(box, flags);
+	t = mbox->super.transaction_begin(box, flags, reason);
 	lt = i_new(struct lazy_expunge_transaction, 1);
 	lt->copy_only_last_instance = luser->copy_only_last_instance;
 
@@ -395,9 +400,9 @@ static void lazy_expunge_transaction_free(struct lazy_expunge_transaction *lt)
 		mailbox_free(&lt->dest_box);
 	if (hash_table_is_created(lt->guids))
 		hash_table_destroy(&lt->guids);
-	if (lt->pool != NULL)
-		pool_unref(&lt->pool);
+	pool_unref(&lt->pool);
 	i_free(lt->delayed_errstr);
+	i_free(lt->delayed_internal_errstr);
 	i_free(lt);
 }
 
@@ -423,8 +428,9 @@ lazy_expunge_transaction_commit(struct mailbox_transaction_context *ctx,
 		mbox->super.transaction_rollback(ctx);
 		ret = -1;
 	} else {
-		mail_storage_set_critical(ctx->box->storage,
-			"Lazy-expunge transaction failed: %s", lt->delayed_errstr);
+		mailbox_set_critical(ctx->box,
+			"Lazy-expunge transaction failed: %s",
+			lt->delayed_internal_errstr);
 		mbox->super.transaction_rollback(ctx);
 		ret = -1;
 	}
@@ -578,7 +584,7 @@ static void lazy_expunge_mail_user_created(struct mail_user *user)
 		v->deinit = lazy_expunge_user_deinit;
 		luser->env = env;
 		luser->copy_only_last_instance =
-			mail_user_plugin_getenv(user, "lazy_expunge_only_last_instance") != NULL;
+			mail_user_plugin_getenv_bool(user, "lazy_expunge_only_last_instance");
 
 		MODULE_CONTEXT_SET(user, lazy_expunge_mail_user_module, luser);
 	} else if (user->mail_debug) {

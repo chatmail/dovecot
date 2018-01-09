@@ -126,7 +126,7 @@ doveadm_expire_mail_cmd_get_next_user(struct doveadm_mail_cmd_context *ctx,
 {
 	struct doveadm_expire_mail_cmd_context *ectx =
 		DOVEADM_EXPIRE_MAIL_CMD_CONTEXT(ctx);
-	const char *key, *value;
+	const char *key, *value, *error;
 	unsigned long oldest_savedate;
 	int ret;
 
@@ -139,8 +139,9 @@ doveadm_expire_mail_cmd_get_next_user(struct doveadm_mail_cmd_context *ctx,
 		if ((time_t)oldest_savedate > ectx->oldest_before_time) {
 			if (doveadm_debug) {
 				i_debug("expire: Stopping iteration on key %s "
-					"(%lu > %ld)", key, oldest_savedate,
-					(long)ectx->oldest_before_time);
+					"(%lu > %"PRIdTIME_T")",
+					key, oldest_savedate,
+					ectx->oldest_before_time);
 			}
 			break;
 		}
@@ -151,7 +152,7 @@ doveadm_expire_mail_cmd_get_next_user(struct doveadm_mail_cmd_context *ctx,
 						       username_r);
 		} T_END;
 		if (ret > 0)
-			return TRUE;
+			return 1;
 		if (ret < 0 && ectx->delete_nonexistent_users) {
 			/* user has been deleted */
 			dict_unset(ectx->trans, key);
@@ -159,8 +160,8 @@ doveadm_expire_mail_cmd_get_next_user(struct doveadm_mail_cmd_context *ctx,
 	}
 
 	/* finished */
-	if (dict_iterate_deinit(&ectx->iter) < 0) {
-		i_error("Dictionary iteration failed");
+	if (dict_iterate_deinit(&ectx->iter, &error) < 0) {
+		i_error("Dictionary iteration failed: %s", error);
 		return -1;
 	}
 	return 0;
@@ -250,7 +251,7 @@ doveadm_expire_analyze_and_query(struct doveadm_mail_cmd_context *ctx,
 			if (arg->value.date_type != MAIL_SEARCH_DATE_TYPE_SAVED)
 				break;
 			if ((arg->value.search_flags &
-			     MAIL_SEARCH_ARG_FLAG_USE_TZ) == 0)
+			     MAIL_SEARCH_ARG_FLAG_UTC_TIMES) == 0)
 				break;
 			query.before_time = arg->value.time;
 			break;
@@ -283,7 +284,7 @@ doveadm_expire_analyze_and_query(struct doveadm_mail_cmd_context *ctx,
 	return FALSE;
 }
 
-static time_t
+static bool
 doveadm_expire_analyze_or_query(struct doveadm_mail_cmd_context *ctx,
 				const struct mail_search_arg *args)
 {
@@ -352,13 +353,14 @@ static void doveadm_expire_mail_cmd_deinit(struct doveadm_mail_cmd_context *ctx)
 {
 	struct doveadm_expire_mail_cmd_context *ectx =
 		DOVEADM_EXPIRE_MAIL_CMD_CONTEXT(ctx);
+	const char *error;
 
 	if (ectx->iter != NULL) {
-		if (dict_iterate_deinit(&ectx->iter) < 0)
-			i_error("expire: Dictionary iteration failed");
+		if (dict_iterate_deinit(&ectx->iter, &error) < 0)
+			i_error("expire: Dictionary iteration failed: %s", error);
 	}
-	if (dict_transaction_commit(&ectx->trans) < 0)
-		i_error("expire: Dictionary commit failed");
+	if (dict_transaction_commit(&ectx->trans, &error) < 0)
+		i_error("expire: Dictionary commit failed: %s", error);
 	dict_deinit(&ectx->dict);
 	hash_table_destroy(&ectx->user_states);
 
@@ -368,6 +370,7 @@ static void doveadm_expire_mail_cmd_deinit(struct doveadm_mail_cmd_context *ctx)
 static void doveadm_expire_mail_init(struct doveadm_mail_cmd_context *ctx)
 {
 	struct doveadm_expire_mail_cmd_context *ectx;
+	struct dict_settings dict_set;
 	struct dict *dict;
 	const struct expire_query *query;
 	const char *expire_dict, *username, *value, *error;
@@ -407,8 +410,11 @@ static void doveadm_expire_mail_init(struct doveadm_mail_cmd_context *ctx)
 	if (doveadm_debug)
 		i_debug("expire: Searching only users listed in expire database");
 
-	if (dict_init(expire_dict, DICT_DATA_TYPE_UINT32, "",
-		      doveadm_settings->base_dir, &dict, &error) < 0) {
+	i_zero(&dict_set);
+	dict_set.value_type = DICT_DATA_TYPE_UINT32;
+	dict_set.username = "";
+	dict_set.base_dir = doveadm_settings->base_dir;
+	if (dict_init(expire_dict, &dict_set, &dict, &error) < 0) {
 		i_error("dict_init(%s) failed, not using it: %s",
 			expire_dict, error);
 		return;

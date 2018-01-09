@@ -72,10 +72,13 @@ static const struct setting_define director_setting_defines[] = {
 	DEF(SET_STR, director_mail_servers),
 	DEF(SET_STR, director_username_hash),
 	DEF(SET_STR, director_flush_socket),
+	DEF(SET_TIME, director_ping_idle_timeout),
+	DEF(SET_TIME, director_ping_max_timeout),
 	DEF(SET_TIME, director_user_expire),
 	DEF(SET_TIME, director_user_kick_delay),
-	DEF(SET_IN_PORT, director_doveadm_port),
-	DEF(SET_BOOL, director_consistent_hashing),
+	DEF(SET_UINT, director_max_parallel_moves),
+	DEF(SET_UINT, director_max_parallel_kicks),
+	DEF(SET_SIZE, director_output_buffer_size),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -87,9 +90,13 @@ const struct director_settings director_default_settings = {
 	.director_mail_servers = "",
 	.director_username_hash = "%Lu",
 	.director_flush_socket = "",
+	.director_ping_idle_timeout = 30,
+	.director_ping_max_timeout = 60,
 	.director_user_expire = 60*15,
 	.director_user_kick_delay = 2,
-	.director_doveadm_port = 0
+	.director_max_parallel_moves = 100,
+	.director_max_parallel_kicks = 100,
+	.director_output_buffer_size = 10 * 1024 * 1024,
 };
 
 const struct setting_parser_info director_setting_parser_info = {

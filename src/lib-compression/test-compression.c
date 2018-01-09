@@ -45,15 +45,15 @@ static void test_compression_handler(const struct compression_handler *handler)
 
 	/* 2) write uncompressible data */
 	for (i = 0; i < 1024*128 / sizeof(buf); i++) {
-		random_fill_weak(buf, sizeof(buf));
+		random_fill(buf, sizeof(buf));
 		sha1_loop(&sha1, buf, sizeof(buf));
 		test_assert(o_stream_send(output, buf, sizeof(buf)) == sizeof(buf));
 	}
 
 	/* 3) write semi-compressible data */
 	for (i = 0; i < sizeof(buf); i++) {
-		if (rand () % 3 == 0)
-			buf[i] = rand() % 4;
+		if (i_rand_limit(3) == 0)
+			buf[i] = i_rand_limit(4);
 		else
 			buf[i] = i;
 	}
@@ -62,15 +62,16 @@ static void test_compression_handler(const struct compression_handler *handler)
 		test_assert(o_stream_send(output, buf, sizeof(buf)) == sizeof(buf));
 	}
 
+	test_assert(o_stream_finish(output) > 0);
 	o_stream_destroy(&output);
 	o_stream_destroy(&file_output);
 	sha1_result(&sha1, output_sha1);
 
 	/* read and uncompress the data */
 	sha1_init(&sha1);
-	file_input = i_stream_create_fd(fd, IO_BLOCK_SIZE, FALSE);
+	file_input = i_stream_create_fd(fd, IO_BLOCK_SIZE);
 	input = handler->create_istream(file_input, FALSE);
-	while ((ret = i_stream_read_data(input, &data, &size, 0)) > 0) {
+	while ((ret = i_stream_read_more(input, &data, &size)) > 0) {
 		sha1_loop(&sha1, data, size);
 		i_stream_skip(input, size);
 	}
@@ -101,23 +102,24 @@ static void test_gz(const char *str1, const char *str2)
 	const struct compression_handler *gz = compression_lookup_handler("gz");
 	struct ostream *buf_output, *output;
 	struct istream *test_input, *input;
-	buffer_t *buf = buffer_create_dynamic(pool_datastack_create(), 512);
+	buffer_t *buf = t_buffer_create(512);
 
 	if (gz == NULL || gz->create_ostream == NULL)
 		return; /* not compiled in */
 
 	/* write concated output */
 	buf_output = o_stream_create_buffer(buf);
+	o_stream_set_finish_via_child(buf_output, FALSE);
 
 	output = gz->create_ostream(buf_output, 6);
 	o_stream_nsend_str(output, str1);
-	test_assert(o_stream_nfinish(output) == 0);
+	test_assert(o_stream_finish(output) > 0);
 	o_stream_destroy(&output);
 
 	if (str2[0] != '\0') {
 		output = gz->create_ostream(buf_output, 6);
 		o_stream_nsend_str(output, "world");
-		test_assert(o_stream_nfinish(output) == 0);
+		test_assert(o_stream_finish(output) > 0);
 		o_stream_destroy(&output);
 	}
 
@@ -255,12 +257,12 @@ static void test_compress_file(const char *in_path, const char *out_path)
 	file_output = o_stream_create_fd_file(fd_out, 0, FALSE);
 	output = handler->create_ostream(file_output, 1);
 	input = i_stream_create_fd_autoclose(&fd_in, IO_BLOCK_SIZE);
-	while (i_stream_read_data(input, &data, &size, 0) > 0) {
+	while (i_stream_read_more(input, &data, &size) > 0) {
 		sha1_loop(&sha1, data, size);
 		o_stream_nsend(output, data, size);
 		i_stream_skip(input, size);
 	}
-	if (o_stream_nfinish(output) < 0) {
+	if (o_stream_finish(output) < 0) {
 		i_fatal("write(%s) failed: %s",
 			out_path, o_stream_get_error(output));
 	}
@@ -271,9 +273,9 @@ static void test_compress_file(const char *in_path, const char *out_path)
 
 	/* verify that we can read the compressed file */
 	sha1_init(&sha1);
-	file_input = i_stream_create_fd(fd_out, IO_BLOCK_SIZE, FALSE);
+	file_input = i_stream_create_fd(fd_out, IO_BLOCK_SIZE);
 	input = handler->create_istream(file_input, FALSE);
-	while ((ret = i_stream_read_data(input, &data, &size, 0)) > 0) {
+	while ((ret = i_stream_read_more(input, &data, &size)) > 0) {
 		sha1_loop(&sha1, data, size);
 		i_stream_skip(input, size);
 	}
@@ -288,7 +290,7 @@ static void test_compress_file(const char *in_path, const char *out_path)
 
 int main(int argc, char *argv[])
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_compression,
 		test_gz_concat,
 		test_gz_no_concat,

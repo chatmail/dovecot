@@ -29,7 +29,7 @@
 
 #include <sys/time.h>
 
-#define MAILBOX_LIST_INDEX_HIERARHCY_SEP '~'
+#define MAILBOX_LIST_INDEX_HIERARCHY_SEP '~'
 
 #define INDEX_LIST_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, mailbox_list_index_module)
@@ -112,15 +112,18 @@ struct mailbox_list_index {
 	HASH_TABLE(void *, struct mailbox_list_index_node *) mailbox_hash;
 	struct mailbox_list_index_node *mailbox_tree;
 
-	unsigned int pending_init:1;
-	unsigned int opened:1;
-	unsigned int syncing:1;
-	unsigned int updating_status:1;
-	unsigned int has_backing_store:1;
-	unsigned int index_last_check_changed:1;
-	unsigned int corrupted_names_or_parents:1;
-	unsigned int handling_corruption:1;
-	unsigned int call_corruption_callback:1;
+	bool pending_init:1;
+	bool opened:1;
+	bool syncing:1;
+	bool updating_status:1;
+	bool has_backing_store:1;
+	bool index_last_check_changed:1;
+	bool corrupted_names_or_parents:1;
+	bool handling_corruption:1;
+	bool call_corruption_callback:1;
+	bool rebuild_on_missing_inbox:1;
+	bool force_resynced:1;
+	bool force_resync_failed:1;
 };
 
 struct mailbox_list_index_iterate_context {
@@ -134,7 +137,8 @@ struct mailbox_list_index_iterate_context {
 	string_t *path;
 	struct mailbox_list_index_node *next_node;
 
-	unsigned int failed:1;
+	bool failed:1;
+	bool prefix_inbox_list:1;
 };
 
 extern MODULE_CONTEXT_DEFINE(mailbox_list_index_module,
@@ -200,8 +204,15 @@ void mailbox_list_index_notify_wait(struct mailbox_list_notify *notify,
 void mailbox_list_index_notify_flush(struct mailbox_list_notify *notify);
 
 void mailbox_list_index_status_init_mailbox(struct mailbox_vfuncs *v);
-void mailbox_list_index_backend_init_mailbox(struct mailbox *box,
+bool mailbox_list_index_backend_init_mailbox(struct mailbox *box,
 					     struct mailbox_vfuncs *v);
 void mailbox_list_index_status_init_finish(struct mailbox_list *list);
+
+void mailbox_list_index_status_sync_init(struct mailbox *box);
+void mailbox_list_index_status_sync_deinit(struct mailbox *box);
+
+void mailbox_list_index_backend_sync_init(struct mailbox *box,
+					  enum mailbox_sync_flags flags);
+int mailbox_list_index_backend_sync_deinit(struct mailbox *box);
 
 #endif

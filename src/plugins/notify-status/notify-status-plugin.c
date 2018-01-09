@@ -51,8 +51,12 @@ struct notify_status_user {
 static int notify_status_dict_init(struct mail_user *user, const char *uri,
 				   struct dict **dict_r, const char **error_r)
 {
-	if (dict_init(uri, DICT_DATA_TYPE_STRING, user->username,
-		      user->set->base_dir, dict_r, error_r) < 0) {
+	struct dict_settings set = {
+		.username = user->username,
+		.base_dir = user->set->base_dir,
+	};
+	(void)mail_user_get_home(user, &set.home_dir);
+	if (dict_init(uri, &set, dict_r, error_r) < 0) {
 		*error_r = t_strdup_printf("dict_init(%s) failed: %s",
 					   uri, *error_r);
 		return -1;
@@ -102,14 +106,15 @@ static bool notify_status_mailbox_enabled(struct mailbox *box)
 	return FALSE;
 }
 
-static void notify_update_callback(int ret,
+static void notify_update_callback(const struct dict_commit_result *result,
 				   void *context ATTR_UNUSED)
 {
-	if (ret == DICT_COMMIT_RET_OK ||
-	    ret == DICT_COMMIT_RET_NOTFOUND)
+	if (result->ret == DICT_COMMIT_RET_OK ||
+	    result->ret == DICT_COMMIT_RET_NOTFOUND)
 		return;
 
-	i_error("notify-status: dict_transaction_commit failed");
+	i_error("notify-status: dict_transaction_commit failed: %s",
+		result->error == NULL ? "" : result->error);
 }
 
 #define MAILBOX_STATUS_NOTIFY (STATUS_MESSAGES|STATUS_UNSEEN|\
@@ -165,13 +170,18 @@ static void notify_update_mailbox_status(struct mailbox *box)
 			{ '\0', dec2str(status.highest_pvt_modseq), "highest_pvt_modseq" },
 			{ '\0', NULL, NULL }
 		};
+		const char *error;
 		const char *key =
 			t_strdup_printf(NOTIFY_STATUS_KEY, mailbox_get_vname(box));
 		string_t *dest = t_str_new(64);
-		var_expand(dest, nuser->value_template, values);
-		t = dict_transaction_begin(nuser->dict);
-		dict_set(t, key, str_c(dest));
-		dict_transaction_commit_async(&t, notify_update_callback, NULL);
+		if (var_expand(dest, nuser->value_template, values, &error)<0) {
+			i_error("notify-status: var_expand(%s) failed: %s",
+				nuser->value_template, error);
+		} else {
+			t = dict_transaction_begin(nuser->dict);
+			dict_set(t, key, str_c(dest));
+			dict_transaction_commit_async(&t, notify_update_callback, NULL) ;
+		}
 	}
 
 	mailbox_free(&box);

@@ -1,33 +1,33 @@
 /* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
-/* Wrap srand() so that we can reproduce fuzzed tests */
-
 #include "lib.h"
+#include "randgen.h"
 
-static int seeded = 0;
-static unsigned int seed;
-static char const *env_seed;
+#ifdef HAVE_ARC4RANDOM
+#ifdef HAVE_LIBBSD
+#include <bsd/stdlib.h>
+#endif
 
-int rand_get_seed_count(void)
+uint32_t i_rand(void)
 {
-	return seeded;
+	return arc4random();
 }
-unsigned int rand_get_last_seed(void)
-{
-	i_assert(seeded > 0);
-	return seed;
-}
-void rand_set_seed(unsigned int s)
-{
-	if (seeded == 0) {
-		unsigned int seedval;
-		env_seed = getenv("DOVECOT_SRAND");
-		if (env_seed != NULL && str_to_uint(env_seed, &seedval) >= 0)
-			seed = seedval;
-	}
-	seeded++;
-	if (env_seed == NULL)
-		seed = s;
 
-	srand(seed);
+uint32_t i_rand_limit(uint32_t upper_bound)
+{
+	return arc4random_uniform(upper_bound);
 }
+#else
+uint32_t i_rand(void)
+{
+	uint32_t value;
+	random_fill(&value, sizeof(value));
+	return value;
+}
+
+uint32_t i_rand_limit(uint32_t upper_bound)
+{
+	/* FIXME: This simple implementation suffers from modulo-bias. */
+	return i_rand() % upper_bound;
+}
+#endif

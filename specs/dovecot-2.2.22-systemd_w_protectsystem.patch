@@ -1,0 +1,14 @@
+diff -up dovecot-2.2.28/dovecot.service.in.systemd_w_protectsystem dovecot-2.2.28/dovecot.service.in
+--- dovecot-2.2.28/dovecot.service.in.systemd_w_protectsystem	2017-02-27 10:00:14.647423500 +0100
++++ dovecot-2.2.28/dovecot.service.in	2017-02-27 10:02:18.051377067 +0100
+@@ -20,8 +20,8 @@ ExecReload=@bindir@/doveadm reload
+ ExecStop=@bindir@/doveadm stop
+ PrivateTmp=true
+ NonBlocking=yes
+-# Enable this if your systemd is new enough to support it:
+-#ProtectSystem=full
++# Enable this if your systemd is new enough to support it: (it will make /usr /boot /etc read only for dovecot)
++ProtectSystem=full
+ 
+ # You can add environment variables with e.g.:
+ #Environment='CORE_OUTOFMEM=1'

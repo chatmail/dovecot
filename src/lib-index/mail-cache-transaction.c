@@ -45,8 +45,8 @@ struct mail_cache_transaction_ctx {
 
 	unsigned int records_written;
 
-	unsigned int tried_compression:1;
-	unsigned int changes:1;
+	bool tried_compression:1;
+	bool changes:1;
 };
 
 static MODULE_CONTEXT_DEFINE_INIT(cache_mail_index_transaction_module,
@@ -156,8 +156,7 @@ void mail_cache_transaction_rollback(struct mail_cache_transaction_ctx **_ctx)
 	ctx->view->trans_seq1 = ctx->view->trans_seq2 = 0;
 
 	mail_index_view_close(&ctx->view->trans_view);
-	if (ctx->cache_data != NULL)
-		buffer_free(&ctx->cache_data);
+	buffer_free(&ctx->cache_data);
 	if (array_is_created(&ctx->cache_data_seq))
 		array_free(&ctx->cache_data_seq);
 	if (array_is_created(&ctx->cache_data_wanted_seqs))
@@ -521,7 +520,7 @@ mail_cache_transaction_update_last_rec(struct mail_cache_transaction_ctx *ctx)
 	size_t size;
 
 	size = mail_cache_transaction_update_last_rec_size(ctx);
-	if (size > MAIL_CACHE_RECORD_MAX_SIZE) {
+	if (size > ctx->cache->index->optimization_set.cache.record_max_size) {
 		buffer_set_used_size(ctx->cache_data, ctx->last_rec_pos);
 		return;
 	}
@@ -573,7 +572,7 @@ int mail_cache_transaction_commit(struct mail_cache_transaction_ctx **_ctx)
 		}
 		/* Here would be a good place to do fdatasync() to make sure
 		   everything is written before offsets are updated to index.
-		   However it slows down I/O unneededly and we're pretty good
+		   However it slows down I/O needlessly and we're pretty good
 		   at catching and fixing cache corruption, so we no longer do
 		   it. */
 	}
@@ -684,7 +683,7 @@ static int mail_cache_header_add_field(struct mail_cache_transaction_ctx *ctx,
 	T_BEGIN {
 		buffer_t *buffer;
 
-		buffer = buffer_create_dynamic(pool_datastack_create(), 256);
+		buffer = t_buffer_create(256);
 		mail_cache_header_fields_get(cache, buffer);
 		ret = mail_cache_header_fields_write(ctx, buffer);
 	} T_END;

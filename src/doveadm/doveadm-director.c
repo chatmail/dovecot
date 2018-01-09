@@ -152,7 +152,7 @@ static void
 cmd_director_status_user(struct director_context *ctx)
 {
 	const char *line, *const *args;
-	unsigned int expires;
+	time_t expires;
 
 	director_send(ctx, t_strdup_printf("USER-LOOKUP\t%s\t%s\n", ctx->user,
 					   ctx->tag != NULL ? ctx->tag : ""));
@@ -164,7 +164,7 @@ cmd_director_status_user(struct director_context *ctx)
 
 	args = t_strsplit_tabescaped(line);
 	if (str_array_length(args) != 4 ||
-	    str_to_uint(args[1], &expires) < 0) {
+	    str_to_time(args[1], &expires) < 0) {
 		i_error("Invalid reply from director");
 		doveadm_exit_code = EX_PROTOCOL;
 		return;
@@ -243,6 +243,19 @@ static void cmd_director_status(struct doveadm_cmd_context *cctx)
 	director_disconnect(ctx);
 }
 
+static bool user_hash_expand(const char *username, unsigned int *hash_r)
+{
+	const char *error;
+
+	if (!mail_user_hash(username, doveadm_settings->director_username_hash,
+			    hash_r, &error)) {
+		i_error("Failed to expand director_username_hash=%s: %s",
+			doveadm_settings->director_username_hash, error);
+		return FALSE;
+	}
+	return TRUE;
+}
+
 static void
 user_list_add(const char *username, pool_t pool,
 	      HASH_TABLE_TYPE(user_list) users)
@@ -250,14 +263,16 @@ user_list_add(const char *username, pool_t pool,
 	struct user_list *user, *old_user;
 	unsigned int user_hash;
 
+	if (!user_hash_expand(username, &user_hash))
+		return;
+
 	user = p_new(pool, struct user_list, 1);
 	user->name = p_strdup(pool, username);
-	user_hash = mail_user_hash(username, doveadm_settings->director_username_hash);
 
 	old_user = hash_table_lookup(users, POINTER_CAST(user_hash));
 	if (old_user != NULL)
 		user->next = old_user;
-	hash_table_insert(users, POINTER_CAST(user_hash), user);
+	hash_table_update(users, POINTER_CAST(user_hash), user);
 }
 
 static void ATTR_NULL(1)
@@ -337,7 +352,8 @@ static void cmd_director_map(struct doveadm_cmd_context *cctx)
 	pool_t pool;
 	HASH_TABLE_TYPE(user_list) users;
 	struct user_list *user;
-	unsigned int ips_count, user_hash, expires;
+	unsigned int ips_count, user_hash;
+	time_t expires;
 
 	ctx = cmd_director_init(cctx);
 
@@ -348,10 +364,11 @@ static void cmd_director_map(struct doveadm_cmd_context *cctx)
 
 	if (ctx->user_map) {
 		/* user -> hash mapping */
-		user_hash = mail_user_hash(ctx->host, doveadm_settings->director_username_hash);
-		doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
-		doveadm_print_header("hash", "hash", DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
-		doveadm_print(t_strdup_printf("%u", user_hash));
+		if (user_hash_expand(ctx->host, &user_hash)) {
+			doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
+			doveadm_print_header("hash", "hash", DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
+			doveadm_print(t_strdup_printf("%u", user_hash));
+		}
 		director_disconnect(ctx);
 		return;
 	}
@@ -402,7 +419,7 @@ static void cmd_director_map(struct doveadm_cmd_context *cctx)
 			args = t_strsplit_tabescaped(line);
 			if (str_array_length(args) < 3 ||
 			    str_to_uint(args[0], &user_hash) < 0 ||
-			    str_to_uint(args[1], &expires) < 0 ||
+			    str_to_time(args[1], &expires) < 0 ||
 			    net_addr2ip(args[2], &user_ip) < 0) {
 				i_error("Invalid USER-LIST reply: %s", line);
 				doveadm_exit_code = EX_PROTOCOL;
@@ -585,9 +602,8 @@ static void cmd_director_move(struct doveadm_cmd_context *cctx)
 		return;
 	}
 
-	user_hash = mail_user_hash(ctx->user, doveadm_settings->director_username_hash);
-
-	if (director_get_host(ctx->host, &ips, &ips_count) != 0) {
+	if (!user_hash_expand(ctx->user, &user_hash) ||
+	    director_get_host(ctx->host, &ips, &ips_count) != 0) {
 		director_disconnect(ctx);
 		return;
 	}
@@ -820,7 +836,7 @@ static void cmd_director_ring_add(struct doveadm_cmd_context *cctx)
 	ctx = cmd_director_init(cctx);
 	if (ctx->ip == NULL ||
 	    net_addr2ip(ctx->ip, &ip) < 0 ||
-	    (ctx->port && net_str2port(ctx->port, &port) < 0)) {
+	    (ctx->port != 0 && net_str2port(ctx->port, &port) < 0)) {
 		director_cmd_help(cctx->cmd);
 		return;
 	}
@@ -862,7 +878,6 @@ static void cmd_director_ring_status(struct doveadm_cmd_context *cctx)
 {
 	struct director_context *ctx;
 	const char *line, *const *args;
-	unsigned long l;
 
 	ctx = cmd_director_init(cctx);
 
@@ -872,24 +887,36 @@ static void cmd_director_ring_status(struct doveadm_cmd_context *cctx)
 	doveadm_print_header_simple("type");
 	doveadm_print_header_simple("last failed");
 	doveadm_print_header_simple("status");
+	doveadm_print_header_simple("ping ms");
+	doveadm_print_header_simple("input");
+	doveadm_print_header_simple("output");
+	doveadm_print_header_simple("buffered");
+	doveadm_print_header_simple("buffered peak");
+	doveadm_print_header_simple("last read");
+	doveadm_print_header_simple("last write");
 
 	director_send(ctx, "DIRECTOR-LIST\n");
 	while ((line = i_stream_read_next_line(ctx->input)) != NULL) {
 		if (*line == '\0')
 			break;
 		T_BEGIN {
+			unsigned int i;
+			time_t ts;
+
 			args = t_strsplit_tabescaped(line);
-			if (str_array_length(args) >= 5 &&
-			    str_to_ulong(args[3], &l) == 0) {
-				doveadm_print(args[0]);
-				doveadm_print(args[1]);
-				doveadm_print(args[2]);
-				if (l == 0)
-					doveadm_print("never");
-				else
-					doveadm_print(unixdate2str(l));
-				doveadm_print(args[4]);
+			for (i = 0; i < 12 && args[i] != NULL; i++) {
+				if ((i == 3 || i == 10 || i == 11) &&
+				    str_to_time(args[i], &ts) == 0) {
+					if (ts == 0)
+						doveadm_print("never");
+					else
+						doveadm_print(unixdate2str(ts));
+				} else {
+					doveadm_print(args[i]);
+				}
 			}
+			for (; i < 12; i++)
+				doveadm_print("-");
 		} T_END;
 	}
 	if (line == NULL)

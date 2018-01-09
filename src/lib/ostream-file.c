@@ -29,11 +29,12 @@
 	((size) < SSIZE_T_MAX ? (size_t)(size) : SSIZE_T_MAX)
 
 static void stream_send_io(struct file_ostream *fstream);
+static struct ostream * o_stream_create_fd_common(int fd,
+		size_t max_buffer_size, bool autoclose_fd);
 
 static void stream_closed(struct file_ostream *fstream)
 {
-	if (fstream->io != NULL)
-		io_remove(&fstream->io);
+	io_remove(&fstream->io);
 
 	if (fstream->autoclose_fd && fstream->fd != -1) {
 		if (close(fstream->fd) < 0) {
@@ -50,9 +51,6 @@ void o_stream_file_close(struct iostream_private *stream,
 				bool close_parent ATTR_UNUSED)
 {
 	struct file_ostream *fstream = (struct file_ostream *)stream;
-
-	/* flush output before really closing it */
-	(void)o_stream_flush(&fstream->ostream.ostream);
 
 	stream_closed(fstream);
 }
@@ -343,6 +341,7 @@ static void o_stream_file_cork(struct ostream_private *stream, bool set)
 		else if (!set) {
 			/* buffer flushing might close the stream */
 			ret = buffer_flush(fstream);
+			stream->last_errors_not_checked = TRUE;
 			if (fstream->io == NULL &&
 			    (ret == 0 || fstream->flush_pending) &&
 			    !stream->ostream.closed) {
@@ -460,6 +459,7 @@ static void o_stream_grow_buffer(struct file_ostream *fstream, size_t bytes)
 static void stream_send_io(struct file_ostream *fstream)
 {
 	struct ostream *ostream = &fstream->ostream.ostream;
+	bool use_cork = !fstream->ostream.corked;
 	int ret;
 
 	/* Set flush_pending = FALSE first before calling the flush callback,
@@ -469,19 +469,20 @@ static void stream_send_io(struct file_ostream *fstream)
 	fstream->flush_pending = FALSE;
 
 	o_stream_ref(ostream);
+	if (use_cork)
+		o_stream_cork(ostream);
 	if (fstream->ostream.callback != NULL)
 		ret = fstream->ostream.callback(fstream->ostream.context);
 	else
 		ret = o_stream_file_flush(&fstream->ostream);
+	if (use_cork)
+		o_stream_uncork(ostream);
 
 	if (ret == 0)
 		fstream->flush_pending = TRUE;
 
 	if (!fstream->flush_pending && IS_STREAM_EMPTY(fstream)) {
-		if (fstream->io != NULL) {
-			/* all sent */
-			io_remove(&fstream->io);
-		}
+		io_remove(&fstream->io);
 	} else if (!fstream->ostream.ostream.closed) {
 		/* Add the IO handler if it's not there already. Callback
 		   might have just returned 0 without there being any data
@@ -687,35 +688,45 @@ o_stream_file_write_at(struct ostream_private *stream,
 	return 0;
 }
 
-static off_t io_stream_sendfile(struct ostream_private *outstream,
-				struct istream *instream, int in_fd,
-				bool *sendfile_not_supported_r)
+static bool
+io_stream_sendfile(struct ostream_private *outstream,
+		   struct istream *instream, int in_fd,
+		   enum ostream_send_istream_result *res_r)
 {
 	struct file_ostream *foutstream = (struct file_ostream *)outstream;
-	uoff_t start_offset;
-	uoff_t in_size, offset, send_size, v_offset;
+	uoff_t in_size, offset, send_size, v_offset, abs_start_offset;
 	ssize_t ret;
+	bool sendfile_not_supported = FALSE;
 
-	*sendfile_not_supported_r = FALSE;
-
-	if ((ret = i_stream_get_size(instream, TRUE, &in_size)) <= 0) {
-		outstream->ostream.stream_errno = ret == 0 ? ESPIPE :
-			instream->stream_errno;
-		return -1;
+	if ((ret = i_stream_get_size(instream, TRUE, &in_size)) < 0) {
+		*res_r = OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT;
+		return TRUE;
+	}
+	if (ret == 0) {
+		/* size unknown. we can't use sendfile(). */
+		return FALSE;
 	}
 
 	o_stream_socket_cork(foutstream);
 
 	/* flush out any data in buffer */
-	if ((ret = buffer_flush(foutstream)) <= 0)
-		return ret;
+	if ((ret = buffer_flush(foutstream)) < 0) {
+		*res_r = OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT;
+		return TRUE;
+	} else if (ret == 0) {
+		*res_r = OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT;
+		return TRUE;
+	}
 
-	if (o_stream_lseek(foutstream) < 0)
-		return -1;
+	if (o_stream_lseek(foutstream) < 0) {
+		*res_r = OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT;
+		return TRUE;
+	}
 
-        start_offset = v_offset = instream->v_offset;
-	do {
-		offset = instream->real_stream->abs_start_offset + v_offset;
+	v_offset = instream->v_offset;
+	abs_start_offset = i_stream_get_absolute_offset(instream) - v_offset;
+	while (v_offset < in_size) {
+		offset = abs_start_offset + v_offset;
 		send_size = in_size - v_offset;
 
 		ret = safe_sendfile(foutstream->fd, in_fd, &offset,
@@ -735,8 +746,10 @@ static off_t io_stream_sendfile(struct ostream_private *outstream,
 				}
 			}
 			if (errno == EINVAL)
-				*sendfile_not_supported_r = TRUE;
+				sendfile_not_supported = TRUE;
 			else {
+				io_stream_set_error(&outstream->iostream,
+						    "sendfile() failed: %m");
 				outstream->ostream.stream_errno = errno;
 				/* close only if error wasn't because
 				   sendfile() isn't supported */
@@ -749,24 +762,27 @@ static off_t io_stream_sendfile(struct ostream_private *outstream,
 		foutstream->real_offset += ret;
 		foutstream->buffer_offset += ret;
 		outstream->ostream.offset += ret;
-	} while ((uoff_t)ret != send_size);
+	}
 
 	i_stream_seek(instream, v_offset);
-	if (ret == 0) {
-		/* we should be at EOF. if not, write more. */
-		i_assert(!foutstream->file ||
-			 instream->v_offset - start_offset == in_size);
-		if (i_stream_read(instream) > 0) {
-			if (io_stream_sendfile(outstream, instream, in_fd,
-					       sendfile_not_supported_r) < 0)
-				return -1;
-		}
+	if (v_offset == in_size) {
+		instream->eof = TRUE;
+		*res_r = OSTREAM_SEND_ISTREAM_RESULT_FINISHED;
+		return TRUE;
 	}
-	return ret < 0 ? -1 : (off_t)(instream->v_offset - start_offset);
+	i_assert(ret <= 0);
+	if (sendfile_not_supported)
+		return FALSE;
+	if (ret < 0)
+		*res_r = OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT;
+	else
+		*res_r = OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT;
+	return TRUE;
 }
 
-static off_t io_stream_copy_backwards(struct ostream_private *outstream,
-				      struct istream *instream, uoff_t in_size)
+static enum ostream_send_istream_result
+io_stream_copy_backwards(struct ostream_private *outstream,
+			 struct istream *instream, uoff_t in_size)
 {
 	struct file_ostream *foutstream = (struct file_ostream *)outstream;
 	uoff_t in_start_offset, in_offset, in_limit, out_offset;
@@ -806,8 +822,10 @@ static off_t io_stream_copy_backwards(struct ostream_private *outstream,
 			i_stream_seek(instream, in_offset);
 			read_size = in_limit - in_offset;
 
-			(void)i_stream_read_data(instream, &data, &size,
-						 read_size-1);
+			/* FIXME: something's wrong here */
+			if (i_stream_read_bytes(instream, &data, &size,
+						read_size) == 0)
+				i_unreached();
 			if (size >= read_size) {
 				size = read_size;
 				if (instream->mmaped) {
@@ -833,72 +851,69 @@ static off_t io_stream_copy_backwards(struct ostream_private *outstream,
 		if (ret < 0) {
 			/* error */
 			outstream->ostream.stream_errno = errno;
-			return -1;
+			return OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT;
 		}
 		i_stream_skip(instream, size);
 	}
+	/* make it visible that we're at instream's EOF */
+	i_stream_seek(instream, in_size);
+	instream->eof = TRUE;
 
 	outstream->ostream.offset += in_size - in_start_offset;
-	return (off_t) (in_size - in_start_offset);
+	return OSTREAM_SEND_ISTREAM_RESULT_FINISHED;
 }
 
-static off_t io_stream_copy_stream(struct ostream_private *outstream,
-				   struct istream *instream, bool same_stream)
+static enum ostream_send_istream_result
+io_stream_copy_same_stream(struct ostream_private *outstream,
+			   struct istream *instream)
 {
 	uoff_t in_size;
 	off_t in_abs_offset, ret = 0;
 
-	if (same_stream) {
-		/* copying data within same fd. we'll have to be careful with
-		   seeks and overlapping writes. */
-		if ((ret = i_stream_get_size(instream, TRUE, &in_size)) < 0) {
-			outstream->ostream.stream_errno =
-				instream->stream_errno;
-			return -1;
-		}
+	/* copying data within same fd. we'll have to be careful with
+	   seeks and overlapping writes. */
+	if ((ret = i_stream_get_size(instream, TRUE, &in_size)) < 0)
+		return OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT;
+	if (ret == 0) {
 		/* if we couldn't find out the size, it means that instream
 		   isn't a regular file_istream. we can be reasonably sure that
 		   we can copy it safely the regular way. (there's really no
 		   other possibility, other than failing completely.) */
+		return io_stream_copy(&outstream->ostream, instream);
 	}
-	if (ret > 0) {
-		i_assert(instream->v_offset <= in_size);
+	i_assert(instream->v_offset <= in_size);
 
-		in_abs_offset = instream->real_stream->abs_start_offset +
-			instream->v_offset;
-		ret = (off_t)outstream->ostream.offset - in_abs_offset;
-		if (ret == 0) {
-			/* copying data over itself. we don't really
-			   need to do that, just fake it. */
-			return in_size - instream->v_offset;
-		}
-		if (ret > 0 && in_size > (uoff_t)ret) {
-			/* overlapping */
-			i_assert(instream->seekable);
-			return io_stream_copy_backwards(outstream, instream,
-							in_size);
-		}
+	in_abs_offset = i_stream_get_absolute_offset(instream);
+	ret = (off_t)outstream->ostream.offset - in_abs_offset;
+	if (ret == 0) {
+		/* copying data over itself. we don't really
+		   need to do that, just fake it. */
+		return OSTREAM_SEND_ISTREAM_RESULT_FINISHED;
 	}
-
-	return io_stream_copy(&outstream->ostream, instream);
+	if (ret > 0 && in_size > (uoff_t)ret) {
+		/* overlapping */
+		i_assert(instream->seekable);
+		return io_stream_copy_backwards(outstream, instream, in_size);
+	} else {
+		/* non-overlapping */
+		return io_stream_copy(&outstream->ostream, instream);
+	}
 }
 
-static off_t o_stream_file_send_istream(struct ostream_private *outstream,
-					struct istream *instream)
+static enum ostream_send_istream_result
+o_stream_file_send_istream(struct ostream_private *outstream,
+			   struct istream *instream)
 {
 	struct file_ostream *foutstream = (struct file_ostream *)outstream;
 	bool same_stream;
 	int in_fd;
-	off_t ret;
-	bool sendfile_not_supported;
+	enum ostream_send_istream_result res;
 
 	in_fd = !instream->readable_fd ? -1 : i_stream_get_fd(instream);
 	if (!foutstream->no_sendfile && in_fd != -1 &&
 	    in_fd != foutstream->fd && instream->seekable) {
-		ret = io_stream_sendfile(outstream, instream, in_fd,
-					 &sendfile_not_supported);
-		if (ret >= 0 || !sendfile_not_supported)
-			return ret;
+		if (io_stream_sendfile(outstream, instream, in_fd, &res))
+			return res;
 
 		/* sendfile() not supported (with this fd), fallback to
 		   regular sending. */
@@ -907,7 +922,9 @@ static off_t o_stream_file_send_istream(struct ostream_private *outstream,
 
 	same_stream = i_stream_get_fd(instream) == foutstream->fd &&
 		foutstream->fd != -1;
-	return io_stream_copy_stream(outstream, instream, same_stream);
+	if (!same_stream)
+		return io_stream_copy(&outstream->ostream, instream);
+	return io_stream_copy_same_stream(outstream, instream);
 }
 
 static void o_stream_file_switch_ioloop(struct ostream_private *stream)
@@ -972,8 +989,9 @@ static void fstream_init_file(struct file_ostream *fstream)
 	}
 }
 
-struct ostream *
-o_stream_create_fd(int fd, size_t max_buffer_size, bool autoclose_fd)
+static
+struct ostream * o_stream_create_fd_common(int fd, size_t max_buffer_size,
+		bool autoclose_fd)
 {
 	struct file_ostream *fstream;
 	struct ostream *ostream;
@@ -1000,13 +1018,18 @@ o_stream_create_fd(int fd, size_t max_buffer_size, bool autoclose_fd)
 }
 
 struct ostream *
+o_stream_create_fd(int fd, size_t max_buffer_size)
+{
+	return o_stream_create_fd_common(fd, max_buffer_size, FALSE);
+}
+
+struct ostream *
 o_stream_create_fd_autoclose(int *fd, size_t max_buffer_size)
 {
-	struct ostream *output;
-
-	output = o_stream_create_fd(*fd, max_buffer_size, TRUE);
+	struct ostream *ostream = o_stream_create_fd_common(*fd,
+			max_buffer_size, TRUE);
 	*fd = -1;
-	return output;
+	return ostream;
 }
 
 struct ostream *

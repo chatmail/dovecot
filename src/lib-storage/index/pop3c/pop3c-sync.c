@@ -5,11 +5,13 @@
 #include "istream.h"
 #include "bsearch-insert-pos.h"
 #include "str.h"
+#include "sort.h"
 #include "strnum.h"
 #include "index-mail.h"
 #include "pop3c-client.h"
 #include "pop3c-storage.h"
 #include "pop3c-sync.h"
+#include "mailbox-recent-flags.h"
 
 struct pop3c_sync_msg {
 	uint32_t seq;
@@ -37,8 +39,7 @@ int pop3c_sync_get_uidls(struct pop3c_mailbox *mbox)
 
 	if (pop3c_client_cmd_stream(mbox->client, "UIDL\r\n",
 				    &input, &error) < 0) {
-		mail_storage_set_critical(mbox->box.storage,
-					  "UIDL failed: %s", error);
+		mailbox_set_critical(&mbox->box, "UIDL failed: %s", error);
 		return -1;
 	}
 
@@ -48,13 +49,13 @@ int pop3c_sync_get_uidls(struct pop3c_mailbox *mbox)
 		seq++;
 		p = strchr(line, ' ');
 		if (p == NULL) {
-			mail_storage_set_critical(mbox->box.storage,
+			mailbox_set_critical(&mbox->box,
 				"Invalid UIDL line: %s", line);
 			break;
 		}
 		*p++ = '\0';
 		if (str_to_uint(line, &line_seq) < 0 || line_seq != seq) {
-			mail_storage_set_critical(mbox->box.storage,
+			mailbox_set_critical(&mbox->box,
 				"Unexpected UIDL seq: %s != %u", line, seq);
 			break;
 		}
@@ -96,32 +97,31 @@ int pop3c_sync_get_sizes(struct pop3c_mailbox *mbox)
 
 	if (pop3c_client_cmd_stream(mbox->client, "LIST\r\n",
 				    &input, &error) < 0) {
-		mail_storage_set_critical(mbox->box.storage,
-					  "LIST failed: %s", error);
+		mailbox_set_critical(&mbox->box, "LIST failed: %s", error);
 		return -1;
 	}
 
 	mbox->msg_sizes = i_new(uoff_t, mbox->msg_count); seq = 0;
 	while ((line = i_stream_read_next_line(input)) != NULL) {
 		if (++seq > mbox->msg_count) {
-			mail_storage_set_critical(mbox->box.storage,
+			mailbox_set_critical(&mbox->box,
 				"Too much data in LIST: %s", line);
 			break;
 		}
 		p = strchr(line, ' ');
 		if (p == NULL) {
-			mail_storage_set_critical(mbox->box.storage,
+			mailbox_set_critical(&mbox->box,
 				"Invalid LIST line: %s", line);
 			break;
 		}
 		*p++ = '\0';
 		if (str_to_uint(line, &line_seq) < 0 || line_seq != seq) {
-			mail_storage_set_critical(mbox->box.storage,
+			mailbox_set_critical(&mbox->box,
 				"Unexpected LIST seq: %s != %u", line, seq);
 			break;
 		}
 		if (str_to_uoff(p, &mbox->msg_sizes[seq-1]) < 0) {
-			mail_storage_set_critical(mbox->box.storage,
+			mailbox_set_critical(&mbox->box,
 				"Invalid LIST size: %s", p);
 			break;
 		}
@@ -348,7 +348,7 @@ int pop3c_sync(struct pop3c_mailbox *mbox)
 struct mailbox_sync_context *
 pop3c_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
-	struct pop3c_mailbox *mbox = (struct pop3c_mailbox *)box;
+	struct pop3c_mailbox *mbox = POP3C_MAILBOX(box);
 	int ret = 0;
 
 	if ((flags & MAILBOX_SYNC_FLAG_FULL_READ) != 0 &&

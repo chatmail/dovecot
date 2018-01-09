@@ -2,8 +2,6 @@
 
 #include "common.h"
 #include "array.h"
-#include "fd-set-nonblock.h"
-#include "fd-close-on-exec.h"
 #include "ioloop.h"
 #include "net.h"
 #ifdef HAVE_SYSTEMD
@@ -81,8 +79,7 @@ static int service_unix_listener_listen(struct service_listener *l)
 		   after 3 times just fail here. */
 		fd = net_connect_unix(set->path);
 		if (fd != -1 || errno != ECONNREFUSED || i >= 3) {
-			if (fd != -1)
-				i_close_fd(&fd);
+			i_close_fd(&fd);
 			service_error(service, "Socket already exists: %s",
 				      set->path);
 			return 0;
@@ -381,8 +378,8 @@ int services_listen(struct service_list *service_list)
 	return ret;
 }
 
-static int listener_equals(const struct service_listener *l1,
-			   const struct service_listener *l2)
+static bool listener_equals(const struct service_listener *l1,
+			    const struct service_listener *l2)
 {
 	if (l1->type != l2->type)
 		return FALSE;

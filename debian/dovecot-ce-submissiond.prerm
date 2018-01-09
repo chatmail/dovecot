@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+	deb-systemd-invoke stop dovecot.socket || true
+fi
+
+if [ -x "/etc/init.d/dovecot" ]; then
+	invoke-rc.d dovecot stop
+fi
+
+#DEBHELPER#
+

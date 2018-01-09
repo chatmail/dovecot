@@ -10,7 +10,7 @@
 struct noop_list_iterate_context {
 	struct mailbox_list_iterate_context ctx;
 	struct mailbox_info inbox_info;
-	unsigned int list_inbox:1;
+	bool list_inbox:1;
 };
 
 extern struct mailbox_list none_mailbox_list;
@@ -24,6 +24,7 @@ static struct mailbox_list *none_list_alloc(void)
 
 	list = p_new(pool, struct mailbox_list, 1);
 	*list = none_mailbox_list;
+	list->props = MAILBOX_LIST_PROP_NO_LIST_INDEX;
 	list->pool = pool;
 	return list;
 }

@@ -229,7 +229,7 @@ view_lookup_full(struct mail_index_view *view, uint32_t seq,
 			*expunged_r = FALSE;
 		return head_rec;
 	} else {
-		/* expuned from head. use the old record. */
+		/* expunged from head. use the old record. */
 		*map_r = view->map;
 		if (expunged_r != NULL)
 			*expunged_r = TRUE;
@@ -630,9 +630,18 @@ mail_index_view_open_with_map(struct mail_index *index,
 	return view;
 }
 
-struct mail_index_view *mail_index_view_open(struct mail_index *index)
+#undef mail_index_view_open
+struct mail_index_view *
+mail_index_view_open(struct mail_index *index,
+		     const char *source_filename, unsigned int source_linenum)
 {
-	return mail_index_view_open_with_map(index, index->map);
+	struct mail_index_view *view;
+
+	view = mail_index_view_open_with_map(index, index->map);
+	/* these can be used to debug mail_index_view_close() leaks */
+	view->source_filename = source_filename;
+	view->source_linenum = source_linenum;
+	return view;
 }
 
 const struct mail_index_ext *

@@ -15,7 +15,7 @@ interpeter:
    extension, which allows access to external string data. Any type of Dovecot
    dict lookup can be specified as data source.
  * <Extprograms> [Pigeonhole.Sieve.Plugins.Extprograms.txt] [*Pigeonhole v0.3*
-   and beyond]/(custom language extensions, experimental)/
+   and beyond]/(custom language extensions)/
  * This plugin adds support for the Dovecot-specific 'vnd.dovecot.pipe',
    'vnd.dovecot.filter' and 'vnd.dovecot.execute' extensions. These extensions
    add new action commands for invoking a predefined set of external programs
@@ -29,10 +29,10 @@ interpeter:
    Sieve filtering in IMAP, operating when messages are created or their
    attributes are changed.
  * <Pipe> [Pigeonhole.Sieve.Plugins.Pipe.txt] [*Pigeonhole v0.2*] /(custom
-   language extension, experimental)/
+   language extension, deprecated)/
  * This plugin adds support for the Dovecot-specific 'vnd.dovecot.pipe'
    extension, which allows piping messages to a pre-defined set of external
    programs. For Pigeonhole v0.3, the same functionality (and more) is provided
    by the extprograms plugin.
 
-(This file was created from the wiki on 2017-10-10 04:42)
+(This file was created from the wiki on 2017-12-22 04:42)

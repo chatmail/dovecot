@@ -352,7 +352,7 @@ static void mech_scram_sha1_auth_continue(struct auth_request *auth_request,
 	const char *server_final_message;
 	size_t len;
 
-	if (!request->client_first_message_bare) {
+	if (request->client_first_message_bare == NULL) {
 		/* Received client-first-message */
 		if (parse_scram_client_first(request, data,
 					     data_size, &error)) {
@@ -367,7 +367,7 @@ static void mech_scram_sha1_auth_continue(struct auth_request *auth_request,
 					     &error)) {
 			if (!verify_credentials(request)) {
 				auth_request_log_info(auth_request, AUTH_SUBSYS_MECH,
-						      "password mismatch");
+						      AUTH_LOG_MSG_PASSWORD_MISMATCH);
 			} else {
 				server_final_message =
 					get_scram_server_final(request);

@@ -112,6 +112,9 @@ static void director_request_timeout(struct director *dir)
 			user->weak = FALSE;
 		}
 
+		i_assert(dir->requests_delayed_count > 0);
+		dir->requests_delayed_count--;
+
 		array_delete(&dir->pending_requests, 0, 1);
 		T_BEGIN {
 			request->callback(NULL, NULL, errormsg, request->context);
@@ -128,8 +131,13 @@ void director_request(struct director *dir, const char *username,
 		      director_request_callback *callback, void *context)
 {
 	struct director_request *request;
-	unsigned int username_hash =
-		director_get_username_hash(dir, username);
+	unsigned int username_hash;
+
+	if (!director_get_username_hash(dir, username,
+					&username_hash)) {
+		callback(NULL, NULL, "Failed to expand director_username_hash", context);
+		return;
+	}
 
 	dir->num_requests++;
 
@@ -267,7 +275,7 @@ director_request_existing(struct director_request *request, struct user *user)
 	}
 }
 
-bool director_request_continue(struct director_request *request)
+static bool director_request_continue_real(struct director_request *request)
 {
 	struct director *dir = request->dir;
 	struct mail_host *host;
@@ -325,9 +333,23 @@ bool director_request_continue(struct director_request *request)
 	i_assert(!user->weak);
 	director_update_user(dir, dir->self_host, user);
 	T_BEGIN {
-		request->callback(&user->host->ip, user->host->hostname,
+		request->callback(user->host, user->host->hostname,
 				  NULL, request->context);
 	} T_END;
 	director_request_free(request);
+	return TRUE;
+}
+
+bool director_request_continue(struct director_request *request)
+{
+	if (request->delay_reason != REQUEST_DELAY_NONE) {
+		i_assert(request->dir->requests_delayed_count > 0);
+		request->dir->requests_delayed_count--;
+	}
+	if (!director_request_continue_real(request)) {
+		i_assert(request->delay_reason != REQUEST_DELAY_NONE);
+		request->dir->requests_delayed_count++;
+		return FALSE;
+	}
 	return TRUE;
 }

@@ -1,6 +1,6 @@
 /* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
-/* The idea is that we use 32bit integers for string sort IDs which specifiy
+/* The idea is that we use 32bit integers for string sort IDs which specify
    the sort order for primary sort condition. The whole 32bit integer space is
    used and whenever adding a string, the available space is halved and the new
    ID is added in the middle. For example if we add one mail the first time, it
@@ -17,9 +17,9 @@
 
 struct mail_sort_node {
 	uint32_t seq:29;
-	uint32_t wanted:1;
-	uint32_t no_update:1;
-	uint32_t sort_id_changed:1;
+	bool wanted:1;
+	bool no_update:1;
+	bool sort_id_changed:1;
 	uint32_t sort_id;
 };
 ARRAY_DEFINE_TYPE(mail_sort_node, struct mail_sort_node);
@@ -36,13 +36,13 @@ struct sort_string_context {
 	uint32_t ext_id, last_seq, highest_reset_id, prev_seq;
 	uint32_t lowest_nonexpunged_zero;
 
-	unsigned int regetting:1;
-	unsigned int have_all_wanted:1;
-	unsigned int no_writing:1;
-	unsigned int reverse:1;
-	unsigned int seqs_nonsorted:1;
-	unsigned int broken:1;
-	unsigned int failed:1;
+	bool regetting:1;
+	bool have_all_wanted:1;
+	bool no_writing:1;
+	bool reverse:1;
+	bool seqs_nonsorted:1;
+	bool broken:1;
+	bool failed:1;
 };
 
 static struct sort_string_context *static_zero_cmp_context;
@@ -496,6 +496,11 @@ static void index_sort_merge(struct sort_string_context *ctx)
 			ret = 1;
 		}
 
+		if (ret == 0) {
+			ret = index_sort_node_cmp_type(ctx->program,
+					ctx->program->sort_program + 1,
+					znodes[zpos].seq, nznodes[nzpos].seq);
+		}
 		if (ret <= 0) {
 			array_append(&ctx->sorted_nodes, &znodes[zpos], 1);
 			prev_str = zstr;
@@ -833,9 +838,8 @@ static void index_sort_list_reset_broken(struct sort_string_context *ctx,
 	struct mailbox *box = ctx->program->t->box;
 	struct mail_sort_node *node;
 
-	mail_storage_set_critical(box->storage,
-				  "%s: Broken %s indexes, resetting: %s",
-				  box->name, ctx->primary_sort_name, reason);
+	mailbox_set_critical(box, "Broken %s indexes, resetting: %s",
+			     ctx->primary_sort_name, reason);
 
 	array_clear(&ctx->zero_nodes);
 	array_append_array(&ctx->zero_nodes,

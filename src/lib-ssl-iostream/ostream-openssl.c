@@ -26,8 +26,7 @@ static void o_stream_ssl_destroy(struct iostream_private *stream)
 
 	sstream->ssl_io->ssl_output = NULL;
 	ssl_iostream_unref(&sstream->ssl_io);
-	if (sstream->buffer != NULL)
-		buffer_free(&sstream->buffer);
+	buffer_free(&sstream->buffer);
 }
 
 static size_t
@@ -48,7 +47,7 @@ o_stream_ssl_buffer(struct ssl_ostream *sstream, const struct const_iovec *iov,
 	}
 
 	if (sstream->ostream.max_buffer_size == 0) {
-		/* we're requeted to use whatever space is available in
+		/* we're requested to use whatever space is available in
 		   the buffer */
 		avail = buffer_get_writable_size(sstream->buffer) - sstream->buffer->used;
 	} else {
@@ -95,8 +94,8 @@ static int o_stream_ssl_flush_buffer(struct ssl_ostream *sstream)
 				CONST_PTR_OFFSET(sstream->buffer->data, pos),
 				sstream->buffer->used - pos);
 		if (ret <= 0) {
-			ret = openssl_iostream_handle_write_error(sstream->ssl_io,
-								  ret, "SSL_write");
+			ret = openssl_iostream_handle_error(sstream->ssl_io,
+				ret, OPENSSL_IOSTREAM_SYNC_TYPE_WRITE, "SSL_write");
 			if (ret < 0) {
 				io_stream_set_error(&sstream->ostream.iostream,
 					"%s", sstream->ssl_io->last_error);
@@ -107,7 +106,8 @@ static int o_stream_ssl_flush_buffer(struct ssl_ostream *sstream)
 				break;
 		} else {
 			pos += ret;
-			(void)openssl_iostream_bio_sync(sstream->ssl_io);
+			(void)openssl_iostream_bio_sync(sstream->ssl_io,
+				OPENSSL_IOSTREAM_SYNC_TYPE_WRITE);
 		}
 	}
 	buffer_delete(sstream->buffer, 0, pos);
@@ -119,7 +119,8 @@ static int o_stream_ssl_flush(struct ostream_private *stream)
 	struct ssl_ostream *sstream = (struct ssl_ostream *)stream;
 	int ret;
 
-	if ((ret = openssl_iostream_more(sstream->ssl_io)) < 0) {
+	if ((ret = openssl_iostream_more(sstream->ssl_io,
+				OPENSSL_IOSTREAM_SYNC_TYPE_HANDSHAKE)) < 0) {
 		/* handshake failed */
 		io_stream_set_error(&stream->iostream, "%s",
 				    sstream->ssl_io->last_error);

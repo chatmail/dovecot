@@ -15,13 +15,13 @@ struct raw_mbox_istream {
 	uoff_t from_offset, hdr_offset, body_offset, mail_size;
 	uoff_t input_peak_offset;
 
-	unsigned int locked:1;
-	unsigned int seeked:1;
-	unsigned int crlf_ending:1;
-	unsigned int corrupted:1;
-	unsigned int mail_size_forced:1;
-	unsigned int eof:1;
-	unsigned int header_missing_eoh:1;
+	bool locked:1;
+	bool seeked:1;
+	bool crlf_ending:1;
+	bool corrupted:1;
+	bool mail_size_forced:1;
+	bool eof:1;
+	bool header_missing_eoh:1;
 };
 
 static void i_stream_raw_mbox_destroy(struct iostream_private *stream)
@@ -33,7 +33,6 @@ static void i_stream_raw_mbox_destroy(struct iostream_private *stream)
 
 	i_stream_seek(rstream->istream.parent,
 		      rstream->istream.istream.v_offset);
-	i_stream_unref(&rstream->istream.parent);
 }
 
 static int mbox_read_from_line(struct raw_mbox_istream *rstream)
@@ -60,7 +59,7 @@ static int mbox_read_from_line(struct raw_mbox_istream *rstream)
 	}
 
 	while ((p = memchr(buf+skip, '\n', pos-skip)) == NULL) {
-		ret = i_stream_read(rstream->istream.parent);
+		ret = i_stream_read_memarea(rstream->istream.parent);
 		buf = i_stream_get_data(rstream->istream.parent, &pos);
 		if (ret < 0) {
 			if (ret == -2) {
@@ -107,7 +106,7 @@ static int mbox_read_from_line(struct raw_mbox_istream *rstream)
 		rstream->istream.istream.v_offset += pos;
 		i_stream_skip(rstream->istream.parent, pos);
 
-		while ((ret = i_stream_read(rstream->istream.parent)) > 0) {
+		while ((ret = i_stream_read_memarea(rstream->istream.parent)) > 0) {
 			p = memchr(buf, '\n', pos);
 			if (p != NULL)
 				break;
@@ -197,7 +196,7 @@ static ssize_t i_stream_raw_mbox_read(struct istream_private *stream)
 			ret = pos;
 			break;
 		}
-		ret = i_stream_read(stream->parent);
+		ret = i_stream_read_memarea(stream->parent);
 	} while (ret > 0);
 	stream->istream.stream_errno = stream->parent->stream_errno;
 
@@ -453,19 +452,23 @@ struct istream *i_stream_create_raw_mbox(struct istream *input)
 	rstream->istream.istream.blocking = input->blocking;
 	rstream->istream.istream.seekable = input->seekable;
 
-	return i_stream_create(&rstream->istream, input, -1);
+	return i_stream_create(&rstream->istream, input, -1, 0);
 }
 
 static int istream_raw_mbox_is_valid_from(struct raw_mbox_istream *rstream)
 {
 	const unsigned char *data;
-	size_t size;
+	size_t size = 0;
 	time_t received_time;
 	char *sender;
 	int tz;
 
 	/* minimal: "From x Thu Nov 29 22:33:52 2001" = 31 chars */
-	(void)i_stream_read_data(rstream->istream.parent, &data, &size, 30);
+	do {
+		data = i_stream_get_data(rstream->istream.parent, &size);
+		if (size >= 31)
+			break;
+	} while (i_stream_read_memarea(rstream->istream.parent) > 0);
 
 	if ((size == 1 && data[0] == '\n') ||
 	    (size == 2 && data[0] == '\r' && data[1] == '\n')) {
@@ -484,8 +487,8 @@ static int istream_raw_mbox_is_valid_from(struct raw_mbox_istream *rstream)
 	}
 
 	while (memchr(data, '\n', size) == NULL) {
-		if (i_stream_read_data(rstream->istream.parent,
-				       &data, &size, size) < 0)
+		if (i_stream_read_bytes(rstream->istream.parent,
+					&data, &size, size+1) < 0)
 			break;
 	}
 
@@ -625,7 +628,7 @@ int istream_raw_mbox_get_body_size(struct istream *stream,
 	}
 
 	/* have to read through the message body */
-	while (i_stream_read_data(stream, &data, &size, 0) > 0)
+	while (i_stream_read_more(stream, &data, &size) > 0)
 		i_stream_skip(stream, size);
 	i_stream_seek(stream, old_offset);
 	if (stream->stream_errno != 0)

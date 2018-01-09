@@ -1,0 +1,33 @@
+diff -up dovecot-2.2.18/doc/example-config/conf.d/10-mail.conf.default-settings dovecot-2.2.18/doc/example-config/conf.d/10-mail.conf
+--- dovecot-2.2.18/doc/example-config/conf.d/10-mail.conf.default-settings	2014-06-02 13:50:10.000000000 +0200
++++ dovecot-2.2.18/doc/example-config/conf.d/10-mail.conf	2015-08-24 17:09:03.866648631 +0200
+@@ -283,6 +283,7 @@ namespace inbox {
+ # them simultaneously.
+ #mbox_read_locks = fcntl
+ #mbox_write_locks = dotlock fcntl
++mbox_write_locks = fcntl
+ 
+ # Maximum time to wait for lock (all of them) before aborting.
+ #mbox_lock_timeout = 5 mins
+diff -up dovecot-2.2.18/doc/example-config/conf.d/10-ssl.conf.default-settings dovecot-2.2.18/doc/example-config/conf.d/10-ssl.conf
+--- dovecot-2.2.18/doc/example-config/conf.d/10-ssl.conf.default-settings	2014-10-03 16:36:00.000000000 +0200
++++ dovecot-2.2.18/doc/example-config/conf.d/10-ssl.conf	2015-08-24 17:10:49.536071649 +0200
+@@ -3,7 +3,9 @@
+ ##
+ 
+ # SSL/TLS support: yes, no, required. <doc/wiki/SSL.txt>
+-#ssl = yes
++# disable plain pop3 and imap, allowed are only pop3+TLS, pop3s, imap+TLS and imaps
++# plain imap and pop3 are still allowed for local connections
++ssl = required
+ 
+ # PEM encoded X.509 SSL/TLS certificate and private key. They're opened before
+ # dropping root privileges, so keep the key file unreadable by anyone but
+@@ -50,6 +52,7 @@ ssl_key = </etc/ssl/private/dovecot.pem
+ 
+ # SSL ciphers to use
+ #ssl_cipher_list = ALL:!LOW:!SSLv2:!EXP:!aNULL
++ssl_cipher_list = PROFILE=SYSTEM
+ 
+ # Prefer the server's order of ciphers over client's.
+ #ssl_prefer_server_ciphers = no

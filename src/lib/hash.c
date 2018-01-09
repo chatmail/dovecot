@@ -52,6 +52,12 @@ struct hash_iterate_context {
 	unsigned int pos;
 };
 
+enum hash_table_operation{
+	HASH_TABLE_OP_INSERT,
+	HASH_TABLE_OP_UPDATE,
+	HASH_TABLE_OP_RESIZE
+};
+
 static bool hash_table_resize(struct hash_table *table, bool grow);
 
 void hash_table_create(struct hash_table **table_r, pool_t node_pool,
@@ -203,26 +209,30 @@ bool hash_table_lookup_full(const struct hash_table *table,
 	return TRUE;
 }
 
-static struct hash_node * ATTR_NOWARN_UNUSED_RESULT
+static void
 hash_table_insert_node(struct hash_table *table, void *key, void *value,
-		       bool check_existing)
+			     enum hash_table_operation opcode)
 {
 	struct hash_node *node, *prev;
 	unsigned int hash;
+	bool check_existing = TRUE;
 
 	i_assert(key != NULL);
 
+	if(opcode == HASH_TABLE_OP_RESIZE)
+		check_existing = FALSE;
 	hash = table->hash_cb(key);
 
 	if (check_existing && table->removed_count > 0) {
 		/* there may be holes, have to check everything */
 		node = hash_table_lookup_node(table, key, hash);
 		if (node != NULL) {
+			i_assert(opcode == HASH_TABLE_OP_UPDATE);
 			node->value = value;
-			return node;
+			return;
 		}
 
-                check_existing = FALSE;
+		check_existing = FALSE;
 	}
 
 	/* a) primary node */
@@ -232,13 +242,13 @@ hash_table_insert_node(struct hash_table *table, void *key, void *value,
 
 		node->key = key;
 		node->value = value;
-		return node;
+		return;
 	}
-
 	if (check_existing) {
 		if (table->key_compare_cb(node->key, key) == 0) {
+			i_assert(opcode == HASH_TABLE_OP_UPDATE);
 			node->value = value;
-			return node;
+			return;
 		}
 	}
 
@@ -250,11 +260,11 @@ hash_table_insert_node(struct hash_table *table, void *key, void *value,
 
 		if (check_existing) {
 			if (table->key_compare_cb(node->key, key) == 0) {
+				i_assert(opcode == HASH_TABLE_OP_UPDATE);
 				node->value = value;
-				return node;
+				return;
 			}
 		}
-
 		prev = node;
 		node = node->next;
 	}
@@ -262,7 +272,8 @@ hash_table_insert_node(struct hash_table *table, void *key, void *value,
 	if (node == NULL) {
 		if (table->frozen == 0 && hash_table_resize(table, TRUE)) {
 			/* resized table, try again */
-			return hash_table_insert_node(table, key, value, FALSE);
+			hash_table_insert_node(table, key, value, HASH_TABLE_OP_RESIZE);
+			return;
 		}
 
 		if (table->free_nodes == NULL)
@@ -279,20 +290,16 @@ hash_table_insert_node(struct hash_table *table, void *key, void *value,
 	node->value = value;
 
 	table->nodes_count++;
-	return node;
 }
 
 void hash_table_insert(struct hash_table *table, void *key, void *value)
 {
-	struct hash_node *node;
-
-	node = hash_table_insert_node(table, key, value, TRUE);
-	node->key = key;
+	hash_table_insert_node(table, key, value, HASH_TABLE_OP_INSERT);
 }
 
 void hash_table_update(struct hash_table *table, void *key, void *value)
 {
-	hash_table_insert_node(table, key, value, TRUE);
+	hash_table_insert_node(table, key, value, HASH_TABLE_OP_UPDATE);
 }
 
 static void
@@ -471,7 +478,7 @@ static bool hash_table_resize(struct hash_table *table, bool grow)
 		node = &old_nodes[i];
 		if (node->key != NULL) {
 			hash_table_insert_node(table, node->key,
-					       node->value, FALSE);
+					       node->value, HASH_TABLE_OP_RESIZE);
 		}
 
 		for (node = node->next; node != NULL; node = next) {
@@ -479,7 +486,7 @@ static bool hash_table_resize(struct hash_table *table, bool grow)
 
 			if (node->key != NULL) {
 				hash_table_insert_node(table, node->key,
-						       node->value, FALSE);
+						       node->value, HASH_TABLE_OP_RESIZE);
 			}
 			free_node(table, node);
 		}
@@ -514,7 +521,7 @@ unsigned int str_hash(const char *p)
 
 	while (*s != '\0') {
 		h = (h << 4) + *s;
-		if ((g = h & 0xf0000000UL)) {
+		if ((g = h & 0xf0000000UL) != 0) {
 			h = h ^ (g >> 24);
 			h = h ^ g;
 		}
@@ -532,7 +539,7 @@ unsigned int strcase_hash(const char *p)
 
 	while (*s != '\0') {
 		h = (h << 4) + i_toupper(*s);
-		if ((g = h & 0xf0000000UL)) {
+		if ((g = h & 0xf0000000UL) != 0) {
 			h = h ^ (g >> 24);
 			h = h ^ g;
 		}
@@ -549,7 +556,7 @@ unsigned int mem_hash(const void *p, unsigned int size)
 
 	for (i = 0; i < size; i++) {
 		h = (h << 4) + *s;
-		if ((g = h & 0xf0000000UL)) {
+		if ((g = h & 0xf0000000UL) != 0) {
 			h = h ^ (g >> 24);
 			h = h ^ g;
 		}
@@ -558,3 +565,19 @@ unsigned int mem_hash(const void *p, unsigned int size)
 	return h;
 }
 
+unsigned int strfastcase_hash(const char *p)
+{
+	const unsigned char *s = (const unsigned char *)p;
+	unsigned int g, h = 0;
+
+	while (*s != '\0') {
+		h = (h << 4) + ((*s) & ~0x20);
+		if ((g = h & 0xf0000000UL) != 0) {
+			h = h ^ (g >> 24);
+			h = h ^ g;
+		}
+		s++;
+	}
+
+	return h;
+}

@@ -213,13 +213,8 @@ mailbox_attribute_set_common(struct mailbox_transaction_context *t,
 			i_unreached();
 		}
 	}
-	
-	/* FIXME: v2.3 should move the internal_attribute to attribute_set()
-	   parameter (as flag). not done yet for API backwards compatibility */
-	t->internal_attribute = iattr != NULL &&
-		iattr->rank != MAIL_ATTRIBUTE_INTERNAL_RANK_AUTHORITY;
+
 	ret = t->box->v.attribute_set(t, type, key, value);
-	t->internal_attribute = FALSE;
 	return ret;
 }
 
@@ -253,7 +248,7 @@ int mailbox_attribute_value_to_string(struct mail_storage *storage,
 	}
 	str = t_str_new(128);
 	i_stream_seek(value->value_stream, 0);
-	while (i_stream_read_data(value->value_stream, &data, &size, 0) > 0) {
+	while (i_stream_read_more(value->value_stream, &data, &size) > 0) {
 		if (memchr(data, '\0', size) != NULL) {
 			mail_storage_set_error(storage, MAIL_ERROR_PARAMS,
 				"Attribute string value has NULs");
@@ -274,7 +269,7 @@ int mailbox_attribute_value_to_string(struct mail_storage *storage,
 }
 
 static int
-mailbox_attribute_get_common(struct mailbox_transaction_context *t,
+mailbox_attribute_get_common(struct mailbox *box,
 			     enum mail_attribute_type type, const char *key,
 			     struct mail_attribute_value *value_r)
 {
@@ -284,7 +279,7 @@ mailbox_attribute_get_common(struct mailbox_transaction_context *t,
 	iattr = mailbox_internal_attribute_get(type, key);
 
 	/* allow internal server attributes only for the inbox */
-	if (iattr != NULL && !t->box->inbox_user &&
+	if (iattr != NULL && !box->inbox_user &&
 	    strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER,
 	    strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER)) == 0)
 		iattr = NULL;
@@ -293,16 +288,17 @@ mailbox_attribute_get_common(struct mailbox_transaction_context *t,
 	if (iattr != NULL) {
 		switch (iattr->rank) {
 		case MAIL_ATTRIBUTE_INTERNAL_RANK_OVERRIDE:
-			if ((ret = iattr->get(t, key, value_r)) != 0) {
+			if ((ret = iattr->get(box, key, value_r)) != 0) {
 				if (ret < 0)
 					return -1;
 				value_r->flags |= MAIL_ATTRIBUTE_VALUE_FLAG_READONLY;
 				return 1;
 			}
+			break;
 		case MAIL_ATTRIBUTE_INTERNAL_RANK_DEFAULT:
 			break;
 		case MAIL_ATTRIBUTE_INTERNAL_RANK_AUTHORITY:
-			if ((ret = iattr->get(t, key, value_r)) <= 0)
+			if ((ret = iattr->get(box, key, value_r)) <= 0)
 				return ret;
 			value_r->flags |= MAIL_ATTRIBUTE_VALUE_FLAG_READONLY;
 			return 1;
@@ -311,30 +307,25 @@ mailbox_attribute_get_common(struct mailbox_transaction_context *t,
 		}
 	}
 
-	/* user entries - FIXME: v2.3 should move the internal_attribute to
-	   attribute_get() parameter (as flag). not done yet for API backwards
-	   compatibility */
-	t->internal_attribute = iattr != NULL &&
-		iattr->rank != MAIL_ATTRIBUTE_INTERNAL_RANK_AUTHORITY;
-	ret = t->box->v.attribute_get(t, type, key, value_r);
-	t->internal_attribute = FALSE;
+	ret = box->v.attribute_get(box, type, key, value_r);
 	if (ret != 0)
 		return ret;
 
 	/* default entries */
 	if (iattr != NULL) {
 		switch (iattr->rank) {
-		case MAIL_ATTRIBUTE_INTERNAL_RANK_DEFAULT:		
+		case MAIL_ATTRIBUTE_INTERNAL_RANK_DEFAULT:
 			if (iattr->get == NULL)
 				ret = 0;
 			else {
-				if ((ret = iattr->get(t, key, value_r)) < 0)
+				if ((ret = iattr->get(box, key, value_r)) < 0)
 					return ret;
 			}
 			if (ret > 0) {
 				value_r->flags |= MAIL_ATTRIBUTE_VALUE_FLAG_READONLY;
 				return 1;
 			}
+			break;
 		case MAIL_ATTRIBUTE_INTERNAL_RANK_OVERRIDE:
 			break;
 		default:
@@ -344,19 +335,20 @@ mailbox_attribute_get_common(struct mailbox_transaction_context *t,
 	return 0;
 }
 
-int mailbox_attribute_get(struct mailbox_transaction_context *t,
+int mailbox_attribute_get(struct mailbox *box,
 			  enum mail_attribute_type type, const char *key,
 			  struct mail_attribute_value *value_r)
 {
 	int ret;
 	i_zero(value_r);
-	if ((ret = mailbox_attribute_get_common(t, type, key, value_r)) <= 0)
+	if ((ret = mailbox_attribute_get_common(box, type, key,
+				value_r)) <= 0)
 		return ret;
 	i_assert(value_r->value != NULL);
 	return 1;
 }
 
-int mailbox_attribute_get_stream(struct mailbox_transaction_context *t,
+int mailbox_attribute_get_stream(struct mailbox *box,
 				 enum mail_attribute_type type, const char *key,
 				 struct mail_attribute_value *value_r)
 {
@@ -364,7 +356,8 @@ int mailbox_attribute_get_stream(struct mailbox_transaction_context *t,
 
 	i_zero(value_r);
 	value_r->flags |= MAIL_ATTRIBUTE_VALUE_FLAG_INT_STREAMS;
-	if ((ret = mailbox_attribute_get_common(t, type, key, value_r)) <= 0)
+	if ((ret = mailbox_attribute_get_common(box, type, key,
+				value_r)) <= 0)
 		return ret;
 	i_assert(value_r->value != NULL || value_r->value_stream != NULL);
 	return 1;
@@ -391,6 +384,7 @@ mailbox_attribute_iter_init(struct mailbox *box,
 
 	iter = box->v.attribute_iter_init(box, type, prefix);
 	i_assert(iter->box != NULL);
+	box->attribute_iter_count++;
 
 	/* check which internal attributes may apply */
 	t_array_init(&extra_attrs, 4);
@@ -410,7 +404,7 @@ mailbox_attribute_iter_init(struct mailbox *box,
 
 	/* copy relevant attributes */
 	array_foreach(&extra_attrs, attr) {
-		/* skip internal server attributes unless we're interating inbox */
+		/* skip internal server attributes unless we're iterating inbox */
 		if (!box->inbox_any &&
 		    strncmp(*attr, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER,
 			    strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER)) == 0)
@@ -462,13 +456,20 @@ int mailbox_attribute_iter_deinit(struct mailbox_attribute_iter **_iter)
 	int ret;
 
 	*_iter = NULL;
+
 	if (iter->box != NULL) {
 		/* not wrapped */
+		i_assert(iter->box->attribute_iter_count > 0);
+		iter->box->attribute_iter_count--;
 		return iter->box->v.attribute_iter_deinit(iter);
 	}
 
 	/* wrapped */
 	intiter = (struct mailbox_attribute_internal_iter *)iter;
+
+	i_assert(intiter->real_iter->box->attribute_iter_count > 0);
+	intiter->real_iter->box->attribute_iter_count--;
+
 	ret = intiter->real_iter->box->v.attribute_iter_deinit(intiter->real_iter);
 	array_free(&intiter->extra_attrs);
 	i_free(intiter);

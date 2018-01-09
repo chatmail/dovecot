@@ -1,0 +1,26 @@
+#!/usr/bin/python3
+import poplib
+
+print("Testing POP3")
+print("Connecting")
+client = poplib.POP3('localhost')
+client.set_debuglevel(2)
+
+print("Logging in")
+client.user('dep8')
+client.pass_('test')
+
+print("Listing INBOX")
+res, data, _ = client.list()
+assert res.startswith(b'+OK')
+
+print("Fetching and verifying test message")
+for entry in data:
+    _id, _ = entry.split(maxsplit=1)
+    res, body, _ = client.retr(int(_id))
+    if b'Subject: DEP-8 test' in body:
+        break
+else:
+    raise AssertionError("Test message not found")
+
+print("Done")

@@ -102,7 +102,7 @@ file_lock_find_proc_locks(int lock_fd ATTR_UNUSED)
 	int fd;
 
 	if (!have_proc_locks)
-		return FALSE;
+		return NULL;
 
 	if (fstat(lock_fd, &st) < 0)
 		return "";
@@ -197,7 +197,7 @@ static int file_lock_do(int fd, const char *path, int lock_type,
 		fl.l_start = 0;
 		fl.l_len = 0;
 
-		ret = fcntl(fd, timeout_secs ? F_SETLKW : F_SETLK, &fl);
+		ret = fcntl(fd, timeout_secs != 0 ? F_SETLKW : F_SETLK, &fl);
 		if (timeout_secs != 0) {
 			alarm(0);
 			file_lock_wait_end(path);

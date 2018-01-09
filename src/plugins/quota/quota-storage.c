@@ -33,8 +33,8 @@ struct quota_mailbox {
 	ARRAY(uoff_t) expunge_sizes;
 	unsigned int prev_idx;
 
-	unsigned int recalculate:1;
-	unsigned int sync_transaction_expunge:1;
+	bool recalculate:1;
+	bool sync_transaction_expunge:1;
 };
 
 struct quota_user_module quota_user_module =
@@ -47,10 +47,12 @@ static MODULE_CONTEXT_DEFINE_INIT(quota_mailbox_list_module,
 				  &mailbox_list_module_register);
 
 static void quota_set_storage_error(struct quota_transaction_context *qt,
-				    struct mail_storage *storage,
-				    enum quota_alloc_result res)
+				    struct mailbox *box,
+				    enum quota_alloc_result res,
+				    const char *internal_err)
 {
 	const char *errstr = quota_alloc_result_errstr(res, qt);
+	struct mail_storage *storage = box->storage;
 	switch (res) {
 	case QUOTA_ALLOC_RESULT_OVER_MAXSIZE:
 		mail_storage_set_error(storage, MAIL_ERROR_LIMIT, errstr);
@@ -60,7 +62,8 @@ static void quota_set_storage_error(struct quota_transaction_context *qt,
 		mail_storage_set_error(storage, MAIL_ERROR_NOQUOTA, errstr);
 		break;
 	case QUOTA_ALLOC_RESULT_TEMPFAIL:
-		mail_storage_set_internal_error(storage);
+	case QUOTA_ALLOC_RESULT_BACKGROUND_CALC:
+		mailbox_set_critical(box, "quota: %s", internal_err);
 		break;
 	case QUOTA_ALLOC_RESULT_OK:
 		i_unreached();
@@ -120,9 +123,10 @@ quota_get_status(struct mailbox *box, enum mailbox_status_items items,
 
 	if ((items & STATUS_CHECK_OVER_QUOTA) != 0) {
 		qt = quota_transaction_begin(box);
-		enum quota_alloc_result qret = quota_test_alloc(qt, 0);
+		const char *error;
+		enum quota_alloc_result qret = quota_test_alloc(qt, 0, &error);
 		if (qret != QUOTA_ALLOC_RESULT_OK) {
-			quota_set_storage_error(qt, box->storage, qret);
+			quota_set_storage_error(qt, box, qret, error);
 			ret = -1;
 		}
 		quota_transaction_rollback(&qt);
@@ -141,13 +145,14 @@ quota_get_status(struct mailbox *box, enum mailbox_status_items items,
 
 static struct mailbox_transaction_context *
 quota_mailbox_transaction_begin(struct mailbox *box,
-				enum mailbox_transaction_flags flags)
+				enum mailbox_transaction_flags flags,
+				const char *reason)
 {
 	struct quota_mailbox *qbox = QUOTA_CONTEXT(box);
 	struct mailbox_transaction_context *t;
 	struct quota_transaction_context *qt;
 
-	t = qbox->module_ctx.super.transaction_begin(box, flags);
+	t = qbox->module_ctx.super.transaction_begin(box, flags, reason);
 	qt = quota_transaction_begin(box);
 	qt->sync_transaction = (flags & MAILBOX_TRANSACTION_FLAG_SYNC) != 0;
 
@@ -249,19 +254,21 @@ static int quota_check(struct mail_save_context *ctx, struct mailbox *src_box)
 		return 0;
 	}
 
-	ret = quota_try_alloc(qt, ctx->dest_mail);
+	const char *error;
+	ret = quota_try_alloc(qt, ctx->dest_mail, &error);
 	switch (ret) {
 	case QUOTA_ALLOC_RESULT_OK:
 		return 0;
 	case QUOTA_ALLOC_RESULT_TEMPFAIL:
-		/* allow saving anyway. don't log an error, because at this
-		   point we can't give very informative error without API
-		   changes. the real error should have been logged already
-		   (except if this was due to quota calculation on background,
-		   then we intentionally don't want to log anything) */
+		/* Log the error, but allow saving anyway. */
+		i_error("quota: Failed to check if user is under quota: %s - saving mail anyway", error);
+		return 0;
+	case QUOTA_ALLOC_RESULT_BACKGROUND_CALC:
+		/* Could not determine if there is enough space due to ongoing
+		   background quota calculation, allow saving anyway. */
 		return 0;
 	default:
-		quota_set_storage_error(qt, t->box->storage, ret);
+		quota_set_storage_error(qt, t->box, ret, error);
 		return -1;
 	}
 }
@@ -278,7 +285,11 @@ quota_copy(struct mail_save_context *ctx, struct mail *mail)
 
 	/* get quota before copying any mails. this avoids .vsize.lock
 	   deadlocks with backends that lock mails for expunging/copying. */
-	(void)quota_transaction_set_limits(qt);
+	enum quota_get_result error_res;
+	const char *error;
+	if (quota_transaction_set_limits(qt, &error_res, &error) < 0 &&
+	    error_res != QUOTA_GET_RESULT_BACKGROUND_CALC)
+		i_error("Failed to set quota transaction limits: %s", error);
 
 	if (qbox->module_ctx.super.copy(ctx, mail) < 0)
 		return -1;
@@ -297,6 +308,7 @@ quota_save_begin(struct mail_save_context *ctx, struct istream *input)
 	struct mailbox_transaction_context *t = ctx->transaction;
 	struct quota_transaction_context *qt = QUOTA_CONTEXT(t);
 	struct quota_mailbox *qbox = QUOTA_CONTEXT(t->box);
+	const char *error;
 	uoff_t size;
 
 	if (!ctx->moving && i_stream_get_size(input, TRUE, &size) > 0) {
@@ -310,17 +322,22 @@ quota_save_begin(struct mail_save_context *ctx, struct istream *input)
 		   benefit of giving "out of quota" error before sending the
 		   full mail. */
 
-		enum quota_alloc_result qret = quota_test_alloc(qt, size);
+		enum quota_alloc_result qret = quota_test_alloc(qt, size, &error);
 		switch (qret) {
 		case QUOTA_ALLOC_RESULT_OK:
 			/* Great, there is space. */
 			break;
 		case QUOTA_ALLOC_RESULT_TEMPFAIL:
-			/* allow saving anyway. don't log an error - see
-			   quota_check() for reasons. */
+			/* Log the error, but allow saving anyway. */
+			i_error("quota: Failed to check if user is under quota: %s - saving mail anyway", error);
+			break;
+		case QUOTA_ALLOC_RESULT_BACKGROUND_CALC:
+			/* Could not determine if there is enough space due to
+			 * ongoing background quota calculation, allow saving
+			 * anyway. */
 			break;
 		default:
-			quota_set_storage_error(qt, t->box->storage, qret);
+			quota_set_storage_error(qt, t->box, qret, error);
 			return -1;
 		}
 	}
@@ -330,7 +347,10 @@ quota_save_begin(struct mail_save_context *ctx, struct istream *input)
 
 	/* get quota before copying any mails. this avoids .vsize.lock
 	   deadlocks with backends that lock mails for expunging/copying. */
-	(void)quota_transaction_set_limits(qt);
+	enum quota_get_result error_res;
+	if (quota_transaction_set_limits(qt, &error_res, &error) < 0 &&
+	    error_res != QUOTA_GET_RESULT_BACKGROUND_CALC)
+		i_error("Failed to set quota transaction limits: %s", error);
 
 	return qbox->module_ctx.super.save_begin(ctx, input);
 }
@@ -451,8 +471,7 @@ static void quota_mailbox_sync_notify(struct mailbox *box, uint32_t uid,
 		struct mail_index_view *box_view = box->view;
 		if (box->tmp_sync_view != NULL)
 			box->view = box->tmp_sync_view;
-		qbox->expunge_trans = mailbox_transaction_begin(box, 0);
-		mailbox_transaction_set_reason(qbox->expunge_trans, "quota");
+		qbox->expunge_trans = mailbox_transaction_begin(box, 0, "quota");
 		box->view = box_view;
 		qbox->expunge_qt->tmp_mail =
 			mail_alloc(qbox->expunge_trans,

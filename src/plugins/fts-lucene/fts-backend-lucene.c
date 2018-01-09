@@ -30,8 +30,8 @@ struct lucene_fts_backend {
 
 	struct fts_expunge_log *expunge_log;
 
-	unsigned int dir_created:1;
-	unsigned int updating:1;
+	bool dir_created:1;
+	bool updating:1;
 };
 
 struct lucene_fts_backend_update_context {
@@ -263,6 +263,7 @@ fts_backend_lucene_update_deinit(struct fts_backend_update_context *_ctx)
 	if (ctx->expunge_ctx != NULL) {
 		if (fts_expunge_log_append_commit(&ctx->expunge_ctx) < 0) {
 			struct stat st;
+			ret = -1;
 
 			if (stat(backend->dir_path, &st) < 0 && errno == ENOENT) {
 				/* lucene-indexes directory doesn't even exist,
@@ -271,7 +272,6 @@ fts_backend_lucene_update_deinit(struct fts_backend_update_context *_ctx)
 				(void)lucene_index_rescan(backend->index);
 				ret = 0;
 			}
-			ret = -1;
 		}
 	}
 
@@ -289,8 +289,7 @@ fts_backend_lucene_update_deinit(struct fts_backend_update_context *_ctx)
 				str_tabescape(user->username),
 				str_tabescape(ctx->first_box_vname));
 			fd = fts_indexer_cmd(user, cmd, &path);
-			if (fd != -1)
-				i_close_fd(&fd);
+			i_close_fd(&fd);
 		}
 	}
 
@@ -499,7 +498,7 @@ static unsigned int wstr_hash(const wchar_t *s)
 
 	while (*s != '\0') {
 		h = (h << 4) + *s;
-		if ((g = h & 0xf0000000UL)) {
+		if ((g = h & 0xf0000000UL) != 0) {
 			h = h ^ (g >> 24);
 			h = h ^ g;
 		}

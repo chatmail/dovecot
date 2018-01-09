@@ -59,7 +59,7 @@ static void test_istream_seekable_one(unsigned int buffer_size)
 	}
 	test_assert(i_stream_read(input) == -1);
 	for (i = 0; i < STREAM_COUNT; i++) {
-		test_assert(i_stream_is_eof(streams[i]));
+		test_assert(streams[i]->eof && streams[i]->stream_errno == 0);
 		i_stream_unref(&streams[i]);
 	}
 	i_stream_unref(&input);
@@ -73,11 +73,11 @@ static void test_istream_seekable_random(void)
 	size_t size;
 	unsigned int i, j, offset, stream_count, data_len, buffer_size;
 
-	stream_count = (rand() % 10) + 2;
+	stream_count = i_rand_minmax(2, 10 + 2 - 1);
 	streams = t_new(struct istream *, stream_count + 1);
 	for (i = 0, offset = 0; i < stream_count; i++) {
-		data_len = rand() % 100 + 1;
-		w_data = t_malloc(data_len);
+		data_len = i_rand_minmax(1, 100);
+		w_data = t_malloc_no0(data_len);
 		for (j = 0; j < data_len; j++)
 			w_data[j] = offset++;
 		streams[i] = test_istream_create_data(w_data, data_len);
@@ -87,7 +87,7 @@ static void test_istream_seekable_random(void)
 	streams[i] = NULL;
 	i_assert(offset > 0);
 
-	buffer_size = (rand() % 100) + 1; size = 0;
+	buffer_size = i_rand_minmax(1, 100); size = 0;
 	input = i_stream_create_seekable(streams, buffer_size, fd_callback, NULL);
 
 	/* first read it through */
@@ -98,8 +98,8 @@ static void test_istream_seekable_random(void)
 
 	i_stream_seek(input, 0);
 	for (i = 0; i < 100; i++) {
-		if (rand() % 3 == 0) {
-			i_stream_seek(input, rand() % offset);
+		if (i_rand_limit(3) == 0) {
+			i_stream_seek(input, i_rand_limit(offset));
 		} else {
 			ssize_t ret = i_stream_read(input);
 			if (input->v_offset + size == offset)
@@ -109,7 +109,7 @@ static void test_istream_seekable_random(void)
 			} else {
 				test_assert(ret > 0);
 				test_assert(input->v_offset + ret <= offset);
-				i_stream_skip(input, rand() % (ret+1));
+				i_stream_skip(input, i_rand_limit(ret + 1));
 
 				data = i_stream_get_data(input, &size);
 				for (j = 0; j < size; j++) {
@@ -120,7 +120,7 @@ static void test_istream_seekable_random(void)
 		size = i_stream_get_data_size(input);
 	}
 	for (i = 0; i < stream_count; i++) {
-		test_assert(i_stream_is_eof(streams[i]));
+		test_assert(streams[i]->eof && streams[i]->stream_errno == 0);
 		i_stream_unref(&streams[i]);
 	}
 	i_stream_unref(&input);

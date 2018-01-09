@@ -1,0 +1,10 @@
+/usr/share/dovecot/dovecot-abi contains that portion of DOVECOT_ABI_VERSION
+from configure.ac outside parentheses (i.e not including the package version.)
+It might look something like this:
+
+2.2.ABIv10
+
+...packages providing plugins for dovecot can use this information in their
+dependencies to avoid having to update every time there is a minor update to 
+the dovecot package.
+

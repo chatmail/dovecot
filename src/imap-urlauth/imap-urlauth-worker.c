@@ -42,7 +42,7 @@
 #define IS_STANDALONE() \
         (getenv(MASTER_IS_PARENT_ENV) == NULL)
 
-#define IMAP_URLAUTH_WORKER_PROTOCOL_MAJOR_VERSION 1
+#define IMAP_URLAUTH_WORKER_PROTOCOL_MAJOR_VERSION 2
 #define IMAP_URLAUTH_WORKER_PROTOCOL_MINOR_VERSION 0
 
 struct client {
@@ -55,7 +55,7 @@ struct client {
 	struct ostream *output, *ctrl_output;
 	struct timeout *to_idle;
 
-	char *access_user;
+	char *access_user, *access_service;
 	ARRAY_TYPE(string) access_apps;
 
 	struct mail_storage_service_user *service_user;
@@ -71,12 +71,12 @@ struct client {
 	const struct imap_urlauth_worker_settings *set;
 	const struct mail_storage_settings *mail_set;
 
-	unsigned int debug:1;
-	unsigned int finished:1;
-	unsigned int waiting_input:1;
-	unsigned int version_received:1;
-	unsigned int access_received:1;
-	unsigned int access_anonymous:1;
+	bool debug:1;
+	bool finished:1;
+	bool waiting_input:1;
+	bool version_received:1;
+	bool access_received:1;
+	bool access_anonymous:1;
 };
 
 static bool verbose_proctitle = FALSE;
@@ -193,8 +193,8 @@ client_create_standalone(const char *access_user,
 	}
 	client->debug = debug;
 
-	client->input = i_stream_create_fd(fd_in, MAX_INBUF_SIZE, FALSE);
-	client->output = o_stream_create_fd(fd_out, (size_t)-1, FALSE);
+	client->input = i_stream_create_fd(fd_in, MAX_INBUF_SIZE);
+	client->output = o_stream_create_fd(fd_out, (size_t)-1);
 	client->io = io_add(fd_in, IO_READ, client_input, client);
 	client->to_idle = timeout_add(CLIENT_IDLE_TIMEOUT_MSECS,
 				      client_idle_timeout, client);
@@ -238,22 +238,15 @@ static void client_destroy(struct client *client)
 	if (client->mail_user != NULL)
 		mail_user_unref(&client->mail_user);
 
-	if (client->io != NULL)
-		io_remove(&client->io);
-	if (client->ctrl_io != NULL)
-		io_remove(&client->ctrl_io);
-	if (client->to_idle != NULL)
-		timeout_remove(&client->to_idle);
+	io_remove(&client->io);
+	io_remove(&client->ctrl_io);
+	timeout_remove(&client->to_idle);
 
-	if (client->input != NULL)
-		i_stream_destroy(&client->input);
-	if (client->output != NULL)
-		o_stream_destroy(&client->output);
+	i_stream_destroy(&client->input);
+	o_stream_destroy(&client->output);
 
-	if (client->ctrl_input != NULL)
-		i_stream_destroy(&client->ctrl_input);
-	if (client->ctrl_output != NULL)
-		o_stream_destroy(&client->ctrl_output);
+	i_stream_destroy(&client->ctrl_input);
+	o_stream_destroy(&client->ctrl_output);
 
 	fd_close_maybe_stdio(&client->fd_in, &client->fd_out);
 	if (client->fd_ctrl >= 0)
@@ -262,6 +255,7 @@ static void client_destroy(struct client *client)
 	if (client->service_user != NULL)
 		mail_storage_service_user_unref(&client->service_user);
 	i_free(client->access_user);
+	i_free(client->access_service);
 	array_foreach_modifiable(&client->access_apps, app)
 		i_free(*app);
 	array_free(&client->access_apps);
@@ -277,7 +271,7 @@ static int client_run_url(struct client *client)
 	size_t size;
 	ssize_t ret = 0;
 
-	while (i_stream_read_data(client->msg_part_input, &data, &size, 0) > 0) {
+	while (i_stream_read_more(client->msg_part_input, &data, &size) > 0) {
 		if ((ret = o_stream_send(client->output, data, size)) < 0)
 			break;
 		i_stream_skip(client->msg_part_input, ret);
@@ -606,9 +600,15 @@ client_handle_user_command(struct client *client, const char *cmd,
 	restrict_access_allow_coredumps(TRUE);
 
 	set = mail_storage_service_user_get_set(user)[1];
-	settings_var_expand(&imap_urlauth_worker_setting_parser_info, set,
-			    mail_user->pool,
-			    mail_user_var_expand_table(mail_user));
+	if (settings_var_expand(&imap_urlauth_worker_setting_parser_info, set,
+				mail_user->pool,
+				mail_user_var_expand_table(mail_user),
+				&error) <= 0) {
+		client_send_line(client, "NO");
+		client_abort(client, t_strdup_printf(
+			"Session aborted: Failed to expand settings: %s", error));
+		return 0;
+	}
 
 	if (set->verbose_proctitle) {
 		verbose_proctitle = TRUE;
@@ -637,14 +637,16 @@ client_handle_user_command(struct client *client, const char *cmd,
 	config.url_host = set->imap_urlauth_host;
 	config.url_port = set->imap_urlauth_port;
 	config.access_user = client->access_user;
+	config.access_service = client->access_service;
 	config.access_anonymous = client->access_anonymous;
 	config.access_applications =
 		(const void *)array_get(&client->access_apps, &count);
 		
 	client->urlauth_ctx = imap_urlauth_init(client->mail_user, &config);
 	if (client->debug) {
-		i_debug("Providing access to user account `%s' on behalf of `%s'",
-			mail_user->username, client->access_user);
+		i_debug("Providing access to user account `%s' on behalf of user `%s' "
+			"using service `%s'", mail_user->username, client->access_user,
+			client->access_service);
 	}
 
 	i_set_failure_prefix("imap-urlauth[%s](%s->%s): ",
@@ -718,7 +720,6 @@ static void client_input(struct client *client)
 
 static int client_output(struct client *client)
 {
-	o_stream_cork(client->output);
 	if (o_stream_flush(client->output) < 0) {
 		if (client->ctrl_output != NULL)
 			(void)o_stream_send_str(client->ctrl_output, "DISCONNECTED\n");
@@ -741,7 +742,6 @@ static int client_output(struct client *client)
 		}
 	}
 
-	o_stream_uncork(client->output);
 	if (client->url != NULL) {
 		/* url not finished yet */
 		return 0;
@@ -790,9 +790,8 @@ client_ctrl_read_fds(struct client *client)
 	}
 
 	client->ctrl_input =
-		i_stream_create_fd(client->fd_ctrl, MAX_INBUF_SIZE, FALSE);
-	client->ctrl_output =
-		o_stream_create_fd(client->fd_ctrl, (size_t)-1, FALSE);
+		i_stream_create_fd(client->fd_ctrl, MAX_INBUF_SIZE);
+	client->ctrl_output = o_stream_create_fd(client->fd_ctrl, (size_t)-1);
 	return 1;
 }
 
@@ -858,13 +857,14 @@ static void client_ctrl_input(struct client *client)
 		return;
 	}
 	args++;
-	if (*args == NULL) {
+	if (args[0] == NULL || args[1] == NULL) {
 		i_error("Invalid ACCESS command: %s", str_sanitize(line, 80));
 		client_abort(client, "Control session aborted: Invalid command");
 		return;
 	}
 
 	i_assert(client->access_user == NULL);
+	i_assert(client->access_service == NULL);
 	if (**args != '\0') {
 		client->access_user = i_strdup(*args);
 		client->access_anonymous = FALSE;
@@ -872,6 +872,9 @@ static void client_ctrl_input(struct client *client)
 		client->access_user = i_strdup("anonymous");
 		client->access_anonymous = TRUE;
 	}
+	args++;
+	client->access_service = i_strdup(*args);
+
 	i_set_failure_prefix("imap-urlauth[%s](%s): ",
 			     my_pid, client->access_user);
 
@@ -910,14 +913,14 @@ static void client_ctrl_input(struct client *client)
 		return;
 	}
 
-	client->input = i_stream_create_fd(client->fd_in, MAX_INBUF_SIZE, FALSE);
-	client->output = o_stream_create_fd(client->fd_out, (size_t)-1, FALSE); 
+	client->input = i_stream_create_fd(client->fd_in, MAX_INBUF_SIZE);
+	client->output = o_stream_create_fd(client->fd_out, (size_t)-1);
 	client->io = io_add(client->fd_in, IO_READ, client_input, client);
 	o_stream_set_flush_callback(client->output, client_output, client);
 
 	if (client->debug) {
-		i_debug("Worker activated for access by user %s",
-			client->access_user);
+		i_debug("Worker activated for access by user `%s' using service `%s'",
+			client->access_user, client->access_service);
 	}
 }
 
@@ -1000,7 +1003,6 @@ int main(int argc, char *argv[])
 				t_strdup_printf("imap-urlauth[%s]: ", my_pid));
 	master_service_set_die_callback(master_service, imap_urlauth_worker_die);
 
-	random_init();
 	storage_service =
 		mail_storage_service_init(master_service,
 					  set_roots, storage_service_flags);
@@ -1028,7 +1030,6 @@ int main(int argc, char *argv[])
 	clients_destroy_all();
 
 	mail_storage_service_deinit(&storage_service);
-	random_deinit();
 	master_service_deinit(&master_service);
 	return 0;
 }

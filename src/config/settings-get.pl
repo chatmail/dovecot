@@ -1,6 +1,13 @@
 #!/usr/bin/env perl
 use strict;
 
+print "/* WARNING: THIS FILE IS GENERATED - DO NOT PATCH!\n";
+print "   It's not enough alone in any case, because the defaults may be\n";
+print "   coming from the individual *-settings.c in some situations. If you\n";
+print "   wish to modify defaults, change the other *-settings.c files and\n";
+print "   just delete this file. This file will be automatically regenerated\n";
+print "   by make. (This file is distributed in the tarball only because some\n";
+print "   systems might not have Perl installed.) */\n";
 print '#include "lib.h"'."\n";
 print '#include "array.h"'."\n";
 print '#include "ipwd.h"'."\n";
@@ -139,6 +146,7 @@ print "};\n";
 print "const struct setting_parser_info *all_default_roots[] = {\n";
 print "\t&master_service_setting_parser_info,\n";
 print "\t&master_service_ssl_setting_parser_info,\n";
+print "\t&smtp_submit_setting_parser_info,\n";
 foreach my $name (keys %parsers) {
   my $module = $parsers{$name};
   next if (!$module);

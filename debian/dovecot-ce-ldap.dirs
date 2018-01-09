@@ -1,0 +1,3 @@
+usr/lib/dovecot/modules/auth
+usr/lib/dovecot/modules/dict
+usr/share/dovecot/conf.d

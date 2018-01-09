@@ -98,8 +98,8 @@ struct connection {
 
 	enum connection_disconnect_reason disconnect_reason;
 
-	unsigned int version_received:1;
-	unsigned int unix_socket:1;
+	bool version_received:1;
+	bool unix_socket:1;
 };
 
 struct connection_list {
@@ -110,6 +110,8 @@ struct connection_list {
 	struct connection_vfuncs v;
 };
 
+void connection_init(struct connection_list *list,
+		     struct connection *conn);
 void connection_init_server(struct connection_list *list,
 			    struct connection *conn, const char *name,
 			    int fd_in, int fd_out);

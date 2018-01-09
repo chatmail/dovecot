@@ -22,7 +22,7 @@ raw_storage_create_from_set(const struct setting_parser_info *set_info,
 	struct mail_storage_settings *mail_set;
 	const char *error;
 
-	user = mail_user_alloc("raw mail user", set_info, set);
+	user = mail_user_alloc(NULL, "raw mail user", set_info, set);
 	user->autocreated = TRUE;
 	mail_user_set_home(user, "/");
 	if (mail_user_init(user, &error) < 0)
@@ -76,7 +76,7 @@ raw_mailbox_alloc_common(struct mail_user *user, struct istream *input,
 		return -1;
 
 	i_assert(strcmp(box->storage->name, RAW_STORAGE_NAME) == 0);
-	raw_box = (struct raw_mailbox *)box;
+	raw_box = RAW_MAILBOX(box);
 	raw_box->envelope_sender = envelope_sender;
 	raw_box->mtime = received_time;
 	return 0;
@@ -140,14 +140,14 @@ raw_mailbox_alloc(struct mail_storage *storage, struct mailbox_list *list,
 	index_storage_mailbox_alloc(&mbox->box, vname, flags, "dovecot.index");
 
 	mbox->mtime = mbox->ctime = (time_t)-1;
-	mbox->storage = (struct raw_storage *)storage;
+	mbox->storage = RAW_STORAGE(storage);
 	mbox->size = (uoff_t)-1;
 	return &mbox->box;
 }
 
 static int raw_mailbox_open(struct mailbox *box)
 {
-	struct raw_mailbox *mbox = (struct raw_mailbox *)box;
+	struct raw_mailbox *mbox = RAW_MAILBOX(box);
 	const char *path;
 	int fd;
 
@@ -165,8 +165,7 @@ static int raw_mailbox_open(struct mailbox *box)
 				MAIL_ERROR_NOTFOUND,
 				T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
 		} else if (!mail_storage_set_error_from_errno(box->storage)) {
-			mail_storage_set_critical(box->storage,
-				"open(%s) failed: %m", path);
+			mailbox_set_critical(box, "open(%s) failed: %m", path);
 		}
 		return -1;
 	}

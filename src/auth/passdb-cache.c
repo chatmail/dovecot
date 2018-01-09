@@ -85,8 +85,9 @@ bool passdb_cache_verify_plain(struct auth_request *request, const char *key,
 		scheme = password_get_scheme(&cached_pw);
 		i_assert(scheme != NULL);
 
-		ret = auth_request_password_verify(request, password, cached_pw,
-						   scheme, AUTH_SUBSYS_DB);
+		ret = auth_request_password_verify_log(request, password, cached_pw,
+						   scheme, AUTH_SUBSYS_DB,
+						   !(node->last_success || neg_expired));
 
 		if (ret == 0 && (node->last_success || neg_expired)) {
 			/* a) the last authentication was successful. assume
@@ -152,9 +153,9 @@ void passdb_cache_init(const struct auth_settings *set)
 
 	if (restrict_get_process_size(&limit) == 0 &&
 	    set->cache_size > limit) {
-		i_warning("auth_cache_size (%luM) is higher than "
+		i_warning("auth_cache_size (%"PRIuUOFF_T"M) is higher than "
 			  "process VSZ limit (%luM)",
-			  (unsigned long)(set->cache_size/1024/1024),
+			  set->cache_size/1024/1024,
 			  (unsigned long)(limit/1024/1024));
 	}
 	passdb_cache = auth_cache_new(set->cache_size, set->cache_ttl,

@@ -57,7 +57,7 @@ static void mail_transaction_log_2_unlink_old(struct mail_transaction_log *log)
 	}
 
 	if (log2_rotate_time != (uint32_t)-1 &&
-	    ioloop_time - (time_t)log2_rotate_time >= (time_t)log->index->log_rotate_log2_stale_secs &&
+	    ioloop_time - (time_t)log2_rotate_time >= (time_t)log->index->optimization_set.log.log2_max_age_secs &&
 	    !log->index->readonly) {
 		i_unlink_if_exists(log->filepath2);
 		log2_rotate_time = (uint32_t)-1;
@@ -160,7 +160,7 @@ void mail_transaction_log_free(struct mail_transaction_log **_log)
 	i_free(log);
 }
 
-void mail_transaction_log_move_to_memory(struct mail_transaction_log *log)
+int mail_transaction_log_move_to_memory(struct mail_transaction_log *log)
 {
 	struct mail_transaction_log_file *file;
 
@@ -178,10 +178,11 @@ void mail_transaction_log_move_to_memory(struct mail_transaction_log *log)
 	log->filepath2 = i_strconcat(log->filepath, ".2", NULL);
 
 	if (log->head != NULL)
-		mail_transaction_log_file_move_to_memory(log->head);
+		return mail_transaction_log_file_move_to_memory(log->head);
 	else {
 		file = mail_transaction_log_file_alloc_in_memory(log);
 		mail_transaction_log_set_head(log, file);
+		return 0;
 	}
 }
 
@@ -244,17 +245,17 @@ bool mail_transaction_log_want_rotate(struct mail_transaction_log *log)
 		return TRUE;
 	}
 
-	if (file->sync_offset > log->index->log_rotate_max_size) {
+	if (file->sync_offset > log->index->optimization_set.log.max_size) {
 		/* file is too large, definitely rotate */
 		return TRUE;
 	}
-	if (file->sync_offset < log->index->log_rotate_min_size) {
+	if (file->sync_offset < log->index->optimization_set.log.min_size) {
 		/* file is still too small */
 		return FALSE;
 	}
 	/* rotate if the timestamp is old enough */
 	return file->hdr.create_stamp <
-		ioloop_time - log->index->log_rotate_min_created_ago_secs;
+		ioloop_time - log->index->optimization_set.log.min_age_secs;
 }
 
 int mail_transaction_log_rotate(struct mail_transaction_log *log, bool reset)

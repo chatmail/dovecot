@@ -24,7 +24,7 @@
 struct msg_map_common {
 	/* sha1(header) - set only when needed */
 	unsigned char hdr_sha1[SHA1_RESULTLEN];
-	unsigned int hdr_sha1_set:1;
+	bool hdr_sha1_set:1;
 };
 
 struct pop3_uidl_map {
@@ -53,12 +53,12 @@ struct pop3_migration_mail_storage {
 	const char *pop3_box_vname;
 	ARRAY(struct pop3_uidl_map) pop3_uidl_map;
 
-	unsigned int all_mailboxes:1;
-	unsigned int pop3_all_hdr_sha1_set:1;
-	unsigned int ignore_missing_uidls:1;
-	unsigned int ignore_extra_uidls:1;
-	unsigned int skip_size_check:1;
-	unsigned int skip_uidl_cache:1;
+	bool all_mailboxes:1;
+	bool pop3_all_hdr_sha1_set:1;
+	bool ignore_missing_uidls:1;
+	bool ignore_extra_uidls:1;
+	bool skip_size_check:1;
+	bool skip_uidl_cache:1;
 };
 
 struct pop3_migration_mailbox {
@@ -69,9 +69,9 @@ struct pop3_migration_mailbox {
 
 	struct mail_cache_field cache_field;
 
-	unsigned int cache_field_registered:1;
-	unsigned int uidl_synced:1;
-	unsigned int uidl_sync_failed:1;
+	bool cache_field_registered:1;
+	bool uidl_synced:1;
+	bool uidl_sync_failed:1;
 };
 
 /* NOTE: these headers must be sorted */
@@ -176,11 +176,8 @@ pop3_header_filter_callback(struct header_filter_istream *input ATTR_UNUSED,
 		return;
 	if (hdr->eoh) {
 		ctx->have_eoh = TRUE;
-		if (ctx->stop) {
-			/* matched is handled differently for eoh by
-			 istream-header-filter. a design bug I guess.. */
-			*matched = FALSE;
-		}
+		if (ctx->stop)
+			*matched = TRUE;
 	} else {
 		if (strspn(hdr->name, "\r") == hdr->name_len) {
 			/* CR+CR+LF - some servers stop the header processing
@@ -224,7 +221,7 @@ int pop3_migration_get_hdr_sha1(uint32_t mail_seq, struct istream *input,
 
 	sha1_init(&sha1_ctx);
 	i_zero(&hash_ctx);
-	while (i_stream_read_data(input, &data, &size, 0) > 0) {
+	while (i_stream_read_more(input, &data, &size) > 0) {
 		message_header_hash_more(&hash_ctx, &hash_method_sha1, &sha1_ctx,
 					 MESSAGE_HEADER_HASH_MAX_VERSION,
 					 data, size);
@@ -380,7 +377,7 @@ static int pop3_map_read(struct mail_storage *storage, struct mailbox *pop3_box)
 		return -1;
 	}
 
-	t = mailbox_transaction_begin(pop3_box, 0);
+	t = mailbox_transaction_begin(pop3_box, 0, __func__);
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);
 	ctx = mailbox_search_init(t, search_args, NULL,
@@ -442,7 +439,7 @@ pop3_map_read_cached_hdr_hashes(struct mailbox_transaction_context *t,
 	buffer_t *cache_buf;
 
 	ctx = mailbox_search_init(t, search_args, NULL, 0, NULL);
-	cache_buf = buffer_create_dynamic(pool_datastack_create(), SHA1_RESULTLEN);
+	cache_buf = t_buffer_create(SHA1_RESULTLEN);
 
 	while (mailbox_search_next(ctx, &mail)) {
 		map = array_idx_modifiable_i(msg_map, mail->seq-1);
@@ -482,7 +479,7 @@ map_read_hdr_hashes(struct mailbox *box, struct array *msg_map, uint32_t seq1)
 	struct msg_map_common *map;
 	int ret = 0;
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	/* get all the cached hashes */
 	search_args = mail_search_build_init();
 	mail_search_build_add_seqset(search_args, seq1, array_count_i(msg_map));
@@ -563,7 +560,7 @@ static int imap_map_read(struct mailbox *box)
 	i_assert(!array_is_created(&mbox->imap_msg_map));
 	p_array_init(&mbox->imap_msg_map, box->pool, status.messages);
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);
 	ctx = mailbox_search_init(t, search_args, NULL,
@@ -806,9 +803,9 @@ static void imap_uidls_add_to_cache(struct mailbox *box)
 	unsigned int i, count;
 	unsigned int field_idx;
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	mail = mail_alloc(t, 0, NULL);
-	imail = (struct index_mail *)mail;
+	imail = INDEX_MAIL(mail);
 	field_idx = imail->ibox->cache_fields[MAIL_CACHE_POP3_UIDL].idx;
 
 	imap_map = array_get_modifiable(&mbox->imap_msg_map, &count);
@@ -1020,20 +1017,20 @@ static void pop3_migration_mail_storage_created(struct mail_storage *storage)
 
 	mstorage->pop3_box_vname = p_strdup(storage->pool, pop3_box_vname);
 	mstorage->all_mailboxes =
-		mail_user_plugin_getenv(storage->user,
-					"pop3_migration_all_mailboxes") != NULL;
+		mail_user_plugin_getenv_bool(storage->user,
+					"pop3_migration_all_mailboxes");
 	mstorage->ignore_missing_uidls =
-		mail_user_plugin_getenv(storage->user,
-			"pop3_migration_ignore_missing_uidls") != NULL;
+		mail_user_plugin_getenv_bool(storage->user,
+			"pop3_migration_ignore_missing_uidls");
 	mstorage->ignore_extra_uidls =
-		mail_user_plugin_getenv(storage->user,
-			"pop3_migration_ignore_extra_uidls") != NULL;
+		mail_user_plugin_getenv_bool(storage->user,
+			"pop3_migration_ignore_extra_uidls");
 	mstorage->skip_size_check =
-		mail_user_plugin_getenv(storage->user,
-			"pop3_migration_skip_size_check") != NULL;
+		mail_user_plugin_getenv_bool(storage->user,
+			"pop3_migration_skip_size_check");
 	mstorage->skip_uidl_cache =
-		mail_user_plugin_getenv(storage->user,
-			"pop3_migration_skip_uidl_cache") != NULL;
+		mail_user_plugin_getenv_bool(storage->user,
+			"pop3_migration_skip_uidl_cache");
 
 	MODULE_CONTEXT_SET(storage, pop3_migration_storage_module, mstorage);
 }

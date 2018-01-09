@@ -11,7 +11,7 @@
 #include "auth-request.h"
 #include "auth-request-stats.h"
 
-#define USER_STATS_SOCKET_NAME "stats-user"
+#define USER_STATS_SOCKET_NAME "old-stats-user"
 
 static struct stats_connection *auth_stats_conn = NULL;
 static struct stats_item *auth_stats_item;
@@ -48,7 +48,7 @@ void auth_request_stats_send(struct auth_request *request)
 	if (!request->set->stats)
 		return;
 
-	buf = buffer_create_dynamic(pool_datastack_create(), 128);
+	buf = t_buffer_create(128);
 	stats_export(buf, request->stats);
 
 	str = t_str_new(256);

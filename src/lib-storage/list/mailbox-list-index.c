@@ -15,8 +15,8 @@
 /* dovecot.list.index.log doesn't have to be kept for that long. */
 #define MAILBOX_LIST_INDEX_LOG_ROTATE_MIN_SIZE (8*1024)
 #define MAILBOX_LIST_INDEX_LOG_ROTATE_MAX_SIZE (64*1024)
-#define MAILBOX_LIST_INDEX_LOG_ROTATE_SECS_AGO (5*60)
-#define MAILBOX_LIST_INDEX_LOG2_STALE_SECS (10*60)
+#define MAILBOX_LIST_INDEX_LOG_ROTATE_MIN_AGE_SECS (5*60)
+#define MAILBOX_LIST_INDEX_LOG2_MAX_AGE_SECS (10*60)
 
 static void mailbox_list_index_init_finish(struct mailbox_list *list);
 
@@ -84,11 +84,15 @@ int mailbox_list_index_index_open(struct mailbox_list *list)
 					   perm.file_create_gid,
 					   perm.file_create_gid_origin);
 	}
-	mail_index_set_log_rotation(ilist->index,
-				    MAILBOX_LIST_INDEX_LOG_ROTATE_MIN_SIZE,
-				    MAILBOX_LIST_INDEX_LOG_ROTATE_MAX_SIZE,
-				    MAILBOX_LIST_INDEX_LOG_ROTATE_SECS_AGO,
-				    MAILBOX_LIST_INDEX_LOG2_STALE_SECS);
+	const struct mail_index_optimization_settings optimize_set = {
+		.log = {
+			.min_size = MAILBOX_LIST_INDEX_LOG_ROTATE_MIN_SIZE,
+			.max_size = MAILBOX_LIST_INDEX_LOG_ROTATE_MAX_SIZE,
+			.min_age_secs = MAILBOX_LIST_INDEX_LOG_ROTATE_MIN_AGE_SECS,
+			.log2_max_age_secs = MAILBOX_LIST_INDEX_LOG2_MAX_AGE_SECS,
+		},
+	};
+	mail_index_set_optimization_settings(ilist->index, &optimize_set);
 
 	mail_index_set_fsync_mode(ilist->index, set->parsed_fsync_mode, 0);
 	mail_index_set_lock_method(ilist->index, set->parsed_lock_method,
@@ -394,6 +398,8 @@ static int mailbox_list_index_parse_records(struct mailbox_list_index *ilist,
 				parent->children = node;
 				continue;
 			}
+		} else if (strcasecmp(node->name, "INBOX") == 0) {
+			ilist->rebuild_on_missing_inbox = FALSE;
 		}
 		if (hash_table_lookup(duplicate_hash, node) == NULL)
 			hash_table_insert(duplicate_hash, node, node);
@@ -438,8 +444,11 @@ int mailbox_list_index_parse(struct mailbox_list *list,
 		/* nothing changed */
 		return 0;
 	}
-	if ((hdr->flags & MAIL_INDEX_HDR_FLAG_FSCKD) != 0)
+	if ((hdr->flags & MAIL_INDEX_HDR_FLAG_FSCKD) != 0) {
+		mailbox_list_set_critical(list,
+			"Mailbox list index was marked as fsck'd %s", ilist->path);
 		ilist->call_corruption_callback = TRUE;
+	}
 
 	mailbox_list_index_reset(ilist);
 	ilist->sync_log_file_seq = hdr->log_file_seq;
@@ -463,8 +472,6 @@ int mailbox_list_index_parse(struct mailbox_list *list,
 			mail_index_mark_corrupted(ilist->index);
 			return -1;
 		}
-		/* FIXME: find any missing mailboxes, add them and write the
-		   index back. */
 		ilist->call_corruption_callback = TRUE;
 		ilist->corrupted_names_or_parents = TRUE;
 	}
@@ -585,9 +592,14 @@ int mailbox_list_index_handle_corruption(struct mailbox_list *list)
 {
 	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
 	struct mail_storage *const *storagep;
+	enum mail_storage_list_index_rebuild_reason reason;
 	int ret = 0;
 
-	if (!ilist->call_corruption_callback)
+	if (ilist->call_corruption_callback)
+		reason = MAIL_STORAGE_LIST_INDEX_REBUILD_REASON_CORRUPTED;
+	else if (ilist->rebuild_on_missing_inbox)
+		reason = MAIL_STORAGE_LIST_INDEX_REBUILD_REASON_NO_INBOX;
+	else
 		return 0;
 
 	/* make sure we don't recurse */
@@ -596,8 +608,8 @@ int mailbox_list_index_handle_corruption(struct mailbox_list *list)
 	ilist->handling_corruption = TRUE;
 
 	array_foreach(&list->ns->all_storages, storagep) {
-		if ((*storagep)->v.list_index_corrupted != NULL) {
-			if ((*storagep)->v.list_index_corrupted(*storagep) < 0)
+		if ((*storagep)->v.list_index_rebuild != NULL) {
+			if ((*storagep)->v.list_index_rebuild(*storagep, reason) < 0)
 				ret = -1;
 			else {
 				/* FIXME: implement a generic handler that
@@ -618,6 +630,7 @@ int mailbox_list_index_set_uncorrupted(struct mailbox_list *list)
 	struct mailbox_list_index_sync_context *sync_ctx;
 
 	ilist->call_corruption_callback = FALSE;
+	ilist->rebuild_on_missing_inbox = FALSE;
 
 	if (mailbox_list_index_sync_begin(list, &sync_ctx) < 0)
 		return -1;
@@ -630,8 +643,7 @@ static void mailbox_list_index_deinit(struct mailbox_list *list)
 {
 	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
 
-	if (ilist->to_refresh != NULL)
-		timeout_remove(&ilist->to_refresh);
+	timeout_remove(&ilist->to_refresh);
 	if (ilist->index != NULL) {
 		hash_table_destroy(&ilist->mailbox_hash);
 		hash_table_destroy(&ilist->mailbox_names);
@@ -816,9 +828,8 @@ mailbox_list_index_set_subscribed(struct mailbox_list *_list,
 
 static bool mailbox_list_index_is_enabled(struct mailbox_list *list)
 {
-	if (!list->mail_set->mailbox_list_index)
-		return FALSE;
-	if (strcmp(list->name, MAILBOX_LIST_NAME_NONE) == 0)
+	if (!list->mail_set->mailbox_list_index ||
+	    (list->props & MAILBOX_LIST_PROP_NO_LIST_INDEX) != 0)
 		return FALSE;
 
 	i_assert(list->set.list_index_fname != NULL);
@@ -897,7 +908,10 @@ static void mailbox_list_index_init_finish(struct mailbox_list *list)
 	i_assert(list->set.list_index_fname != NULL);
 	ilist->path = dir == NULL ? "(in-memory mailbox list index)" :
 		p_strdup_printf(list->pool, "%s/%s", dir, list->set.list_index_fname);
-	ilist->index = mail_index_alloc(dir, list->set.list_index_fname);
+	ilist->index = mail_index_alloc(list->ns->user->event,
+					dir, list->set.list_index_fname);
+	ilist->rebuild_on_missing_inbox =
+		(list->ns->flags & NAMESPACE_FLAG_INBOX_ANY) != 0;
 
 	ilist->ext_id = mail_index_ext_register(ilist->index, "list",
 				sizeof(struct mailbox_list_index_header),
@@ -920,6 +934,36 @@ mailbox_list_index_namespaces_added(struct mail_namespace *namespaces)
 		mailbox_list_index_init_finish(ns->list);
 }
 
+static struct mailbox_sync_context *
+mailbox_list_index_sync_init(struct mailbox *box,
+			     enum mailbox_sync_flags flags)
+{
+	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(box);
+
+	mailbox_list_index_status_sync_init(box);
+	if (ibox->have_backend)
+		mailbox_list_index_backend_sync_init(box, flags);
+	return ibox->module_ctx.super.sync_init(box, flags);
+}
+
+static int
+mailbox_list_index_sync_deinit(struct mailbox_sync_context *ctx,
+			       struct mailbox_sync_status *status_r)
+{
+	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(ctx->box);
+	struct mailbox *box = ctx->box;
+
+	if (ibox->module_ctx.super.sync_deinit(ctx, status_r) < 0)
+		return -1;
+	ctx = NULL;
+
+	mailbox_list_index_status_sync_deinit(box);
+	if (ibox->have_backend)
+		return mailbox_list_index_backend_sync_deinit(box);
+	else
+		return 0;
+}
+
 static void mailbox_list_index_mailbox_allocated(struct mailbox *box)
 {
 	struct mailbox_vfuncs *v = box->vlast;
@@ -939,8 +983,14 @@ static void mailbox_list_index_mailbox_allocated(struct mailbox *box)
 	v->create_box = mailbox_list_index_create_mailbox;
 	v->update_box = mailbox_list_index_update_mailbox;
 
+	/* These are used by both status and backend code, but they can't both
+	   be overriding the same function pointer since they share the
+	   super pointer. */
+	v->sync_init = mailbox_list_index_sync_init;
+	v->sync_deinit = mailbox_list_index_sync_deinit;
+
 	mailbox_list_index_status_init_mailbox(v);
-	mailbox_list_index_backend_init_mailbox(box, v);
+	ibox->have_backend = mailbox_list_index_backend_init_mailbox(box, v);
 }
 
 static struct mail_storage_hooks mailbox_list_index_hooks = {

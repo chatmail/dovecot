@@ -129,7 +129,7 @@ struct mail_keywords {
 	int refcount;
 
         /* variable sized list of keyword indexes */
-	unsigned int idx[1];
+	unsigned int idx[FLEXIBLE_ARRAY_MEMBER];
 };
 
 enum mail_index_transaction_flags {
@@ -223,7 +223,7 @@ struct mail_index_view_sync_rec {
 	enum mail_index_view_sync_type type;
 
 	/* TRUE if this was a hidden transaction. */
-	unsigned int hidden:1;
+	bool hidden:1;
 };
 
 struct mail_index_transaction_commit_result {
@@ -237,6 +237,50 @@ struct mail_index_transaction_commit_result {
 	unsigned int ignored_modseq_changes;
 };
 
+struct mail_index_base_optimization_settings {
+	/* Rewrite the index when the number of bytes that needs to be read
+	   from the .log on refresh is between these min/max values. */
+	uoff_t rewrite_min_log_bytes;
+	uoff_t rewrite_max_log_bytes;
+};
+
+struct mail_index_log_optimization_settings {
+	/* Rotate transaction log after it's a) min_size or larger and it was
+	   created at least min_age_secs or b) larger than max_size. */
+	uoff_t min_size;
+	uoff_t max_size;
+	unsigned int min_age_secs;
+
+	/* Delete .log.2 when it's older than log2_stale_secs. Don't be too
+	   eager, because older files are useful for QRESYNC and dsync. */
+	unsigned int log2_max_age_secs;
+};
+
+struct mail_index_cache_optimization_settings {
+	/* Drop fields that haven't been accessed for n seconds */
+	unsigned int unaccessed_field_drop_secs;
+	/* If cache record becomes larger than this, don't add it. */
+	unsigned int record_max_size;
+
+	/* Never compress the file if it's smaller than this */
+	uoff_t compress_min_size;
+	/* Compress the file when n% of records are deleted */
+	unsigned int compress_delete_percentage;
+	/* Compress the file when n% of rows contain continued rows.
+	   For example 200% means that the record has 2 continued rows, i.e.
+	   it exists in 3 separate segments in the cache file. */
+	unsigned int compress_continued_percentage;
+	/* Compress the file when we need to follow more than n next_offsets to
+	   find the latest cache header. */
+	unsigned int compress_header_continue_count;
+};
+
+struct mail_index_optimization_settings {
+	struct mail_index_base_optimization_settings index;
+	struct mail_index_log_optimization_settings log;
+	struct mail_index_cache_optimization_settings cache;
+};
+
 struct mail_index;
 struct mail_index_map;
 struct mail_index_view;
@@ -244,9 +288,12 @@ struct mail_index_transaction;
 struct mail_index_sync_ctx;
 struct mail_index_view_sync_ctx;
 
-struct mail_index *mail_index_alloc(const char *dir, const char *prefix);
+struct mail_index *mail_index_alloc(struct event *parent_event,
+				    const char *dir, const char *prefix);
 void mail_index_free(struct mail_index **index);
 
+/* Change .cache file's directory. */
+void mail_index_set_cache_dir(struct mail_index *index, const char *dir);
 /* Specify how often to do fsyncs. If mode is FSYNC_MODE_OPTIMIZED, the mask
    can be used to specify which transaction types to fsync. */
 void mail_index_set_fsync_mode(struct mail_index *index, enum fsync_mode mode,
@@ -262,14 +309,10 @@ void mail_index_set_permissions(struct mail_index *index,
 void mail_index_set_lock_method(struct mail_index *index,
 				enum file_lock_method lock_method,
 				unsigned int max_timeout_secs);
-/* Rotate transaction log after it's a) min_size or larger and it was created
-   at least min_created_ago_secs or b) larger than max_size. Delete .log.2 when
-   it's older than log2_stale_secs. The defaults are min_size=32kB, max_size=1M,
-   min_created_ago_secs=5min, log2_stale_secs=2d. */
-void mail_index_set_log_rotation(struct mail_index *index,
-				 uoff_t min_size, uoff_t max_size,
-				 unsigned int min_created_ago_secs,
-				 unsigned int log2_stale_secs);
+/* Override the default optimization-related settings. Anything set to 0 will
+   use the default. */
+void mail_index_set_optimization_settings(struct mail_index *index,
+	const struct mail_index_optimization_settings *set);
 /* When creating a new index file or reseting an existing one, add the given
    extension header data immediately to it. */
 void mail_index_set_ext_init_data(struct mail_index *index, uint32_t ext_id,
@@ -301,7 +344,11 @@ mail_index_refresh(struct mail_index *index);
 /* View can be used to look into index. Sequence numbers inside view change
    only when you synchronize it. The view acquires required locks
    automatically, but you'll have to drop them manually. */
-struct mail_index_view *mail_index_view_open(struct mail_index *index);
+struct mail_index_view *
+mail_index_view_open(struct mail_index *index,
+		     const char *source_filename, unsigned int source_linenum);
+#define mail_index_view_open(index) \
+	mail_index_view_open(index, __FILE__, __LINE__)
 void mail_index_view_close(struct mail_index_view **view);
 
 /* Returns the index for given view. */
@@ -499,7 +546,7 @@ void mail_index_append(struct mail_index_transaction *t, uint32_t uid,
 /* Assign UIDs for mails with uid=0 or uid<first_uid. All the assigned UIDs
    are higher than the highest unassigned UID (i.e. it doesn't try to fill UID
    gaps). Assumes that mailbox is locked in a way that UIDs can be safely
-   assigned. Returns UIDs for all asigned messages, in their sequence order
+   assigned. Returns UIDs for all assigned messages, in their sequence order
    (so UIDs are not necessary ascending). */
 void mail_index_append_finish_uids(struct mail_index_transaction *t,
 				   uint32_t first_uid,

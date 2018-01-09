@@ -138,11 +138,11 @@ struct mailbox_list {
 
 	ARRAY(union mailbox_list_module_context *) module_contexts;
 
-	unsigned int index_root_dir_created:1;
-	unsigned int list_index_root_dir_created:1;
-	unsigned int guid_cache_updated:1;
-	unsigned int guid_cache_invalidated:1;
-	unsigned int last_error_is_internal:1;
+	bool index_root_dir_created:1;
+	bool list_index_root_dir_created:1;
+	bool guid_cache_updated:1;
+	bool guid_cache_invalidated:1;
+	bool last_error_is_internal:1;
 };
 
 union mailbox_list_iterate_module_context {
@@ -170,8 +170,8 @@ struct mailbox_list_iter_update_context {
 	struct imap_match_glob *glob;
 	enum mailbox_info_flags leaf_flags, parent_flags;
 
-	unsigned int update_only:1;
-	unsigned int match_parents:1;
+	bool update_only:1;
+	bool match_parents:1;
 };
 
 /* Modules should use do "my_id = mailbox_list_module_id++" and

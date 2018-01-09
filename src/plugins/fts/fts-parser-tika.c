@@ -4,6 +4,7 @@
 #include "ioloop.h"
 #include "istream.h"
 #include "module-context.h"
+#include "iostream-ssl.h"
 #include "http-url.h"
 #include "http-client.h"
 #include "message-parser.h"
@@ -39,6 +40,7 @@ tika_get_http_client_url(struct mail_user *user, struct http_url **http_url_r)
 {
 	struct fts_parser_tika_user *tuser = TIKA_USER_CONTEXT(user);
 	struct http_client_settings http_set;
+	struct ssl_iostream_settings ssl_set;
 	const char *url, *error;
 
 	url = mail_user_plugin_getenv(user, "fts_tika");
@@ -62,6 +64,9 @@ tika_get_http_client_url(struct mail_user *user, struct http_url **http_url_r)
 	}
 
 	if (tika_http_client == NULL) {
+		i_zero(&ssl_set);
+		mail_user_init_ssl_client_settings(user, &ssl_set);
+
 		i_zero(&http_set);
 		http_set.max_idle_time_msecs = 100;
 		http_set.max_parallel_connections = 1;
@@ -70,6 +75,7 @@ tika_get_http_client_url(struct mail_user *user, struct http_url **http_url_r)
 		http_set.max_attempts = 3;
 		http_set.connect_timeout_msecs = 5*1000;
 		http_set.request_timeout_msecs = 60*1000;
+		http_set.ssl = &ssl_set;
 		http_set.debug = user->mail_debug;
 		tika_http_client = http_client_init(&http_set);
 	}
@@ -103,28 +109,25 @@ fts_tika_parser_response(const struct http_response *response,
 		}
 		parser->payload = i_stream_create_from_data("", 0);
 		break;
-	case 500:
-		/* Server Error - the problem could be anything (in Tika or
-		   HTTP server or proxy) and might be retriable, but Tika has
-		   trouble processing some documents and throws up this error
-		   every time for those documents.
-
-		   Unfortunately we can't easily re-send the request here,
-		   because we would have to re-send the entire payload, which
-		   isn't available anymore here. So we'd need to indicate
-		   in fts_parser_deinit() that we want to retry.
-		   FIXME: do this in v2.3. For now we'll just ignore it. */
-		i_info("fts_tika: PUT %s failed: %s - ignoring",
-		       mail_user_plugin_getenv(parser->user, "fts_tika"),
-		       http_response_get_message(response));
-		parser->payload = i_stream_create_from_data("", 0);
-		break;
-
 	default:
-		i_error("fts_tika: PUT %s failed: %s",
-			mail_user_plugin_getenv(parser->user, "fts_tika"),
-			http_response_get_message(response));
-		parser->failed = TRUE;
+		if (response->status / 100 == 5) {
+			/* Server Error - the problem could be anything (in Tika or
+			   HTTP server or proxy) and might be retriable, but Tika has
+			   trouble processing some documents and throws up this error
+			   every time for those documents. */
+			parser->parser.may_need_retry = TRUE;
+			i_free(parser->parser.retriable_error_msg);
+			parser->parser.retriable_error_msg =
+				i_strdup_printf("fts_tika: PUT %s failed: %s",
+						mail_user_plugin_getenv(parser->user, "fts_tika"),
+						http_response_get_message(response));
+			parser->payload = i_stream_create_from_data("", 0);
+		} else {
+			i_error("fts_tika: PUT %s failed: %s",
+				mail_user_plugin_getenv(parser->user, "fts_tika"),
+				http_response_get_message(response));
+			parser->failed = TRUE;
+		}
 		break;
 	}
 	parser->http_req = NULL;
@@ -132,32 +135,33 @@ fts_tika_parser_response(const struct http_response *response,
 }
 
 static struct fts_parser *
-fts_parser_tika_try_init(struct mail_user *user, const char *content_type,
-			 const char *content_disposition)
+fts_parser_tika_try_init(struct fts_parser_context *parser_context)
 {
 	struct tika_fts_parser *parser;
 	struct http_url *http_url;
 	struct http_client_request *http_req;
 
-	if (tika_get_http_client_url(user, &http_url) < 0)
+	if (tika_get_http_client_url(parser_context->user, &http_url) < 0)
 		return NULL;
+	if (http_url->path == NULL)
+		http_url->path = "/";
 
 	parser = i_new(struct tika_fts_parser, 1);
 	parser->parser.v = fts_parser_tika;
-	parser->user = user;
+	parser->user = parser_context->user;
 
 	http_req = http_client_request(tika_http_client, "PUT",
-			http_url->host_name,
+			http_url->host.name,
 			t_strconcat(http_url->path, http_url->enc_query, NULL),
 			fts_tika_parser_response, parser);
 	http_client_request_set_port(http_req, http_url->port);
 	http_client_request_set_ssl(http_req, http_url->have_ssl);
-	if (content_type != NULL)
+	if (parser_context->content_type != NULL)
 		http_client_request_add_header(http_req, "Content-Type",
-					       content_type);
-	if (content_disposition != NULL)
+					       parser_context->content_type);
+	if (parser_context->content_disposition != NULL)
 		http_client_request_add_header(http_req, "Content-Disposition",
-					       content_disposition);
+					       parser_context->content_disposition);
 	http_client_request_add_header(http_req, "Accept", "text/plain");
 
 	parser->http_req = http_req;
@@ -197,7 +201,7 @@ static void fts_parser_tika_more(struct fts_parser *_parser,
 	}
 	/* continue returning data from Tika. we'll create a new ioloop just
 	   for reading this one payload. */
-	while ((ret = i_stream_read_data(parser->payload, &data, &size, 0)) == 0) {
+	while ((ret = i_stream_read_more(parser->payload, &data, &size)) == 0) {
 		if (parser->failed)
 			break;
 		/* wait for more input from Tika */
@@ -232,17 +236,20 @@ static void fts_parser_tika_more(struct fts_parser *_parser,
 	}
 }
 
-static int fts_parser_tika_deinit(struct fts_parser *_parser)
+static int fts_parser_tika_deinit(struct fts_parser *_parser, const char **retriable_err_msg_r)
 {
 	struct tika_fts_parser *parser = (struct tika_fts_parser *)_parser;
-	int ret = parser->failed ? -1 : 0;
+	int ret = _parser->may_need_retry ? 0: (parser->failed ? -1 : 1);
+
+	i_assert(ret != 0 || _parser->retriable_error_msg != NULL);
+	if (retriable_err_msg_r != NULL)
+		*retriable_err_msg_r = t_strdup(_parser->retriable_error_msg);
+	i_free(_parser->retriable_error_msg);
 
 	/* remove io before unrefing payload - otherwise lib-http adds another
 	   timeout to ioloop unnecessarily */
-	if (parser->payload != NULL)
-		i_stream_unref(&parser->payload);
-	if (parser->io != NULL)
-		io_remove(&parser->io);
+	i_stream_unref(&parser->payload);
+	io_remove(&parser->io);
 	if (parser->http_req != NULL)
 		http_client_request_abort(&parser->http_req);
 	if (parser->ioloop != NULL) {

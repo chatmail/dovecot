@@ -191,7 +191,7 @@ static bool have_positive_owner_rights(struct acl_backend *backend,
 	bool ret = FALSE;
 
 	iter = acl_object_list_init(aclobj);
-	while ((ret = acl_object_list_next(iter, &rights)) > 0) {
+	while (acl_object_list_next(iter, &rights)) {
 		if (acl_rights_is_owner(backend, &rights)) {
 			if (rights.rights != NULL) {
 				ret = TRUE;
@@ -199,7 +199,7 @@ static bool have_positive_owner_rights(struct acl_backend *backend,
 			}
 		}
 	}
-	acl_object_list_deinit(&iter);
+	(void)acl_object_list_deinit(&iter);
 	return ret;
 }
 
@@ -222,7 +222,7 @@ imap_acl_write_aclobj(string_t *dest, struct acl_backend *backend,
 
 	tmp = t_str_new(128);
 	iter = acl_object_list_init(aclobj);
-	while ((ret = acl_object_list_next(iter, &rights)) > 0) {
+	while (acl_object_list_next(iter, &rights)) {
 		if (acl_rights_is_owner(backend, &rights)) {
 			if (rights.id_type == ACL_ID_OWNER && convert_owner) {
 				rights.id_type = ACL_ID_USER;
@@ -250,7 +250,7 @@ imap_acl_write_aclobj(string_t *dest, struct acl_backend *backend,
 			imap_acl_write_right(dest, tmp, &rights, TRUE);
 		}
 	}
-	acl_object_list_deinit(&iter);
+	ret = acl_object_list_deinit(&iter);
 
 	if (!seen_positive_owner && username != NULL && add_default) {
 		/* no positive owner rights returned, write default ACLs */
@@ -295,7 +295,7 @@ static bool cmd_getacl(struct client_command_context *cmd)
 	ret = imap_acl_write_aclobj(str, backend,
 				    acl_mailbox_get_aclobj(box), TRUE,
 				    ns->type == MAIL_NAMESPACE_TYPE_PRIVATE);
-	if (ret == 0) {
+	if (ret > -1) {
 		client_send_line(cmd->client, str_c(str));
 		client_send_tagline(cmd, "OK Getacl completed.");
 	} else {
@@ -545,7 +545,8 @@ cmd_acl_mailbox_update(struct mailbox *box,
 		return -1;
 	}
 
-	t = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
+	t = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_EXTERNAL,
+				      __func__);
 	ret = acl_mailbox_update_acl(t, update);
 	if (mailbox_transaction_commit(&t) < 0)
 		ret = -1;

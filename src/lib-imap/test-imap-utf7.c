@@ -8,7 +8,7 @@
 
 static void test_imap_utf7_by_example(void)
 {
-	static struct test {
+	static const struct test {
 		const char *utf8;
 		const char *mutf7;
 	} tests[] = {
@@ -96,7 +96,7 @@ static void test_imap_utf7_non_utf16(void)
 		csrc[4] = mb64[(i&3) << 4];
 		csrc[5] = '-';
 		csrc[6] = '\0';
-		test_assert_idx(imap_utf7_is_valid(csrc+2) == 0, i);
+		test_assert_idx(!imap_utf7_is_valid(csrc+2), i);
 	}
 	for (i = 0; i <= 255; ++i) {
 		/* Invalid, U+00E4 followed by a single octet */
@@ -105,7 +105,7 @@ static void test_imap_utf7_non_utf16(void)
 		csrc[2] = mb64[((0x00 & 0x03) << 4) | (0xe4 >> 4)];
 		csrc[3] = mb64[((0xe4 & 0x0f) << 2) | (   i >> 6)];
 		csrc[4] = mb64[     i & 0x3f                     ];
-		test_assert_idx(imap_utf7_is_valid(csrc) == 0, i);
+		test_assert_idx(!imap_utf7_is_valid(csrc), i);
 	}
 	test_end();
 }
@@ -124,7 +124,7 @@ static void test_imap_utf7_bad_ascii(void)
 			i = 0x7f;
 		csrc[0] = i;
 		csrc[1] = '\0';
-		test_assert_idx(imap_utf7_is_valid(csrc) == 0, i);
+		test_assert_idx(!imap_utf7_is_valid(csrc), i);
 		str_truncate(dest, 0);
 		test_assert_idx(imap_utf7_to_utf8(csrc, dest) < 0, i);
 	}
@@ -148,7 +148,7 @@ static void test_imap_utf7_unnecessary(void)
 		csrc[3] = mb64[((   i & 0x0f) << 2) |     0      ];
 		csrc[4] = '-';
 		csrc[5] = '\0';
-		test_assert_idx(imap_utf7_is_valid(csrc) == 0, i);
+		test_assert_idx(!imap_utf7_is_valid(csrc), i);
 		str_truncate(dest, 0);
 		test_assert_idx(imap_utf7_to_utf8(csrc, dest) < 0, i);
 
@@ -166,7 +166,7 @@ static void test_imap_utf7_unnecessary(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_imap_utf7_by_example,
 		test_imap_utf7_ucs4_cases,
 		test_imap_utf7_non_utf16,

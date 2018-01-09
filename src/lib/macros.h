@@ -8,7 +8,7 @@
 #endif
 
 #ifndef FALSE
-#  define FALSE (0)
+#  define FALSE (!1)
 #endif
 
 #ifndef TRUE
@@ -25,6 +25,10 @@
 	((void *) (((unsigned char *) (ptr)) + (offset)))
 #define CONST_PTR_OFFSET(ptr, offset) \
 	((const void *) (((const unsigned char *) (ptr)) + (offset)))
+
+#define container_of(ptr, type, name) \
+	(type *)((uintptr_t)(ptr) - (uintptr_t)offsetof(type, name) + \
+		 COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE(ptr, &((type *) 0)->name))
 
 /* Don't use simply MIN/MAX, as they're often defined elsewhere in include
    files that are included after this file generating tons of warnings. */
@@ -177,8 +181,8 @@
 #endif
 
 #if __GNUC__ > 2
-#  define unlikely(expr) __builtin_expect(!!(expr), 0)
-#  define likely(expr) __builtin_expect(!!(expr), 1)
+#  define unlikely(expr) (__builtin_expect((expr) ? 1 : 0, 0) != 0)
+#  define likely(expr) (__builtin_expect((expr) ? 1 : 0, 1) != 0)
 #else
 #  define unlikely(expr) expr
 #  define likely(expr) expr
@@ -193,39 +197,24 @@
 /* Provide macros for error handling. */
 #ifdef DISABLE_ASSERTS
 #  define i_assert(expr)
-#elif defined (__GNUC__) && !defined (__STRICT_ANSI__)
+#else
 
 #define i_assert(expr)			STMT_START{			\
      if (unlikely(!(expr)))						\
        i_panic("file %s: line %d (%s): assertion failed: (%s)",		\
 		__FILE__,						\
 		__LINE__,						\
-		__FUNCTION__,					\
+		__func__,					\
 		#expr);			}STMT_END
-
-#else /* !__GNUC__ */
-
-#define i_assert(expr)			STMT_START{		\
-     if (unlikely(!(expr)))					\
-       i_panic("file %s: line %d: assertion failed: (%s)",	\
-	      __FILE__,						\
-	      __LINE__,						\
-	      #expr);			}STMT_END
 
 #endif
 
-/* Close the fd and set it to -1. This assert-crashes if fd == 0. Normally
-   this would happen only if an uninitialized fd is attempted to be closed,
-   which is a bug. */
-#define i_close_fd(fd) STMT_START {  \
-	i_assert(*fd > 0); \
-	if (unlikely(close_keep_errno(fd) < 0)) \
-		i_error("close(%d[%s:%d]) failed: %m", \
-			*(fd), __FILE__, __LINE__); \
-	} STMT_END
-
-#define i_unreached() \
+#ifndef STATIC_CHECKER
+#  define i_unreached() \
 	i_panic("file %s: line %d: unreached", __FILE__, __LINE__)
+#else
+#  define i_unreached() __builtin_unreachable()
+#endif
 
 /* Convenience macros to test the versions of dovecot. */
 #if defined DOVECOT_VERSION_MAJOR && defined DOVECOT_VERSION_MINOR
@@ -243,5 +232,11 @@
 /* Convenience wrappers for initializing a struct */
 #define i_zero(p) memset(p, 0, sizeof(*(p)))
 #define i_zero_safe(p) safe_memset(p, 0, sizeof(*(p)))
+
+#define ST_CHANGED(st_a, st_b) \
+	((st_a).st_mtime != (st_b).st_mtime || \
+	 ST_MTIME_NSEC(st_a) != ST_MTIME_NSEC(st_b) || \
+	 (st_a).st_size != (st_b).st_size || \
+	 (st_a).st_ino != (st_b).st_ino)
 
 #endif

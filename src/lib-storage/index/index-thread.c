@@ -26,8 +26,8 @@ struct mail_thread_context {
 	struct mail_search_args *search_args;
 	ARRAY_TYPE(seq_range) added_uids;
 
-	unsigned int failed:1;
-	unsigned int corrupted:1;
+	bool failed:1;
+	bool corrupted:1;
 };
 
 struct mail_thread_mailbox {
@@ -98,10 +98,9 @@ mail_strmap_rec_get_msgid(struct mail_thread_context *ctx,
 
 	if (msgid == NULL) {
 		/* shouldn't have happened, probably corrupted */
-		mail_storage_set_critical(mail->box->storage,
-			"Corrupted thread index for mailbox %s: "
-			"UID %u lost Message ID %u",
-			mail->box->vname, mail->uid, rec->ref_index);
+		mail_set_critical(mail,
+			"Corrupted thread index: lost Message ID %u",
+			rec->ref_index);
 		ctx->failed = TRUE;
 		ctx->corrupted = TRUE;
 		return -1;
@@ -558,7 +557,7 @@ int mail_thread_init(struct mailbox *box, struct mail_search_args *args,
 	ctx = i_new(struct mail_thread_context, 1);
 	ctx->box = box;
 	ctx->search_args = args;
-	ctx->t = mailbox_transaction_begin(ctx->box, 0);
+	ctx->t = mailbox_transaction_begin(ctx->box, 0, __func__);
 	/* perform search first, so we don't break if there are INTHREAD keys */
 	search_ctx = mailbox_search_init(ctx->t, args, NULL, 0, NULL);
 

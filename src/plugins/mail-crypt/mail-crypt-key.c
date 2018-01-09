@@ -137,7 +137,7 @@ int mail_crypt_private_key_id_match(struct dcrypt_private_key *key,
 					   hash, pubid);
 		return 0;
 	}
-	return 1;
+	return 1;		
 }
 
 int mail_crypt_public_key_id_match(struct dcrypt_public_key *key,
@@ -292,13 +292,11 @@ int mail_crypt_decrypt_private_key(struct mailbox *box, const char *pubid,
 	return 1;
 }
 
-int mail_crypt_get_private_key(struct mailbox_transaction_context *t,
-			       const char *pubid,
-			       bool user_key, bool shared,
-			       struct dcrypt_private_key **key_r,
-			       const char **error_r)
+int mail_crypt_get_private_key(struct mailbox *box, const char *pubid,
+				bool user_key, bool shared,
+				struct dcrypt_private_key **key_r,
+				const char **error_r)
 {
-	struct mailbox *box = mailbox_transaction_get_mailbox(t);
 	struct mail_user *user = mail_storage_get_user(mailbox_get_storage(box));
 	struct mail_crypt_user *muser = mail_crypt_get_mail_crypt_user(user);
 
@@ -312,7 +310,7 @@ int mail_crypt_get_private_key(struct mailbox_transaction_context *t,
 	int ret;
 	const char *attr_name = mail_crypt_get_key_path(user_key, FALSE, pubid);
 
-	if ((ret = mailbox_attribute_get(t,
+	if ((ret = mailbox_attribute_get(box,
 					 shared ? MAIL_ATTRIBUTE_TYPE_SHARED :
 						  MAIL_ATTRIBUTE_TYPE_PRIVATE,
 					 attr_name, &value)) <= 0) {
@@ -358,11 +356,8 @@ int mail_crypt_user_get_private_key(struct mail_user *user, const char *pubid,
 		return -1;
 	}
 
-	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(box, 0);
-
 	if (pubid == NULL) {
-		if ((ret = mailbox_attribute_get(t, MAIL_ATTRIBUTE_TYPE_SHARED,
+		if ((ret = mailbox_attribute_get(box, MAIL_ATTRIBUTE_TYPE_SHARED,
 						 USER_CRYPT_PREFIX ACTIVE_KEY_NAME,
 						 &value)) <= 0) {
 			if (ret < 0) {
@@ -380,23 +375,20 @@ int mail_crypt_user_get_private_key(struct mail_user *user, const char *pubid,
 
 	/* try to open key */
 	if (ret > 0)
-		ret = mail_crypt_get_private_key(t, pubid, TRUE, FALSE,
+		ret = mail_crypt_get_private_key(box, pubid, TRUE, FALSE,
 						 key_r, error_r);
-
-	(void)mailbox_transaction_commit(&t);
 	mailbox_free(&box);
 	return ret;
 }
 
-int mail_crypt_box_get_private_key(struct mailbox_transaction_context *t,
+int mail_crypt_box_get_private_key(struct mailbox *box,
 				   struct dcrypt_private_key **key_r,
 				   const char **error_r)
 {
-	struct mailbox *box = mailbox_transaction_get_mailbox(t);
 	struct mail_attribute_value value;
 	int ret;
 	/* get active key */
-	if ((ret = mailbox_attribute_get(t, MAIL_ATTRIBUTE_TYPE_SHARED,
+	if ((ret = mailbox_attribute_get(box, MAIL_ATTRIBUTE_TYPE_SHARED,
 					 BOX_CRYPT_PREFIX ACTIVE_KEY_NAME, &value)) <= 0) {
 		if (ret < 0) {
 			*error_r = t_strdup_printf("mailbox_attribute_get(%s, /shared/%s) failed: %s",
@@ -407,7 +399,7 @@ int mail_crypt_box_get_private_key(struct mailbox_transaction_context *t,
 		return ret;
 	}
 
-	return mail_crypt_get_private_key(t, value.value,
+	return mail_crypt_get_private_key(box, value.value,
 					  FALSE, FALSE,
 					  key_r, error_r);
 }
@@ -482,7 +474,6 @@ int mail_crypt_user_set_private_key(struct mail_user *user, const char *pubid,
 	struct mailbox_transaction_context *t;
 	int ret;
 
-
 	if ((ret = mail_crypt_env_get_private_key(user, NULL, &env_key,
 						  error_r)) < 0) {
 		return -1;
@@ -507,7 +498,7 @@ int mail_crypt_user_set_private_key(struct mail_user *user, const char *pubid,
 		return -1;
 	}
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 
 	if ((ret = mail_crypt_set_private_key(t, TRUE, FALSE, pubid, enc_key, key,
 					      error_r)) < 0) {
@@ -531,7 +522,7 @@ int mail_crypt_box_set_private_key(struct mailbox *box, const char *pubid,
 	int ret;
 	struct mailbox_transaction_context *t;
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	if ((ret = mail_crypt_set_private_key(t, FALSE, FALSE, pubid, user_key,
 					      key, error_r)) < 0) {
 		mailbox_transaction_rollback(&t);
@@ -545,12 +536,10 @@ int mail_crypt_box_set_private_key(struct mailbox *box, const char *pubid,
 }
 
 static
-int mail_crypt_get_public_key(struct mailbox_transaction_context *t,
-			      const char *pubid,
+int mail_crypt_get_public_key(struct mailbox *box, const char *pubid,
 			      bool user_key, struct dcrypt_public_key **key_r,
 			      const char **error_r)
 {
-	struct mailbox *box = mailbox_transaction_get_mailbox(t);
 	struct mail_user *user = mail_storage_get_user(mailbox_get_storage(box));
 	struct mail_crypt_user *muser = mail_crypt_get_mail_crypt_user(user);
 
@@ -566,7 +555,7 @@ int mail_crypt_get_public_key(struct mailbox_transaction_context *t,
 	int ret;
 	const char *attr_name = mail_crypt_get_key_path(user_key, TRUE, pubid);
 
-	if ((ret = mailbox_attribute_get(t,
+	if ((ret = mailbox_attribute_get(box,
 					 MAIL_ATTRIBUTE_TYPE_SHARED,
 					 attr_name, &value)) <= 0) {
 		if (ret < 0) {
@@ -633,10 +622,7 @@ int mail_crypt_user_get_public_key(struct mail_user *user,
 		return -1;
 	}
 
-	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(box, 0);
-
-	if ((ret = mailbox_attribute_get(t, MAIL_ATTRIBUTE_TYPE_SHARED,
+	if ((ret = mailbox_attribute_get(box, MAIL_ATTRIBUTE_TYPE_SHARED,
 					 USER_CRYPT_PREFIX ACTIVE_KEY_NAME,
 					 &value)) <= 0) {
 		if (ret < 0) {
@@ -646,23 +632,21 @@ int mail_crypt_user_get_public_key(struct mail_user *user,
 						   mailbox_get_last_internal_error(box, NULL));
 		}
 	} else {
-		ret = mail_crypt_get_public_key(t, value.value, TRUE, key_r, error_r);
+		ret = mail_crypt_get_public_key(box, value.value, TRUE, key_r, error_r);
 	}
 
-	(void)mailbox_transaction_commit(&t);
 	mailbox_free(&box);
 	return ret;
 }
 
-int mail_crypt_box_get_public_key(struct mailbox_transaction_context *t,
+int mail_crypt_box_get_public_key(struct mailbox *box,
 				  struct dcrypt_public_key **key_r,
 				  const char **error_r)
 {
-	struct mailbox *box = mailbox_transaction_get_mailbox(t);
 	struct mail_attribute_value value;
 	int ret;
 
-	if ((ret = mailbox_attribute_get(t, MAIL_ATTRIBUTE_TYPE_SHARED,
+	if ((ret = mailbox_attribute_get(box, MAIL_ATTRIBUTE_TYPE_SHARED,
 					 BOX_CRYPT_PREFIX ACTIVE_KEY_NAME,
 					 &value)) <= 0) {
 		if (ret < 0) {
@@ -673,7 +657,7 @@ int mail_crypt_box_get_public_key(struct mailbox_transaction_context *t,
 		}
 		return ret;
 	}
-	return mail_crypt_get_public_key(t, value.value, FALSE, key_r, error_r);
+	return mail_crypt_get_public_key(box, value.value, FALSE, key_r, error_r);
 }
 
 static
@@ -732,7 +716,7 @@ int mail_crypt_user_set_public_key(struct mail_user *user, const char *pubid,
 		return -1;
 	}
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 
 	if ((ret = mail_crypt_set_public_key(t, TRUE, pubid, key,
 					     error_r)) == 0) {
@@ -772,7 +756,7 @@ int mail_crypt_box_set_public_key(struct mailbox *box, const char *pubid,
 	struct mailbox_transaction_context *t;
 	struct mail_attribute_value value;
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	if ((ret = mail_crypt_set_public_key(t, FALSE, pubid, key,
 					     error_r)) == 0) {
 		value.value_stream = NULL;
@@ -832,12 +816,11 @@ int mail_crypt_box_set_keys(struct mailbox *box,
 	return 0;
 }
 
-int mail_crypt_box_get_shared_key(struct mailbox_transaction_context *t,
+int mail_crypt_box_get_shared_key(struct mailbox *box,
 				  const char *pubid,
 				  struct dcrypt_private_key **key_r,
 				  const char **error_r)
 {
-	struct mailbox *box = mailbox_transaction_get_mailbox(t);
 	struct mail_user *user = mail_storage_get_user(mailbox_get_storage(box));
 	struct mail_crypt_user *muser = mail_crypt_get_mail_crypt_user(user);
 
@@ -859,7 +842,7 @@ int mail_crypt_box_get_shared_key(struct mailbox_transaction_context *t,
 						hexname,
 						pubid);
 
-	if ((ret = mailbox_attribute_get(t,
+	if ((ret = mailbox_attribute_get(box,
 					MAIL_ATTRIBUTE_TYPE_SHARED,
 					attr_name, &value)) <= 0) {
 		if (ret < 0) {
@@ -869,7 +852,7 @@ int mail_crypt_box_get_shared_key(struct mailbox_transaction_context *t,
 						mailbox_get_last_internal_error(box, NULL));
 			return ret;
 		}
-		return mail_crypt_get_private_key(t, pubid, FALSE, TRUE, key_r,
+		return mail_crypt_get_private_key(box, pubid, FALSE, TRUE, key_r,
 						  error_r);
 	} else {
 		if ((ret = mail_crypt_decrypt_private_key(box, pubid, value.value,
@@ -920,7 +903,7 @@ int mail_crypt_box_set_shared_key(struct mailbox_transaction_context *t,
 				      NULL, user_key, error_r)) {
 		return -1;
 	}
-
+	
 	value.value_stream = NULL;
 	value.value = str_c(data);
 	value.last_change = 0;
@@ -1098,11 +1081,10 @@ int mail_crypt_box_get_pvt_digests(struct mailbox *box, pool_t pool,
 	return ret;
 }
 
-int mail_crypt_box_get_private_keys(struct mailbox_transaction_context *t,
+int mail_crypt_box_get_private_keys(struct mailbox *box,
 				    ARRAY_TYPE(dcrypt_private_key) *keys_r,
 				    const char **error_r)
 {
-	struct mailbox *box = mailbox_transaction_get_mailbox(t);
 	struct mailbox_attribute_iter *iter;
 	iter = mailbox_attribute_iter_init(box, MAIL_ATTRIBUTE_TYPE_PRIVATE,
 					    BOX_CRYPT_PREFIX PRIVKEYS_PREFIX);
@@ -1111,7 +1093,7 @@ int mail_crypt_box_get_private_keys(struct mailbox_transaction_context *t,
 
 	while ((id = mailbox_attribute_iter_next(iter)) != NULL) {
 		struct dcrypt_private_key *key = NULL;
-		if ((ret = mail_crypt_get_private_key(t, id, FALSE, FALSE,
+		if ((ret = mail_crypt_get_private_key(box, id, FALSE, FALSE,
 						      &key, error_r)) < 0) {
 			(void)mailbox_attribute_iter_deinit(&iter);
 			return -1;
@@ -1178,18 +1160,18 @@ mail_crypt_user_get_or_gen_public_key(struct mail_user *user,
 }
 
 int
-mail_crypt_box_get_or_gen_public_key(struct mailbox_transaction_context *t,
+mail_crypt_box_get_or_gen_public_key(struct mailbox *box,
 				     struct dcrypt_public_key **pub_r,
 				     const char **error_r)
 {
-	struct mailbox *box = mailbox_transaction_get_mailbox(t);
+	i_assert(box != NULL);
 	i_assert(pub_r != NULL);
 	i_assert(error_r != NULL);
 
 	struct mail_user *user =
 		mail_storage_get_user(mailbox_get_storage(box));
 	int ret;
-	if ((ret = mail_crypt_box_get_public_key(t, pub_r, error_r)) == 0) {
+	if ((ret = mail_crypt_box_get_public_key(box, pub_r, error_r)) == 0) {
 		struct dcrypt_public_key *user_key;
 		if (mail_crypt_user_get_or_gen_public_key(user, &user_key,
 							  error_r) < 0) {

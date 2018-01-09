@@ -2,8 +2,6 @@
 
 #include "common.h"
 #include "ioloop.h"
-#include "fd-close-on-exec.h"
-#include "fd-set-nonblock.h"
 #include "fdpass.h"
 #include "service.h"
 #include "service-process.h"
@@ -131,7 +129,7 @@ void service_anvil_process_destroyed(struct service_process *process)
 void service_anvil_send_log_fd(void)
 {
 	ssize_t ret;
-	char b;
+	char b = 0;
 
 	if (service_anvil_global->process_count == 0)
 		return;

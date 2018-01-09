@@ -1,0 +1,175 @@
+#!/usr/bin/make -f
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+SHELL=/bin/bash -O extglob
+
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all
+
+# LP: 1636781 - strip incompatible default linker option
+ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
+  export DEB_LDFLAGS_MAINT_STRIP = -Wl,-Bsymbolic-functions
+endif
+
+# Macros to help move files to the module packages
+CORE_DIR=$(CURDIR)/debian/dovecot-ce-core
+PKG_DIR=$(CURDIR)/debian/dovecot-ce-PKG
+MOVE=mv $(CORE_DIR)/$(1) $(PKG_DIR:PKG=$(2))/$(dir $(1));
+
+# Files to move from dovecot-core to the individual packages. Files added to
+# <addon>_files will be automatically moved from dovecot's tree to the
+# respective package.
+imapd_files = usr/lib/dovecot/imap* \
+	      usr/lib/dovecot/modules/lib??_imap_!(sieve*) \
+	      usr/share/dovecot/conf.d/??-imap*
+
+pop3d_files = usr/lib/dovecot/pop3* \
+	      usr/share/dovecot/conf.d/??-pop3*
+
+lmtpd_files = usr/lib/dovecot/lmtp* \
+	      usr/share/dovecot/conf.d/??-lmtp*
+
+submissiond_files = usr/lib/dovecot/submission* \
+	      usr/share/dovecot/conf.d/??-submission*
+
+pgsql_files = usr/lib/dovecot/modules/auth/libdriver_pgsql* \
+	      usr/lib/dovecot/modules/dict/libdriver_pgsql* \
+	      usr/lib/dovecot/modules/libdriver_pgsql*
+
+mysql_files = usr/lib/dovecot/modules/auth/libdriver_mysql* \
+	      usr/lib/dovecot/modules/dict/libdriver_mysql* \
+	      usr/lib/dovecot/modules/libdriver_mysql*
+
+sqlite_files = usr/lib/dovecot/modules/auth/libdriver_sqlite* \
+	       usr/lib/dovecot/modules/dict/libdriver_sqlite* \
+	       usr/lib/dovecot/modules/libdriver_sqlite*
+
+gssapi_files = usr/lib/dovecot/modules/auth/libmech_gssapi*
+
+lua_files = usr/lib/dovecot/modules/auth/libauthdb_lua* 
+
+#	    usr/share/dovecot/*-lua.conf.ext \
+#	    usr/share/dovecot/conf.d/*-lua.conf.ext
+
+ldap_files = usr/lib/dovecot/modules/auth/libauthdb_ldap* \
+	     usr/lib/dovecot/modules/dict/libdict_ldap* \
+	     usr/lib/dovecot/libdovecot-ldap* \
+	     usr/share/dovecot/*-ldap.conf.ext \
+	     usr/share/dovecot/conf.d/*-ldap.conf.ext
+
+solr_files = usr/lib/dovecot/modules/lib??_fts_solr_*
+
+lucene_files = usr/lib/dovecot/modules/lib??_fts_lucene_*
+
+dev_files = usr/include/* \
+	    usr/lib/dovecot/dovecot-config \
+	    usr/share/aclocal/*.m4
+
+%:
+	dh $@ --with=systemd,autotools-dev
+
+override_dh_auto_configure:
+	KRB5CONFIG=krb5-config.mit ./configure \
+	            --with-ldap=plugin \
+	            --with-ssl=openssl \
+	            --with-sql=plugin \
+	            --with-lua=plugin \
+	            --with-pgsql \
+	            --with-mysql \
+	            --with-sqlite \
+	            --with-gssapi=plugin \
+	            --with-solr \
+	            --with-ioloop=best \
+	            --with-libwrap \
+	            --with-lucene \
+		    --with-lz4 \
+	            --prefix=/usr \
+	            --sysconfdir=/etc \
+	            --libexecdir=\$${prefix}/lib \
+	            --localstatedir=/var \
+	            --mandir=\$${prefix}/share/man \
+	            --infodir=\$${prefix}/share/info \
+		    --docdir=\$${prefix}/share/doc/dovecot-ce-core \
+	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
+	            --disable-rpath \
+	            --with-systemdsystemunitdir=/lib/systemd/system \
+	            --disable-static
+	$(MAKE) dovecot-config
+	
+override_dh_auto_build:
+	dh_auto_build --parallel
+
+override_dh_auto_clean:
+	dh_auto_clean
+
+override_dh_auto_install:
+	# Install everything under dovecot-ce-core
+	$(MAKE) install DESTDIR=$(CORE_DIR)
+	rm `find $(CURDIR)/debian -name '*.la'`
+	rm debian/dovecot-ce-core/etc/dovecot/README
+
+override_dh_install:
+	chmod 0700 debian/dovecot-ce-core/etc/dovecot/private
+	# dh_auto_install has installed everything in the dovecot-core package.
+	# Run dh_install to install additional files from the source directory
+	# or debian/ to the individual packages. NOTE: there is nothing in
+	# debian/tmp!
+	dh_install
+	install -o root -g root -m 0755 $(CORE_DIR)/usr/share/doc/dovecot-ce-core/mkcert.sh \
+		$(CORE_DIR)/usr/share/dovecot/
+	rm $(CORE_DIR)/usr/share/doc/dovecot-ce-core/mkcert.sh
+	rm $(CORE_DIR)/usr/share/doc/dovecot-ce-core/dovecot-openssl.cnf
+	rm $(CORE_DIR)/usr/share/doc/dovecot-ce-core/solr-schema.xml
+	rm -rf $(CORE_DIR)/usr/share/doc/dovecot-ce-core/example-config
+	
+	$(foreach package,$(patsubst dovecot-ce-%,%,$(shell dh_listpackages)),\
+		$(foreach file,$($(package)_files),\
+			$(call MOVE,$(file),$(package))))
+	
+	rmdir $(CORE_DIR)/usr/include
+	rmdir $(CORE_DIR)/usr/share/aclocal
+	grep ABI_VERSION config.h \
+		| perl -ne '/"(.+)\(.+\)"/ && print $$1' \
+		| tr '[A-Z]' '[a-z]' > $(PKG_DIR:PKG=dev)/usr/share/dovecot/dovecot-abi
+
+	sed -i "s@LIBDOVECOT='\(.*\)'@LIBDOVECOT=\'\1 -Wl,-R/usr/lib/dovecot\'@" \
+	  $(CURDIR)/debian/dovecot-ce-dev/usr/lib/dovecot/dovecot-config
+	
+	# Install apport hook
+	install -D -m 644 debian/source_dovecot.py $(CURDIR)/debian/dovecot-ce-core/usr/share/apport/package-hooks/dovecot-ce-core.py
+
+	install -m644 debian/dovecot-ce-imapd.ufw.profile debian/dovecot-ce-imapd/etc/ufw/applications.d/dovecot-ce-imapd
+	install -m644 debian/dovecot-ce-pop3d.ufw.profile debian/dovecot-ce-pop3d/etc/ufw/applications.d/dovecot-ce-pop3d
+
+override_dh_installpam:
+	dh_installpam -pdovecot-ce-core --name=dovecot
+
+override_dh_installinit:
+	dh_installinit -pdovecot-ce-core --name=dovecot -u"defaults 20" --no-start
+
+override_dh_gencontrol:
+	dh_gencontrol -- -Vdovecot:ABI-Version=$(shell cat $(CURDIR)/debian/dovecot-ce-dev/usr/share/dovecot/dovecot-abi)
+
+override_dh_strip:
+	dh_strip --dbg-package=dovecot-ce-dbg
+
+override_dh_makeshlibs:
+	# Do not add an ldconfig trigger; none of the dovecot shared libraries
+	# are public.
+	dh_makeshlibs -n
+
+
+#override_dh_systemd_enable:
+	#dh_systemd_enable -pdovecot-ce-core dovecot.service
+	#dh_systemd_enable -pdovecot-ce-core --no-enable dovecot.socket
+
+override_dh_installdocs:
+	dh_installdocs
+
+.PHONY: override_dh_auto_configure override_dh_auto_build \
+	override_dh_auto_clean override_dh_auto_install \
+	override_dh_gencontrol override_dh_installinit \
+	override_dh_strip override_dh_installpam \
+	override_dh_makeshlibs override_dh_installdocs \
+	override_dh_install override_dh_systemd_enable

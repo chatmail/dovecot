@@ -18,9 +18,12 @@ struct raw_mailbox {
 	uoff_t size;
 	const char *envelope_sender;
 
-	unsigned int synced:1;
-	unsigned int have_filename:1;
+	bool synced:1;
+	bool have_filename:1;
 };
+
+#define RAW_STORAGE(s)		container_of(s, struct raw_storage, storage)
+#define RAW_MAILBOX(s)		container_of(s, struct raw_mailbox, box)
 
 extern struct mail_vfuncs raw_mail_vfuncs;
 

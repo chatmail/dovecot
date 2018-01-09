@@ -3,7 +3,6 @@
 #include "lib.h"
 
 #include "ioloop.h"
-#include "fd-set-nonblock.h"
 #include "net.h"
 #include "str.h"
 #include "write-full.h"
@@ -47,7 +46,7 @@ static void rawlog_proxy_destroy(struct rawlog_proxy *proxy)
 {
 	if (proxy->in_output != NULL) {
 		o_stream_uncork(proxy->in_output);
-		if (o_stream_nfinish(proxy->in_output) < 0) {
+		if (o_stream_finish(proxy->in_output) < 0) {
 			i_error("write(in) failed: %s",
 				o_stream_get_error(proxy->in_output));
 		}
@@ -55,18 +54,15 @@ static void rawlog_proxy_destroy(struct rawlog_proxy *proxy)
 	}
 	if (proxy->out_output != NULL) {
 		o_stream_uncork(proxy->out_output);
-		if (o_stream_nfinish(proxy->out_output) < 0) {
+		if (o_stream_finish(proxy->out_output) < 0) {
 			i_error("write(out) failed: %s",
 				o_stream_get_error(proxy->out_output));
 		}
 		o_stream_destroy(&proxy->out_output);
 	}
-	if (proxy->client_io != NULL)
-		io_remove(&proxy->client_io);
-	if (proxy->server_io != NULL)
-		io_remove(&proxy->server_io);
-	if (proxy->to_flush != NULL)
-		timeout_remove(&proxy->to_flush);
+	io_remove(&proxy->client_io);
+	io_remove(&proxy->server_io);
+	timeout_remove(&proxy->to_flush);
 
 	o_stream_destroy(&proxy->client_output);
 	o_stream_destroy(&proxy->server_output);
@@ -281,7 +277,7 @@ rawlog_proxy_create(int client_in_fd, int client_out_fd, int server_fd,
 
 	proxy = i_new(struct rawlog_proxy, 1);
 	proxy->server_fd = server_fd;
-	proxy->server_output = o_stream_create_fd(server_fd, (size_t)-1, FALSE);
+	proxy->server_output = o_stream_create_fd(server_fd, (size_t)-1);
 	o_stream_set_no_error_handling(proxy->server_output, TRUE);
 	o_stream_set_flush_callback(proxy->server_output, server_output, proxy);
 	proxy->server_io = io_add(server_fd, IO_READ, server_input, proxy);
@@ -289,7 +285,7 @@ rawlog_proxy_create(int client_in_fd, int client_out_fd, int server_fd,
 	proxy->client_in_fd = client_in_fd;
 	proxy->client_out_fd = client_out_fd;
 	proxy->client_output =
-		o_stream_create_fd(client_out_fd, (size_t)-1, FALSE);
+		o_stream_create_fd(client_out_fd, (size_t)-1);
 	o_stream_set_no_error_handling(proxy->client_output, TRUE);
 	proxy->client_io = io_add(proxy->client_in_fd, IO_READ,
 				  client_input, proxy);

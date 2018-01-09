@@ -5,8 +5,6 @@
 
 #ifdef IOLOOP_NOTIFY_INOTIFY
 
-#include "fd-close-on-exec.h"
-#include "fd-set-nonblock.h"
 #include "ioloop-private.h"
 #include "ioloop-notify-fd.h"
 #include "buffer.h"
@@ -206,11 +204,7 @@ void io_loop_notify_handler_deinit(struct ioloop *ioloop)
 		io_remove(&_io);
 	}
 
-	if (ctx->inotify_fd != -1) {
-		if (close(ctx->inotify_fd) < 0)
-			i_error("close(inotify) failed: %m");
-		ctx->inotify_fd = -1;
-	}
+	i_close_fd(&ctx->inotify_fd);
 	i_free(ctx);
 }
 
@@ -234,8 +228,7 @@ int io_loop_extract_notify_fd(struct ioloop *ioloop)
 	}
 	for (io = ctx->fd_ctx.notifies; io != NULL; io = io->next)
 		io->fd = -1;
-	if (ctx->event_io != NULL)
-		io_remove(&ctx->event_io);
+	io_remove(&ctx->event_io);
 	fd = ctx->inotify_fd;
 	ctx->inotify_fd = new_inotify_fd;
 	return fd;

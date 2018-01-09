@@ -17,7 +17,7 @@ struct bzlib_ostream {
 	char outbuf[CHUNK_SIZE];
 	unsigned int outbuf_offset, outbuf_used;
 
-	unsigned int flushed:1;
+	bool flushed:1;
 };
 
 static void o_stream_bzlib_close(struct iostream_private *stream,
@@ -25,7 +25,6 @@ static void o_stream_bzlib_close(struct iostream_private *stream,
 {
 	struct bzlib_ostream *zstream = (struct bzlib_ostream *)stream;
 
-	(void)o_stream_flush(&zstream->ostream.ostream);
 	(void)BZ2_bzCompressEnd(&zstream->zs);
 	if (close_parent)
 		o_stream_close(zstream->ostream.parent);
@@ -103,12 +102,7 @@ static int o_stream_bzlib_send_flush(struct bzlib_ostream *zstream)
 	bool done = FALSE;
 	int ret;
 
-	if (zs->avail_in != 0) {
-		i_assert(zstream->ostream.ostream.last_failed_errno != 0);
-		zstream->ostream.ostream.stream_errno =
-			zstream->ostream.ostream.last_failed_errno;
-		return -1;
-	}
+	i_assert(zs->avail_in == 0);
 
 	if (zstream->flushed)
 		return 0;
@@ -151,15 +145,11 @@ static int o_stream_bzlib_send_flush(struct bzlib_ostream *zstream)
 static int o_stream_bzlib_flush(struct ostream_private *stream)
 {
 	struct bzlib_ostream *zstream = (struct bzlib_ostream *)stream;
-	int ret;
 
 	if (o_stream_bzlib_send_flush(zstream) < 0)
 		return -1;
 
-	ret = o_stream_flush(stream->parent);
-	if (ret < 0)
-		o_stream_copy_error_from_parent(stream);
-	return ret;
+	return o_stream_flush_parent(stream);
 }
 
 static ssize_t

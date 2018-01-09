@@ -54,15 +54,17 @@ struct imap_parser {
 	int str_first_escape; /* ARG_PARSE_STRING: index to first '\' */
 	uoff_t literal_size; /* ARG_PARSE_LITERAL: string size */
 
-	const char *error;
+	enum imap_parser_error error;
+	const char *error_msg;
 
-	unsigned int literal_skip_crlf:1;
-	unsigned int literal_nonsync:1;
-	unsigned int literal8:1;
-	unsigned int literal_size_return:1;
-	unsigned int eol:1;
-	unsigned int args_added_extra_eol:1;
-	unsigned int fatal_error:1;
+	bool literal_minus:1;
+	bool literal_skip_crlf:1;
+	bool literal_nonsync:1;
+	bool literal8:1;
+	bool literal_size_return:1;
+	bool eol:1;
+	bool args_added_extra_eol:1;
+	bool fatal_error:1;
 };
 
 struct imap_parser *
@@ -105,6 +107,11 @@ void imap_parser_unref(struct imap_parser **_parser)
 	i_free(parser);
 }
 
+void imap_parser_enable_literal_minus(struct imap_parser *parser)
+{
+	parser->literal_minus = TRUE;
+}
+
 void imap_parser_reset(struct imap_parser *parser)
 {
 	p_clear(parser->pool);
@@ -122,7 +129,8 @@ void imap_parser_reset(struct imap_parser *parser)
 	parser->str_first_escape = 0;
 	parser->literal_size = 0;
 
-	parser->error = NULL;
+	parser->error = IMAP_PARSE_ERROR_NONE;
+	parser->error_msg = NULL;
 
 	parser->literal_skip_crlf = FALSE;
 	parser->eol = FALSE;
@@ -137,16 +145,18 @@ void imap_parser_set_streams(struct imap_parser *parser, struct istream *input,
 	parser->output = output;
 }
 
-const char *imap_parser_get_error(struct imap_parser *parser, bool *fatal)
+const char *imap_parser_get_error(struct imap_parser *parser,
+	enum imap_parser_error *error_r)
 {
-        *fatal = parser->fatal_error;
-	return parser->error;
+	if (error_r != NULL)
+		*error_r = parser->error;
+	return parser->error_msg;
 }
 
 /* skip over everything parsed so far, plus the following whitespace */
-static int imap_parser_skip_to_next(struct imap_parser *parser,
-				    const unsigned char **data,
-				    size_t *data_size)
+static bool imap_parser_skip_to_next(struct imap_parser *parser,
+				     const unsigned char **data,
+				     size_t *data_size)
 {
 	size_t i;
 
@@ -184,7 +194,7 @@ static void imap_parser_open_list(struct imap_parser *parser)
 	parser->cur_type = ARG_PARSE_NONE;
 }
 
-static int imap_parser_close_list(struct imap_parser *parser)
+static bool imap_parser_close_list(struct imap_parser *parser)
 {
 	struct imap_arg *arg;
 
@@ -195,7 +205,8 @@ static int imap_parser_close_list(struct imap_parser *parser)
 			parser->cur_type = ARG_PARSE_NONE;
 			return TRUE;
 		}
-		parser->error = "Unexpected ')'";
+		parser->error_msg = "Unexpected ')'";
+		parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
 		return FALSE;
 	}
 
@@ -290,25 +301,26 @@ static void imap_parser_save_arg(struct imap_parser *parser,
 	parser->cur_type = ARG_PARSE_NONE;
 }
 
-static int is_valid_atom_char(struct imap_parser *parser, char chr)
+static bool is_valid_atom_char(struct imap_parser *parser, char chr)
 {
-	const char *error;
+	const char *error_msg;
 
 	if (IS_ATOM_PARSER_INPUT((unsigned char)chr))
-		error = "Invalid characters in atom";
+		error_msg = "Invalid characters in atom";
 	else if ((chr & 0x80) != 0)
-		error = "8bit data in atom";
+		error_msg = "8bit data in atom";
 	else
 		return TRUE;
 
 	if ((parser->flags & IMAP_PARSE_FLAG_ATOM_ALLCHARS) != 0)
 		return TRUE;
-	parser->error = error;
+	parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+	parser->error_msg = error_msg;
 	return FALSE;
 }
 
-static int imap_parser_read_atom(struct imap_parser *parser,
-				 const unsigned char *data, size_t data_size)
+static bool imap_parser_read_atom(struct imap_parser *parser,
+				  const unsigned char *data, size_t data_size)
 {
 	size_t i;
 
@@ -324,7 +336,8 @@ static int imap_parser_read_atom(struct imap_parser *parser,
 				break;
 			} else if ((parser->flags &
 				    IMAP_PARSE_FLAG_ATOM_ALLCHARS) == 0) {
-				parser->error = "Unexpected ')'";
+				parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+				parser->error_msg = "Unexpected ')'";
 				return FALSE;
 			}
 			/* assume it's part of the atom */
@@ -336,8 +349,8 @@ static int imap_parser_read_atom(struct imap_parser *parser,
 	return parser->cur_type == ARG_PARSE_NONE;
 }
 
-static int imap_parser_read_string(struct imap_parser *parser,
-				   const unsigned char *data, size_t data_size)
+static bool imap_parser_read_string(struct imap_parser *parser,
+				    const unsigned char *data, size_t data_size)
 {
 	size_t i;
 
@@ -370,7 +383,8 @@ static int imap_parser_read_string(struct imap_parser *parser,
 		   a linebreak.. */
 		if (is_linebreak(data[i]) &&
 		    (parser->flags & IMAP_PARSE_FLAG_MULTILINE_STR) == 0) {
-			parser->error = "Missing '\"'";
+			parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+			parser->error_msg = "Missing '\"'";
 			return FALSE;
 		}
 	}
@@ -379,21 +393,33 @@ static int imap_parser_read_string(struct imap_parser *parser,
 	return parser->cur_type == ARG_PARSE_NONE;
 }
 
-static int imap_parser_literal_end(struct imap_parser *parser)
+static bool imap_parser_literal_end(struct imap_parser *parser)
 {
+	if (parser->literal_minus && parser->literal_nonsync &&
+		parser->literal_size > 4096) {
+		parser->error_msg = "Non-synchronizing literal size too large";
+		parser->error = IMAP_PARSE_ERROR_LITERAL_TOO_BIG;
+		return FALSE;
+	}
+
 	if ((parser->flags & IMAP_PARSE_FLAG_LITERAL_SIZE) == 0) {
 		if (parser->line_size >= parser->max_line_size ||
 		    parser->literal_size >
 		    parser->max_line_size - parser->line_size) {
 			/* too long string, abort. */
-			parser->error = "Literal size too large";
-			parser->fatal_error = TRUE;
+			parser->error = IMAP_PARSE_ERROR_LITERAL_TOO_BIG;
+			parser->error_msg = "Literal size too large";
 			return FALSE;
 		}
 
 		if (parser->output != NULL && !parser->literal_nonsync) {
 			o_stream_nsend(parser->output, "+ OK\r\n", 6);
-			o_stream_nflush(parser->output);
+			if (o_stream_is_corked(parser->output)) {
+				/* make sure this continuation is sent to the
+				   client as soon as possible */
+				o_stream_uncork(parser->output);
+				o_stream_cork(parser->output);
+			}
 		}
 	}
 
@@ -404,9 +430,9 @@ static int imap_parser_literal_end(struct imap_parser *parser)
 	return TRUE;
 }
 
-static int imap_parser_read_literal(struct imap_parser *parser,
-				    const unsigned char *data,
-				    size_t data_size)
+static bool imap_parser_read_literal(struct imap_parser *parser,
+				     const unsigned char *data,
+				     size_t data_size)
 {
 	size_t i, prev_size;
 
@@ -419,7 +445,8 @@ static int imap_parser_read_literal(struct imap_parser *parser,
 		}
 
 		if (parser->literal_nonsync) {
-			parser->error = "Expecting '}' after '+'";
+			parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+			parser->error_msg = "Expecting '}' after '+'";
 			return FALSE;
 		}
 
@@ -429,7 +456,8 @@ static int imap_parser_read_literal(struct imap_parser *parser,
 		}
 
 		if (data[i] < '0' || data[i] > '9') {
-			parser->error = "Invalid literal size";
+			parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+			parser->error_msg = "Invalid literal size";
 			return FALSE;
 		}
 
@@ -438,7 +466,8 @@ static int imap_parser_read_literal(struct imap_parser *parser,
 
 		if (parser->literal_size < prev_size) {
 			/* wrapped around, abort. */
-			parser->error = "Literal size too large";
+			parser->error = IMAP_PARSE_ERROR_LITERAL_TOO_BIG;
+			parser->error_msg = "Literal size too large";
 			return FALSE;
 		}
 	}
@@ -447,9 +476,9 @@ static int imap_parser_read_literal(struct imap_parser *parser,
 	return FALSE;
 }
 
-static int imap_parser_read_literal_data(struct imap_parser *parser,
-					 const unsigned char *data,
-					 size_t data_size)
+static bool imap_parser_read_literal_data(struct imap_parser *parser,
+					  const unsigned char *data,
+					  size_t data_size)
 {
 	if (parser->literal_skip_crlf) {
 		/* skip \r\n or \n, anything else gives an error */
@@ -466,7 +495,8 @@ static int imap_parser_read_literal_data(struct imap_parser *parser,
 		}
 
 		if (*data != '\n') {
-			parser->error = "Missing LF after literal size";
+			parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+			parser->error_msg = "Missing LF after literal size";
 			return FALSE;
 		}
 
@@ -493,7 +523,7 @@ static int imap_parser_read_literal_data(struct imap_parser *parser,
 	} else {
 		/* we want to save only literal size, not the literal itself. */
 		parser->literal_size_return = TRUE;
-		imap_parser_save_arg(parser, &uchar_nul, 0);
+		imap_parser_save_arg(parser, uchar_empty_ptr, 0);
 		return FALSE;
 	}
 }
@@ -550,7 +580,7 @@ static bool imap_parser_read_text(struct imap_parser *parser,
 
 /* Returns TRUE if argument was fully processed. Also returns TRUE if
    an argument inside a list was processed. */
-static int imap_parser_read_arg(struct imap_parser *parser)
+static bool imap_parser_read_arg(struct imap_parser *parser)
 {
 	const unsigned char *data;
 	size_t data_size;
@@ -579,14 +609,16 @@ static int imap_parser_read_arg(struct imap_parser *parser)
 				return FALSE;
 			}
 			if (data[1] != '\n') {
-				parser->error = "CR sent without LF";
+				parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+				parser->error_msg = "CR sent without LF";
 				return FALSE;
 			}
 			/* fall through */
 		case '\n':
 			/* unexpected end of line */
 			if ((parser->flags & IMAP_PARSE_FLAG_INSIDE_LIST) != 0) {
-				parser->error = "Missing ')'";
+				parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+				parser->error_msg = "Missing ')'";
 				return FALSE;
 			}
 			parser->eol = TRUE;
@@ -606,7 +638,8 @@ static int imap_parser_read_arg(struct imap_parser *parser)
 				break;
 			}
 			if ((parser->flags & IMAP_PARSE_FLAG_LITERAL8) == 0) {
-				parser->error = "literal8 not allowed here";
+				parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+				parser->error_msg = "literal8 not allowed here";
 				return FALSE;
 			}
 			parser->cur_type = ARG_PARSE_LITERAL8;
@@ -672,7 +705,8 @@ static int imap_parser_read_arg(struct imap_parser *parser)
 		if (parser->cur_pos == data_size)
 			return FALSE;
 		if (data[parser->cur_pos] != '{') {
-			parser->error = "Expected '{'";
+			parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+			parser->error_msg = "Expected '{'";
 			return FALSE;
 		}
 		parser->cur_type = ARG_PARSE_LITERAL;
@@ -723,7 +757,8 @@ static int finish_line(struct imap_parser *parser, unsigned int count,
 
 	if (parser->list_arg != NULL && !parser->literal_size_return &&
 	    (parser->flags & IMAP_PARSE_FLAG_STOP_AT_LIST) == 0) {
-		parser->error = "Missing ')'";
+		parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+		parser->error_msg = "Missing ')'";
 		*args_r = NULL;
 		return -1;
 	}
@@ -756,12 +791,13 @@ int imap_parser_read_args(struct imap_parser *parser, unsigned int count,
 			break;
 
 		if (parser->line_size > parser->max_line_size) {
-			parser->error = "IMAP command line too large";
+			parser->error = IMAP_PARSE_ERROR_LINE_TOO_LONG;
+			parser->error_msg = "IMAP command line too large";
 			break;
 		}
 	}
 
-	if (parser->error != NULL) {
+	if (parser->error != IMAP_PARSE_ERROR_NONE) {
 		/* error, abort */
 		parser->line_size += parser->cur_pos;
 		i_stream_skip(parser->input, parser->cur_pos);

@@ -20,7 +20,7 @@ struct virtual_mail {
 	ARRAY(struct mail *) backend_mails;
 
 	/* mail is lost if backend_mail doesn't point to correct mail */
-	unsigned int cur_lost:1;
+	bool cur_lost:1;
 };
 
 struct mail *
@@ -453,6 +453,28 @@ virtual_mail_get_stream(struct mail *mail, bool get_body,
 }
 
 static int
+virtual_mail_get_binary_stream(struct mail *mail,
+			       const struct message_part *part,
+			       bool include_hdr, uoff_t *size_r,
+			       unsigned int *lines_r, bool *binary_r,
+			       struct istream **stream_r)
+{
+	struct virtual_mail *vmail = (struct virtual_mail *)mail;
+	struct mail *backend_mail;
+
+	if (backend_mail_get(vmail, &backend_mail) < 0)
+		return -1;
+
+	struct mail_private *p = (struct mail_private *)backend_mail;
+	if (p->v.get_binary_stream(backend_mail, part, include_hdr,
+				   size_r, lines_r, binary_r, stream_r) < 0) {
+		virtual_box_copy_error(mail->box, backend_mail->box);
+		return -1;
+	}
+	return 0;
+}
+
+static int
 virtual_mail_get_special(struct mail *mail, enum mail_fetch_field field,
 			 const char **value_r)
 {
@@ -468,17 +490,18 @@ virtual_mail_get_special(struct mail *mail, enum mail_fetch_field field,
 	return 0;
 }
 
-static struct mail *virtual_mail_get_real_mail(struct mail *mail)
+static int virtual_mail_get_backend_mail(struct mail *mail,
+					 struct mail **real_mail_r)
 {
 	struct virtual_mail *vmail = (struct virtual_mail *)mail;
-	struct mail *backend_mail, *real_mail;
+	struct mail *backend_mail;
 
 	if (backend_mail_get(vmail, &backend_mail) < 0)
-		return NULL;
+		return -1;
 
-	if (mail_get_backend_mail(backend_mail, &real_mail) < 0)
-		return NULL;
-	return real_mail;
+	if (mail_get_backend_mail(backend_mail, real_mail_r) < 0)
+		return -1;
+	return 0;
 }
 
 static void virtual_mail_update_pop3_uidl(struct mail *mail, const char *uidl)
@@ -502,22 +525,16 @@ static void virtual_mail_expunge(struct mail *mail)
 }
 
 static void
-virtual_mail_set_cache_corrupted_reason(struct mail *mail,
-					enum mail_fetch_field field,
-					const char *reason)
+virtual_mail_set_cache_corrupted(struct mail *mail,
+				 enum mail_fetch_field field,
+				 const char *reason)
 {
 	struct virtual_mail *vmail = (struct virtual_mail *)mail;
 	struct mail *backend_mail;
 
 	if (backend_mail_get(vmail, &backend_mail) < 0)
 		return;
-	mail_set_cache_corrupted_reason(backend_mail, field, reason);
-}
-
-static void
-virtual_mail_set_cache_corrupted(struct mail *mail, enum mail_fetch_field field)
-{
-	virtual_mail_set_cache_corrupted_reason(mail, field, "");
+	mail_set_cache_corrupted(backend_mail, field, reason);
 }
 
 struct mail_vfuncs virtual_mail_vfuncs = {
@@ -545,9 +562,9 @@ struct mail_vfuncs virtual_mail_vfuncs = {
 	virtual_mail_get_headers,
 	virtual_mail_get_header_stream,
 	virtual_mail_get_stream,
-	index_mail_get_binary_stream,
+	virtual_mail_get_binary_stream,
 	virtual_mail_get_special,
-	virtual_mail_get_real_mail,
+	virtual_mail_get_backend_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
 	index_mail_update_modseq,
@@ -556,5 +573,4 @@ struct mail_vfuncs virtual_mail_vfuncs = {
 	virtual_mail_expunge,
 	virtual_mail_set_cache_corrupted,
 	NULL,
-	virtual_mail_set_cache_corrupted_reason
 };

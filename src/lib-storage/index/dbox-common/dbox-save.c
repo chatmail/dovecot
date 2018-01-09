@@ -7,6 +7,7 @@
 #include "str.h"
 #include "hex-binary.h"
 #include "index-mail.h"
+#include "index-storage.h"
 #include "dbox-attachment.h"
 #include "dbox-file.h"
 #include "dbox-save.h"
@@ -38,7 +39,7 @@ void dbox_save_begin(struct dbox_save_context *ctx, struct istream *input)
 {
 	struct mail_save_context *_ctx = &ctx->ctx;
 	struct mail_storage *_storage = _ctx->transaction->box->storage;
-	struct dbox_storage *storage = (struct dbox_storage *)_storage;
+	struct dbox_storage *storage = DBOX_STORAGE(_storage);
 	struct dbox_message_header dbox_msg_hdr;
 	struct istream *crlf_input;
 
@@ -55,8 +56,9 @@ void dbox_save_begin(struct dbox_save_context *ctx, struct istream *input)
 	o_stream_cork(ctx->dbox_output);
 	if (o_stream_send(ctx->dbox_output, &dbox_msg_hdr,
 			  sizeof(dbox_msg_hdr)) < 0) {
-		mail_storage_set_critical(_storage, "write(%s) failed: %m",
-					  o_stream_get_name(ctx->dbox_output));
+		mail_set_critical(_ctx->dest_mail, "write(%s) failed: %s",
+				  o_stream_get_name(ctx->dbox_output),
+				  o_stream_get_error(ctx->dbox_output));
 		ctx->failed = TRUE;
 	}
 	_ctx->data.output = ctx->dbox_output;
@@ -68,8 +70,7 @@ void dbox_save_begin(struct dbox_save_context *ctx, struct istream *input)
 
 int dbox_save_continue(struct mail_save_context *_ctx)
 {
-	struct dbox_save_context *ctx = (struct dbox_save_context *)_ctx;
-	struct mail_storage *storage = _ctx->transaction->box->storage;
+	struct dbox_save_context *ctx = DBOX_SAVECTX(_ctx);
 
 	if (ctx->failed)
 		return -1;
@@ -77,22 +78,11 @@ int dbox_save_continue(struct mail_save_context *_ctx)
 	if (_ctx->data.attach != NULL)
 		return index_attachment_save_continue(_ctx);
 
-	do {
-		if (o_stream_send_istream(_ctx->data.output, ctx->input) < 0) {
-			if (!mail_storage_set_error_from_errno(storage)) {
-				mail_storage_set_critical(storage,
-					"write(%s) failed: %m",
-					o_stream_get_name(_ctx->data.output));
-			}
-			ctx->failed = TRUE;
-			return -1;
-		}
-		index_mail_cache_parse_continue(_ctx->dest_mail);
-
-		/* both tee input readers may consume data from our primary
-		   input stream. we'll have to make sure we don't return with
-		   one of the streams still having data in them. */
-	} while (i_stream_read(ctx->input) > 0);
+	if (index_storage_save_continue(_ctx, ctx->input,
+					_ctx->dest_mail) < 0) {
+		ctx->failed = TRUE;
+		return -1;
+	}
 	return 0;
 }
 
@@ -100,6 +90,7 @@ void dbox_save_end(struct dbox_save_context *ctx)
 {
 	struct mail_save_data *mdata = &ctx->ctx.data;
 	struct ostream *dbox_output = ctx->dbox_output;
+	int ret;
 
 	i_assert(mdata->output != NULL);
 
@@ -107,14 +98,22 @@ void dbox_save_end(struct dbox_save_context *ctx)
 		if (index_attachment_save_finish(&ctx->ctx) < 0)
 			ctx->failed = TRUE;
 	}
-	if (o_stream_nfinish(mdata->output) < 0) {
-		mail_storage_set_critical(ctx->ctx.transaction->box->storage,
-					  "write(%s) failed: %m",
-					  o_stream_get_name(mdata->output));
+	if (mdata->output != dbox_output) {
+		/* e.g. zlib plugin had changed this. make sure we
+		   successfully write the trailer. */
+		ret = o_stream_finish(mdata->output);
+	} else {
+		/* no plugins - flush the output so far */
+		ret = o_stream_flush(mdata->output);
+	}
+	if (ret < 0) {
+		mail_set_critical(ctx->ctx.dest_mail,
+				  "write(%s) failed: %s",
+				  o_stream_get_name(mdata->output),
+				  o_stream_get_error(mdata->output));
 		ctx->failed = TRUE;
 	}
 	if (mdata->output != dbox_output) {
-		/* e.g. zlib plugin had changed this */
 		o_stream_ref(dbox_output);
 		o_stream_destroy(&mdata->output);
 		mdata->output = dbox_output;
@@ -129,7 +128,7 @@ void dbox_save_write_metadata(struct mail_save_context *_ctx,
 			      const char *orig_mailbox_name,
 			      guid_128_t guid_128)
 {
-	struct dbox_save_context *ctx = (struct dbox_save_context *)_ctx;
+	struct dbox_save_context *ctx = DBOX_SAVECTX(_ctx);
 	struct mail_save_data *mdata = &ctx->ctx.data;
 	struct dbox_metadata_header metadata_hdr;
 	const char *guid;
@@ -150,8 +149,8 @@ void dbox_save_write_metadata(struct mail_save_context *_ctx,
 		str_printfa(str, "%c%llx\n", DBOX_METADATA_PHYSICAL_SIZE,
 			    (unsigned long long)ctx->input->v_offset);
 	}
-	str_printfa(str, "%c%lx\n", DBOX_METADATA_RECEIVED_TIME,
-		    (unsigned long)mdata->received_date);
+	str_printfa(str, "%c%"PRIxTIME_T"\n", DBOX_METADATA_RECEIVED_TIME,
+		    mdata->received_date);
 	if (mail_get_virtual_size(_ctx->dest_mail, &vsize) < 0)
 		i_unreached();
 	str_printfa(str, "%c%llx\n", DBOX_METADATA_VIRTUAL_SIZE,

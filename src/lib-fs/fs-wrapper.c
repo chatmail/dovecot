@@ -31,9 +31,9 @@ void fs_wrapper_set_async_callback(struct fs_file *file,
 	fs_file_set_async_callback(file->parent, callback, context);
 }
 
-int fs_wrapper_wait_async(struct fs *fs)
+void fs_wrapper_wait_async(struct fs *fs)
 {
-	return fs_wait_async(fs->parent);
+	fs_wait_async(fs->parent);
 }
 
 void fs_wrapper_set_metadata(struct fs_file *file, const char *key,
@@ -78,14 +78,14 @@ void fs_wrapper_write_stream(struct fs_file *file)
 
 int fs_wrapper_write_stream_finish(struct fs_file *file, bool success)
 {
+	if (file->output == NULL)
+		return fs_write_stream_finish_async(file->parent);
+
 	if (!success) {
 		fs_write_stream_abort_parent(file, &file->output);
 		return -1;
 	}
-
-	if (fs_write_stream_finish(file->parent, &file->output) < 0)
-		return -1;
-	return 1;
+	return fs_write_stream_finish(file->parent, &file->output);
 }
 
 int fs_wrapper_lock(struct fs_file *file, unsigned int secs,
@@ -132,17 +132,18 @@ int fs_wrapper_delete(struct fs_file *file)
 	return fs_delete(file->parent);
 }
 
-struct fs_iter *
-fs_wrapper_iter_init(struct fs *fs, const char *path,
-		     enum fs_iter_flags flags)
+struct fs_iter *fs_wrapper_iter_alloc(void)
 {
-	struct wrapper_fs_iter *iter;
-
-	iter = i_new(struct wrapper_fs_iter, 1);
-	iter->iter.fs = fs;
-	iter->iter.flags = flags;
-	iter->parent = fs_iter_init(fs->parent, path, flags);
+	struct wrapper_fs_iter *iter = i_new(struct wrapper_fs_iter, 1);
 	return &iter->iter;
+}
+
+void fs_wrapper_iter_init(struct fs_iter *_iter, const char *path,
+			  enum fs_iter_flags flags)
+{
+	struct wrapper_fs_iter *iter = (struct wrapper_fs_iter *)_iter;
+
+	iter->parent = fs_iter_init_parent(_iter, path, flags);
 }
 
 const char *fs_wrapper_iter_next(struct fs_iter *_iter)

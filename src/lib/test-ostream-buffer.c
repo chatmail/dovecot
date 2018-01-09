@@ -23,23 +23,23 @@ static void test_ostream_buffer_random_once(void)
 	output = o_stream_create_buffer(buffer);
 	o_stream_cork(output);
 
-	size = (rand() % MAX_BUFSIZE) + 1;
-	random_fill_weak(randbuf, size);
+	size = i_rand_minmax(1, MAX_BUFSIZE);
+	random_fill(randbuf, size);
 	memcpy(buf, randbuf, size);
 	test_assert(o_stream_send(output, buf, size) > 0);
 
 	for (i = 0; i < 10; i++) {
-		offset = rand() % (MAX_BUFSIZE*3);
-		size = (rand() % MAX_BUFSIZE) + 1;
-		random_fill_weak(randbuf, size);
+		offset = i_rand_limit(MAX_BUFSIZE * 3);
+		size = i_rand_minmax(1, MAX_BUFSIZE);
+		random_fill(randbuf, size);
 		memcpy(buf + offset, randbuf, size);
 		test_assert(o_stream_pwrite(output, randbuf, size, offset) == 0);
-		if (rand() % 10 == 0)
+		if (i_rand_limit(10) == 0)
 			test_assert(o_stream_flush(output) > 0);
 	}
 
-	test_assert(o_stream_flush(output) > 0);
 	o_stream_uncork(output);
+	test_assert(o_stream_finish(output) > 0);
 
 	i_assert(buffer->used <= MAX_BUFSIZE*4);
 	test_assert(memcmp(buf, buffer->data, buffer->used) == 0);

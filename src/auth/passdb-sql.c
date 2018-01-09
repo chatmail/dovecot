@@ -154,11 +154,18 @@ static void sql_lookup_pass(struct passdb_sql_request *sql_request)
 	struct passdb_module *_module =
 		sql_request->auth_request->passdb->passdb;
 	struct sql_passdb_module *module = (struct sql_passdb_module *)_module;
-	const char *query;
+	const char *query, *error;
 
-	query = t_auth_request_var_expand(module->conn->set.password_query,
-					  sql_request->auth_request,
-					  passdb_sql_escape);
+	if (t_auth_request_var_expand(module->conn->set.password_query,
+				      sql_request->auth_request,
+				      passdb_sql_escape, &query, &error) <= 0) {
+		auth_request_log_debug(sql_request->auth_request, AUTH_SUBSYS_DB,
+			"Failed to expand password_query=%s: %s",
+			module->conn->set.password_query, error);
+		sql_request->callback.verify_plain(PASSDB_RESULT_INTERNAL_FAILURE,
+						   sql_request->auth_request);
+		return;
+	}
 
 	auth_request_log_debug(sql_request->auth_request, AUTH_SUBSYS_DB,
 			       "query: %s", query);
@@ -193,46 +200,53 @@ static void sql_lookup_credentials(struct auth_request *request,
         sql_lookup_pass(sql_request);
 }
 
-static void sql_set_credentials_callback(const char *error,
+static void sql_set_credentials_callback(const struct sql_commit_result *sql_result,
 					 struct passdb_sql_request *sql_request)
 {
 	struct passdb_module *_module =
 		sql_request->auth_request->passdb->passdb;
 	struct sql_passdb_module *module = (struct sql_passdb_module *)_module;
 
-	if (error != NULL) {
+	if (sql_result->error != NULL) {
 		if (!module->conn->default_update_query) {
 			auth_request_log_error(sql_request->auth_request,
 				AUTH_SUBSYS_DB,
-				"Set credentials query failed: %s", error);
+				"Set credentials query failed: %s", sql_result->error);
 		} else {
 			auth_request_log_error(sql_request->auth_request,
 				AUTH_SUBSYS_DB,
 				"Set credentials query failed: %s"
 				"(using built-in default update_query: %s)",
-				error, module->conn->set.update_query);
+				sql_result->error, module->conn->set.update_query);
 		}
 	}
 
 	sql_request->callback.
-		set_credentials(error == NULL, sql_request->auth_request);
+		set_credentials(sql_result->error == NULL, sql_request->auth_request);
 	i_free(sql_request);
 }
 
-static int sql_set_credentials(struct auth_request *request,
-			       const char *new_credentials,
-			       set_credentials_callback_t *callback)
+static void sql_set_credentials(struct auth_request *request,
+				const char *new_credentials,
+				set_credentials_callback_t *callback)
 {
 	struct sql_passdb_module *module =
 		(struct sql_passdb_module *) request->passdb->passdb;
 	struct sql_transaction_context *transaction;
 	struct passdb_sql_request *sql_request;
-	const char *query;
+	const char *query, *error;
 
 	request->mech_password = p_strdup(request->pool, new_credentials);
 
-	query = t_auth_request_var_expand(module->conn->set.update_query,
-					  request, passdb_sql_escape);
+	if (t_auth_request_var_expand(module->conn->set.update_query,
+				      request, passdb_sql_escape,
+				      &query, &error) <= 0) {
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"Failed to expand update_query=%s: %s",
+			module->conn->set.update_query, error);
+		callback(FALSE, request);
+		return;
+	}
 
 	sql_request = i_new(struct passdb_sql_request, 1);
 	sql_request->auth_request = request;
@@ -242,7 +256,6 @@ static int sql_set_credentials(struct auth_request *request,
 	sql_update(transaction, query);
 	sql_transaction_commit(&transaction,
 			       sql_set_credentials_callback, sql_request);
-	return 0;
 }
 
 static struct passdb_module *

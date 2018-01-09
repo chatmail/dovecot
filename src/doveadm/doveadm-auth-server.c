@@ -224,10 +224,16 @@ static void cmd_auth_cache_flush(int argc, char *argv[])
 }
 
 static void cmd_user_mail_input_field(const char *key, const char *value,
-				      const char *show_field)
+				      const char *show_field, bool *first)
 {
 	string_t *jvalue = t_str_new(128);
 	if (show_field != NULL && strcmp(show_field, key) != 0) return;
+	/* do not emit comma on first field. we need to keep track
+	   of when the first field actually gets printed as it
+	   might change due to show_field */
+	if (!*first)
+		o_stream_nsend_str(doveadm_print_ostream, ",");
+	*first = FALSE;
 	json_append_escaped(jvalue, key);
 	o_stream_nsend_str(doveadm_print_ostream, "\"");
 	o_stream_nsend_str(doveadm_print_ostream, str_c(jvalue));
@@ -247,20 +253,16 @@ cmd_user_mail_print_fields(const struct authtest_input *input,
 	const struct mail_storage_settings *mail_set;
 	const char *key, *value;
 	unsigned int i;
+	bool first = TRUE;
 
-	if (strcmp(input->username, user->username) != 0) {
-		cmd_user_mail_input_field("user", user->username, show_field);
-		o_stream_nsend_str(doveadm_print_ostream, ",");
-	}
-	cmd_user_mail_input_field("uid", user->set->mail_uid, show_field);
-	o_stream_nsend_str(doveadm_print_ostream, ",");
-	cmd_user_mail_input_field("gid", user->set->mail_gid, show_field);
-	o_stream_nsend_str(doveadm_print_ostream, ",");
-	cmd_user_mail_input_field("home", user->set->mail_home, show_field);
+	if (strcmp(input->username, user->username) != 0)
+		cmd_user_mail_input_field("user", user->username, show_field, &first);
+	cmd_user_mail_input_field("uid", user->set->mail_uid, show_field, &first);
+	cmd_user_mail_input_field("gid", user->set->mail_gid, show_field, &first);
+	cmd_user_mail_input_field("home", user->set->mail_home, show_field, &first);
 
 	mail_set = mail_user_set_get_storage_set(user);
-	o_stream_nsend_str(doveadm_print_ostream, ",");
-	cmd_user_mail_input_field("mail", mail_set->mail_location, show_field);
+	cmd_user_mail_input_field("mail", mail_set->mail_location, show_field, &first);
 
 	if (userdb_fields != NULL) {
 		for (i = 0; userdb_fields[i] != NULL; i++) {
@@ -276,8 +278,7 @@ cmd_user_mail_print_fields(const struct authtest_input *input,
 			    strcmp(key, "home") != 0 &&
 			    strcmp(key, "mail") != 0 &&
 			    *key != '\0') {
-				o_stream_nsend_str(doveadm_print_ostream, ",");
-				cmd_user_mail_input_field(key, value, show_field);
+				cmd_user_mail_input_field(key, value, show_field, &first);
 			}
 		}
 	}
@@ -327,18 +328,26 @@ cmd_user_mail_input(struct mail_storage_service_ctx *storage_service,
 		cmd_user_mail_print_fields(input, user, userdb_fields, show_field);
 	else {
 		string_t *str = t_str_new(128);
-		var_expand_with_funcs(str, expand_field,
-				      mail_user_var_expand_table(user),
-				      mail_user_var_expand_func_table, user);
-		string_t *value = t_str_new(128);
-		json_append_escaped(value, expand_field);
-		o_stream_nsend_str(doveadm_print_ostream, "\"");
-		o_stream_nsend_str(doveadm_print_ostream, str_c(value));
-		o_stream_nsend_str(doveadm_print_ostream, "\":\"");
-		str_truncate(value, 0);
-		json_append_escaped(value, str_c(str));
-		o_stream_nsend_str(doveadm_print_ostream, str_c(value));
-		o_stream_nsend_str(doveadm_print_ostream, "\"");
+		if (var_expand_with_funcs(str, expand_field,
+					  mail_user_var_expand_table(user),
+					  mail_user_var_expand_func_table, user,
+					  &error) <= 0) {
+			string_t *str = t_str_new(128);
+			str_printfa(str, "\"error\":\"Failed to expand field: ");
+			json_append_escaped(str, error);
+			str_append_c(str, '"');
+			o_stream_nsend(doveadm_print_ostream, str_data(str), str_len(str));
+		} else {
+			string_t *value = t_str_new(128);
+			json_append_escaped(value, expand_field);
+			o_stream_nsend_str(doveadm_print_ostream, "\"");
+			o_stream_nsend_str(doveadm_print_ostream, str_c(value));
+			o_stream_nsend_str(doveadm_print_ostream, "\":\"");
+			str_truncate(value, 0);
+			json_append_escaped(value, str_c(str));
+			o_stream_nsend_str(doveadm_print_ostream, str_c(value));
+			o_stream_nsend_str(doveadm_print_ostream, "\"");
+		}
 
 	}
 

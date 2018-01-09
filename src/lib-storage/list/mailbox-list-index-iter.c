@@ -85,16 +85,30 @@ mailbox_list_index_update_info(struct mailbox_list_index_iterate_context *ctx)
 	str_append(ctx->path, node->name);
 
 	ctx->info.vname = mailbox_list_get_vname(ctx->ctx.list, str_c(ctx->path));
-	ctx->info.vname = p_strdup(ctx->info_pool, ctx->info.vname);
-	ctx->info.flags = 0;
+	ctx->info.flags = node->children != NULL ?
+		MAILBOX_CHILDREN : MAILBOX_NOCHILDREN;
+	if (strcmp(ctx->info.vname, "INBOX") != 0) {
+		/* non-INBOX */
+		ctx->info.vname = p_strdup(ctx->info_pool, ctx->info.vname);
+	} else if (!ctx->prefix_inbox_list) {
+		/* listing INBOX itself */
+		ctx->info.vname = "INBOX";
+		if (mail_namespace_is_inbox_noinferiors(ctx->info.ns)) {
+			ctx->info.flags &= ~(MAILBOX_CHILDREN|MAILBOX_NOCHILDREN);
+			ctx->info.flags |= MAILBOX_NOINFERIORS;
+		}
+	} else {
+		/* listing INBOX/INBOX */
+		ctx->info.vname = p_strconcat(ctx->info_pool,
+			ctx->ctx.list->ns->prefix, "INBOX", NULL);
+		ctx->info.flags |= MAILBOX_NONEXISTENT;
+	}
 	if ((node->flags & MAILBOX_LIST_INDEX_FLAG_NONEXISTENT) != 0)
 		ctx->info.flags |= MAILBOX_NONEXISTENT;
 	else if ((node->flags & MAILBOX_LIST_INDEX_FLAG_NOSELECT) != 0)
 		ctx->info.flags |= MAILBOX_NOSELECT;
 	if ((node->flags & MAILBOX_LIST_INDEX_FLAG_NOINFERIORS) != 0)
 		ctx->info.flags |= MAILBOX_NOINFERIORS;
-	ctx->info.flags |= node->children != NULL ?
-		MAILBOX_CHILDREN : MAILBOX_NOCHILDREN;
 
 	if ((ctx->ctx.flags & (MAILBOX_LIST_ITER_SELECT_SUBSCRIBED |
 			       MAILBOX_LIST_ITER_RETURN_SUBSCRIBED)) != 0) {
@@ -116,6 +130,14 @@ mailbox_list_index_update_next(struct mailbox_list_index_iterate_context *ctx,
 			       bool follow_children)
 {
 	struct mailbox_list_index_node *node = ctx->next_node;
+
+	if (!ctx->prefix_inbox_list && ctx->ctx.list->ns->prefix_len > 0 &&
+	    strcmp(node->name, "INBOX") == 0 && node->parent == NULL &&
+	    node->children != NULL) {
+		/* prefix/INBOX has children */
+		ctx->prefix_inbox_list = TRUE;
+		return;
+	}
 
 	if (node->children != NULL && follow_children) {
 		ctx->parent_len = str_len(ctx->path);

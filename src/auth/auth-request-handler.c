@@ -32,8 +32,8 @@ struct auth_request_handler {
 
 	auth_master_request_callback_t *master_callback;
 
-	unsigned int destroyed:1;
-	unsigned int token_auth:1;
+	bool destroyed:1;
+	bool token_auth:1;
 };
 
 static ARRAY(struct auth_request *) auth_failures_arr;
@@ -280,6 +280,7 @@ auth_request_handler_reply_success_finish(struct auth_request *request)
 static void
 auth_request_handler_reply_failure_finish(struct auth_request *request)
 {
+	const char *code = NULL;
 	string_t *str = t_str_new(128);
 
 	auth_fields_remove(request->extra_fields, "nologin");
@@ -292,34 +293,40 @@ auth_request_handler_reply_failure_finish(struct auth_request *request)
 				      request->original_username);
 	}
 
-	if (request->internal_failure)
-		str_append(str, "\ttemp");
-	else if (request->master_user != NULL) {
+	if (request->internal_failure) {
+		code = AUTH_CLIENT_FAIL_CODE_TEMPFAIL;
+	} else if (request->master_user != NULL) {
 		/* authentication succeeded, but we can't log in
 		   as the wanted user */
-		str_append(str, "\tauthz");
+		code = AUTH_CLIENT_FAIL_CODE_AUTHZFAILED;
+	} else {
+		switch (request->passdb_result) {
+		case PASSDB_RESULT_NEXT:
+		case PASSDB_RESULT_INTERNAL_FAILURE:
+		case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
+		case PASSDB_RESULT_USER_UNKNOWN:
+		case PASSDB_RESULT_PASSWORD_MISMATCH:
+		case PASSDB_RESULT_OK:
+			break;
+		case PASSDB_RESULT_USER_DISABLED:
+			code = AUTH_CLIENT_FAIL_CODE_USER_DISABLED;
+			break;
+		case PASSDB_RESULT_PASS_EXPIRED:
+			code = AUTH_CLIENT_FAIL_CODE_PASS_EXPIRED;
+			break;
+		}
 	}
+
 	if (auth_fields_exists(request->extra_fields, "nodelay")) {
 		/* this is normally a hidden field, need to add it explicitly */
 		str_append(str, "\tnodelay");
 	}
-	auth_str_append_extra_fields(request, str);
 
-	switch (request->passdb_result) {
-	case PASSDB_RESULT_NEXT:
-	case PASSDB_RESULT_INTERNAL_FAILURE:
-	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
-	case PASSDB_RESULT_USER_UNKNOWN:
-	case PASSDB_RESULT_PASSWORD_MISMATCH:
-	case PASSDB_RESULT_OK:
-		break;
-	case PASSDB_RESULT_USER_DISABLED:
-		str_append(str, "\tuser_disabled");
-		break;
-	case PASSDB_RESULT_PASS_EXPIRED:
-		str_append(str, "\tpass_expired");
-		break;
+	if (code != NULL) {
+		str_append(str, "\tcode=");
+		str_append(str, code);
 	}
+	auth_str_append_extra_fields(request, str);
 
 	auth_request_handle_failure(request, str_c(str));
 }
@@ -396,19 +403,32 @@ void auth_request_handler_reply_continue(struct auth_request *request,
 				   reply, reply_size);
 }
 
-static void auth_request_handler_auth_fail(struct auth_request_handler *handler,
+static void
+auth_request_handler_auth_fail_code(struct auth_request_handler *handler,
 					   struct auth_request *request,
-					   const char *reason)
+					   const char *fail_code, const char *reason)
 {
 	string_t *str = t_str_new(128);
 
 	auth_request_log_info(request, AUTH_SUBSYS_MECH, "%s", reason);
 
-	str_printfa(str, "FAIL\t%u\treason=", request->id);
+	str_printfa(str, "FAIL\t%u", request->id);
+	if (*fail_code != '\0') {
+		str_append(str, "\tcode=");
+		str_append(str, fail_code);
+	}
+	str_append(str, "\treason=");
 	str_append_tabescaped(str, reason);
 
 	handler->callback(str_c(str), handler->conn);
 	auth_request_handler_remove(handler, request);
+}
+
+static void auth_request_handler_auth_fail
+(struct auth_request_handler *handler, struct auth_request *request,
+					   const char *reason)
+{
+	auth_request_handler_auth_fail_code(handler, request, "", reason);
 }
 
 static void auth_request_timeout(struct auth_request *request)
@@ -558,16 +578,29 @@ bool auth_request_handler_auth_begin(struct auth_request_handler *handler,
 		return TRUE;
 	}
 
-	/* Empty initial response is a "=" base64 string. Completely empty
-	   string shouldn't really be sent, but at least Exim does it,
-	   so just allow it for backwards compatibility.. */
-	if (initial_resp != NULL && *initial_resp != '\0') {
+	/* Handle initial respose */
+	if (initial_resp == NULL) {
+		/* No initial response */
+		request->initial_response = NULL;
+		request->initial_response_len = 0;
+	} else if (*initial_resp == '\0' || strcmp(initial_resp, "=") == 0 ) {
+		/* Empty initial response - Protocols that use SASL often
+		   use '=' to indicate an empty initial response; i.e., to
+		   distinguish it from an absent initial response. However, that
+		   should not be conveyed to the SASL layer (it is not even
+		   valid Base64); only the empty string should be passed on.
+		   Still, we recognize it here anyway, because we used to make
+		   the same mistake. */
+		request->initial_response = uchar_empty_ptr;
+		request->initial_response_len = 0;
+	} else {
 		size_t len = strlen(initial_resp);
 
-		buf = buffer_create_dynamic(pool_datastack_create(),
-					    MAX_BASE64_DECODED_SIZE(len));
+		/* Initial response encoded in Bas64 */
+		buf = t_buffer_create(MAX_BASE64_DECODED_SIZE(len));
 		if (base64_decode(initial_resp, len, NULL, buf) < 0) {
-                        auth_request_handler_auth_fail(handler, request,
+			auth_request_handler_auth_fail_code(handler, request,
+				AUTH_CLIENT_FAIL_CODE_INVALID_BASE64,
 				"Invalid base64 data in initial response");
 			return TRUE;
 		}
@@ -620,10 +653,10 @@ bool auth_request_handler_auth_continue(struct auth_request_handler *handler,
 	request->accept_cont_input = FALSE;
 
 	data_len = strlen(data);
-	buf = buffer_create_dynamic(pool_datastack_create(),
-				    MAX_BASE64_DECODED_SIZE(data_len));
+	buf = t_buffer_create(MAX_BASE64_DECODED_SIZE(data_len));
 	if (base64_decode(data, data_len, NULL, buf) < 0) {
-		auth_request_handler_auth_fail(handler, request,
+		auth_request_handler_auth_fail_code(handler, request,
+			AUTH_CLIENT_FAIL_CODE_INVALID_BASE64,
 			"Invalid base64 data in continued response");
 		return TRUE;
 	}
@@ -810,8 +843,7 @@ void auth_request_handler_flush_failures(bool flush_all)
 
 	count = aqueue_count(auth_failures);
 	if (count == 0) {
-		if (to_auth_failures != NULL)
-			timeout_remove(&to_auth_failures);
+		timeout_remove(&to_auth_failures);
 		return;
 	}
 
@@ -820,7 +852,7 @@ void auth_request_handler_flush_failures(bool flush_all)
 	for (i = 0; i < count; i++) {
 		auth_request = auth_requests[aqueue_idx(auth_failures, i)];
 
-		/* FIXME: assumess that failure_delay is always the same. */
+		/* FIXME: assumes that failure_delay is always the same. */
 		diff = ioloop_time - auth_request->last_access;
 		if (diff < (time_t)auth_request->set->failure_delay &&
 		    !flush_all)
@@ -850,7 +882,7 @@ void auth_request_handler_flush_failures(bool flush_all)
 		i_assert(auth_request->state == AUTH_REQUEST_STATE_FINISHED);
 		auth_request_handler_reply(auth_request,
 					   AUTH_CLIENT_RESULT_FAILURE,
-					   &uchar_nul, 0);
+					   uchar_empty_ptr, 0);
 		auth_request_unref(&auth_request);
 	}
 }
@@ -872,6 +904,5 @@ void auth_request_handler_deinit(void)
 	array_free(&auth_failures_arr);
 	aqueue_deinit(&auth_failures);
 
-	if (to_auth_failures != NULL)
-		timeout_remove(&to_auth_failures);
+	timeout_remove(&to_auth_failures);
 }

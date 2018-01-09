@@ -44,7 +44,7 @@ static void test_fts_filter_contractions_fail(void)
 
 static void test_fts_filter_contractions_fr(void)
 {
-	struct {
+	static const struct {
 		const char *input;
 		const char *output;
 	} tests[] = {
@@ -92,7 +92,7 @@ static void test_fts_filter_contractions_fr(void)
 
 static void test_fts_filter_lowercase(void)
 {
-	struct {
+	static const struct {
 		const char *input;
 		const char *output;
 	} tests[] = {
@@ -120,7 +120,7 @@ static void test_fts_filter_lowercase(void)
 #ifdef HAVE_LIBICU
 static void test_fts_filter_lowercase_utf8(void)
 {
-	struct {
+	static const struct {
 		const char *input;
 		const char *output;
 	} tests[] = {
@@ -147,7 +147,7 @@ static void test_fts_filter_lowercase_utf8(void)
 
 static void test_fts_filter_lowercase_too_long_utf8(void)
 {
-	struct {
+	static const struct {
 		const char *input;
 		const char *output;
 	} tests[] = {
@@ -655,13 +655,14 @@ static void test_fts_filter_normalizer_baddata(void)
 	struct fts_filter *norm;
 	const char *token, *error;
 	string_t *str;
-	unsigned int i;
+	unichar_t i;
 
 	test_begin("fts filter normalizer bad data");
 
 	test_assert(fts_filter_create(fts_filter_normalizer_icu, NULL, NULL, settings, &norm, &error) == 0);
 	str = t_str_new(128);
 	for (i = 1; i < 0x1ffff; i++) {
+		if (!uni_is_valid_ucs4(i)) continue;
 		str_truncate(str, 0);
 		uni_ucs4_to_utf8_c(i, str);
 		token = str_c(str);
@@ -671,7 +672,7 @@ static void test_fts_filter_normalizer_baddata(void)
 	}
 
 	str_truncate(str, 0);
-	uni_ucs4_to_utf8_c(0x7fffffff, str);
+	uni_ucs4_to_utf8_c(UNICHAR_T_MAX, str);
 	token = str_c(str);
 	test_assert(fts_filter_filter(norm, &token, &error) >= 0);
 
@@ -977,7 +978,7 @@ static void test_fts_filter_english_possessive(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_fts_filter_find,
 		test_fts_filter_contractions_fail,
 		test_fts_filter_contractions_fr,

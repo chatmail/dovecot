@@ -14,7 +14,6 @@
 #include "llist.h"
 #include "hostpid.h"
 #include "env-util.h"
-#include "fd-close-on-exec.h"
 #include "restrict-access.h"
 #include "restrict-process-size.h"
 #include "eacces-error.h"
@@ -263,6 +262,8 @@ service_process_setup_environment(struct service *service, unsigned int uid,
 	if (service->type == SERVICE_TYPE_ANVIL &&
 	    service_anvil_global->restarted)
 		env_put("ANVIL_RESTARTED=1");
+	env_put(t_strconcat(DOVECOT_LOG_DEBUG_ENV"=",
+			    service->list->service_set->log_debug, NULL));
 }
 
 static void service_process_status_timeout(struct service_process *process)
@@ -374,10 +375,8 @@ void service_process_destroy(struct service_process *process)
 	service->process_count--;
 	i_assert(service->process_avail <= service->process_count);
 
-	if (process->to_status != NULL)
-		timeout_remove(&process->to_status);
-	if (process->to_idle != NULL)
-		timeout_remove(&process->to_idle);
+	timeout_remove(&process->to_status);
+	timeout_remove(&process->to_idle);
 	if (service->list->log_byes != NULL)
 		service_process_notify_add(service->list->log_byes, process);
 
@@ -425,10 +424,10 @@ get_exit_status_message(struct service *service, enum fatal_exit_status status)
 		str = t_str_new(128);
 		str_append(str, "Out of memory");
 		if (service->vsz_limit != 0) {
-			str_printfa(str, " (service %s { vsz_limit=%u MB }, "
+			str_printfa(str, " (service %s { vsz_limit=%"PRIuUOFF_T" MB }, "
 				    "you may need to increase it)",
 				    service->set->name,
-				    (unsigned int)(service->vsz_limit/1024/1024));
+				    service->vsz_limit/1024/1024);
 		}
 		if (getenv("CORE_OUTOFMEM") == NULL)
 			str_append(str, " - set CORE_OUTOFMEM=1 environment to get core dump");
@@ -449,7 +448,7 @@ log_coredump(struct service *service, string_t *str, int status)
 #ifdef WCOREDUMP
 	int signum = WTERMSIG(status);
 
-	if (WCOREDUMP(status)) {
+	if (WCOREDUMP(status) != 0) {
 		str_append(str, " (core dumped)");
 		return;
 	}

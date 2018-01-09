@@ -21,6 +21,7 @@ struct ioloop *current_ioloop = NULL;
 uint64_t ioloop_global_wait_usecs = 0;
 
 static ARRAY(io_switch_callback_t *) io_switch_callbacks = ARRAY_INIT;
+static bool panic_on_leak = FALSE, panic_on_leak_set = FALSE;
 
 static void io_loop_initialize_handler(struct ioloop *ioloop)
 {
@@ -159,18 +160,23 @@ static void io_remove_full(struct io **_io, bool closed)
 		/* remove io from the ioloop before unreferencing the istream,
 		   because a destroyed istream may automatically close the
 		   fd. */
-		if (istream != NULL)
-			i_stream_unref(&istream);
+		i_stream_unref(&istream);
 	}
 }
 
 void io_remove(struct io **io)
 {
+	if (*io == NULL)
+		return;
+
 	io_remove_full(io, FALSE);
 }
 
 void io_remove_closed(struct io **io)
 {
+	if (*io == NULL)
+		return;
+
 	i_assert(((*io)->condition & IO_NOTIFY) == 0);
 
 	io_remove_full(io, TRUE);
@@ -313,7 +319,12 @@ static void timeout_free(struct timeout *timeout)
 void timeout_remove(struct timeout **_timeout)
 {
 	struct timeout *timeout = *_timeout;
-	struct ioloop *ioloop = timeout->ioloop;
+	struct ioloop *ioloop;
+
+	if (timeout == NULL)
+		return;
+
+	ioloop = timeout->ioloop;
 
 	*_timeout = NULL;
 	if (timeout->item.idx != UINT_MAX)
@@ -515,7 +526,7 @@ static void io_loop_handle_timeouts_real(struct ioloop *ioloop)
 {
 	struct priorityq_item *item;
 	struct timeval tv, tv_call;
-	unsigned int t_id;
+	data_stack_frame_t t_id;
 
 	if (gettimeofday(&ioloop_timeval, NULL) < 0)
 		i_fatal("gettimeofday(): %m");
@@ -527,6 +538,7 @@ static void io_loop_handle_timeouts_real(struct ioloop *ioloop)
 						 ioloop_timeval.tv_sec));
 		ioloop->time_moved_callback(ioloop_time,
 					    ioloop_timeval.tv_sec);
+		i_assert(ioloop == current_ioloop);
 		/* the callback may have slept, so check the time again. */
 		if (gettimeofday(&ioloop_timeval, NULL) < 0)
 			i_fatal("gettimeofday(): %m");
@@ -538,6 +550,7 @@ static void io_loop_handle_timeouts_real(struct ioloop *ioloop)
 			/* time moved forwards */
 			ioloop->time_moved_callback(ioloop->next_max_time,
 						    ioloop_timeval.tv_sec);
+			i_assert(ioloop == current_ioloop);
 		}
 		ioloop_add_wait_time(ioloop);
 	}
@@ -566,12 +579,13 @@ static void io_loop_handle_timeouts_real(struct ioloop *ioloop)
 		t_id = t_push_named("ioloop timeout handler %p",
 				    (void *)timeout->callback);
 		timeout->callback(timeout->context);
-		if (t_pop() != t_id) {
+		if (!t_pop(&t_id)) {
 			i_panic("Leaked a t_pop() call in timeout handler %p",
 				(void *)timeout->callback);
 		}
 		if (ioloop->cur_ctx != NULL)
 			io_loop_context_deactivate(ioloop->cur_ctx);
+		i_assert(ioloop == current_ioloop);
 	}
 }
 
@@ -585,7 +599,7 @@ void io_loop_handle_timeouts(struct ioloop *ioloop)
 void io_loop_call_io(struct io *io)
 {
 	struct ioloop *ioloop = io->ioloop;
-	unsigned int t_id;
+	data_stack_frame_t t_id;
 
 	if (io->pending) {
 		i_assert(ioloop->io_pending_count > 0);
@@ -598,12 +612,13 @@ void io_loop_call_io(struct io *io)
 	t_id = t_push_named("ioloop handler %p",
 			    (void *)io->callback);
 	io->callback(io->context);
-	if (t_pop() != t_id) {
+	if (!t_pop(&t_id)) {
 		i_panic("Leaked a t_pop() call in I/O handler %p",
 			(void *)io->callback);
 	}
 	if (ioloop->cur_ctx != NULL)
 		io_loop_context_deactivate(ioloop->cur_ctx);
+	i_assert(ioloop == current_ioloop);
 }
 
 void io_loop_run(struct ioloop *ioloop)
@@ -644,10 +659,14 @@ static void io_loop_call_pending(struct ioloop *ioloop)
 
 void io_loop_handler_run(struct ioloop *ioloop)
 {
+	i_assert(ioloop == current_ioloop);
+
 	io_loop_timeouts_start_new(ioloop);
 	ioloop->wait_started = ioloop_timeval;
 	io_loop_handler_run_internal(ioloop);
 	io_loop_call_pending(ioloop);
+
+	i_assert(ioloop == current_ioloop);
 }
 
 void io_loop_stop(struct ioloop *ioloop)
@@ -680,6 +699,11 @@ void io_loop_time_refresh(void)
 struct ioloop *io_loop_create(void)
 {
 	struct ioloop *ioloop;
+
+	if (!panic_on_leak_set) {
+		panic_on_leak_set = TRUE;
+		panic_on_leak = getenv("CORE_IO_LEAK") != NULL;
+	}
 
 	/* initialize time */
 	if (gettimeofday(&ioloop_timeval, NULL) < 0)
@@ -718,11 +742,16 @@ void io_loop_destroy(struct ioloop **_ioloop)
 	while (ioloop->io_files != NULL) {
 		struct io_file *io = ioloop->io_files;
 		struct io *_io = &io->io;
+		const char *error = t_strdup_printf(
+			"I/O leak: %p (%s:%u, fd %d)",
+			(void *)io->io.callback,
+			io->io.source_filename,
+			io->io.source_linenum, io->fd);
 
-		i_warning("I/O leak: %p (%s:%u, fd %d)",
-			  (void *)io->io.callback,
-			  io->io.source_filename,
-			  io->io.source_linenum, io->fd);
+		if (panic_on_leak)
+			i_panic("%s", error);
+		else
+			i_warning("%s", error);
 		io_remove(&_io);
 		leaks = TRUE;
 	}
@@ -730,10 +759,15 @@ void io_loop_destroy(struct ioloop **_ioloop)
 
 	array_foreach(&ioloop->timeouts_new, to_idx) {
 		struct timeout *to = *to_idx;
+		const char *error = t_strdup_printf(
+			"Timeout leak: %p (%s:%u)", (void *)to->callback,
+			to->source_filename,
+			to->source_linenum);
 
-		i_warning("Timeout leak: %p (%s:%u)", (void *)to->callback,
-			  to->source_filename,
-			  to->source_linenum);
+		if (panic_on_leak)
+			i_panic("%s", error);
+		else
+			i_warning("%s", error);
 		timeout_free(to);
 		leaks = TRUE;
 	}
@@ -741,10 +775,15 @@ void io_loop_destroy(struct ioloop **_ioloop)
 
 	while ((item = priorityq_pop(ioloop->timeouts)) != NULL) {
 		struct timeout *to = (struct timeout *)item;
+		const char *error = t_strdup_printf(
+			"Timeout leak: %p (%s:%u)", (void *)to->callback,
+			to->source_filename,
+			to->source_linenum);
 
-		i_warning("Timeout leak: %p (%s:%u)", (void *)to->callback,
-			  to->source_filename,
-			  to->source_linenum);
+		if (panic_on_leak)
+			i_panic("%s", error);
+		else
+			i_warning("%s", error);
 		timeout_free(to);
 		leaks = TRUE;
 	}
@@ -752,10 +791,15 @@ void io_loop_destroy(struct ioloop **_ioloop)
 
 	while (ioloop->wait_timers != NULL) {
 		struct io_wait_timer *timer = ioloop->wait_timers;
+		const char *error = t_strdup_printf(
+			"IO wait timer leak: %s:%u",
+			timer->source_filename,
+			timer->source_linenum);
 
-		i_warning("IO wait timer leak: %s:%u",
-			  timer->source_filename,
-			  timer->source_linenum);
+		if (panic_on_leak)
+			i_panic("%s", error);
+		else
+			i_warning("%s", error);
 		io_wait_timer_remove(&timer);
 		leaks = TRUE;
 	}
@@ -769,9 +813,7 @@ void io_loop_destroy(struct ioloop **_ioloop)
 	if (ioloop->handler_context != NULL)
 		io_loop_handler_deinit(ioloop);
 
-	if (ioloop->cur_ctx != NULL)
-		io_loop_context_deactivate(ioloop->cur_ctx);
-
+	i_assert(ioloop->cur_ctx == NULL);
 	i_free(ioloop);
 }
 
@@ -805,7 +847,7 @@ void io_loop_add_switch_callback(io_switch_callback_t *callback)
 {
 	if (!array_is_created(&io_switch_callbacks)) {
 		i_array_init(&io_switch_callbacks, 4);
-		lib_atexit(io_switch_callbacks_free);
+		lib_atexit_priority(io_switch_callbacks_free, LIB_ATEXIT_PRIORITY_LOW);
 	}
 	array_append(&io_switch_callbacks, &callback, 1);
 }
@@ -834,8 +876,12 @@ struct ioloop_context *io_loop_context_new(struct ioloop *ioloop)
 	ctx->ioloop = ioloop;
 	i_array_init(&ctx->callbacks, 4);
 
-	if (ioloop->cur_ctx != NULL)
-		io_loop_context_unref(&ioloop->cur_ctx);
+	if (ioloop->cur_ctx != NULL) {
+		io_loop_context_deactivate(ioloop->cur_ctx);
+		/* deactivation may remove the cur_ctx */
+		if (ioloop->cur_ctx != NULL)
+			io_loop_context_unref(&ioloop->cur_ctx);
+	}
 	ioloop->cur_ctx = ctx;
 	return ctx;
 }
@@ -937,7 +983,7 @@ void io_loop_context_deactivate(struct ioloop_context *ctx)
 {
 	struct ioloop_context_callback *cb;
 
-	i_assert(ctx->ioloop->cur_ctx != NULL);
+	i_assert(ctx->ioloop->cur_ctx == ctx);
 
 	array_foreach_modifiable(&ctx->callbacks, cb) {
 		if (!cb->activated) {

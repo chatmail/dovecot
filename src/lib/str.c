@@ -64,7 +64,7 @@ char *str_free_without_data(string_t **str)
 const char *str_c(string_t *str)
 {
 	str_add_nul(str);
-	return buffer_get_data(str, NULL);
+	return str->data;
 }
 
 char *str_c_modifiable(string_t *str)
@@ -83,12 +83,14 @@ bool str_equals(const string_t *str1, const string_t *str2)
 
 void str_append_n(string_t *str, const void *cstr, size_t max_len)
 {
+	const char *p;
 	size_t len;
 
-	len = 0;
-	while (len < max_len && ((const char *)cstr)[len] != '\0')
-		len++;
-
+	p = memchr(cstr, '\0', max_len);
+	if (p == NULL)
+		len = max_len;
+	else
+		len = p - (const char *)cstr;
 	buffer_append(str, cstr, len);
 }
 

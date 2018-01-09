@@ -73,6 +73,7 @@ static int dict_connection_parse_handshake(struct dict_connection *conn,
 
 static int dict_connection_dict_init(struct dict_connection *conn)
 {
+	struct dict_settings dict_set;
 	const char *const *strlist;
 	unsigned int i, count;
 	const char *uri, *error;
@@ -94,8 +95,11 @@ static int dict_connection_dict_init(struct dict_connection *conn)
 	}
 	uri = strlist[i+1];
 
-	if (dict_init(uri, conn->value_type, conn->username,
-		      dict_settings->base_dir, &conn->dict, &error) < 0) {
+	i_zero(&dict_set);
+	dict_set.value_type = conn->value_type;
+	dict_set.username = conn->username;
+	dict_set.base_dir = dict_settings->base_dir;
+	if (dict_init(uri, &dict_set, &conn->dict, &error) < 0) {
 		/* dictionary initialization failed */
 		i_error("Failed to initialize dictionary '%s': %s",
 			conn->name, error);
@@ -109,8 +113,7 @@ static void dict_connection_input_more(struct dict_connection *conn)
 	const char *line;
 	int ret;
 
-	if (conn->to_input != NULL)
-		timeout_remove(&conn->to_input);
+	timeout_remove(&conn->to_input);
 
 	while ((line = i_stream_next_line(conn->input)) != NULL) {
 		T_BEGIN {
@@ -122,8 +125,7 @@ static void dict_connection_input_more(struct dict_connection *conn)
 		}
 		if (array_count(&conn->cmds) >= DICT_CONN_MAX_PENDING_COMMANDS) {
 			io_remove(&conn->io);
-			if (conn->to_input != NULL)
-				timeout_remove(&conn->to_input);
+			timeout_remove(&conn->to_input);
 			break;
 		}
 	}
@@ -158,7 +160,7 @@ static void dict_connection_input(struct dict_connection *conn)
 			dict_connection_destroy(conn);
 			return;
 		}
-		if (dict_connection_dict_init(conn)) {
+		if (dict_connection_dict_init(conn) < 0) {
 			dict_connection_destroy(conn);
 			return;
 		}
@@ -179,17 +181,14 @@ void dict_connection_continue_input(struct dict_connection *conn)
 
 static int dict_connection_output(struct dict_connection *conn)
 {
-	struct ostream *output = conn->output;
 	int ret;
 
-	o_stream_cork(output);
 	if ((ret = o_stream_flush(conn->output)) < 0) {
 		dict_connection_destroy(conn);
-		ret = 1;
-	} else if (ret > 0) {
-		dict_connection_cmds_output_more(conn);
+		return 1;
 	}
-	o_stream_uncork(output);
+	if (ret > 0)
+		dict_connection_cmds_output_more(conn);
 	return ret;
 }
 
@@ -200,9 +199,8 @@ struct dict_connection *dict_connection_create(int fd)
 	conn = i_new(struct dict_connection, 1);
 	conn->refcount = 1;
 	conn->fd = fd;
-	conn->input = i_stream_create_fd(fd, DICT_CLIENT_MAX_LINE_LENGTH,
-					 FALSE);
-	conn->output = o_stream_create_fd(fd, 128*1024, FALSE);
+	conn->input = i_stream_create_fd(fd, DICT_CLIENT_MAX_LINE_LENGTH);
+	conn->output = o_stream_create_fd(fd, 128*1024);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	o_stream_set_flush_callback(conn->output, dict_connection_output, conn);
 	conn->io = io_add(fd, IO_READ, dict_connection_input, conn);
@@ -258,8 +256,7 @@ bool dict_connection_unref(struct dict_connection *conn)
 
 static void dict_connection_unref_safe_callback(struct dict_connection *conn)
 {
-	if (conn->to_unref != NULL)
-		timeout_remove(&conn->to_unref);
+	timeout_remove(&conn->to_unref);
 	(void)dict_connection_unref(conn);
 }
 
@@ -289,10 +286,8 @@ void dict_connection_destroy(struct dict_connection *conn)
 	conn->destroyed = TRUE;
 	DLLIST_REMOVE(&dict_connections, conn);
 
-	if (conn->to_input != NULL)
-		timeout_remove(&conn->to_input);
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	timeout_remove(&conn->to_input);
+	io_remove(&conn->io);
 	i_stream_close(conn->input);
 	o_stream_close(conn->output);
 	if (close(conn->fd) < 0)

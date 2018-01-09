@@ -1,5 +1,5 @@
 .\" Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file
-.TH DOVEADM\-FETCH 1 "2015-05-09" "Dovecot v2.2" "Dovecot"
+.TH DOVEADM\-FETCH 1 "2015-05-09" "Dovecot v2.3" "Dovecot"
 .SH NAME
 doveadm\-fetch \- Fetch partial/full messages or message information
 .\"------------------------------------------------------------------------
@@ -187,7 +187,6 @@ date.sent: 2010\-01\-28 09:38:49 (+0100)
 ^L
 mailbox: dovecot/pigeonhole/2.0
 date.sent: 2010\-03\-28 18:41:14 (+0200)
-^L
 .fi
 .\"------------------------------------------------------------------------
 @INCLUDE:reporting-bugs@

@@ -92,9 +92,9 @@ auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
 	tab[0].value = escape_func(username, auth_request);
 	tab[1].value = escape_func(t_strcut(username, '@'),
 				   auth_request);
-	tab[2].value = strchr(username, '@');
+	tab[2].value = i_strchr_to_next(username, '@');
 	if (tab[2].value != NULL)
-		tab[2].value = escape_func(tab[2].value+1, auth_request);
+		tab[2].value = escape_func(tab[2].value, auth_request);
 	tab[3].value = escape_func(auth_request->service, auth_request);
 	/* tab[4] = we have no home dir */
 	if (auth_request->local_ip.family != 0)
@@ -126,9 +126,9 @@ auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
 		tab[15].value = escape_func(login_user, auth_request);
 		tab[16].value = escape_func(t_strcut(login_user, '@'),
 					    auth_request);
-		tab[17].value = strchr(login_user, '@');
+		tab[17].value = i_strchr_to_next(login_user, '@');
 		if (tab[17].value != NULL) {
-			tab[17].value = escape_func(tab[17].value+1,
+			tab[17].value = escape_func(tab[17].value,
 						    auth_request);
 		}
 	}
@@ -140,9 +140,9 @@ auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
 		tab[20].value = net_ip2addr(&auth_request->real_remote_ip);
 	tab[21].value = dec2str(auth_request->real_local_port);
 	tab[22].value = dec2str(auth_request->real_remote_port);
-	tab[23].value = strchr(username, '@');
+	tab[23].value = i_strchr_to_next(username, '@');
 	if (tab[23].value != NULL) {
-		tab[23].value = escape_func(t_strcut(tab[23].value+1, '@'),
+		tab[23].value = escape_func(t_strcut(tab[23].value, '@'),
 					    auth_request);
 	}
 	tab[24].value = strrchr(username, '@');
@@ -157,9 +157,9 @@ auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
 		auth_request->original_username : username;
 	tab[27].value = escape_func(orig_user, auth_request);
 	tab[28].value = escape_func(t_strcut(orig_user, '@'), auth_request);
-	tab[29].value = strchr(orig_user, '@');
+	tab[29].value = i_strchr_to_next(orig_user, '@');
 	if (tab[29].value != NULL)
-		tab[29].value = escape_func(tab[29].value+1, auth_request);
+		tab[29].value = escape_func(tab[29].value, auth_request);
 
 	if (auth_request->master_user != NULL)
 		auth_user = auth_request->master_user;
@@ -167,13 +167,11 @@ auth_request_get_var_expand_table_full(const struct auth_request *auth_request,
 		auth_user = orig_user;
 	tab[30].value = escape_func(auth_user, auth_request);
 	tab[31].value = escape_func(t_strcut(auth_user, '@'), auth_request);
-	tab[32].value = strchr(auth_user, '@');
+	tab[32].value = i_strchr_to_next(auth_user, '@');
 	if (tab[32].value != NULL)
-		tab[32].value = escape_func(tab[32].value+1, auth_request);
+		tab[32].value = escape_func(tab[32].value, auth_request);
 	if (auth_request->local_name != NULL)
 		tab[33].value = escape_func(auth_request->local_name, auth_request);
-	else
-		tab[33].value = "";
 	if (auth_request->client_id != NULL)
 		tab[34].value = escape_func(auth_request->client_id, auth_request);
 	return ret_tab;
@@ -202,20 +200,25 @@ static const char *field_get_default(const char *data)
 	}
 }
 
-static const char *
-auth_request_var_expand_func_passdb(const char *data, void *context)
+static int
+auth_request_var_expand_func_passdb(const char *data, void *context,
+				    const char **value_r,
+				    const char **error_r ATTR_UNUSED)
 {
 	struct auth_request_var_expand_ctx *ctx = context;
 	const char *field_name = t_strcut(data, ':');
 	const char *value;
 
 	value = auth_fields_find(ctx->auth_request->extra_fields, field_name);
-	return ctx->escape_func(value != NULL ? value : field_get_default(data),
-				ctx->auth_request);
+	*value_r = ctx->escape_func(value != NULL ? value : field_get_default(data),
+				    ctx->auth_request);
+	return 1;
 }
 
-static const char *
-auth_request_var_expand_func_userdb(const char *data, void *context)
+static int
+auth_request_var_expand_func_userdb(const char *data, void *context,
+				    const char **value_r,
+				    const char **error_r ATTR_UNUSED)
 {
 	struct auth_request_var_expand_ctx *ctx = context;
 	const char *field_name = t_strcut(data, ':');
@@ -223,8 +226,9 @@ auth_request_var_expand_func_userdb(const char *data, void *context)
 
 	value = ctx->auth_request->userdb_reply == NULL ? NULL :
 		auth_fields_find(ctx->auth_request->userdb_reply, field_name);
-	return ctx->escape_func(value != NULL ? value : field_get_default(data),
-				ctx->auth_request);
+	*value_r = ctx->escape_func(value != NULL ? value : field_get_default(data),
+				    ctx->auth_request);
+	return 1;
 }
 
 const struct var_expand_func_table auth_request_var_funcs_table[] = {
@@ -233,35 +237,39 @@ const struct var_expand_func_table auth_request_var_funcs_table[] = {
 	{ NULL, NULL }
 };
 
-void auth_request_var_expand(string_t *dest, const char *str,
-			     const struct auth_request *auth_request,
-			     auth_request_escape_func_t *escape_func)
+int auth_request_var_expand(string_t *dest, const char *str,
+			    const struct auth_request *auth_request,
+			    auth_request_escape_func_t *escape_func,
+			    const char **error_r)
 {
-	auth_request_var_expand_with_table(dest, str, auth_request,
+	return auth_request_var_expand_with_table(dest, str, auth_request,
 		auth_request_get_var_expand_table(auth_request, escape_func),
-		escape_func);
+		escape_func, error_r);
 }
 
-void auth_request_var_expand_with_table(string_t *dest, const char *str,
-					const struct auth_request *auth_request,
-					const struct var_expand_table *table,
-					auth_request_escape_func_t *escape_func)
+int auth_request_var_expand_with_table(string_t *dest, const char *str,
+				       const struct auth_request *auth_request,
+				       const struct var_expand_table *table,
+				       auth_request_escape_func_t *escape_func,
+				       const char **error_r)
 {
 	struct auth_request_var_expand_ctx ctx;
 
 	i_zero(&ctx);
 	ctx.auth_request = auth_request;
 	ctx.escape_func = escape_func == NULL ? escape_none : escape_func;
-	var_expand_with_funcs(dest, str, table,
-			      auth_request_var_funcs_table, &ctx);
+	return var_expand_with_funcs(dest, str, table,
+				     auth_request_var_funcs_table, &ctx, error_r);
 }
 
-const char *
-t_auth_request_var_expand(const char *str,
-			  const struct auth_request *auth_request,
-			  auth_request_escape_func_t *escape_func)
+int t_auth_request_var_expand(const char *str,
+			      const struct auth_request *auth_request ATTR_UNUSED,
+			      auth_request_escape_func_t *escape_func ATTR_UNUSED,
+			      const char **value_r, const char **error_r)
 {
 	string_t *dest = t_str_new(128);
-	auth_request_var_expand(dest, str, auth_request, escape_func);
-	return str_c(dest);
+	int ret = auth_request_var_expand(dest, str, auth_request,
+					  escape_func, error_r);
+	*value_r = str_c(dest);
+	return ret;
 }

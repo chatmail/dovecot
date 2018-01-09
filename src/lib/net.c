@@ -1,8 +1,7 @@
-/* Copyright (c) 1999-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 1999-2017 Dovecot authors, see the included COPYING file */
 
 #define _GNU_SOURCE /* For Linux's struct ucred */
 #include "lib.h"
-#include "fd-set-nonblock.h"
 #include "time-util.h"
 #include "net.h"
 
@@ -20,9 +19,7 @@
 union sockaddr_union {
 	struct sockaddr sa;
 	struct sockaddr_in sin;
-#ifdef HAVE_IPV6
 	struct sockaddr_in6 sin6;
-#endif
 };
 
 union sockaddr_union_unix {
@@ -30,15 +27,13 @@ union sockaddr_union_unix {
 	struct sockaddr_un un;
 };
 
-#ifdef HAVE_IPV6
-#  define SIZEOF_SOCKADDR(so) ((so).sa.sa_family == AF_INET6 ? \
+#define SIZEOF_SOCKADDR(so) ((so).sa.sa_family == AF_INET6 ? \
 	sizeof(so.sin6) : sizeof(so.sin))
-#else
-#  define SIZEOF_SOCKADDR(so) (sizeof(so.sin))
-#endif
 
 #if !defined(HAVE_GETPEEREID) && !defined(SO_PEERCRED) && !defined(HAVE_GETPEERUCRED) && defined(MSG_WAITALL) && defined(LOCAL_CREDS)
 #  define NEEDS_LOCAL_CREDS 1
+#else
+#  undef NEEDS_LOCAL_CREDS
 #endif
 
 /* If connect() fails with EADDRNOTAVAIL (or some others on FreeBSD), retry it
@@ -64,10 +59,8 @@ int net_ip_cmp(const struct ip_addr *ip1, const struct ip_addr *ip2)
 	if (ip1->family != ip2->family)
 		return ip1->family - ip2->family;
 
-#ifdef HAVE_IPV6
 	if (ip1->family == AF_INET6)
 		return memcmp(&ip1->u.ip6, &ip2->u.ip6, sizeof(ip1->u.ip6));
-#endif
 
 	return memcmp(&ip1->u.ip4, &ip2->u.ip4, sizeof(ip1->u.ip4));
 }
@@ -77,19 +70,17 @@ unsigned int net_ip_hash(const struct ip_addr *ip)
         const unsigned char *p;
 	unsigned int len, g, h = 0;
 
-#ifdef HAVE_IPV6
 	if (ip->family == AF_INET6) {
 		p = ip->u.ip6.s6_addr;
 		len = sizeof(ip->u.ip6);
 	} else
-#endif
 	{
 		return ip->u.ip4.s_addr;
 	}
 
 	for (; len > 0; len--, p++) {
 		h = (h << 4) + *p;
-		if ((g = h & 0xf0000000UL)) {
+		if ((g = h & 0xf0000000UL) != 0) {
 			h = h ^ (g >> 24);
 			h = h ^ g;
 		}
@@ -103,22 +94,15 @@ static inline void
 sin_set_ip(union sockaddr_union *so, const struct ip_addr *ip)
 {
 	if (ip == NULL) {
-#ifdef HAVE_IPV6
 		so->sin6.sin6_family = AF_INET6;
 		so->sin6.sin6_addr = in6addr_any;
-#else
-		so->sin.sin_family = AF_INET;
-		so->sin.sin_addr.s_addr = INADDR_ANY;
-#endif
 		return;
 	}
 
 	so->sin.sin_family = ip->family;
-#ifdef HAVE_IPV6
 	if (ip->family == AF_INET6)
 		memcpy(&so->sin6.sin6_addr, &ip->u.ip6, sizeof(ip->u.ip6));
 	else
-#endif
 		memcpy(&so->sin.sin_addr, &ip->u.ip4, sizeof(ip->u.ip4));
 }
 
@@ -131,11 +115,9 @@ sin_get_ip(const union sockaddr_union *so, struct ip_addr *ip)
 
 	ip->family = so->sin.sin_family;
 
-#ifdef HAVE_IPV6
 	if (ip->family == AF_INET6)
 		memcpy(&ip->u.ip6, &so->sin6.sin6_addr, sizeof(ip->u.ip6));
 	else
-#endif
 	if (ip->family == AF_INET)
 		memcpy(&ip->u.ip4, &so->sin.sin_addr, sizeof(ip->u.ip4));
 	else
@@ -144,20 +126,16 @@ sin_get_ip(const union sockaddr_union *so, struct ip_addr *ip)
 
 static inline void sin_set_port(union sockaddr_union *so, in_port_t port)
 {
-#ifdef HAVE_IPV6
 	if (so->sin.sin_family == AF_INET6)
                 so->sin6.sin6_port = htons(port);
 	else
-#endif
 		so->sin.sin_port = htons(port);
 }
 
 static inline in_port_t sin_get_port(union sockaddr_union *so)
 {
-#ifdef HAVE_IPV6
 	if (so->sin.sin_family == AF_INET6)
 		return ntohs(so->sin6.sin6_port);
-#endif
 	if (so->sin.sin_family == AF_INET)
 		return ntohs(so->sin.sin_port);
 
@@ -344,7 +322,7 @@ int net_connect_unix_with_retries(const char *path, unsigned int msecs)
 			break;
 
 		/* busy. wait for a while. */
-		usleep(((rand() % 10) + 1) * 10000);
+		usleep(i_rand_minmax(1, 10) * 10000);
 		if (gettimeofday(&now, NULL) < 0)
 			i_panic("gettimeofday() failed: %m");
 	} while (timeval_diff_msecs(&now, &start) < (int)msecs);
@@ -407,21 +385,25 @@ int net_set_recv_buffer_size(int fd, size_t size)
 	return setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &opt, sizeof(opt));
 }
 
-void net_get_ip_any4(struct ip_addr *ip)
-{
-	ip->family = AF_INET;
-	ip->u.ip4.s_addr = INADDR_ANY;
-}
+const struct ip_addr net_ip4_any = {
+	.family = AF_INET,
+	.u.ip4.s_addr = INADDR_ANY
+};
 
-void net_get_ip_any6(struct ip_addr *ip)
-{
-#ifdef HAVE_IPV6
-	ip->family = AF_INET6;
-	ip->u.ip6 = in6addr_any;
-#else
-	memset(ip, 0, sizeof(struct ip_addr));
-#endif
-}
+const struct ip_addr net_ip6_any = {
+	.family = AF_INET6,
+	.u.ip6 = IN6ADDR_ANY_INIT
+};
+
+const struct ip_addr net_ip4_loopback = {
+	.family = AF_INET,
+	.u.ip4.s_addr = INADDR_LOOPBACK
+};
+
+const struct ip_addr net_ip6_loopback = {
+	.family = AF_INET6,
+	.u.ip6 = IN6ADDR_LOOPBACK_INIT
+};
 
 int net_listen(const struct ip_addr *my_ip, in_port_t *port, int backlog)
 {
@@ -443,7 +425,6 @@ int net_listen_full(const struct ip_addr *my_ip, in_port_t *port,
 
 	/* create the socket */
 	fd = socket(so.sin.sin_family, SOCK_STREAM, 0);
-#ifdef HAVE_IPV6
 	if (fd == -1 && my_ip == NULL &&
 	    (errno == EINVAL || errno == EAFNOSUPPORT)) {
 		/* IPv6 is not supported by OS */
@@ -452,7 +433,6 @@ int net_listen_full(const struct ip_addr *my_ip, in_port_t *port,
 
 		fd = socket(AF_INET, SOCK_STREAM, 0);
 	}
-#endif
 	if (fd == -1) {
 		i_error("socket() failed: %m");
 		return -1;
@@ -568,7 +548,7 @@ int net_listen_unix_unlink_stale(const char *path, int backlog)
 		/* see if it really exists */
 		fd = net_connect_unix(path);
 		if (fd != -1 || errno != ECONNREFUSED) {
-			if (fd != -1) i_close_fd(&fd);
+			i_close_fd(&fd);
 			errno = EADDRINUSE;
 			return -1;
 		}
@@ -637,41 +617,19 @@ ssize_t net_receive(int fd, void *buf, size_t len)
 	return ret;
 }
 
-ssize_t net_transmit(int fd, const void *data, size_t len)
-{
-        ssize_t ret;
-
-	i_assert(fd >= 0);
-	i_assert(len <= SSIZE_T_MAX);
-
-	ret = send(fd, data, len, 0);
-	if (ret == -1) {
-		if (errno == EINTR || errno == EAGAIN)
-			return 0;
-		if (errno == EPIPE)
-			return -2;
-	}
-        return ret;
-}
-
 int net_gethostbyname(const char *addr, struct ip_addr **ips,
 		      unsigned int *ips_count)
 {
 	/* @UNSAFE */
-#ifdef HAVE_IPV6
 	union sockaddr_union *so;
 	struct addrinfo hints, *ai, *origai;
 	struct ip_addr ip;
 	int host_error;
-#else
-	struct hostent *hp;
-#endif
         int count;
 
 	*ips = NULL;
         *ips_count = 0;
 
-#ifdef HAVE_IPV6
 	/* support [ipv6] style addresses here so they work globally */
 	if (addr[0] == '[' && net_addr2ip(addr, &ip) == 0) {
 		*ips_count = 1;
@@ -680,7 +638,7 @@ int net_gethostbyname(const char *addr, struct ip_addr **ips,
 		return 0;
 	}
 
-	memset(&hints, 0, sizeof(struct addrinfo));
+	i_zero(&hints);
 	hints.ai_socktype = SOCK_STREAM;
 
 	/* save error to host_error for later use */
@@ -694,7 +652,7 @@ int net_gethostbyname(const char *addr, struct ip_addr **ips,
                 count++;
 
         *ips_count = count;
-        *ips = t_malloc(sizeof(struct ip_addr) * count);
+        *ips = t_new(struct ip_addr, count);
 
         count = 0;
 	for (ai = origai; ai != NULL; ai = ai->ai_next, count++) {
@@ -703,27 +661,6 @@ int net_gethostbyname(const char *addr, struct ip_addr **ips,
 		sin_get_ip(so, &(*ips)[count]);
 	}
 	freeaddrinfo(origai);
-#else
-	hp = gethostbyname(addr);
-	if (hp == NULL)
-		return h_errno;
-
-        /* get number of IPs */
-	count = 0;
-	while (hp->h_addr_list[count] != NULL)
-		count++;
-
-        *ips_count = count;
-        *ips = t_malloc(sizeof(struct ip_addr) * count);
-
-	while (count > 0) {
-		count--;
-
-		(*ips)[count].family = AF_INET;
-		memcpy(&(*ips)[count].u.ip4, hp->h_addr_list[count],
-		       sizeof((*ips)[count].u.ip4));
-	}
-#endif
 
 	return 0;
 }
@@ -883,7 +820,7 @@ int net_getunixcred(int fd, struct net_unix_cred *cred_r)
 		return -1;
 	}
 	return 0;
-#elif NEEDS_LOCAL_CREDS
+#elif defined(NEEDS_LOCAL_CREDS)
 	/* NetBSD < 5 */
 	int i, n, on;
 	struct iovec iov;
@@ -899,9 +836,9 @@ int net_getunixcred(int fd, struct net_unix_cred *cred_r)
 
 	sc = (struct sockcred *)cdata.buf;
 	sc->sc_uid = sc->sc_euid = sc->sc_gid = sc->sc_egid = -1;
-	memset(&cdata.ch, 0, sizeof cdata.ch);
+	i_zero(&cdata.ch);
 
-	memset(&msg, 0, sizeof msg);
+	i_zero(&msg);
 
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
@@ -930,36 +867,58 @@ int net_getunixcred(int fd, struct net_unix_cred *cred_r)
 
 const char *net_ip2addr(const struct ip_addr *ip)
 {
-#ifdef HAVE_IPV6
-	char addr[MAX_IP_LEN+1];
+	char *addr = t_malloc_no0(MAX_IP_LEN+1);
 
-	addr[MAX_IP_LEN] = '\0';
 	if (inet_ntop(ip->family, &ip->u.ip6, addr, MAX_IP_LEN) == NULL)
 		return "";
 
-	return t_strdup(addr);
-#else
-	unsigned long ip4;
+	return addr;
+}
 
-	if (ip->family != AF_INET)
-		return "";
+static bool net_addr2ip_inet4_fast(const char *addr, struct ip_addr *ip)
+{
+	uint8_t *saddr = (void *)&ip->u.ip4.s_addr;
+	unsigned int i, num;
 
-	ip4 = ntohl(ip->u.ip4.s_addr);
-	return t_strdup_printf("%lu.%lu.%lu.%lu",
-			       (ip4 & 0xff000000UL) >> 24,
-			       (ip4 & 0x00ff0000) >> 16,
-			       (ip4 & 0x0000ff00) >> 8,
-			       (ip4 & 0x000000ff));
-#endif
+	if (str_parse_uint(addr, &num, &addr) < 0)
+		return FALSE;
+	if (*addr == '\0' && num <= 0xffffffff) {
+		/* single-number IPv4 address */
+		ip->u.ip4.s_addr = htonl(num);
+		ip->family = AF_INET;
+		return TRUE;
+	}
+
+	/* try to parse as a.b.c.d */
+	i = 0;
+	for (;;) {
+		if (num >= 256)
+			return FALSE;
+		saddr[i] = num;
+		if (i == 3)
+			break;
+		i++;
+		if (*addr != '.')
+			return FALSE;
+		addr++;
+		if (str_parse_uint(addr, &num, &addr) < 0)
+			return FALSE;
+	}
+	if (*addr != '\0')
+		return FALSE;
+	ip->family = AF_INET;
+	return TRUE;
 }
 
 int net_addr2ip(const char *addr, struct ip_addr *ip)
 {
 	int ret;
 
+	if (net_addr2ip_inet4_fast(addr, ip))
+		return 0;
+
 	if (strchr(addr, ':') != NULL) {
 		/* IPv6 */
-#ifdef HAVE_IPV6
 		T_BEGIN {
 			if (addr[0] == '[') {
 				/* allow [ipv6 addr] */
@@ -971,9 +930,6 @@ int net_addr2ip(const char *addr, struct ip_addr *ip)
 		} T_END;
 		if (ret == 0)
 			return -1;
-#else
-		ip->u.ip4.s_addr = 0;
-#endif
 		ip->family = AF_INET6;
  	} else {
 		/* IPv4 */
@@ -1061,7 +1017,6 @@ int net_ipport2str(const struct ip_addr *ip, in_port_t port, const char **str_r)
 int net_ipv6_mapped_ipv4_convert(const struct ip_addr *src,
 				 struct ip_addr *dest)
 {
-#ifdef HAVE_IPV6
 	static uint8_t v4_prefix[] =
 		{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff };
 
@@ -1073,9 +1028,6 @@ int net_ipv6_mapped_ipv4_convert(const struct ip_addr *src,
 	dest->family = AF_INET;
 	memcpy(&dest->u.ip6, &src->u.ip6.s6_addr[3*4], 4);
 	return 0;
-#else
-	return -1;
-#endif
 }
 
 int net_geterror(int fd)
@@ -1095,36 +1047,17 @@ int net_geterror(int fd)
 
 const char *net_gethosterror(int error)
 {
-#ifdef HAVE_IPV6
 	i_assert(error != 0);
 
 	return gai_strerror(error);
-#else
-	switch (error) {
-	case HOST_NOT_FOUND:
-		return "Host not found";
-	case NO_ADDRESS:
-		return "No IP address found for name";
-	case NO_RECOVERY:
-		return "A non-recoverable name server error occurred";
-	case TRY_AGAIN:
-		return "A temporary error on an authoritative name server";
-	default:
-		return t_strdup_printf("Unknown error %d", error);
-	}
-#endif
 }
 
 int net_hosterror_notfound(int error)
 {
-#ifdef HAVE_IPV6
 #ifdef EAI_NODATA /* NODATA is depricated */
-	return error != 1 && (error == EAI_NONAME || error == EAI_NODATA);
+	return (error != 1 && (error == EAI_NONAME || error == EAI_NODATA)) ? 1 : 0;
 #else
-	return error != 1 && (error == EAI_NONAME);
-#endif
-#else
-	return error == HOST_NOT_FOUND || error == NO_ADDRESS;
+	return (error != 1 && (error == EAI_NONAME)) ? 1 : 0;
 #endif
 }
 
@@ -1221,13 +1154,8 @@ bool net_is_in_network(const struct ip_addr *ip,
 		ip1 = &ip->u.ip4.s_addr;
 		ip2 = &net_ip->u.ip4.s_addr;
 	} else {
-#ifdef HAVE_IPV6
 		ip1 = (const void *)&ip->u.ip6;
 		ip2 = (const void *)&net_ip->u.ip6;
-#else
-		/* shouldn't get here */
-		return FALSE;
-#endif
 	}
 
 	/* check first the full 32bit ints */

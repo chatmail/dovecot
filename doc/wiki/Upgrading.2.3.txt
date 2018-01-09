@@ -18,6 +18,36 @@ Settings changes
  * Time interval based settings no longer default to "seconds". All numbers
    must explicitly be followed by the time unit (except 0). This is important,
    because some settings now support milliseconds as well.
+ * fs-posix: prefix=path parameter no longer automatically appends '/' to the
+   path if it's not there. This allows using it properly as a prefix, instead
+   of only a directory prefix. Make sure you have the '/' appended to the
+   prefix, or the "dir/filename" will be accessed just as "dirnamename".
+ * 'ssl_protocols' setting was replaced by 'ssl_min_protocol'. Now you only
+   specify the minimum ssl protocol version Dovecot accepts, defaulting to
+   TLSv1.
+
+Statistics redesign
+-------------------
+
+The statistics code was redesigned. The old "stats" plugin was renamed to
+"old_stats" and the "doveadm stats" was renamed to "doveadm oldstats". There's
+a new "doveadm stats" command that isn't compatible with the old one. Also the
+new stats code doesn't require a plugin, so make sure you remove 'stats' from
+'mail_plugin' setting. For more details see <Statistics.txt>.
+
+So if you wish to keep using the old stats:
+
+ * 'mail_plugins = stats' -> 'mail_plugins = old_stats'
+ * 'service stats' -> 'service old-stats'
+    * 'executable = stats' -> 'executable = old-stats'
+    * 'fifo_listener stats-mail' -> 'fifo_listener old-stats-mail'
+    * 'fifo_listener stats-user' -> 'fifo_listener old-stats-user'
+    * 'unix_listener stats' -> 'unix_listener old-stats'
+ * 'plugin { stats_refresh }' -> 'plugin { old_stats_refresh }'
+ * 'plugin { stats_notify_path }' -> 'plugin { old_stats_notify_path }'
+ * 'plugin { stats_track_cmds }' -> 'plugin { old_stats_track_cmds }'
+ * 'auth_stats' -> keep as 'auth_stats'
+ * 'stats_*' settings -> 'old_stats_*'
 
 Localhost auth penalty
 ----------------------
@@ -60,7 +90,8 @@ Setting default changes
  * mail_log_prefix="%s(%u): "
     * -> "%s(%u)<%{pid}><%{session}>: "
  * mysql: ssl_verify_server_cert=no -> yes
- * ssl_options: no_compression is now enabled by default.
+ * 'ssl_options': 'no_compression' is now the default, and a new 'compression'
+   option is introduced for enabling compression
 
 Diffie-Hellman parameters for SSL
 ---------------------------------
@@ -77,8 +108,23 @@ Diffie-Hellman parameters for SSL
 Other changes
 -------------
 
+ * Linux: Dovecot no longer enables core dumping for "setuid processes", which
+   most of them are.
+    * To enable them with Linux kernel v3.6+: Make sure core dumps get written
+      to a globally shared directory and enable them with:'sysctl -w
+      fs.suid_dumpable=2'
+       * With older Linux kernel versions you can set it to 1, but that's not
+         good for security of your system.
+    * You can also revert to old behavior with: 'import_environment =
+      $import_environment PR_SET_DUMPABLE'
+       * However, this also may have some security implications depending on
+         the setup. Mainly if you have system users and you've enabled
+         chrooting or mail_access_groups, this could allow the system users to
+         gain unintentional access.
+ * userdb nss was removed. Use userdb passwd instead.
  * doveadm: table formatter prints the header now to stdout, not stderr
  * doveadm: Removed mount commands
+ * OpenSSL version is required to be at least 1.0.1 for Dovecot to build
  * subscriptions file is written in a new version 2 format. Dovecot v2.2.17 and
    newer can read this file.
  * mail_log plugin: Headers are logged as UTF-8 (instead of MIME-encoded)
@@ -90,4 +136,4 @@ Other changes
     * user_disabled -> code=user_disabled
     * pass_expired -> code=pass_expired
 
-(This file was created from the wiki on 2017-10-10 04:42)
+(This file was created from the wiki on 2017-12-22 04:42)

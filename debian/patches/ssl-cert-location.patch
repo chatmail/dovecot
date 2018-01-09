@@ -1,0 +1,49 @@
+From: Jaldhar H. Vyas <jaldhar@debian.org>
+Date: Tue, 25 Sep 2012 01:12:07 -0400
+Last-Update: Sun, 30 Nov 2014 23:59:07 -0500
+Subject: SSL cert location
+Description: Move dovecots generated X.509 certificate out of /etc/ssl where
+ it doesn't belong.  Turn off ssl by default.
+Bug: #608719
+---
+ doc/example-config/conf.d/10-ssl.conf | 6 ++--
+ doc/mkcert.sh                         | 4 ++--
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/doc/example-config/conf.d/10-ssl.conf b/doc/example-config/conf.d/10-ssl.conf
+index 7ae6b7a..37732d4 100644
+--- a/doc/example-config/conf.d/10-ssl.conf
++++ b/doc/example-config/conf.d/10-ssl.conf
+@@ -3,14 +3,14 @@
+ ##
+ 
+ # SSL/TLS support: yes, no, required. <doc/wiki/SSL.txt>
+-#ssl = yes
++ssl = no
+ 
+ # PEM encoded X.509 SSL/TLS certificate and private key. They're opened before
+ # dropping root privileges, so keep the key file unreadable by anyone but
+ # root. Included doc/mkcert.sh can be used to easily generate self-signed
+ # certificate, just make sure to update the domains in dovecot-openssl.cnf
+-ssl_cert = </etc/ssl/certs/dovecot.pem
+-ssl_key = </etc/ssl/private/dovecot.pem
++#ssl_cert = </etc/dovecot/dovecot.pem
++#ssl_key = </etc/dovecot/private/dovecot.pem
+ 
+ # If key file is password protected, give the password here. Alternatively
+ # give it when starting dovecot with -p parameter. Since this file is often
+diff --git a/doc/mkcert.sh b/doc/mkcert.sh
+index 2fedd48..3ee5143 100644
+--- a/doc/mkcert.sh
++++ b/doc/mkcert.sh
+@@ -7,8 +7,8 @@ OPENSSL=${OPENSSL-openssl}
+ SSLDIR=${SSLDIR-/etc/ssl}
+ OPENSSLCONFIG=${OPENSSLCONFIG-dovecot-openssl.cnf}
+ 
+-CERTDIR=$SSLDIR/certs
+-KEYDIR=$SSLDIR/private
++CERTDIR=/etc/dovecot
++KEYDIR=/etc/dovecot/private
+ 
+ CERTFILE=$CERTDIR/dovecot.pem
+ KEYFILE=$KEYDIR/dovecot.pem

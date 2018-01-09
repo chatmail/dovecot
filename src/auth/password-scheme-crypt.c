@@ -3,28 +3,24 @@
 #include "lib.h"
 #include "mycrypt.h"
 #include "password-scheme.h"
+#include "crypt-blowfish.h"
+#include "randgen.h"
 
 /* Lengths and limits for some crypt() algorithms. */
 #define CRYPT_BLF_ROUNDS_DEFAULT 5
 #define CRYPT_BLF_ROUNDS_MIN 4
 #define CRYPT_BLF_ROUNDS_MAX 31
-#define CRYPT_BLF_SALT_LEN 22
+#define CRYPT_BLF_SALT_LEN 16 /* raw salt */
+#define CRYPT_BLF_PREFIX_LEN (7+22+1) /* $2.$nn$ + salt */
+#define CRYPT_BLF_BUFFER_LEN 128
+#define CRYPT_BLF_PREFIX "$2y"
 #define CRYPT_SHA2_ROUNDS_DEFAULT 5000
 #define CRYPT_SHA2_ROUNDS_MIN 1000
 #define CRYPT_SHA2_ROUNDS_MAX 999999999
 #define CRYPT_SHA2_SALT_LEN 16
 
-unsigned int password_scheme_encryption_rounds = 0;
-
-void password_set_encryption_rounds(unsigned int rounds)
-{
-	/* just take the new value. crypt_generate_*() will enforce their
-	   limits. */
-	password_scheme_encryption_rounds = rounds;
-}
-
 static void
-crypt_generate_des(const char *plaintext, const char *user ATTR_UNUSED,
+crypt_generate_des(const char *plaintext, const struct password_generate_params *params ATTR_UNUSED,
 		   const unsigned char **raw_password_r, size_t *size_r)
 {
 #define CRYPT_SALT_LEN 2
@@ -37,11 +33,13 @@ crypt_generate_des(const char *plaintext, const char *user ATTR_UNUSED,
 }
 
 static void
-crypt_generate_blowfisch(const char *plaintext, const char *user ATTR_UNUSED,
+crypt_generate_blowfish(const char *plaintext, const struct password_generate_params *params,
 			 const unsigned char **raw_password_r, size_t *size_r)
 {
-	const char *password, *salt, *magic_salt;
-	unsigned int rounds = password_scheme_encryption_rounds;
+	char salt[CRYPT_BLF_SALT_LEN];
+	char password[CRYPT_BLF_BUFFER_LEN];
+	char magic_salt[CRYPT_BLF_PREFIX_LEN];
+	unsigned int rounds = params->rounds;
 
 	if (rounds == 0)
 		rounds = CRYPT_BLF_ROUNDS_DEFAULT;
@@ -50,19 +48,59 @@ crypt_generate_blowfisch(const char *plaintext, const char *user ATTR_UNUSED,
 	else if (rounds > CRYPT_BLF_ROUNDS_MAX)
 		rounds = CRYPT_BLF_ROUNDS_MAX;
 
-	salt = password_generate_salt(CRYPT_BLF_SALT_LEN);
-	magic_salt = t_strdup_printf("$2a$%02u$%s", rounds, salt);
-	password = t_strdup(mycrypt(plaintext, magic_salt));
-	*raw_password_r = (const unsigned char *)password;
+	random_fill(salt, CRYPT_BLF_SALT_LEN);
+	if (crypt_gensalt_blowfish_rn(CRYPT_BLF_PREFIX, rounds,
+				      salt, CRYPT_BLF_SALT_LEN,
+				      magic_salt, CRYPT_BLF_PREFIX_LEN) == NULL)
+		i_fatal("crypt_gensalt_blowfish_rn failed: %m");
+
+	if (crypt_blowfish_rn(plaintext, magic_salt, password,
+			       CRYPT_BLF_BUFFER_LEN) == NULL)
+		i_fatal("crypt_blowfish_rn failed: %m");
+
+	*raw_password_r = (const unsigned char *)t_strdup(password);
 	*size_r = strlen(password);
 }
 
+static int
+crypt_verify_blowfish(const char *plaintext, const struct password_generate_params *params ATTR_UNUSED,
+		      const unsigned char *raw_password, size_t size,
+		      const char **error_r)
+{
+	const char *password;
+	const char *salt;
+	char crypted[CRYPT_BLF_BUFFER_LEN];
+
+	if (size == 0) {
+		/* the default mycrypt() handler would return match */
+		return 0;
+	}
+	password = t_strndup(raw_password, size);
+
+	if (size < CRYPT_BLF_PREFIX_LEN ||
+	    strncmp(password, "$2", 2) != 0 ||
+	    password[2] < 'a' || password[2] > 'z' ||
+	    password[3] != '$') {
+		*error_r = "Password is not blowfish password";
+		return -1;
+	}
+
+	salt = t_strndup(password, CRYPT_BLF_PREFIX_LEN);
+	if (crypt_blowfish_rn(plaintext, salt, crypted, CRYPT_BLF_BUFFER_LEN) == NULL) {
+		/* really shouldn't happen unless the system is broken */
+		*error_r = t_strdup_printf("crypt_blowfish_rn failed: %m");
+		return -1;
+	}
+
+	return strcmp(crypted, password) == 0 ? 1 : 0;
+}
+
 static void
-crypt_generate_sha256(const char *plaintext, const char *user ATTR_UNUSED,
+crypt_generate_sha256(const char *plaintext, const struct password_generate_params *params,
 		      const unsigned char **raw_password_r, size_t *size_r)
 {
 	const char *password, *salt, *magic_salt;
-	unsigned int rounds = password_scheme_encryption_rounds;
+	unsigned int rounds = params->rounds;
 
 	if (rounds == 0)
 		rounds = CRYPT_SHA2_ROUNDS_DEFAULT;
@@ -82,11 +120,11 @@ crypt_generate_sha256(const char *plaintext, const char *user ATTR_UNUSED,
 }
 
 static void
-crypt_generate_sha512(const char *plaintext, const char *user ATTR_UNUSED,
+crypt_generate_sha512(const char *plaintext, const struct password_generate_params *params,
 		      const unsigned char **raw_password_r, size_t *size_r)
 {
 	const char *password, *salt, *magic_salt;
-	unsigned int rounds = password_scheme_encryption_rounds;
+	unsigned int rounds = params->rounds;
 
 	if (rounds == 0)
 		rounds = CRYPT_SHA2_ROUNDS_DEFAULT;
@@ -124,14 +162,22 @@ static const struct {
 
 /* keep in sync with the sample struct above */
 static const struct password_scheme crypt_schemes[] = {
-	{ "CRYPT", PW_ENCODING_NONE, 0, crypt_verify,
+	{ "DES-CRYPT", PW_ENCODING_NONE, 0, crypt_verify,
 	  crypt_generate_des },
-	{ "BLF-CRYPT", PW_ENCODING_NONE, 0, crypt_verify,
-	  crypt_generate_blowfisch },
 	{ "SHA256-CRYPT", PW_ENCODING_NONE, 0, crypt_verify,
 	  crypt_generate_sha256 },
 	{ "SHA512-CRYPT", PW_ENCODING_NONE, 0, crypt_verify,
 	  crypt_generate_sha512 }
+};
+
+static const struct password_scheme blf_crypt_scheme = {
+	"BLF-CRYPT", PW_ENCODING_NONE, 0, crypt_verify_blowfish,
+		crypt_generate_blowfish
+};
+
+static const struct password_scheme default_crypt_scheme = {
+	"CRYPT", PW_ENCODING_NONE, 0, crypt_verify,
+		crypt_generate_blowfish
 };
 
 void password_scheme_register_crypt(void)
@@ -145,4 +191,6 @@ void password_scheme_register_crypt(void)
 		   (strcmp(crypted, sample[i].expected) == 0))
 			password_scheme_register(&crypt_schemes[i]);
 	}
+	password_scheme_register(&blf_crypt_scheme);
+	password_scheme_register(&default_crypt_scheme);
 }

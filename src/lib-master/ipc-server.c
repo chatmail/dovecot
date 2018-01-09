@@ -33,7 +33,7 @@ struct ipc_server {
 	struct istream *input;
 	struct ostream *output;
 
-	unsigned int version_received:1;
+	bool version_received:1;
 };
 
 static void ipc_server_disconnect(struct ipc_server *server);
@@ -97,8 +97,7 @@ static void ipc_server_connect(struct ipc_server *server)
 {
 	i_assert(server->fd == -1);
 
-	if (server->to != NULL)
-		timeout_remove(&server->to);
+	timeout_remove(&server->to);
 
 	server->fd = net_connect_unix(server->path);
 	if (server->fd == -1) {
@@ -109,8 +108,8 @@ static void ipc_server_connect(struct ipc_server *server)
 	}
 
 	server->io = io_add(server->fd, IO_READ, ipc_server_input, server);
-	server->input = i_stream_create_fd(server->fd, (size_t)-1, FALSE);
-	server->output = o_stream_create_fd(server->fd, (size_t)-1, FALSE);
+	server->input = i_stream_create_fd(server->fd, (size_t)-1);
+	server->output = o_stream_create_fd(server->fd, (size_t)-1);
 	o_stream_set_no_error_handling(server->output, TRUE);
 	o_stream_nsend_str(server->output,
 		t_strdup_printf(IPC_SERVER_HANDSHAKE, server->name, my_pid));
@@ -154,8 +153,7 @@ void ipc_server_deinit(struct ipc_server **_server)
 	i_assert(server->ipc_cmd_refcount == 0);
 
 	ipc_server_disconnect(server);
-	if (server->to != NULL)
-		timeout_remove(&server->to);
+	timeout_remove(&server->to);
 	i_free(server->name);
 	i_free(server->path);
 	i_free(server);

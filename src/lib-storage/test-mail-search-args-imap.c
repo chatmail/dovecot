@@ -10,7 +10,7 @@
 
 #define CURRENT_UNIX_TIME 1000000
 
-static struct {
+static const struct {
 	const char *input, *output;
 } tests[] = {
 	{ "ALL", NULL },
@@ -167,7 +167,7 @@ static void test_mail_search_args_imap(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_mail_search_args_imap,
 		NULL
 	};

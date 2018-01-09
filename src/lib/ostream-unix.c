@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "fdpass.h"
@@ -15,8 +15,7 @@ o_stream_unix_close(struct iostream_private *stream, bool close_parent)
 {
 	struct unix_ostream *ustream = (struct unix_ostream *)stream;
 
-	if (ustream->write_fd != -1)
-		i_close_fd(&ustream->write_fd);
+	i_close_fd(&ustream->write_fd);
 	o_stream_file_close(stream, close_parent);
 }
 
@@ -82,6 +81,8 @@ bool o_stream_unix_write_fd(struct ostream *output, int fd)
 {
 	struct unix_ostream *ustream =
 		(struct unix_ostream *)output->real_stream;
+
+	i_assert(fd >= 0);
 
 	if (ustream->write_fd >= 0)
 		return FALSE;

@@ -1,4 +1,4 @@
-/* file truct dcrypt_public_keyyntax
+/* file struct dcrypt_public_key syntax
  * magic (14 bytes)
  * version (1 bytes)
  * flags (4 bytes)
@@ -79,7 +79,7 @@ int o_stream_encrypt_send_header_v1(struct encrypt_ostream *stream)
 	i_assert(!stream->prefix_written);
 	stream->prefix_written = TRUE;
 
-	buffer_t *values = buffer_create_dynamic(pool_datastack_create(), 256);
+	buffer_t *values = t_buffer_create(256);
 	buffer_append(values, IOSTREAM_CRYPT_MAGIC, sizeof(IOSTREAM_CRYPT_MAGIC));
 	/* version */
 	c = 1;
@@ -104,24 +104,24 @@ int o_stream_encrypt_send_header_v2(struct encrypt_ostream *stream)
 	i_assert(!stream->prefix_written);
 	stream->prefix_written = TRUE;
 
-	buffer_t *values = buffer_create_dynamic(pool_datastack_create(), 256);
+	buffer_t *values = t_buffer_create(256);
 	buffer_append(values, IOSTREAM_CRYPT_MAGIC, sizeof(IOSTREAM_CRYPT_MAGIC));
 	c = 2;
 	buffer_append(values, &c, 1);
-	i = htonl(stream->flags);
+	i = cpu32_to_be(stream->flags);
 	buffer_append(values, &i, 4);
 	/* store total length of header
 	   9 = version + flags + length
 	   8 = rounds + key data length
 	   */
-	i = htonl(sizeof(IOSTREAM_CRYPT_MAGIC) + 9 + stream->cipher_oid->used + stream->mac_oid->used + 8 + stream->key_data_len);
+	i = cpu32_to_be(sizeof(IOSTREAM_CRYPT_MAGIC) + 9 + stream->cipher_oid->used + stream->mac_oid->used + 8 + stream->key_data_len);
 	buffer_append(values, &i, 4);
 
 	buffer_append_buf(values, stream->cipher_oid, 0, (size_t)-1);
 	buffer_append_buf(values, stream->mac_oid, 0, (size_t)-1);
-	i = htonl(IO_STREAM_ENCRYPT_ROUNDS);
+	i = cpu32_to_be(IO_STREAM_ENCRYPT_ROUNDS);
 	buffer_append(values, &i, 4);
-	i = htonl(stream->key_data_len);
+	i = cpu32_to_be(stream->key_data_len);
 	buffer_append(values, &i, 4);
 	buffer_append(values, stream->key_data, stream->key_data_len);
 	i_free_and_null(stream->key_data);
@@ -156,9 +156,9 @@ int o_stream_encrypt_keydata_create_v1(struct encrypt_ostream *stream)
 	hash->loop(hctx, seed, sizeof(seed));
 	hash->result(hctx, ekhash);
 
-	ephemeral_key = buffer_create_dynamic(pool_datastack_create(), 256);
-	encrypted_key = buffer_create_dynamic(pool_datastack_create(), 256);
-	secret = buffer_create_dynamic(pool_datastack_create(), 256);
+	ephemeral_key = t_buffer_create(256);
+	encrypted_key = t_buffer_create(256);
+	secret = t_buffer_create(256);
 
 	if (!dcrypt_ecdh_derive_secret_peer(stream->pub, ephemeral_key, secret, &error)) {
 		io_stream_set_error(&stream->ostream.iostream, "Cannot perform ECDH: %s", error);
@@ -247,9 +247,9 @@ int o_stream_encrypt_key_for_pubkey_v2(struct encrypt_ostream *stream, const cha
 	const char *error;
 	buffer_t *encrypted_key, *ephemeral_key, *temp_key;
 
-	ephemeral_key = buffer_create_dynamic(pool_datastack_create(), 256);
-	encrypted_key = buffer_create_dynamic(pool_datastack_create(), 256);
-	temp_key = buffer_create_dynamic(pool_datastack_create(), 48);
+	ephemeral_key = t_buffer_create(256);
+	encrypted_key = t_buffer_create(256);
+	temp_key = t_buffer_create(48);
 
 	ktype = dcrypt_key_type_public(pubkey);
 
@@ -261,7 +261,7 @@ int o_stream_encrypt_key_for_pubkey_v2(struct encrypt_ostream *stream, const cha
 		}
 	} else if (ktype == DCRYPT_KEY_EC) {
 		/* R = our ephemeral public key */
-		buffer_t *secret = buffer_create_dynamic(pool_datastack_create(), 256);
+		buffer_t *secret = t_buffer_create(256);
 
 		/* derive ephemeral key and shared secret */
 		if (!dcrypt_ecdh_derive_secret_peer(pubkey, ephemeral_key, secret, &error)) {
@@ -313,11 +313,11 @@ int o_stream_encrypt_key_for_pubkey_v2(struct encrypt_ostream *stream, const cha
 	/* store hash of public key as ID */
 	dcrypt_key_id_public(stream->pub, "sha256", res, NULL);
 	/* store ephemeral key (if present) */
-	unsigned int val = htonl(ephemeral_key->used);
+	unsigned int val = cpu32_to_be(ephemeral_key->used);
 	buffer_append(res, &val, 4);
 	buffer_append_buf(res, ephemeral_key, 0, (size_t)-1);
 	/* store encrypted key */
-	val = htonl(encrypted_key->used);
+	val = cpu32_to_be(encrypted_key->used);
 	buffer_append(res, &val, 4);
 	buffer_append_buf(res, encrypted_key, 0, (size_t)-1);
 
@@ -354,7 +354,7 @@ int o_stream_encrypt_keydata_create_v2(struct encrypt_ostream *stream, const cha
 
 	/* generate keydata length of random data for key/iv/mac */
 	kl = dcrypt_ctx_sym_get_key_length(stream->ctx_sym) + dcrypt_ctx_sym_get_iv_length(stream->ctx_sym) + tagsize;
-	keydata = buffer_create_dynamic(pool_datastack_create(), kl);
+	keydata = t_buffer_create(kl);
 	random_fill(buffer_append_space_unsafe(keydata, kl), kl);
 	buffer_set_used_size(keydata, kl);
 	ptr = keydata->data;
@@ -378,7 +378,7 @@ int o_stream_encrypt_keydata_create_v2(struct encrypt_ostream *stream, const cha
 	hash->result(hctx, hres);
 
 	for(int i = 1; i < 2049; i++) {
-		uint32_t i_msb = htonl(i);
+		uint32_t i_msb = cpu32_to_be(i);
 
 		hash->init(hctx);
 		hash->loop(hctx, hres, sizeof(hres));
@@ -387,7 +387,7 @@ int o_stream_encrypt_keydata_create_v2(struct encrypt_ostream *stream, const cha
 	}
 
 	/* store key data hash */
-	val = htonl(sizeof(hres));
+	val = cpu32_to_be(sizeof(hres));
 	buffer_append(res, &val, 4);
 	buffer_append(res, hres, sizeof(hres));
 
@@ -468,7 +468,7 @@ ssize_t o_stream_encrypt_sendv(struct ostream_private *stream,
 				}
 			}
 
-			/* hopefully upstream can accomondate */
+			/* hopefully upstream can accommodate */
 			if (o_stream_encrypt_send(estream, buf.data, buf.used) < 0) {
 				return -1;
 			}
@@ -489,18 +489,17 @@ int o_stream_encrypt_finalize(struct ostream_private *stream)
 	const char *error;
 	struct encrypt_ostream *estream = (struct encrypt_ostream *)stream;
 
-	/* if nothing was written, we are done */
-	if (!estream->prefix_written) return o_stream_flush(stream->parent);
-
 	if (estream->finalized) {
-		/* we've already flushed the encrypted output.
-		   just flush the parent. */
-		return o_stream_flush(stream->parent);
+		/* we've already flushed the encrypted output. */
+		return 0;
 	}
 	estream->finalized = TRUE;
 
+	/* if nothing was written, we are done */
+	if (!estream->prefix_written) return 0;
+
 	/* acquire last block */
-	buffer_t *buf = buffer_create_dynamic(pool_datastack_create(), dcrypt_ctx_sym_get_block_size(estream->ctx_sym));
+	buffer_t *buf = t_buffer_create(dcrypt_ctx_sym_get_block_size(estream->ctx_sym));
 	if (!dcrypt_ctx_sym_final(estream->ctx_sym, buf, &error)) {
 		io_stream_set_error(&estream->ostream.iostream, "Encryption failure: %s", error);
 		return -1;
@@ -534,8 +533,21 @@ int o_stream_encrypt_finalize(struct ostream_private *stream)
 		return -1;
 	}
 
-	/* flush parent */
-	return o_stream_flush(stream->parent);
+	return 0;
+}
+
+static
+int o_stream_encrypt_flush(struct ostream_private *stream)
+{
+	struct encrypt_ostream *estream = (struct encrypt_ostream *)stream;
+
+	if (stream->finished && estream->ctx_sym != NULL &&
+	    !estream->finalized) {
+		if (o_stream_encrypt_finalize(&estream->ostream) < 0)
+			return -1;
+	}
+
+	return o_stream_flush_parent(stream);
 }
 
 static
@@ -543,9 +555,9 @@ void o_stream_encrypt_close(struct iostream_private *stream,
 			    bool close_parent)
 {
 	struct encrypt_ostream *estream = (struct encrypt_ostream *)stream;
-	if (estream->ctx_sym != NULL && !estream->finalized &&
-	    estream->ostream.ostream.stream_errno == 0)
-		o_stream_encrypt_finalize(&estream->ostream);
+
+	i_assert(estream->finalized || estream->ctx_sym == NULL ||
+		 estream->ostream.ostream.stream_errno != 0);
 	if (close_parent) {
 		o_stream_close(estream->ostream.parent);
 	}
@@ -556,12 +568,12 @@ void o_stream_encrypt_destroy(struct iostream_private *stream)
 {
 	struct encrypt_ostream *estream = (struct encrypt_ostream *)stream;
 	/* release resources */
-	if (estream->ctx_sym != NULL) dcrypt_ctx_sym_destroy(&(estream->ctx_sym));
-	if (estream->ctx_mac != NULL) dcrypt_ctx_hmac_destroy(&(estream->ctx_mac));
+	if (estream->ctx_sym != NULL) dcrypt_ctx_sym_destroy(&estream->ctx_sym);
+	if (estream->ctx_mac != NULL) dcrypt_ctx_hmac_destroy(&estream->ctx_mac);
 	if (estream->key_data != NULL) i_free(estream->key_data);
-	if (estream->cipher_oid != NULL) buffer_free(&(estream->cipher_oid));
-	if (estream->mac_oid != NULL) buffer_free(&(estream->mac_oid));
-	if (estream->pub != NULL) dcrypt_key_unref_public(&(estream->pub));
+	if (estream->cipher_oid != NULL) buffer_free(&estream->cipher_oid);
+	if (estream->mac_oid != NULL) buffer_free(&estream->mac_oid);
+	if (estream->pub != NULL) dcrypt_key_unref_public(&estream->pub);
 	o_stream_unref(&estream->ostream.parent);
 }
 
@@ -572,7 +584,7 @@ int o_stream_encrypt_init(struct encrypt_ostream *estream, const char *algorithm
 	char *calg, *malg;
 
 	if ((estream->flags & IO_STREAM_ENC_VERSION_1) == IO_STREAM_ENC_VERSION_1) {
-		if (!dcrypt_ctx_sym_create("AES-256-CTR", DCRYPT_MODE_ENCRYPT, &(estream->ctx_sym), &error)) {
+		if (!dcrypt_ctx_sym_create("AES-256-CTR", DCRYPT_MODE_ENCRYPT, &estream->ctx_sym, &error)) {
 			io_stream_set_error(&estream->ostream.iostream, "Cannot create ostream-encrypt: %s", error);
 			return -1;
 		}
@@ -589,7 +601,7 @@ int o_stream_encrypt_init(struct encrypt_ostream *estream, const char *algorithm
 		}
 		(*malg++) = '\0';
 
-		if (!dcrypt_ctx_sym_create(calg, DCRYPT_MODE_ENCRYPT, &(estream->ctx_sym), &error)) {
+		if (!dcrypt_ctx_sym_create(calg, DCRYPT_MODE_ENCRYPT, &estream->ctx_sym, &error)) {
 			io_stream_set_error(&estream->ostream.iostream, "Cannot create ostream-encrypt: %s", error);
 			return -1;
 		}
@@ -604,7 +616,7 @@ int o_stream_encrypt_init(struct encrypt_ostream *estream, const char *algorithm
 
 		/* mac context is optional */
 		if ((estream->flags & IO_STREAM_ENC_INTEGRITY_HMAC) == IO_STREAM_ENC_INTEGRITY_HMAC) {
-			if (!dcrypt_ctx_hmac_create(malg, &(estream->ctx_mac), &error)) {
+			if (!dcrypt_ctx_hmac_create(malg, &estream->ctx_mac, &error)) {
 				io_stream_set_error(&estream->ostream.iostream, "Cannot create ostream-encrypt: %s", error);
 				return -1;
 			}
@@ -616,7 +628,7 @@ int o_stream_encrypt_init(struct encrypt_ostream *estream, const char *algorithm
 			return -1;
 		}
 
-		/* MAC algoritm is used for PBKDF2 and keydata hashing */
+		/* MAC algorithm is used for PBKDF2 and keydata hashing */
 		return o_stream_encrypt_keydata_create_v2(estream, malg);
 	}
 }
@@ -629,6 +641,7 @@ o_stream_create_encrypt_common(enum io_stream_encrypt_flags flags)
 
 	estream = i_new(struct encrypt_ostream, 1);
 	estream->ostream.sendv = o_stream_encrypt_sendv;
+	estream->ostream.flush = o_stream_encrypt_flush;
 	estream->ostream.iostream.close = o_stream_encrypt_close;
 	estream->ostream.iostream.destroy = o_stream_encrypt_destroy;
 

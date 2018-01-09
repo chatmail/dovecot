@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "configure" ]; then
+  CONFFILES="conf.d/20-imap.conf"
+
+  for conffile in $CONFFILES ; do
+    # Tell ucf that the file in /usr/share/dovecot is the latest
+    # maintainer version, and let it handle how to manage the real
+    # configuration file in /etc/dovecot.
+    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
+    ucfr dovecot-imapd /etc/dovecot/$conffile
+  done
+
+  echo 'protocols = $protocols imap' > /usr/share/dovecot/protocols.d/imapd.protocol
+fi
+
+#DEBHELPER#

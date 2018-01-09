@@ -45,7 +45,7 @@ void test_program_success(void) {
 		program_client_local_create("/bin/echo", args, &pc_set);
 
 	buffer_t *output = buffer_create_dynamic(default_pool, 16);
-	struct ostream *os = o_stream_create_buffer(output);
+	struct ostream *os = test_ostream_create(output);
 	program_client_set_output(pc, os);
 
 	test_assert(program_client_run(pc) == 1);
@@ -74,7 +74,7 @@ void test_program_io_sync(void) {
 	program_client_set_input(pc, is);
 
 	buffer_t *output = buffer_create_dynamic(default_pool, 16);
-	struct ostream *os = o_stream_create_buffer(output);
+	struct ostream *os = test_ostream_create(output);
 	program_client_set_output(pc, os);
 
 	test_assert(program_client_run(pc) == 1);
@@ -113,13 +113,11 @@ void test_program_io_async(void) {
 	struct program_client *pc =
 		program_client_local_create("/bin/cat", args, &pc_set);
 
-	lib_signals_reset_ioloop();
-
 	struct istream *is = test_istream_create(pclient_test_io_string);
 	program_client_set_input(pc, is);
 
 	buffer_t *output = buffer_create_dynamic(default_pool, 16);
-	struct ostream *os = o_stream_create_buffer(output);
+	struct ostream *os = test_ostream_create(output);
 	program_client_set_output(pc, os);
 
 	program_client_run_async(pc, test_program_io_async_callback, &ret);
@@ -135,7 +133,6 @@ void test_program_io_async(void) {
 	o_stream_unref(&os);
 	buffer_free(&output);
 	io_loop_set_current(prev_ioloop);
-	lib_signals_reset_ioloop();
 	io_loop_set_current(ioloop);
 	io_loop_destroy(&ioloop);
 
@@ -154,7 +151,7 @@ void test_program_failure(void) {
 		program_client_local_create("/bin/false", args, &pc_set);
 
 	buffer_t *output = buffer_create_dynamic(default_pool, 16);
-	struct ostream *os = o_stream_create_buffer(output);
+	struct ostream *os = test_ostream_create(output);
 	program_client_set_output(pc, os);
 
 	test_assert(program_client_run(pc) == 0);
@@ -180,10 +177,12 @@ int main(void)
 		NULL
 	};
 
+	lib_init();
 	struct ioloop *ioloop = io_loop_create();
 	lib_signals_init();
 	ret = test_run(tests);
 	lib_signals_deinit();
 	io_loop_destroy(&ioloop);
+	lib_deinit();
 	return ret;
 }

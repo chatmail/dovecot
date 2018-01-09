@@ -242,8 +242,8 @@ http_response_parse_status_line(struct http_response_parser *parser)
 	size_t size, old_bytes = 0;
 	int ret;
 
-	while ((ret = i_stream_read_data(_parser->input, &begin, &size,
-					 old_bytes)) > 0) {
+	while ((ret = i_stream_read_bytes(_parser->input, &begin, &size,
+					  old_bytes + 1)) > 0) {
 		_parser->cur = begin;
 		_parser->end = _parser->cur + size;
 
@@ -264,7 +264,8 @@ http_response_parse_status_line(struct http_response_parser *parser)
 		if (_parser->input->eof &&
 		    parser->state == HTTP_RESPONSE_PARSE_STATE_INIT)
 			return 0;
-		_parser->error = "Stream error";
+		_parser->error = t_strdup_printf("Stream error: %s",
+			i_stream_get_error(_parser->input));
 		return -1;
 	}
 	return 0;
@@ -405,7 +406,6 @@ int http_response_parse_next(struct http_response_parser *parser,
 	response->retry_after = retry_after;
 	response->payload = parser->parser.payload;
 	response->header = parser->parser.msg.header;
-	response->headers = *http_header_get_fields(response->header); /* FIXME: remove in v2.3 */
 	response->connection_options = parser->parser.msg.connection_options;
 	response->connection_close = parser->parser.msg.connection_close;
 	return 1;

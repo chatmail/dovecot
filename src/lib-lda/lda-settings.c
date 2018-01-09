@@ -4,6 +4,7 @@
 #include "hostpid.h"
 #include "settings-parser.h"
 #include "mail-storage-settings.h"
+#include "smtp-submit-settings.h"
 #include "lda-settings.h"
 
 #include <stddef.h>
@@ -18,10 +19,7 @@ static bool lda_settings_check(void *_set, pool_t pool, const char **error_r);
 	{ SET_DEFLIST, name, offsetof(struct lda_settings, field), defines }
 
 static const struct setting_define lda_setting_defines[] = {
-	DEF(SET_STR_VARS, postmaster_address),
 	DEF(SET_STR, hostname),
-	DEF(SET_STR_VARS, submission_host),
-	DEF(SET_STR_VARS, sendmail_path),
 	DEF(SET_STR, rejection_subject),
 	DEF(SET_STR, rejection_reason),
 	DEF(SET_STR, deliver_log_format),
@@ -35,10 +33,7 @@ static const struct setting_define lda_setting_defines[] = {
 };
 
 static const struct lda_settings lda_default_settings = {
-	.postmaster_address = "postmaster@%d",
 	.hostname = "",
-	.submission_host = "",
-	.sendmail_path = "/usr/sbin/sendmail",
 	.rejection_subject = "Rejected: %s",
 	.rejection_reason =
 		"Your message to <%t> was automatically rejected:%n%r",
@@ -52,6 +47,7 @@ static const struct lda_settings lda_default_settings = {
 
 static const struct setting_parser_info *lda_setting_dependencies[] = {
 	&mail_user_setting_parser_info,
+	&smtp_submit_setting_parser_info,
 	NULL
 };
 
@@ -71,22 +67,12 @@ const struct setting_parser_info lda_setting_parser_info = {
 	.dependencies = lda_setting_dependencies
 };
 
-static bool lda_settings_check(void *_set, pool_t pool, const char **error_r)
+static bool lda_settings_check(void *_set, pool_t pool,
+	const char **error_r ATTR_UNUSED)
 {
 	struct lda_settings *set = _set;
 
 	if (*set->hostname == '\0')
 		set->hostname = p_strdup(pool, my_hostdomain());
-	if (set->postmaster_address[0] == SETTING_STRVAR_UNEXPANDED[0] &&
-	    set->postmaster_address[1] == '\0') {
-		/* check for valid looking fqdn in hostname */
-		if (strchr(set->hostname, '.') == NULL) {
-			*error_r = "postmaster_address setting not given";
-			return FALSE;
-		}
-		set->postmaster_address =
-			p_strconcat(pool, SETTING_STRVAR_UNEXPANDED,
-				    "postmaster@", set->hostname, NULL);
-	}
 	return TRUE;
 }

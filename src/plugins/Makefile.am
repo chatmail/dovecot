@@ -10,10 +10,6 @@ if BUILD_SOLR
 FTS_SOLR = fts-solr
 endif
 
-if HAVE_LDAP
-DICT_LDAP = dict-ldap
-endif
-
 if HAVE_APPARMOR
 APPARMOR = apparmor
 endif
@@ -40,8 +36,8 @@ SUBDIRS = \
 	pop3-migration \
 	replication \
 	snarf \
-	stats \
-	imap-stats \
+	old-stats \
+	imap-old-stats \
 	mail-crypt \
 	trash \
 	virtual \

@@ -32,11 +32,11 @@ do_open(struct maildir_mailbox *mbox, const char *path,
 		return 0;
 
 	if (errno == EACCES) {
-		mail_storage_set_critical(&mbox->storage->storage, "%s",
+		mailbox_set_critical(&mbox->box, "%s",
 			mail_error_eacces_msg("open", path));
 	} else {
-		mail_storage_set_critical(&mbox->storage->storage,
-					  "open(%s) failed: %m", path);
+		mailbox_set_critical(&mbox->box,
+				     "open(%s) failed: %m", path);
 	}
 	return -1;
 }
@@ -50,11 +50,10 @@ do_stat(struct maildir_mailbox *mbox, const char *path, struct stat *st)
 		return 0;
 
 	if (errno == EACCES) {
-		mail_storage_set_critical(&mbox->storage->storage, "%s",
+		mailbox_set_critical(&mbox->box, "%s",
 			mail_error_eacces_msg("stat", path));
 	} else {
-		mail_storage_set_critical(&mbox->storage->storage,
-					  "stat(%s) failed: %m", path);
+		mailbox_set_critical(&mbox->box, "stat(%s) failed: %m", path);
 	}
 	return -1;
 }
@@ -103,8 +102,8 @@ maildir_open_mail(struct maildir_mailbox *mbox, struct mail *mail,
 
 static int maildir_mail_stat(struct mail *mail, struct stat *st_r)
 {
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)mail->box;
-	struct index_mail *imail = (struct index_mail *)mail;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(mail->box);
+	struct index_mail *imail = INDEX_MAIL(mail);
 	const char *path;
 	int fd, ret;
 
@@ -126,8 +125,7 @@ static int maildir_mail_stat(struct mail *mail, struct stat *st_r)
 	    (fd = i_stream_get_fd(imail->data.stream)) != -1) {
 		mail->transaction->stats.fstat_lookup_count++;
 		if (fstat(fd, st_r) < 0) {
-			mail_storage_set_critical(mail->box->storage,
-				"fstat(%s) failed: %m",
+			mail_set_critical(mail, "fstat(%s) failed: %m",
 				i_stream_get_name(imail->data.stream));
 			return -1;
 		}
@@ -143,8 +141,7 @@ static int maildir_mail_stat(struct mail *mail, struct stat *st_r)
 		mail->transaction->stats.stat_lookup_count++;
 		path = maildir_save_file_get_path(mail->transaction, mail->seq);
 		if (stat(path, st_r) < 0) {
-			mail_storage_set_critical(mail->box->storage,
-						  "stat(%s) failed: %m", path);
+			mail_set_critical(mail, "stat(%s) failed: %m", path);
 			return -1;
 		}
 	}
@@ -153,7 +150,7 @@ static int maildir_mail_stat(struct mail *mail, struct stat *st_r)
 
 static int maildir_mail_get_received_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct stat st;
 
@@ -169,7 +166,7 @@ static int maildir_mail_get_received_date(struct mail *_mail, time_t *date_r)
 
 static int maildir_mail_get_save_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct stat st;
 
@@ -289,7 +286,7 @@ static int maildir_quick_size_lookup(struct index_mail *mail, bool vsize,
 				     uoff_t *size_r)
 {
 	struct mail *_mail = &mail->mail.mail;
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)_mail->box;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(_mail->box);
 	enum maildir_uidlist_rec_ext_key key;
 	const char *path, *fname, *value;
 
@@ -332,7 +329,7 @@ maildir_handle_size_caching(struct index_mail *mail, bool quick_check,
 			    bool vsize)
 {
 	struct mailbox *box = mail->mail.mail.box;
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)box;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(box);
 	enum mail_fetch_field field;
 	uoff_t size;
 	int pop3_state;
@@ -379,8 +376,8 @@ maildir_handle_size_caching(struct index_mail *mail, bool quick_check,
 
 static int maildir_mail_get_virtual_size(struct mail *_mail, uoff_t *size_r)
 {
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)_mail->box;
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(_mail->box);
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct message_size hdr_size, body_size;
 	struct istream *input;
@@ -424,8 +421,8 @@ static int maildir_mail_get_virtual_size(struct mail *_mail, uoff_t *size_r)
 
 static int maildir_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)_mail->box;
+	struct index_mail *mail = INDEX_MAIL(_mail);
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(_mail->box);
 	struct index_mail_data *data = &mail->data;
 	struct stat st;
 	struct message_size hdr_size, body_size;
@@ -476,8 +473,7 @@ static int maildir_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 		path = maildir_save_file_get_path(_mail->transaction,
 						  _mail->seq);
 		if (stat(path, &st) < 0) {
-			mail_storage_set_critical(_mail->box->storage,
-						  "stat(%s) failed: %m", path);
+			mail_set_critical(_mail, "stat(%s) failed: %m", path);
 			return -1;
 		}
 	}
@@ -492,8 +488,8 @@ static int
 maildir_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 			 const char **value_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)_mail->box;
+	struct index_mail *mail = INDEX_MAIL(_mail);
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(_mail->box);
 	const char *path, *fname = NULL, *end, *guid, *uidl, *order;
 	struct stat st;
 
@@ -520,10 +516,9 @@ maildir_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 				return 0;
 			}
 
-			mail_storage_set_critical(_mail->box->storage,
-				"Maildir %s: Corrupted dovecot-uidlist: "
-				"UID %u had empty GUID, clearing it",
-				mailbox_get_path(_mail->box), _mail->uid);
+			mail_set_critical(_mail,
+				"Maildir: Corrupted dovecot-uidlist: "
+				"UID had empty GUID, clearing it");
 			maildir_uidlist_unset_ext(mbox->uidlist, _mail->uid,
 				MAILDIR_UIDLIST_REC_EXT_GUID);
 		}
@@ -597,8 +592,8 @@ maildir_mail_get_stream(struct mail *_mail, bool get_body ATTR_UNUSED,
 			struct message_size *body_size,
 			struct istream **stream_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)_mail->box;
+	struct index_mail *mail = INDEX_MAIL(_mail);
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(_mail->box);
 	struct index_mail_data *data = &mail->data;
 	bool deleted;
 
@@ -623,7 +618,7 @@ maildir_mail_get_stream(struct mail *_mail, bool get_body ATTR_UNUSED,
 
 static void maildir_update_pop3_uidl(struct mail *_mail, const char *uidl)
 {
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)_mail->box;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(_mail->box);
 	const char *fname;
 
 	if (maildir_mail_get_special(_mail, MAIL_FETCH_STORAGE_ID,
@@ -641,7 +636,7 @@ static void maildir_update_pop3_uidl(struct mail *_mail, const char *uidl)
 
 static void maildir_mail_remove_sizes_from_uidlist(struct mail *mail)
 {
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)mail->box;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(mail->box);
 
 	if (maildir_uidlist_lookup_ext(mbox->uidlist, mail->uid,
 				       MAILDIR_UIDLIST_REC_EXT_VSIZE) != NULL) {
@@ -680,8 +675,8 @@ do_fix_size(struct maildir_mailbox *mbox, const char *path,
 		if (stat(path, &st) < 0) {
 			if (errno == ENOENT)
 				return 0;
-			mail_storage_set_critical(&mbox->storage->storage,
-						  "stat(%s) failed: %m", path);
+			mailbox_set_critical(&mbox->box,
+					     "stat(%s) failed: %m", path);
 			return -1;
 		}
 		ctx->physical_size = st.st_size;
@@ -692,7 +687,7 @@ do_fix_size(struct maildir_mailbox *mbox, const char *path,
 				  ctx->physical_size, info);
 
 	if (rename(path, newpath) == 0) {
-		mail_storage_set_critical(mbox->box.storage,
+		mailbox_set_critical(&mbox->box,
 			"Maildir filename has wrong %c value, "
 			"renamed the file from %s to %s",
 			ctx->wrong_key, path, newpath);
@@ -701,8 +696,8 @@ do_fix_size(struct maildir_mailbox *mbox, const char *path,
 	if (errno == ENOENT)
 		return 0;
 
-	mail_storage_set_critical(&mbox->storage->storage,
-				  "rename(%s, %s) failed: %m", path, newpath);
+	mailbox_set_critical(&mbox->box, "rename(%s, %s) failed: %m",
+			     path, newpath);
 	return -1;
 }
 
@@ -710,7 +705,7 @@ static void
 maildir_mail_remove_sizes_from_filename(struct mail *mail,
 					enum mail_fetch_field field)
 {
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)mail->box;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(mail->box);
 	struct mail_private *pmail = (struct mail_private *)mail;
 	enum maildir_uidlist_rec_flag flags;
 	const char *fname;
@@ -758,22 +753,16 @@ maildir_mail_remove_sizes_from_filename(struct mail *mail,
 	(void)maildir_file_do(mbox, mail->uid, do_fix_size, &ctx);
 }
 
-static void maildir_mail_set_cache_corrupted_reason(struct mail *_mail,
-						    enum mail_fetch_field field,
-						    const char *reason)
+static void maildir_mail_set_cache_corrupted(struct mail *_mail,
+					     enum mail_fetch_field field,
+					     const char *reason)
 {
 	if (field == MAIL_FETCH_PHYSICAL_SIZE ||
 	    field == MAIL_FETCH_VIRTUAL_SIZE) {
 		maildir_mail_remove_sizes_from_uidlist(_mail);
 		maildir_mail_remove_sizes_from_filename(_mail, field);
 	}
-	index_mail_set_cache_corrupted_reason(_mail, field, reason);
-}
-
-static void maildir_mail_set_cache_corrupted(struct mail *_mail,
-					     enum mail_fetch_field field)
-{
-	maildir_mail_set_cache_corrupted_reason(_mail, field, "");
+	index_mail_set_cache_corrupted(_mail, field, reason);
 }
 
 struct mail_vfuncs maildir_mail_vfuncs = {
@@ -803,7 +792,7 @@ struct mail_vfuncs maildir_mail_vfuncs = {
 	maildir_mail_get_stream,
 	index_mail_get_binary_stream,
 	maildir_mail_get_special,
-	index_mail_get_real_mail,
+	index_mail_get_backend_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
 	index_mail_update_modseq,
@@ -812,5 +801,4 @@ struct mail_vfuncs maildir_mail_vfuncs = {
 	index_mail_expunge,
 	maildir_mail_set_cache_corrupted,
 	index_mail_opened,
-	maildir_mail_set_cache_corrupted_reason
 };

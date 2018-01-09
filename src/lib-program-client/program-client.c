@@ -8,6 +8,8 @@
 #include "safe-mkstemp.h"
 #include "istream-private.h"
 #include "istream-seekable.h"
+#include "ostream-dot.h"
+#include "istream-dot.h"
 #include "ostream.h"
 #include "lib-signals.h"
 
@@ -19,7 +21,8 @@
 #define MAX_OUTPUT_MEMORY_BUFFER (1024*128)
 
 static
-void program_client_callback(struct program_client *pclient, int result, void *context)
+void program_client_callback(struct program_client *pclient, int result, void
+			     *context)
 {
 	/* do not call callback when destroying */
 	if (pclient->destroying) return;
@@ -86,8 +89,7 @@ int program_client_close_output(struct program_client *pclient)
 {
 	int ret;
 
-	if (pclient->program_output != NULL)
-		o_stream_destroy(&pclient->program_output);
+	o_stream_destroy(&pclient->program_output);
 	if ((ret = pclient->close_output(pclient)) < 0)
 		return -1;
 	pclient->program_output = NULL;
@@ -106,10 +108,8 @@ void program_client_disconnect_extra_fds(struct program_client *pclient)
 
 	efds = array_get_modifiable(&pclient->extra_fds, &count);
 	for(i = 0; i < count; i++) {
-		if (efds[i].input != NULL)
-			i_stream_unref(&efds[i].input);
-		if (efds[i].io != NULL)
-			io_remove(&efds[i].io);
+		i_stream_unref(&efds[i].input);
+		io_remove(&efds[i].io);
 		if (efds[i].parent_fd != -1 && close(efds[i].parent_fd) < 0)
 			i_error("close(fd=%d) failed: %m", efds[i].parent_fd);
 	}
@@ -118,16 +118,15 @@ void program_client_disconnect_extra_fds(struct program_client *pclient)
 void program_client_disconnected(struct program_client *pclient)
 {
 	if (pclient->program_input != NULL) {
-		if (pclient->output_seekable)
+		if (pclient->output_seekable ||
+		    pclient->set.use_dotstream)
 			i_stream_unref(&pclient->program_input);
 		else
 			i_stream_destroy(&pclient->program_input);
 	}
-	if (pclient->program_output != NULL)
-		o_stream_destroy(&pclient->program_output);
+	o_stream_destroy(&pclient->program_output);
 
-	if (pclient->io != NULL)
-		io_remove(&pclient->io);
+	io_remove(&pclient->io);
 
 	if (pclient->fd_in != -1 && close(pclient->fd_in) < 0)
 		i_error("close(%s) failed: %m", pclient->path);
@@ -158,10 +157,8 @@ void program_client_disconnect(struct program_client *pclient, bool force)
 		return;
 	pclient->disconnected = TRUE;
 
-	if (pclient->to != NULL)
-		timeout_remove(&pclient->to);
-	if (pclient->io != NULL)
-		io_remove(&pclient->io);
+	timeout_remove(&pclient->to);
+	io_remove(&pclient->io);
 
 	if ((ret = program_client_close_output(pclient)) < 0)
 		pclient->other_error = TRUE;
@@ -171,7 +168,8 @@ void program_client_disconnect(struct program_client *pclient, bool force)
 	pclient->disconnect(pclient, force);
 }
 
-void program_client_fail(struct program_client *pclient, enum program_client_error error)
+void program_client_fail(struct program_client *pclient,
+			 enum program_client_error error)
 {
 	if (pclient->error != PROGRAM_CLIENT_ERROR_NONE)
 		return;
@@ -188,7 +186,7 @@ bool program_client_input_pending(struct program_client *pclient)
 
 	if (pclient->program_input != NULL &&
 	    !pclient->program_input->closed &&
-	    !i_stream_is_eof(pclient->program_input)) {
+	    !i_stream_read_eof(pclient->program_input)) {
 		return TRUE;
 	}
 
@@ -197,7 +195,7 @@ bool program_client_input_pending(struct program_client *pclient)
 		for(i = 0; i < count; i++) {
 			if (efds[i].input != NULL &&
 			    !efds[i].input->closed &&
-			    !i_stream_is_eof(efds[i].input)) {
+			    !i_stream_read_eof(efds[i].input)) {
 				return TRUE;
 			}
 		}
@@ -211,8 +209,7 @@ int program_client_program_output(struct program_client *pclient)
 {
 	struct istream *input = pclient->input;
 	struct ostream *output = pclient->program_output;
-	const unsigned char *data;
-	size_t size;
+	enum ostream_send_istream_result res;
 	int ret = 0;
 
 	if ((ret = o_stream_flush(output)) <= 0) {
@@ -226,50 +223,55 @@ int program_client_program_output(struct program_client *pclient)
 		return ret;
 	}
 
+	if (!pclient->output_dot_created &&
+	    pclient->set.use_dotstream &&
+	    output != NULL) {
+		pclient->dot_output = o_stream_create_dot(output, FALSE);
+		pclient->output_dot_created = TRUE;
+	}
+	if (pclient->dot_output != NULL)
+		output = pclient->dot_output;
+
 	if (input != NULL && output != NULL) {
-		do {
-			while ((data=i_stream_get_data(input, &size)) != NULL) {
-				ssize_t sent;
-
-				if ((sent=o_stream_send(output, data, size)) < 0) {
-					i_error("write(%s) failed: %s",
-						o_stream_get_name(output),
-						o_stream_get_error(output));
-					program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
-					return -1;
-				}
-
-				if (sent == 0)
-					return 0;
-				i_stream_skip(input, sent);
-			}
-		} while ((ret = i_stream_read(input)) > 0);
-
-		if (ret == 0)
+		res = o_stream_send_istream(output, input);
+		switch (res) {
+		case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
+			i_stream_unref(&pclient->input);
+			input = NULL;
+			break;
+		case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
 			return 1;
-
-		if (ret < 0) {
-			if (input->stream_errno != 0) {
-				i_error("read(%s) failed: %s",
-					i_stream_get_name(input),
-					i_stream_get_error(input));
-				program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
-				return -1;
-			} else if (!i_stream_have_bytes_left(input)) {
-				i_stream_unref(&pclient->input);
-				input = NULL;
-
-				if ((ret = o_stream_flush(output)) <= 0) {
-					if (ret < 0) {
-						i_error("write(%s) failed: %s",
-							o_stream_get_name(output),
-							o_stream_get_error(output));
-						program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
-					}
-					return ret;
-				}
-			}
+		case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
+			return 0;
+		case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
+			i_error("read(%s) failed: %s",
+				i_stream_get_name(input),
+				i_stream_get_error(input));
+			program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
+			return -1;
+		case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+			i_error("write(%s) failed: %s",
+				o_stream_get_name(output),
+				o_stream_get_error(output));
+			program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
+			return -1;
 		}
+	}
+
+	if (input == NULL &&
+	    output != NULL &&
+	    pclient->dot_output != NULL) {
+		if ((ret = o_stream_finish(pclient->dot_output)) <= 0) {
+			if (ret < 0) {
+				i_error("write(%s) failed: %s",
+					o_stream_get_name(output),
+					o_stream_get_error(output));
+					program_client_fail(pclient,
+							    PROGRAM_CLIENT_ERROR_IO);
+			}
+			return ret;
+		}
+		o_stream_unref(&pclient->dot_output);
 	}
 
 	if (input == NULL) {
@@ -287,6 +289,7 @@ void program_client_program_input(struct program_client *pclient)
 {
 	struct istream *input = pclient->program_input;
 	struct ostream *output = pclient->output;
+	enum ostream_send_istream_result res;
 	const unsigned char *data;
 	size_t size;
 	int ret = 0;
@@ -305,35 +308,64 @@ void program_client_program_input(struct program_client *pclient)
 	}
 
 	if (input != NULL) {
-		while ((ret = i_stream_read_data(input, &data, &size, 0)) > 0) {
-			if (output != NULL) {
-				ssize_t sent;
-
-				if ((sent=o_stream_send(output, data, size)) < 0) {
-					i_error("write(%s) failed: %s",
-						o_stream_get_name(output),
-						o_stream_get_error(output));
-					program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
-					return;
-				}
-				if (sent == 0)
-					return;
-				size = (size_t)sent;
-			}
-
-			i_stream_skip(input, size);
+		if (!pclient->input_dot_created &&
+		    pclient->set.use_dotstream) {
+			pclient->dot_input = i_stream_create_dot(input, FALSE);
+			pclient->input_dot_created = TRUE;
 		}
-
-		if (ret < 0) {
-			if (input->stream_errno != 0) {
+		if (pclient->dot_input != NULL)
+			input = pclient->dot_input;
+		else if (pclient->set.use_dotstream) {
+			/* just read it empty */
+			while(i_stream_read_more(input, &data,
+						 &size) > 0)
+				i_stream_skip(input, size);
+			output = NULL;
+		}
+		if (output != NULL) {
+			res = o_stream_send_istream(output, input);
+			switch (res) {
+			case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
+				if (pclient->set.use_dotstream &&
+				    pclient->dot_input != NULL) {
+					i_stream_unref(&pclient->dot_input);
+					input = pclient->program_input;
+				}
+				break;
+			case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
+			case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
+				return;
+			case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
 				i_error("read(%s) failed: %s",
 					i_stream_get_name(input),
 					i_stream_get_error(input));
-				program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
+				program_client_fail(pclient,
+						    PROGRAM_CLIENT_ERROR_IO);
 				return;
-			} else {
-				if (!program_client_input_pending(pclient)) {
-					program_client_disconnect(pclient, FALSE);
+			case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+				i_error("write(%s) failed: %s",
+					o_stream_get_name(output),
+					o_stream_get_error(output));
+				program_client_fail(pclient,
+						    PROGRAM_CLIENT_ERROR_IO);
+				return;
+			}
+		} else {
+			while ((ret =
+				i_stream_read_more(input, &data, &size)) > 0 ||
+			       ret == -2) {
+				i_stream_skip(input, size);
+			}
+
+			if (ret == 0)
+				return;
+			if (ret < 0) {
+				if (input->stream_errno != 0) {
+					i_error("read(%s) failed: %s",
+						i_stream_get_name(input),
+						i_stream_get_error(input));
+					program_client_fail(pclient,
+							    PROGRAM_CLIENT_ERROR_IO);
 					return;
 				}
 			}
@@ -357,7 +389,7 @@ void program_client_extra_fd_input(struct program_client_extra_fd *efd)
 	i_assert(efd->callback != NULL);
 	efd->callback(efd->context, efd->input);
 
-	if (efd->input->closed || i_stream_is_eof(efd->input)) {
+	if (efd->input->closed || i_stream_read_eof(efd->input)) {
 		if (!program_client_input_pending(pclient))
 			program_client_disconnect(pclient, FALSE);
 	}
@@ -368,8 +400,7 @@ int program_client_connected(struct program_client *pclient)
 	int ret = 1;
 
 	pclient->start_time = ioloop_timeval;
-	if (pclient->to != NULL)
-		timeout_remove(&pclient->to);
+	timeout_remove(&pclient->to);
 	if (pclient->set.input_idle_timeout_msecs != 0) {
 		pclient->to =
 			timeout_add(pclient->set.input_idle_timeout_msecs,
@@ -388,8 +419,10 @@ int program_client_connected(struct program_client *pclient)
 	return ret;
 }
 
-void program_client_init(struct program_client *pclient, pool_t pool, const char *path,
-			 const char *const *args, const struct program_client_settings *set)
+void program_client_init(struct program_client *pclient, pool_t pool,
+			 const char *path,
+			 const char *const *args,
+			 const struct program_client_settings *set)
 {
 	pclient->pool = pool;
 	pclient->path = p_strdup(pool, path);
@@ -401,19 +434,19 @@ void program_client_init(struct program_client *pclient, pool_t pool, const char
 	pclient->fd_out = -1;
 }
 
-void program_client_set_input(struct program_client *pclient, struct istream *input)
+void program_client_set_input(struct program_client *pclient,
+			      struct istream *input)
 {
-	if (pclient->input != NULL)
-		i_stream_unref(&pclient->input);
+	i_stream_unref(&pclient->input);
 	if (input != NULL)
 		i_stream_ref(input);
 	pclient->input = input;
 }
 
-void program_client_set_output(struct program_client *pclient, struct ostream *output)
+void program_client_set_output(struct program_client *pclient,
+			       struct ostream *output)
 {
-	if (pclient->output != NULL)
-		o_stream_unref(&pclient->output);
+	o_stream_unref(&pclient->output);
 	if (output != NULL)
 		o_stream_ref(output);
 	pclient->output = output;
@@ -421,10 +454,10 @@ void program_client_set_output(struct program_client *pclient, struct ostream *o
 	i_free(pclient->temp_prefix);
 }
 
-void program_client_set_output_seekable(struct program_client *pclient, const char *temp_prefix)
+void program_client_set_output_seekable(struct program_client *pclient,
+					const char *temp_prefix)
 {
-	if (pclient->output != NULL)
-		o_stream_unref(&pclient->output);
+	o_stream_unref(&pclient->output);
 	pclient->temp_prefix = i_strdup(temp_prefix);
 	pclient->output_seekable = TRUE;
 }
@@ -441,7 +474,8 @@ struct istream *program_client_get_output_seekable(struct program_client *pclien
 
 #undef program_client_set_extra_fd
 void program_client_set_extra_fd(struct program_client *pclient, int fd,
-				 program_client_fd_callback_t *callback, void *context)
+				 program_client_fd_callback_t *callback,
+				 void *context)
 {
 	struct program_client_extra_fd *efds;
 	struct program_client_extra_fd *efd = NULL;
@@ -469,7 +503,8 @@ void program_client_set_extra_fd(struct program_client *pclient, int fd,
 	efd->context = context;
 }
 
-void program_client_set_env(struct program_client *pclient, const char *name, const char *value)
+void program_client_set_env(struct program_client *pclient, const char *name,
+			    const char *value)
 {
 	const char *env;
 
@@ -486,17 +521,14 @@ void program_client_init_streams(struct program_client *pclient)
 	if (pclient->fd_out >= 0) {
 		pclient->program_output =
 			o_stream_create_fd(pclient->fd_out,
-					   MAX_OUTPUT_BUFFER_SIZE, FALSE);
+					   MAX_OUTPUT_BUFFER_SIZE);
 		o_stream_set_name(pclient->program_output, "program stdin");
+		o_stream_set_no_error_handling(pclient->program_output, TRUE);
 	}
 	if (pclient->fd_in >= 0) {
-		struct istream *input;
-
-		input = i_stream_create_fd(pclient->fd_in, (size_t)-1, FALSE);
-
-		pclient->program_input = input;
+		pclient->program_input =
+			i_stream_create_fd(pclient->fd_in, (size_t)-1);
 		i_stream_set_name(pclient->program_input, "program stdout");
-
 		pclient->io = io_add(pclient->fd_in, IO_READ,
 				     program_client_program_input, pclient);
 	}
@@ -510,12 +542,13 @@ void program_client_init_streams(struct program_client *pclient)
 		for(i = 0; i < count; i++) {
 			i_assert(efds[i].parent_fd >= 0);
 			efds[i].input = i_stream_create_fd
-				(efds[i].parent_fd, (size_t)-1, FALSE);
+				(efds[i].parent_fd, (size_t)-1);
 			i_stream_set_name(efds[i].input,
 					  t_strdup_printf("program output fd=%d",
 							  efds[i].child_fd));
 			efds[i].io = io_add(efds[i].parent_fd, IO_READ,
-					    program_client_extra_fd_input, &efds[i]);
+					    program_client_extra_fd_input,
+					    &efds[i]);
 		}
 	}
 }
@@ -532,19 +565,14 @@ void program_client_destroy(struct program_client **_pclient)
 
 	i_assert(pclient->callback == NULL);
 
-	if (pclient->input != NULL)
-		i_stream_unref(&pclient->input);
-	if (pclient->program_input != NULL)
-		i_stream_unref(&pclient->program_input);
-	if (pclient->program_output != NULL)
-		o_stream_unref(&pclient->program_output);
-	if (pclient->output != NULL)
-		o_stream_unref(&pclient->output);
-	if (pclient->seekable_output != NULL)
-		i_stream_unref(&pclient->seekable_output);
+	i_stream_unref(&pclient->input);
+	i_stream_unref(&pclient->dot_input);
+	i_stream_unref(&pclient->program_input);
+	o_stream_unref(&pclient->program_output);
+	o_stream_unref(&pclient->output);
+	i_stream_unref(&pclient->seekable_output);
 
-	if (pclient->io != NULL)
-		io_remove(&pclient->io);
+	io_remove(&pclient->io);
 	i_free(pclient->temp_prefix);
 
 	if (pclient->destroy != NULL)
@@ -584,8 +612,21 @@ int program_client_create(const char *uri, const char *const *args,
 			set);
 		return 0;
 	} else if (strncmp(uri, "unix:", 5) == 0) {
-		*pc_r = program_client_remote_create(
+		*pc_r = program_client_unix_create(
 			uri+5,
+			args,
+			set, noreply);
+		return 0;
+	} else if (strncmp(uri, "tcp:", 4) == 0) {
+		const char *host;
+		in_port_t port;
+		if (net_str2hostport(uri+4, 0, &host, &port) < 0 || port == 0) {
+			*error_r = t_strdup_printf(
+				"Invalid tcp syntax, must be host:port in '%s'", uri+4);
+			return -1;
+		}
+		*pc_r = program_client_net_create(
+			host, port,
 			args,
 			set, noreply);
 		return 0;
@@ -596,7 +637,6 @@ int program_client_create(const char *uri, const char *const *args,
 		return -1;
 	}
 }
-
 
 static
 void program_client_run_callback(int result, int *context)
@@ -631,10 +671,10 @@ int program_client_run(struct program_client *pclient)
 }
 
 #undef program_client_run_async
-void program_client_run_async(struct program_client *pclient, program_client_callback_t *callback, void *context)
+void program_client_run_async(struct program_client *pclient,
+			      program_client_callback_t *callback,
+			      void *context)
 {
-	int ret;
-
 	i_assert(callback != NULL);
 
 	pclient->disconnected = FALSE;
@@ -643,21 +683,6 @@ void program_client_run_async(struct program_client *pclient, program_client_cal
 
 	pclient->callback = callback;
 	pclient->context = context;
-	if ((ret = program_client_connect(pclient)) >= 0) {
-		/* run output */
-		if (ret > 0 && pclient->program_output != NULL &&
-		    (ret = o_stream_flush(pclient->program_output)) == 0) {
-			o_stream_set_flush_callback
-				(pclient->program_output,
-				 program_client_program_output, pclient);
-		}
-		if (ret < 0) {
-			i_error("write(%s) failed: %s",
-				o_stream_get_name(pclient->program_output),
-				o_stream_get_error(pclient->program_output));
-			pclient->error = PROGRAM_CLIENT_ERROR_IO;
-			program_client_callback(pclient, ret, context);
-			return;
-		}
-	}
+	if (program_client_connect(pclient) < 0)
+		program_client_fail(pclient, PROGRAM_CLIENT_ERROR_IO);
 }

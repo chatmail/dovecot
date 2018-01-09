@@ -3,7 +3,6 @@
 #include "lib.h"
 #include "array.h"
 #include "ioloop.h"
-#include "fd-set-nonblock.h"
 #include "fdpass.h"
 #include "hostpid.h"
 #include "connection.h"
@@ -327,8 +326,8 @@ static void imap_client_input_idle_cmd(struct imap_client *client)
 
 	/* we should read either DONE or disconnection. also handle if client
 	   sends DONE\nIDLE simply to recreate the IDLE. */
-	ret = i_stream_read_data(client->input, &data, &size,
-				 client->next_read_threshold);
+	ret = i_stream_read_bytes(client->input, &data, &size,
+				  client->next_read_threshold + 1);
 	if (size == 0) {
 		if (ret < 0)
 			imap_client_disconnected(&client);
@@ -430,70 +429,60 @@ static void imap_client_add_idle_keepalive_timeout(struct imap_client *client)
 						 &client->state.remote_ip,
 						 interval);
 
-	if (client->to_keepalive!= NULL)
-		timeout_remove(&client->to_keepalive);
+	timeout_remove(&client->to_keepalive);
 	client->to_keepalive = timeout_add(interval, keepalive_timeout, client);
 }
 
 static const struct var_expand_table *
 imap_client_get_var_expand_table(struct imap_client *client)
 {
-	static struct var_expand_table static_tab[] = {
-		{ 'u', NULL, "user" },
-		{ 'n', NULL, "username" },
-		{ 'd', NULL, "domain" },
-		{ 's', NULL, "service" },
-		{ 'h', NULL, "home" },
-		{ 'l', NULL, "lip" },
-		{ 'r', NULL, "rip" },
-		{ 'p', NULL, "pid" },
-		{ 'i', NULL, "uid" },
-		{ '\0', NULL, "gid" },
-		{ '\0', NULL, "session" },
-		{ '\0', NULL, "auth_user" },
-		{ '\0', NULL, "auth_username" },
-		{ '\0', NULL, "auth_domain" },
+	const char *username = t_strcut(client->state.username, '@');
+	const char *domain = i_strchr_to_next(client->state.username, '@');
+	const char *local_ip = client->state.local_ip.family == 0 ? NULL :
+		net_ip2addr(&client->state.local_ip);
+	const char *remote_ip = client->state.remote_ip.family == 0 ? NULL :
+		net_ip2addr(&client->state.remote_ip);
+
+	const char *auth_user, *auth_username, *auth_domain;
+	imap_client_parse_userdb_fields(client, &auth_user);
+	if (auth_user == NULL) {
+		auth_user = client->state.username;
+		auth_username = username;
+		auth_domain = domain;
+	} else {
+		auth_username = t_strcut(auth_user, '@');
+		auth_domain = i_strchr_to_next(auth_user, '@');
+	}
+
+	const struct var_expand_table stack_tab[] = {
+		{ 'u', client->state.username, "user" },
+		{ 'n', username, "username" },
+		{ 'd', domain, "domain" },
+		{ 's', "imap-hibernate", "service" },
+		{ 'h', NULL /* we shouldn't need this */, "home" },
+		{ 'l', local_ip, "lip" },
+		{ 'r', remote_ip, "rip" },
+		{ 'p', my_pid, "pid" },
+		{ 'i', dec2str(client->state.uid), "uid" },
+		{ '\0', dec2str(client->state.gid), "gid" },
+		{ '\0', client->state.session_id, "session" },
+		{ '\0', auth_user, "auth_user" },
+		{ '\0', auth_username, "auth_username" },
+		{ '\0', auth_domain, "auth_domain" },
 		/* NOTE: keep this synced with lib-storage's
 		   mail_user_var_expand_table() */
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
-	const char *auth_user;
 
-	tab = t_malloc(sizeof(static_tab));
-	memcpy(tab, static_tab, sizeof(static_tab));
-
-	tab[0].value = client->state.username;
-	tab[1].value = t_strcut(client->state.username, '@');
-	tab[2].value = strchr(client->state.username, '@');
-	if (tab[2].value != NULL) tab[2].value++;
-	tab[3].value = "imap-hibernate";
-	tab[4].value = NULL; /* we shouldn't need this */
-	tab[5].value = client->state.local_ip.family == 0 ? NULL :
-		net_ip2addr(&client->state.local_ip);
-	tab[6].value = client->state.remote_ip.family == 0 ? NULL :
-		net_ip2addr(&client->state.remote_ip);
-	tab[7].value = my_pid;
-	tab[8].value = dec2str(client->state.uid);
-	tab[9].value = dec2str(client->state.gid);
-	tab[10].value = client->state.session_id;
-
-	imap_client_parse_userdb_fields(client, &auth_user);
-	if (auth_user == NULL) {
-		tab[11].value = tab[0].value;
-		tab[12].value = tab[1].value;
-		tab[13].value = tab[2].value;
-	} else {
-		tab[11].value = auth_user;
-		tab[12].value = t_strcut(auth_user, '@');
-		tab[13].value = strchr(auth_user, '@');
-		if (tab[13].value != NULL) tab[13].value++;
-	}
+	tab = t_malloc_no0(sizeof(stack_tab));
+	memcpy(tab, stack_tab, sizeof(stack_tab));
 	return tab;
 }
 
-static const char *
-imap_client_var_expand_func_userdb(const char *data, void *context)
+static int
+imap_client_var_expand_func_userdb(const char *data, void *context,
+				   const char **value_r, const char **error_r ATTR_UNUSED)
 {
 	const char *const *fields = context;
 	const char *field_name = t_strdup_printf("%s=",t_strcut(data, ':'));
@@ -507,7 +496,9 @@ imap_client_var_expand_func_userdb(const char *data, void *context)
 		}
 	}
 
-	return value != NULL ? value : default_value;
+	*value_r = value != NULL ? value : default_value;
+
+	return 1;
 }
 
 static void imap_client_io_activate_user(struct imap_client *client)
@@ -538,7 +529,7 @@ imap_client_create(int fd, const struct imap_client_state *state)
 	struct imap_client *client;
 	pool_t pool = pool_alloconly_create("imap client", 256);
 	void *statebuf;
-	const char *ident;
+	const char *ident, *error;
 
 	i_assert(state->username != NULL);
 	i_assert(state->mail_log_prefix != NULL);
@@ -548,8 +539,8 @@ imap_client_create(int fd, const struct imap_client_state *state)
 	client = p_new(pool, struct imap_client, 1);
 	client->pool = pool;
 	client->fd = fd;
-	client->input = i_stream_create_fd(fd, IMAP_MAX_INBUF, FALSE);
-	client->output = o_stream_create_fd(fd, IMAP_MAX_OUTBUF, FALSE);
+	client->input = i_stream_create_fd(fd, IMAP_MAX_INBUF);
+	client->output = o_stream_create_fd(fd, IMAP_MAX_OUTBUF);
 	client->state = *state;
 	client->state.username = p_strdup(pool, state->username);
 	client->state.session_id = p_strdup(pool, state->session_id);
@@ -566,9 +557,12 @@ imap_client_create(int fd, const struct imap_client_state *state)
 		char **fields = p_strsplit_tabescaped(unsafe_data_stack_pool,
 						      client->state.userdb_fields);
 		str = t_str_new(256);
-		var_expand_with_funcs(str, state->mail_log_prefix,
-				      imap_client_get_var_expand_table(client),
-				      funcs, fields);
+		if (var_expand_with_funcs(str, state->mail_log_prefix,
+					  imap_client_get_var_expand_table(client),
+					  funcs, fields, &error) <= 0) {
+			i_error("Failed to expand mail_log_prefix=%s: %s",
+				state->mail_log_prefix, error);
+		}
 		client->log_prefix = p_strdup(pool, str_c(str));
 	} T_END;
 
@@ -590,16 +584,12 @@ static void imap_client_stop(struct imap_client *client)
 
 	if (client->unhibernate_queued)
 		priorityq_remove(unhibernate_queue, &client->item);
-	if (client->io != NULL)
-		io_remove(&client->io);
-	if (client->to_keepalive != NULL)
-		timeout_remove(&client->to_keepalive);
+	io_remove(&client->io);
+	timeout_remove(&client->to_keepalive);
 
 	array_foreach_modifiable(&client->notifys, notify) {
-		if (notify->io != NULL)
-			io_remove(&notify->io);
-		if (notify->fd != -1)
-			i_close_fd(&notify->fd);
+		io_remove(&notify->io);
+		i_close_fd(&notify->fd);
 	}
 }
 
@@ -722,7 +712,6 @@ void imap_clients_deinit(void)
 		imap_client_io_activate_user(client);
 		imap_client_destroy(&client, "Shutting down");
 	}
-	if (to_unhibernate != NULL)
-		timeout_remove(&to_unhibernate);
+	timeout_remove(&to_unhibernate);
 	priorityq_deinit(&unhibernate_queue);
 }

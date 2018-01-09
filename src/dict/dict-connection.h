@@ -33,7 +33,7 @@ struct dict_connection {
 	ARRAY(struct dict_connection_cmd *) cmds;
 	unsigned int async_id_counter;
 
-	unsigned int destroyed:1;
+	bool destroyed:1;
 };
 
 struct dict_connection *dict_connection_create(int fd);

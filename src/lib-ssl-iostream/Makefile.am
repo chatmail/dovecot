@@ -17,13 +17,13 @@ libssl_iostream_openssl_la_SOURCES = \
 	iostream-openssl.c \
 	iostream-openssl-common.c \
 	iostream-openssl-context.c \
-	iostream-openssl-params.c \
 	istream-openssl.c \
 	ostream-openssl.c
 endif
 
 libssl_iostream_la_SOURCES = \
-	iostream-ssl.c
+	iostream-ssl.c \
+	iostream-ssl-context-cache.c
 
 noinst_HEADERS = \
 	dovecot-openssl-common.h

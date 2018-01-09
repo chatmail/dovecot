@@ -5,7 +5,6 @@
 
 #include "http-header.h"
 
-#define http_response_header http_header_field /* FIXME: remove in v2.3 */
 #define HTTP_RESPONSE_STATUS_INTERNAL 9000
 
 enum http_response_payload_type {
@@ -27,12 +26,9 @@ struct http_response {
 	const struct http_header *header;
 	struct istream *payload;
 
-	/* FIXME: remove in v2.3 */
-	ARRAY_TYPE(http_header_field) headers;
-
 	ARRAY_TYPE(const_string) connection_options;
 
-	unsigned int connection_close:1;
+	bool connection_close:1;
 };
 
 void

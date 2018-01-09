@@ -1,0 +1,46 @@
+.\"                                      Hey, EMACS: -*- nroff -*-
+.\" First parameter, NAME, should be all caps
+.\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
+.\" other parameters are allowed: see man(7), man(1)
+.TH "MAILDIRMAKE.DOVECOT" "1" "23 November 2005"
+.\" Please adjust this date whenever revising the manpage.
+.\"
+.\" Some roff macros, for reference:
+.\" .nh        disable hyphenation
+.\" .hy        enable hyphenation
+.\" .ad l      left justify
+.\" .ad b      justify to both left and right margins
+.\" .nf        disable filling
+.\" .fi        enable filling
+.\" .br        insert line break
+.\" .sp <n>    insert n+1 empty lines
+.\" for manpage-specific macros, see man(7)
+.SH NAME
+maildirmake.dovecot \- creates maildirs and maildir subfolders
+.SH SYNOPSIS
+.B maildirmake.dovecot
+\fBdirectory\fR [ \fRowner\fR ] \fR
+.br
+.SH DESCRIPTION
+.\" TeX users may be more comfortable with the \fB<whatever>\fP and
+.\" \fI<whatever>\fP escape sequences to invode bold face and italics, 
+.\" respectively.
+\fBmaildirmake.dovecot\fP creates a maildir and its maildir subfolders (cur, new, tmp).
+\fBdirectory\fP is the name of the new maildir. If \fBdirectory\fP exists cur, new, tmp directories are created inside it.
+.TP
+You can specify \fBowner\fP to change directories ownership if you have ownership modification permission.
+.TP
+\fBmaildirmake.dovecot\fP is very basic. It is strongly recommended to use \fBmaildirmake\fP if you want to do serious maildir management.
+.SH OPTIONS
+.TP
+\fB-h\fP
+Show options summary and exits immediately.
+.SH SEE ALSO
+.BR maildirmake (1).
+.BR maildir (5).
+.SH AUTHOR
+.TP
+dovecot was written by Timo Sirainen <tss@iki.fi>. maildirmake.dovecot script was written by Jaldhar H. Vyas
+.PP
+This manual page was written by Henry Precheur <henry@precheur.org>,
+for the Debian project (but may be used by others).

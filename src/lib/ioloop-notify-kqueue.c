@@ -11,7 +11,6 @@
 
 #include "ioloop-private.h"
 #include "llist.h"
-#include "fd-close-on-exec.h"
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -118,8 +117,7 @@ void io_loop_notify_handler_deinit(struct ioloop *ioloop)
 		io_remove(&_io);
 	}
 
-	if (ctx->event_io)
-		io_remove(&ctx->event_io);
+	io_remove(&ctx->event_io);
 	if (close(ctx->kq) < 0)
 		i_error("close(kqueue notify) failed: %m");
 	i_free(ctx);
@@ -217,8 +215,7 @@ int io_loop_extract_notify_fd(struct ioloop *ioloop)
 	}
 	for (io = ctx->notifies; io != NULL; io = io->next)
 		io->fd = -1;
-	if (ctx->event_io != NULL)
-		io_remove(&ctx->event_io);
+	io_remove(&ctx->event_io);
 	fd = ctx->kq;
 	ctx->kq = new_kq;
 	return fd;

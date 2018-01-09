@@ -32,11 +32,11 @@ enum director_socket_type {
 	DIRECTOR_SOCKET_TYPE_USERDB,
 	DIRECTOR_SOCKET_TYPE_AUTHREPLY,
 	DIRECTOR_SOCKET_TYPE_RING,
-	DIRECTOR_SOCKET_TYPE_DOVEADM
+	DIRECTOR_SOCKET_TYPE_DOVEADM,
+	DIRECTOR_SOCKET_TYPE_PROXY_NOTIFY,
 };
 
 static struct director *director;
-static struct notify_connection *notify_conn;
 static struct timeout *to_proctitle_refresh;
 static ARRAY(enum director_socket_type) listener_socket_types;
 
@@ -53,20 +53,27 @@ static unsigned int director_total_users_count(void)
 static void director_refresh_proctitle_timeout(void *context ATTR_UNUSED)
 {
 	static uint64_t prev_requests = 0, prev_input = 0, prev_output;
+	static uint64_t prev_incoming_requests = 0;
 	string_t *str;
 
 	str = t_str_new(64);
 	str_printfa(str, "[%u users", director_total_users_count());
+	if (director->requests_delayed_count > 0)
+		str_printfa(str, ", %u delayed", director->requests_delayed_count);
 	if (director->users_moving_count > 0)
 		str_printfa(str, ", %u moving", director->users_moving_count);
-	str_printfa(str, ", %lu req/s",
-		    (unsigned long)(director->num_requests - prev_requests));
-	str_printfa(str, ", %llu+%llu kB/s",
-		    (unsigned long long)(director->ring_traffic_input - prev_input)/1024,
-		    (unsigned long long)(director->ring_traffic_output - prev_output)/1024);
+	if (director->users_kicking_count > 0)
+		str_printfa(str, ", %u kicking", director->users_kicking_count);
+	str_printfa(str, ", %"PRIu64"+%"PRIu64" req/s",
+		    director->num_requests - prev_requests,
+		    director->num_incoming_requests - prev_incoming_requests);
+	str_printfa(str, ", %"PRIu64"+%"PRIu64" kB/s",
+		    (director->ring_traffic_input - prev_input)/1024,
+		    (director->ring_traffic_output - prev_output)/1024);
 	str_append_c(str, ']');
 
 	prev_requests = director->num_requests;
+	prev_incoming_requests = director->num_incoming_requests;
 	prev_input = director->ring_traffic_input;
 	prev_output = director->ring_traffic_output;
 
@@ -101,29 +108,26 @@ director_socket_type_get_from_name(const char *path)
 	else if (strcmp(suffix, "admin") == 0 ||
 		 strcmp(suffix, "doveadm") == 0)
 		return DIRECTOR_SOCKET_TYPE_DOVEADM;
+	else if (strcmp(suffix, "notify") == 0)
+		return DIRECTOR_SOCKET_TYPE_PROXY_NOTIFY;
 	else
 		return DIRECTOR_SOCKET_TYPE_UNKNOWN;
 }
 
 static enum director_socket_type
-listener_get_socket_type_fallback(const struct director_settings *set,
-				  int listen_fd)
+listener_get_socket_type_fallback(int listen_fd)
 {
 	in_port_t local_port;
 
 	if (net_getsockname(listen_fd, NULL, &local_port) == 0 &&
 	    local_port != 0) {
 		/* TCP/IP connection */
-		if (local_port == set->director_doveadm_port)
-			return DIRECTOR_SOCKET_TYPE_DOVEADM;
-		else
-			return DIRECTOR_SOCKET_TYPE_RING;
+		return DIRECTOR_SOCKET_TYPE_RING;
 	}
 	return DIRECTOR_SOCKET_TYPE_AUTH;
 }
 
-static void listener_sockets_init(const struct director_settings *set,
-				  struct ip_addr *listen_ip_r,
+static void listener_sockets_init(struct ip_addr *listen_ip_r,
 				  in_port_t *listen_port_r)
 {
 	const char *name;
@@ -143,7 +147,7 @@ static void listener_sockets_init(const struct director_settings *set,
 		type = director_socket_type_get_from_name(name);
 		if (type == DIRECTOR_SOCKET_TYPE_UNKNOWN) {
 			/* mainly for backwards compatibility */
-			type = listener_get_socket_type_fallback(set, listen_fd);
+			type = listener_get_socket_type_fallback(listen_fd);
 		}
 		if (type == DIRECTOR_SOCKET_TYPE_RING && *listen_port_r == 0 &&
 		    net_getsockname(listen_fd, &ip, &port) == 0 && port > 0) {
@@ -177,12 +181,8 @@ static void client_connected(struct master_service_connection *conn)
 	bool userdb;
 
 	if (conn->fifo) {
-		if (notify_conn != NULL) {
-			i_error("Received another proxy-notify connection");
-			return;
-		}
 		master_service_client_connection_accept(conn);
-		notify_conn = notify_connection_init(director, conn->fd);
+		notify_connection_init(director, conn->fd, TRUE);
 		return;
 	}
 
@@ -221,6 +221,10 @@ static void client_connected(struct master_service_connection *conn)
 	case DIRECTOR_SOCKET_TYPE_DOVEADM:
 		master_service_client_connection_accept(conn);
 		(void)doveadm_connection_init(director, conn->fd);
+		break;
+	case DIRECTOR_SOCKET_TYPE_PROXY_NOTIFY:
+		master_service_client_connection_accept(conn);
+		notify_connection_init(director, conn->fd, FALSE);
 		break;
 	}
 }
@@ -270,7 +274,7 @@ static void main_preinit(void)
 	}
 	set = master_service_settings_get_others(master_service)[0];
 
-	listener_sockets_init(set, &listen_ip, &listen_port);
+	listener_sockets_init(&listen_ip, &listen_port);
 	if (listen_port == 0 && *set->director_servers != '\0') {
 		i_fatal("No inet_listeners defined for director service "
 			"(for standalone keep director_servers empty)");
@@ -278,7 +282,8 @@ static void main_preinit(void)
 
 	directors_init();
 	director = director_init(set, &listen_ip, listen_port,
-				 director_state_changed);
+				 director_state_changed,
+				 doveadm_connections_kick_callback);
 	director_host_add_from_string(director, set->director_servers);
 	director_find_self(director);
 	if (mail_hosts_parse_and_add(director->mail_hosts,
@@ -292,10 +297,8 @@ static void main_preinit(void)
 
 static void main_deinit(void)
 {
-	if (to_proctitle_refresh != NULL)
-		timeout_remove(&to_proctitle_refresh);
-	if (notify_conn != NULL)
-		notify_connection_deinit(&notify_conn);
+	timeout_remove(&to_proctitle_refresh);
+	notify_connections_deinit();
 	/* deinit doveadm connections before director, so it can clean up
 	   its pending work, such as abort user moves. */
 	doveadm_connections_deinit();

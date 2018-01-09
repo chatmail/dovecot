@@ -1,0 +1,2 @@
+dovecot-pop3d: hardening-no-fortify-functions usr/lib/dovecot/pop3
+

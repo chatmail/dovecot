@@ -6,7 +6,7 @@
 
 static void test_settings_get_time(void)
 {
-	struct {
+	static const struct {
 		const char *input;
 		unsigned int output;
 	} tests[] = {
@@ -85,6 +85,7 @@ static void test_settings_get_time(void)
 	};
 	const char *secs_errors[] = {
 		"-1",
+		"1",
 		/* wrong spellings: */
 		"1ss",
 		"1secss",
@@ -108,6 +109,7 @@ static void test_settings_get_time(void)
 	};
 	const char *msecs_errors[] = {
 		"-1",
+		"1",
 		/* wrong spellings: */
 		"1mis",
 		"1mss",
@@ -139,7 +141,7 @@ static void test_settings_get_time(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_settings_get_time,
 		NULL
 	};

@@ -10,6 +10,7 @@
 struct var_expand_test {
 	const char *in;
 	const char *out;
+	int ret;
 };
 
 struct var_get_key_range_test {
@@ -19,26 +20,27 @@ struct var_get_key_range_test {
 
 static void test_var_expand_ranges(void)
 {
-	static struct var_expand_test tests[] = {
-		{ "%v", "value1234" },
-		{ "%3v", "val" },
-		{ "%3.2v", "ue" },
-		{ "%3.-2v", "ue12" },
-		{ "%-3.2v", "23" },
-		{ "%0.-1v", "value123" },
-		{ "%-4.-1v", "123" }
+	static const struct var_expand_test tests[] = {
+		{ "%v", "value1234", 1 },
+		{ "%3v", "val", 1 },
+		{ "%3.2v", "ue", 1 },
+		{ "%3.-2v", "ue12", 1 },
+		{ "%-3.2v", "23", 1 },
+		{ "%0.-1v", "value123", 1 },
+		{ "%-4.-1v", "123", 1 }
 	};
-	static struct var_expand_table table[] = {
+	static const struct var_expand_table table[] = {
 		{ 'v', "value1234", NULL },
 		{ '\0', NULL, NULL }
 	};
 	string_t *str = t_str_new(128);
+	const char *error;
 	unsigned int i;
 
 	test_begin("var_expand - ranges");
 	for (i = 0; i < N_ELEMENTS(tests); i++) {
 		str_truncate(str, 0);
-		var_expand(str, tests[i].in, table);
+		test_assert(var_expand(str, tests[i].in, table, &error) == tests[i].ret);
 		test_assert(strcmp(tests[i].out, str_c(str)) == 0);
 	}
 	test_end();
@@ -47,23 +49,24 @@ static void test_var_expand_ranges(void)
 static void test_var_expand_builtin(void)
 {
 	static struct var_expand_test tests[] = {
-		{ "%{hostname}", NULL },
-		{ "%{pid}", NULL },
-		{ "a%{env:FOO}b", "abaRb" },
-		{ "%50Hv", "1f" },
-		{ "%50Hw", "2e" },
-		{ "%50Nv", "25" },
-		{ "%50Nw", "e" },
+		{ "%{hostname}", NULL, 1 },
+		{ "%{pid}", NULL, 1 },
+		{ "a%{env:FOO}b", "abaRb", 1 },
+		{ "%50Hv", "1f", 1 },
+		{ "%50Hw", "2e", 1 },
+		{ "%50Nv", "25", 1 },
+		{ "%50Nw", "e", 1 },
 
-		{ "%{nonexistent}", "UNSUPPORTED_VARIABLE_nonexistent" },
-		{ "%{nonexistent:default}", "UNSUPPORTED_VARIABLE_nonexistent" },
+		{ "%{nonexistent}", "UNSUPPORTED_VARIABLE_nonexistent", 0 },
+		{ "%{nonexistent:default}", "UNSUPPORTED_VARIABLE_nonexistent", 0 },
 	};
-	static struct var_expand_table table[] = {
+	static const struct var_expand_table table[] = {
 		{ 'v', "value", NULL },
 		{ 'w', "value2", NULL },
 		{ '\0', NULL, NULL }
 	};
 	string_t *str = t_str_new(128);
+	const char *error;
 	unsigned int i;
 
 	tests[0].out = my_hostname;
@@ -73,7 +76,7 @@ static void test_var_expand_builtin(void)
 	test_begin("var_expand - builtin");
 	for (i = 0; i < N_ELEMENTS(tests); i++) {
 		str_truncate(str, 0);
-		var_expand(str, tests[i].in, table);
+		test_assert_idx(var_expand(str, tests[i].in, table, &error) == tests[i].ret, i);
 		test_assert_idx(strcmp(tests[i].out, str_c(str)) == 0, i);
 	}
 	test_end();
@@ -81,14 +84,15 @@ static void test_var_expand_builtin(void)
 
 static void test_var_get_key_range(void)
 {
-	static struct var_get_key_range_test tests[] = {
+	static const struct var_get_key_range_test tests[] = {
 		{ "", 0, 0 },
 		{ "{", 1, 0 },
 		{ "k", 0, 1 },
 		{ "{key}", 1, 3 },
 		{ "5.5Rk", 4, 1 },
 		{ "5.5R{key}", 5, 3 },
-		{ "{key", 1, 3 }
+		{ "{key", 1, 3 },
+		{ "{if;%{if;%{value};eq;value;t;f};eq;t;t;f}", 1, 39 },
 	};
 	unsigned int i, idx, size;
 
@@ -104,49 +108,83 @@ static void test_var_get_key_range(void)
 	test_end();
 }
 
-static const char *test_var_expand_func1(const char *data, void *context)
+static int test_var_expand_func1(const char *data, void *context,
+				 const char **value_r,
+				 const char **error_r ATTR_UNUSED)
 {
 	test_assert(*(int *)context == 0xabcdef);
-	return t_strdup_printf("<%s>", data);
+	*value_r = t_strdup_printf("<%s>", data);
+	return 1;
 }
 
-static const char *test_var_expand_func2(const char *data ATTR_UNUSED,
-					 void *context ATTR_UNUSED)
+static int test_var_expand_func2(const char *data ATTR_UNUSED,
+				 void *context ATTR_UNUSED,
+				 const char **value_r,
+				 const char **error_r ATTR_UNUSED)
 {
-	return "";
+	*value_r = "";
+	return 1;
 }
 
-static const char *test_var_expand_func3(const char *data ATTR_UNUSED,
-					 void *context ATTR_UNUSED)
+static int test_var_expand_func3(const char *data ATTR_UNUSED,
+				 void *context ATTR_UNUSED,
+				 const char **value_r,
+				 const char **error_r ATTR_UNUSED)
 {
-	return NULL;
+	*value_r = NULL;
+	return 1;
+}
+
+static int test_var_expand_func4(const char *data,
+				 void *context ATTR_UNUSED,
+				 const char **value_r ATTR_UNUSED,
+				 const char **error_r)
+{
+	*error_r = t_strdup_printf("Unknown data %s", data == NULL ? "" : data);
+	return 0;
+}
+
+static int test_var_expand_func5(const char *data ATTR_UNUSED,
+				 void *context ATTR_UNUSED,
+				 const char **value_r ATTR_UNUSED,
+				 const char **error_r)
+{
+	*error_r = "Internal error";
+	return -1;
 }
 
 static void test_var_expand_with_funcs(void)
 {
-	static struct var_expand_test tests[] = {
-		{ "%{func1}", "<>" },
-		{ "%{func1:foo}", "<foo>" },
-		{ "%{func2}", "" },
-		{ "%{func3}", "" }
+	static const struct var_expand_test tests[] = {
+		{ "%{func1}", "<>", 1 },
+		{ "%{func1:foo}", "<foo>", 1 },
+		{ "%{func2}", "", 1 },
+		{ "%{func3}", "", 1 },
+		{ "%{func4}", "", 0 },
+		{ "%{func5}", "", -1 },
+		{ "%{func4}%{func5}", "", -1 },
+		{ "%{func5}%{func4}%{func3}", "", -1 },
 	};
-	static struct var_expand_table table[] = {
+	static const struct var_expand_table table[] = {
 		{ '\0', NULL, NULL }
 	};
 	static const struct var_expand_func_table func_table[] = {
 		{ "func1", test_var_expand_func1 },
 		{ "func2", test_var_expand_func2 },
 		{ "func3", test_var_expand_func3 },
+		{ "func4", test_var_expand_func4 },
+		{ "func5", test_var_expand_func5 },
 		{ NULL, NULL }
 	};
 	string_t *str = t_str_new(128);
+	const char *error;
 	unsigned int i;
 	int ctx = 0xabcdef;
 
 	test_begin("var_expand_with_funcs");
 	for (i = 0; i < N_ELEMENTS(tests); i++) {
 		str_truncate(str, 0);
-		var_expand_with_funcs(str, tests[i].in, table, func_table, &ctx);
+		test_assert_idx(var_expand_with_funcs(str, tests[i].in, table, func_table, &ctx, &error) == tests[i].ret, i);
 		test_assert_idx(strcmp(tests[i].out, str_c(str)) == 0, i);
 	}
 	test_end();
@@ -154,7 +192,7 @@ static void test_var_expand_with_funcs(void)
 
 static void test_var_get_key(void)
 {
-	static struct {
+	static const struct {
 		const char *str;
 		char key;
 	} tests[] = {
@@ -174,7 +212,7 @@ static void test_var_get_key(void)
 
 static void test_var_has_key(void)
 {
-	static struct {
+	static const struct {
 		const char *str;
 		char key;
 		const char *long_key;
@@ -197,10 +235,13 @@ static void test_var_has_key(void)
 	test_end();
 }
 
-static const char *test_var_expand_hashing_func1(const char *data,
-						 void *context ATTR_UNUSED)
+static int test_var_expand_hashing_func1(const char *data,
+					 void *context ATTR_UNUSED,
+					 const char **value_r,
+					 const char **error_r ATTR_UNUSED)
 {
-	return data;
+	*value_r = data;
+	return 1;
 }
 
 static int test_var_expand_bad_func(struct var_expand_context *ctx ATTR_UNUSED,
@@ -222,17 +263,18 @@ static const struct var_expand_extension_func_table test_extension_funcs[] = {
 
 static void test_var_expand_extensions(void)
 {
+	const char *error;
 	test_begin("var_expand_extensions");
 
 	var_expand_register_func_array(test_extension_funcs);
 
-	static struct var_expand_table table[] = {
+	static const struct var_expand_table table[] = {
 		{'\0', "example", "value" },
 		{'\0', "other-example", "other-value" },
 		{'\0', NULL, NULL}
 	};
 
-	static struct {
+	static const struct {
 		const char *in;
 		const char *out;
 	} tests[] = {
@@ -256,17 +298,21 @@ static void test_var_expand_extensions(void)
 
 	for (unsigned int i = 0; i < N_ELEMENTS(tests); i++) {
 		str_truncate(str, 0);
-		var_expand_with_funcs(str, tests[i].in, table,
-				      func_table, NULL);
+		error = NULL;
+		test_assert(var_expand_with_funcs(str, tests[i].in, table,
+			    func_table, NULL, &error) == 1);
 		test_assert_idx(strcmp(str_c(str), tests[i].out) == 0, i);
+		if (error != NULL) {
+			i_debug("Error: %s", error);
+		}
 	}
 
-	var_expand_with_funcs(str, "notfound: %{notfound:field}",
-		    	      table, func_table, NULL);
-	/* expect error */
-	test_expect_errors(1);
-	var_expand_with_funcs(str, "notfound: %{badparam:field}",
-			      table, func_table, NULL);
+	test_assert(var_expand_with_funcs(str, "notfound: %{notfound:field}",
+		    table, func_table, NULL, &error) == 0);
+	error = NULL;
+	test_assert(var_expand_with_funcs(str, "notfound: %{badparam:field}",
+		    table, func_table, NULL, &error) == -1);
+	test_assert(error != NULL);
 
 	var_expand_unregister_func_array(test_extension_funcs);
 
@@ -284,95 +330,131 @@ static void test_var_expand_if(void)
 		{ '\0', ";test;", "evil2" },
 		{ '\0', NULL, NULL }
 	};
+	const char *error;
 	string_t *dest = t_str_new(64);
 	test_begin("var_expand_if");
 
 	static const struct var_expand_test tests[] = {
 		/* basic numeric operand test */
-		{ "%{if;1;==;1;yes;no}", "yes"},
-		{ "%{if;1;==;2;yes;no}", "no"},
-		{ "%{if;1;<;1;yes;no}", "no"},
-		{ "%{if;1;<;2;yes;no}", "yes"},
-		{ "%{if;1;<=;1;yes;no}", "yes"},
-		{ "%{if;1;<=;2;yes;no}", "yes"},
-		{ "%{if;1;>;1;yes;no}", "no"},
-		{ "%{if;1;>;2;yes;no}", "no"},
-		{ "%{if;1;>=;1;yes;no}", "yes"},
-		{ "%{if;1;>=;2;yes;no}", "no"},
-		{ "%{if;1;!=;1;yes;no}", "no"},
-		{ "%{if;1;!=;2;yes;no}", "yes"},
+		{ "%{if;1;==;1;yes;no}", "yes", 1 },
+		{ "%{if;1;==;2;yes;no}", "no", 1 },
+		{ "%{if;1;<;1;yes;no}", "no", 1 },
+		{ "%{if;1;<;2;yes;no}", "yes", 1 },
+		{ "%{if;1;<=;1;yes;no}", "yes", 1 },
+		{ "%{if;1;<=;2;yes;no}", "yes", 1 },
+		{ "%{if;1;>;1;yes;no}", "no", 1 },
+		{ "%{if;1;>;2;yes;no}", "no", 1 },
+		{ "%{if;1;>=;1;yes;no}", "yes", 1 },
+		{ "%{if;1;>=;2;yes;no}", "no", 1 },
+		{ "%{if;1;!=;1;yes;no}", "no", 1 },
+		{ "%{if;1;!=;2;yes;no}", "yes", 1 },
 		/* basic string operand test */
-		{ "%{if;a;eq;a;yes;no}", "yes"},
-		{ "%{if;a;eq;b;yes;no}", "no"},
-		{ "%{if;a;lt;a;yes;no}", "no"},
-		{ "%{if;a;lt;b;yes;no}", "yes"},
-		{ "%{if;a;le;a;yes;no}", "yes"},
-		{ "%{if;a;le;b;yes;no}", "yes"},
-		{ "%{if;a;gt;a;yes;no}", "no"},
-		{ "%{if;a;gt;b;yes;no}", "no"},
-		{ "%{if;a;ge;a;yes;no}", "yes"},
-		{ "%{if;a;ge;b;yes;no}", "no"},
-		{ "%{if;a;ne;a;yes;no}", "no"},
-		{ "%{if;a;ne;b;yes;no}", "yes"},
-		{ "%{if;a;*;a;yes;no}", "yes"},
-		{ "%{if;a;*;b;yes;no}", "no"},
-		{ "%{if;a;*;*a*;yes;no}", "yes"},
-		{ "%{if;a;*;*b*;yes;no}", "no"},
-		{ "%{if;a;*;*;yes;no}", "yes"},
-		{ "%{if;a;!*;a;yes;no}", "no"},
-		{ "%{if;a;!*;b;yes;no}", "yes"},
-		{ "%{if;a;!*;*a*;yes;no}", "no"},
-		{ "%{if;a;!*;*b*;yes;no}", "yes"},
-		{ "%{if;a;!*;*;yes;no}", "no"},
-		{ "%{if;a;~;a;yes;no}", "yes"},
-		{ "%{if;a;~;b;yes;no}", "no"},
-		{ "%{if;a;~;.*a.*;yes;no}", "yes"},
-		{ "%{if;a;~;.*b.*;yes;no}", "no"},
-		{ "%{if;a;~;.*;yes;no}", "yes"},
-		{ "%{if;a;!~;a;yes;no}", "no"},
-		{ "%{if;a;!~;b;yes;no}", "yes"},
-		{ "%{if;a;!~;.*a.*;yes;no}", "no"},
-		{ "%{if;a;!~;.*b.*;yes;no}", "yes"},
-		{ "%{if;a;!~;.*;yes;no}", "no"},
-		{ "%{if;this is test;~;^test;yes;no}", "no"},
-		{ "%{if;this is test;~;.*test;yes;no}", "yes"},
+		{ "%{if;a;eq;a;yes;no}", "yes", 1 },
+		{ "%{if;a;eq;b;yes;no}", "no", 1 },
+		{ "%{if;a;lt;a;yes;no}", "no", 1 },
+		{ "%{if;a;lt;b;yes;no}", "yes", 1 },
+		{ "%{if;a;le;a;yes;no}", "yes", 1 },
+		{ "%{if;a;le;b;yes;no}", "yes", 1 },
+		{ "%{if;a;gt;a;yes;no}", "no", 1 },
+		{ "%{if;a;gt;b;yes;no}", "no", 1 },
+		{ "%{if;a;ge;a;yes;no}", "yes", 1 },
+		{ "%{if;a;ge;b;yes;no}", "no", 1 },
+		{ "%{if;a;ne;a;yes;no}", "no", 1 },
+		{ "%{if;a;ne;b;yes;no}", "yes", 1 },
+		{ "%{if;a;*;a;yes;no}", "yes", 1 },
+		{ "%{if;a;*;b;yes;no}", "no", 1 },
+		{ "%{if;a;*;*a*;yes;no}", "yes", 1 },
+		{ "%{if;a;*;*b*;yes;no}", "no", 1 },
+		{ "%{if;a;*;*;yes;no}", "yes", 1 },
+		{ "%{if;a;!*;a;yes;no}", "no", 1 },
+		{ "%{if;a;!*;b;yes;no}", "yes", 1 },
+		{ "%{if;a;!*;*a*;yes;no}", "no", 1 },
+		{ "%{if;a;!*;*b*;yes;no}", "yes", 1 },
+		{ "%{if;a;!*;*;yes;no}", "no", 1 },
+		{ "%{if;a;~;a;yes;no}", "yes", 1 },
+		{ "%{if;a;~;b;yes;no}", "no", 1 },
+		{ "%{if;a;~;.*a.*;yes;no}", "yes", 1 },
+		{ "%{if;a;~;.*b.*;yes;no}", "no", 1 },
+		{ "%{if;a;~;.*;yes;no}", "yes", 1 },
+		{ "%{if;a;!~;a;yes;no}", "no", 1 },
+		{ "%{if;a;!~;b;yes;no}", "yes", 1 },
+		{ "%{if;a;!~;.*a.*;yes;no}", "no", 1 },
+		{ "%{if;a;!~;.*b.*;yes;no}", "yes", 1 },
+		{ "%{if;a;!~;.*;yes;no}", "no", 1 },
+		{ "%{if;this is test;~;^test;yes;no}", "no", 1 },
+		{ "%{if;this is test;~;.*test;yes;no}", "yes", 1 },
 		/* variable expansion */
-		{ "%{if;%a;eq;%a;yes;no}", "yes"},
-		{ "%{if;%a;eq;%b;yes;no}", "no"},
-		{ "%{if;%{alpha};eq;%{alpha};yes;no}", "yes"},
-		{ "%{if;%{alpha};eq;%{beta};yes;no}", "no"},
-		{ "%{if;%o;eq;%o;yes;no}", "yes"},
-		{ "%{if;%o;eq;%t;yes;no}", "no"},
-		{ "%{if;%{one};eq;%{one};yes;no}", "yes"},
-		{ "%{if;%{one};eq;%{two};yes;no}", "no"},
-		{ "%{if;%{one};eq;%{one};%{one};%{two}}", "1"},
-		{ "%{if;%{one};gt;%{two};%{one};%{two}}", "2"},
-		{ "%{if;%{evil1};eq;\\;\\:;%{evil2};no}", ";test;"},
+		{ "%{if;%a;eq;%a;yes;no}", "yes", 1 },
+		{ "%{if;%a;eq;%b;yes;no}", "no", 1 },
+		{ "%{if;%{alpha};eq;%{alpha};yes;no}", "yes", 1 },
+		{ "%{if;%{alpha};eq;%{beta};yes;no}", "no", 1 },
+		{ "%{if;%o;eq;%o;yes;no}", "yes", 1 },
+		{ "%{if;%o;eq;%t;yes;no}", "no", 1 },
+		{ "%{if;%{one};eq;%{one};yes;no}", "yes", 1 },
+		{ "%{if;%{one};eq;%{two};yes;no}", "no", 1 },
+		{ "%{if;%{one};eq;%{one};%{one};%{two}}", "1", 1 },
+		{ "%{if;%{one};gt;%{two};%{one};%{two}}", "2", 1 },
+		{ "%{if;%{evil1};eq;\\;\\:;%{evil2};no}", ";test;", 1 },
 		/* inner if */
-		{ "%{if;%{if;%{one};eq;1;1;0};eq;%{if;%{two};eq;2;2;3};yes;no}", "no"},
+		{ "%{if;%{if;%{one};eq;1;1;0};eq;%{if;%{two};eq;2;2;3};yes;no}", "no", 1 },
 		/* no false */
-		{ "%{if;1;==;1;yes}", "yes"},
-		{ "%{if;1;==;2;yes}", ""},
+		{ "%{if;1;==;1;yes}", "yes", 1 },
+		{ "%{if;1;==;2;yes}", "", 1 },
 		/* invalid input */
-		{ "%{if;}", ""},
-		{ "%{if;1;}", ""},
-		{ "%{if;1;==;}", ""},
-		{ "%{if;1;==;2;}", ""},
-		{ "%{if;1;fu;2;yes;no}", ""},
+		{ "%{if;}", "", -1 },
+		{ "%{if;1;}", "", -1 },
+		{ "%{if;1;==;}", "", -1 },
+		{ "%{if;1;==;2;}", "", -1 },
+		{ "%{if;1;fu;2;yes;no}", "", -1 },
 		/* missing variables */
-		{ "%{if;%{missing1};==;%{missing2};yes;no}", ""},
+		{ "%{if;%{missing1};==;%{missing2};yes;no}", "", 0 },
 	};
 
-	test_expect_errors(6);
-
 	for(size_t i = 0; i < N_ELEMENTS(tests); i++) {
+		int ret;
+		error = NULL;
 		str_truncate(dest, 0);
-		var_expand(dest, tests[i].in, table);
+		ret = var_expand(dest, tests[i].in, table, &error);
+		test_assert_idx(tests[i].ret == ret, i);
 		test_assert_idx(strcmp(tests[i].out, str_c(dest)) == 0, i);
 	}
 
-	test_expect_no_more_errors();
+	test_end();
+}
 
+static void test_var_expand_merge_tables(void)
+{
+	const struct var_expand_table one[] = {
+		{ 'a', "1", "alpha" },
+		{ '\0', "2", "beta" },
+		{ '\0', NULL, NULL }
+	},
+	two[] = {
+		{ 't', "3", "theta" },
+		{ '\0', "4", "phi" },
+		{ '\0', NULL, NULL }
+	},
+	*merged = NULL;
+
+
+	test_begin("var_expand_merge_tables");
+
+	merged = t_var_expand_merge_tables(one, two);
+
+	test_assert(var_expand_table_size(merged) == 4);
+	for(unsigned int i = 0; i < var_expand_table_size(merged); i++) {
+		if (i < 2) {
+			test_assert_idx(merged[i].key == one[i].key, i);
+			test_assert_idx(merged[i].value == one[i].value || strcmp(merged[i].value, one[i].value) == 0, i);
+			test_assert_idx(merged[i].long_key == one[i].long_key || strcmp(merged[i].long_key, one[i].long_key) == 0, i);
+		} else if (i < 4) {
+			test_assert_idx(merged[i].key == two[i-2].key, i);
+			test_assert_idx(merged[i].value == two[i-2].value || strcmp(merged[i].value, two[i-2].value) == 0, i);
+			test_assert_idx(merged[i].long_key == two[i-2].long_key || strcmp(merged[i].long_key, two[i-2].long_key) == 0, i);
+		} else {
+			break;
+		}
+	}
 	test_end();
 }
 
@@ -386,4 +468,5 @@ void test_var_expand(void)
 	test_var_has_key();
 	test_var_expand_extensions();
 	test_var_expand_if();
+	test_var_expand_merge_tables();
 }

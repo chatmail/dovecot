@@ -132,7 +132,7 @@ master_input_request(struct auth_master_connection *conn, const char *args)
 	return TRUE;
 }
 
-static int
+static bool
 master_input_cache_flush(struct auth_master_connection *conn, const char *args)
 {
 	const char *const *list;
@@ -419,14 +419,14 @@ master_input_pass(struct auth_master_connection *conn, const char *args)
 			return FALSE;
 		auth_request_log_info(auth_request, "passdb", "%s", error);
 		pass_callback(PASSDB_RESULT_USER_UNKNOWN,
-			      &uchar_nul, 0, auth_request);
+			      uchar_empty_ptr, 0, auth_request);
 	} else if (conn->userdb_restricted_uid != 0) {
 		/* no permissions to do this lookup */
 		auth_request_log_error(auth_request, "passdb",
 			"Auth client doesn't have permissions to do "
 			"a PASS lookup: %s", auth_restricted_reason(conn));
 		pass_callback(PASSDB_RESULT_INTERNAL_FAILURE,
-			      &uchar_nul, 0, auth_request);
+			      uchar_empty_ptr, 0, auth_request);
 	} else {
 		auth_request_set_state(auth_request,
 				       AUTH_REQUEST_STATE_MECH_CONTINUE);
@@ -748,8 +748,8 @@ auth_master_connection_create(struct auth *auth, int fd,
 	conn->fd = fd;
 	conn->path = i_strdup(path);
 	conn->auth = auth;
-	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
-	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE);
+	conn->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	o_stream_set_flush_callback(conn->output, master_output, conn);
 	conn->io = io_add(fd, IO_READ, master_input, conn);
@@ -782,17 +782,10 @@ void auth_master_connection_destroy(struct auth_master_connection **_conn)
 
 	if (conn->iter_ctx != NULL)
 		master_input_list_finish(conn->iter_ctx);
-	if (conn->input != NULL)
-		i_stream_close(conn->input);
-	if (conn->output != NULL)
-		o_stream_close(conn->output);
-	if (conn->io != NULL)
-		io_remove(&conn->io);
-	if (conn->fd != -1) {
-		if (close(conn->fd) < 0)
-			i_error("close(%s): %m", conn->path);
-		conn->fd = -1;
-	}
+	i_stream_close(conn->input);
+	o_stream_close(conn->output);
+	io_remove(&conn->io);
+	i_close_fd_path(&conn->fd, conn->path);
 
 	master_service_client_connection_destroyed(master_service);
 	auth_master_connection_unref(&conn);
@@ -815,10 +808,8 @@ void auth_master_connection_unref(struct auth_master_connection **_conn)
 	if (--conn->refcount > 0)
 		return;
 
-	if (conn->input != NULL)
-		i_stream_unref(&conn->input);
-	if (conn->output != NULL)
-		o_stream_unref(&conn->output);
+	i_stream_unref(&conn->input);
+	o_stream_unref(&conn->output);
 
 	i_free(conn->path);
 	i_free(conn);

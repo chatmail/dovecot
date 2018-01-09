@@ -24,9 +24,9 @@ struct mail_index_sync_ctx {
 	ARRAY(struct mail_index_sync_list) sync_list;
 	uint32_t next_uid;
 
-	unsigned int no_warning:1;
-	unsigned int seen_nonexternal_transactions:1;
-	unsigned int fully_synced:1;
+	bool no_warning:1;
+	bool seen_nonexternal_transactions:1;
+	bool fully_synced:1;
 };
 
 static void mail_index_sync_add_expunge(struct mail_index_sync_ctx *ctx)
@@ -820,8 +820,9 @@ static bool mail_index_sync_want_index_write(struct mail_index *index)
 
 	log_diff = index->map->hdr.log_file_tail_offset -
 		index->last_read_log_file_tail_offset;
-	if (log_diff > MAIL_INDEX_MAX_WRITE_BYTES ||
-	    (index->index_min_write && log_diff > MAIL_INDEX_MIN_WRITE_BYTES))
+	if (log_diff > index->optimization_set.index.rewrite_max_log_bytes ||
+	    (index->index_min_write &&
+	     log_diff > index->optimization_set.index.rewrite_min_log_bytes))
 		return TRUE;
 
 	if (index->need_recreate)

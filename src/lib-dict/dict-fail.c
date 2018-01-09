@@ -27,14 +27,15 @@ static void dict_fail_deinit(struct dict *dict ATTR_UNUSED)
 {
 }
 
-static int dict_fail_wait(struct dict *dict ATTR_UNUSED)
+static void dict_fail_wait(struct dict *dict ATTR_UNUSED)
 {
-	return -1;
 }
 
 static int dict_fail_lookup(struct dict *dict ATTR_UNUSED, pool_t pool ATTR_UNUSED,
-			    const char *key ATTR_UNUSED, const char **value_r ATTR_UNUSED)
+			    const char *key ATTR_UNUSED, const char **value_r ATTR_UNUSED,
+			    const char **error_r)
 {
+	*error_r = "Unsupported operation (dict does not support this feature)";
 	return -1;
 }
 
@@ -51,8 +52,10 @@ static bool dict_fail_iterate(struct dict_iterate_context *ctx ATTR_UNUSED,
 	return FALSE;
 }
 
-static int dict_fail_iterate_deinit(struct dict_iterate_context *ctx ATTR_UNUSED)
+static int dict_fail_iterate_deinit(struct dict_iterate_context *ctx ATTR_UNUSED,
+				    const char **error_r)
 {
+	*error_r = "Unsupported operation (dict does not support this feature)";
 	return -1;
 }
 
@@ -61,14 +64,17 @@ static struct dict_transaction_context *dict_fail_transaction_init(struct dict *
 	return &dict_transaction_unsupported;
 }
 
-static int dict_fail_transaction_commit(struct dict_transaction_context *ctx ATTR_UNUSED,
-					bool async ATTR_UNUSED,
-					dict_transaction_commit_callback_t *callback,
-					void *context)
+static void dict_fail_transaction_commit(struct dict_transaction_context *ctx ATTR_UNUSED,
+					 bool async ATTR_UNUSED,
+					 dict_transaction_commit_callback_t *callback,
+					 void *context)
 {
+	struct dict_commit_result res = {
+		.ret = DICT_COMMIT_RET_FAILED,
+		.error = "Unsupported operation (dict does not support this feature)"
+	};
 	if (callback != NULL)
-		callback(DICT_COMMIT_RET_FAILED, context);
-	return -1;
+		callback(&res, context);
 }
 
 static void dict_fail_transaction_rollback(struct dict_transaction_context *ctx ATTR_UNUSED)

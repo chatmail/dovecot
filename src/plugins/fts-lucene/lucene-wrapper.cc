@@ -152,8 +152,7 @@ struct lucene_index *lucene_index_init(const char *path,
 
 void lucene_index_close(struct lucene_index *index)
 {
-	if (index->to_close != NULL)
-		timeout_remove(&index->to_close);
+	timeout_remove(&index->to_close);
 
 	_CLDELETE(index->searcher);
 	if (index->writer != NULL) {
@@ -265,7 +264,7 @@ void lucene_index_unselect_mailbox(struct lucene_index *index)
 static void lucene_handle_error(struct lucene_index *index, CLuceneError &err,
 				const char *msg)
 {
-	const char *what = err.what();
+	const char *error, *what = err.what();
 
 	i_error("lucene index %s: %s failed (#%d): %s",
 		index->path, msg, err.number(), what);
@@ -275,9 +274,8 @@ static void lucene_handle_error(struct lucene_index *index, CLuceneError &err,
 	     err.number() == CL_ERR_IO)) {
 		/* delete corrupted index. most IO errors are also about
 		   missing files and other such corruption.. */
-		if (unlink_directory(index->path, (enum unlink_directory_flags)0) < 0 &&
-		    errno != ENOENT)
-			i_error("unlink_directory(%s) failed: %m", index->path);
+		if (unlink_directory(index->path, (enum unlink_directory_flags)0, &error) < 0)
+			i_error("unlink_directory(%s) failed: %s", index->path, error);
 		rescan_clear_unseen_mailboxes(index, NULL);
 	}
 }
@@ -412,6 +410,7 @@ int lucene_index_get_doc_count(struct lucene_index *index, uint32_t *count_r)
 static int lucene_settings_check(struct lucene_index *index)
 {
 	uint32_t set_checksum;
+	const char *error;
 	int ret = 0;
 
 	set_checksum = fts_lucene_settings_checksum(&index->set);
@@ -422,8 +421,8 @@ static int lucene_settings_check(struct lucene_index *index)
 	i_warning("fts-lucene: Settings have changed, rebuilding index for mailbox");
 
 	/* settings changed, rebuild index */
-	if (unlink_directory(index->path, (enum unlink_directory_flags)0) < 0) {
-		i_error("unlink_directory(%s) failed: %m", index->path);
+	if (unlink_directory(index->path, (enum unlink_directory_flags)0, &error) < 0) {
+		i_error("unlink_directory(%s) failed: %s", index->path, error);
 		ret = -1;
 	} else {
 		rescan_clear_unseen_mailboxes(index, NULL);
@@ -1210,13 +1209,13 @@ lucene_add_definite_query(struct lucene_index *index,
 
 	switch (arg->type) {
 	case SEARCH_TEXT: {
-		BooleanQuery *bq = _CLNEW BooleanQuery();
 		Query *q1 = lucene_get_query(index, _T("hdr"), arg);
 		Query *q2 = lucene_get_query(index, _T("body"), arg);
 
 		if (q1 == NULL && q2 == NULL)
 			q = NULL;
 		else {
+			BooleanQuery *bq = _CLNEW BooleanQuery();
 			if (q1 != NULL)
 				bq->add(q1, true, BooleanClause::SHOULD);
 			if (q2 != NULL)

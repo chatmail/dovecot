@@ -2,7 +2,6 @@
 
 #include "lib.h"
 #include "array.h"
-#include "fd-close-on-exec.h"
 #include "ioloop-private.h"
 #include "ioloop-iolist.h"
 
@@ -155,7 +154,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 	if (last) {
 		/* since we're not freeing memory in any case, just increase
 		   deleted counter so next handle_add() can just decrease it
-		   insteading of appending to the events array */
+		   instead of appending to the events array */
 		ctx->deleted_count++;
 	}
 	i_free(io);

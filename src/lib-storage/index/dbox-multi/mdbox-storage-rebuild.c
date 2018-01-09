@@ -32,7 +32,7 @@ struct mdbox_rebuild_msg {
 	uint32_t map_uid;
 
 	uint16_t refcount;
-	unsigned int seen_zero_ref_in_map:1;
+	bool seen_zero_ref_in_map:1;
 };
 
 struct rebuild_msg_mailbox {
@@ -60,8 +60,8 @@ struct mdbox_storage_rebuild_context {
 
 	struct rebuild_msg_mailbox prev_msg;
 
-	unsigned int have_pop3_uidls:1;
-	unsigned int have_pop3_orders:1;
+	bool have_pop3_uidls:1;
+	bool have_pop3_orders:1;
 };
 
 static struct mdbox_storage_rebuild_context *
@@ -331,7 +331,7 @@ rebuild_add_missing_map_uids(struct mdbox_storage_rebuild_context *ctx,
 	}
 }
 
-static int rebuild_apply_map(struct mdbox_storage_rebuild_context *ctx)
+static void rebuild_apply_map(struct mdbox_storage_rebuild_context *ctx)
 {
 	struct mdbox_map *map = ctx->storage->map;
 	const struct mail_index_header *hdr;
@@ -347,8 +347,14 @@ static int rebuild_apply_map(struct mdbox_storage_rebuild_context *ctx)
 	hdr = mail_index_get_header(ctx->atomic->sync_view);
 	for (seq = 1; seq <= hdr->messages_count; seq++) {
 		if (mdbox_map_view_lookup_rec(map, ctx->atomic->sync_view,
-					      seq, &rec) < 0)
-			return -1;
+					      seq, &rec) < 0) {
+			/* map or ref extension is missing from the index.
+			   Just ignore the file entirely. (Don't try to
+			   continue with other records, since they'll fail
+			   as well, and each failure logs the same error.) */
+			i_assert(seq == 1);
+			break;
+		}
 
 		/* look up the rebuild msg record for this message based on
 		   the (file_id, offset, size) triplet */
@@ -373,7 +379,6 @@ static int rebuild_apply_map(struct mdbox_storage_rebuild_context *ctx)
 	/* afterwards we're interested in looking up map_uids.
 	   re-sort the messages to make it easier. */
 	array_sort(&ctx->msgs, mdbox_rebuild_msg_uid_cmp);
-	return 0;
 }
 
 static struct mdbox_rebuild_msg *
@@ -567,7 +572,7 @@ rebuild_mailbox(struct mdbox_storage_rebuild_context *ctx,
 		/* non-temporary error, ignore */
 		return 0;
 	}
-	mbox = (struct mdbox_mailbox *)box;
+	mbox = MDBOX_MAILBOX(box);
 
 	ret = mail_index_sync_begin(box->index, &sync_ctx, &view, &trans,
 				    MAIL_INDEX_SYNC_FLAG_AVOID_FLAG_UPDATES);
@@ -731,7 +736,7 @@ static int rebuild_restore_msg(struct mdbox_storage_rebuild_context *ctx,
 			return -1;
 		}
 	}
-	mbox = (struct mdbox_mailbox *)box;
+	mbox = MDBOX_MAILBOX(box);
 
 	/* switch the mailbox cache if necessary */
 	if (box != ctx->prev_msg.box && ctx->prev_msg.box != NULL) {
@@ -944,8 +949,8 @@ static int mdbox_storage_rebuild_scan(struct mdbox_storage_rebuild_context *ctx)
 			return -1;
 	}
 
-	if (rebuild_apply_map(ctx) < 0 ||
-	    rebuild_mailboxes(ctx) < 0 ||
+	rebuild_apply_map(ctx);
+	if (rebuild_mailboxes(ctx) < 0 ||
 	    rebuild_finish(ctx) < 0) {
 		mdbox_map_atomic_set_failed(ctx->atomic);
 		return -1;

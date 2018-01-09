@@ -23,11 +23,6 @@ struct mail_index_sync_map_ctx;
    try to catch them by limiting the header size. */
 #define MAIL_INDEX_EXT_HEADER_MAX_SIZE (1024*1024*16-1)
 
-/* Write to main index file when bytes-to-be-read-from-log is between these
-   values. */
-#define MAIL_INDEX_MIN_WRITE_BYTES (1024*8)
-#define MAIL_INDEX_MAX_WRITE_BYTES (1024*128)
-
 #define MAIL_INDEX_IS_IN_MEMORY(index) \
 	((index)->dir == NULL)
 
@@ -114,7 +109,7 @@ struct mail_index_registered_ext {
 	mail_index_expunge_handler_t *expunge_handler;
 
 	void *expunge_context;
-	unsigned int expunge_handler_call_always:1;
+	bool expunge_handler_call_always:1;
 };
 
 struct mail_index_record_map {
@@ -159,6 +154,8 @@ union mail_index_module_context {
 
 struct mail_index {
 	char *dir, *prefix;
+	char *cache_dir;
+	struct event *event;
 
 	struct mail_cache *cache;
 	struct mail_transaction_log *log;
@@ -171,9 +168,7 @@ struct mail_index {
 	gid_t gid;
 	char *gid_origin;
 
-	uoff_t log_rotate_min_size, log_rotate_max_size;
-	unsigned int log_rotate_min_created_ago_secs;
-	unsigned int log_rotate_log2_stale_secs;
+	struct mail_index_optimization_settings optimization_set;
 	uint32_t pending_log2_rotate_time;
 
 	pool_t extension_pool;
@@ -223,24 +218,25 @@ struct mail_index {
 	ARRAY(union mail_index_module_context *) module_contexts;
 
 	char *error;
-	unsigned int nodiskspace:1;
-	unsigned int index_lock_timeout:1;
+	bool nodiskspace:1;
+	bool index_lock_timeout:1;
 
-	unsigned int index_delete_requested:1; /* next sync sets it deleted */
-	unsigned int index_deleted:1; /* no changes allowed anymore */
-	unsigned int log_sync_locked:1;
-	unsigned int readonly:1;
-	unsigned int mapping:1;
-	unsigned int syncing:1;
-	unsigned int need_recreate:1;
-	unsigned int index_min_write:1;
-	unsigned int modseqs_enabled:1;
-	unsigned int initial_create:1;
-	unsigned int initial_mapped:1;
-	unsigned int fscked:1;
+	bool index_delete_requested:1; /* next sync sets it deleted */
+	bool index_deleted:1; /* no changes allowed anymore */
+	bool log_sync_locked:1;
+	bool readonly:1;
+	bool mapping:1;
+	bool syncing:1;
+	bool need_recreate:1;
+	bool index_min_write:1;
+	bool modseqs_enabled:1;
+	bool initial_create:1;
+	bool initial_mapped:1;
+	bool fscked:1;
 };
 
 extern struct mail_index_module_register mail_index_module_register;
+extern struct event_category event_category_index;
 
 /* Add/replace sync handler for specified extra record. */
 void mail_index_register_expunge_handler(struct mail_index *index,

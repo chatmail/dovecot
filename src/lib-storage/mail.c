@@ -349,20 +349,7 @@ int mail_get_special(struct mail *mail, enum mail_fetch_field field,
 int mail_get_backend_mail(struct mail *mail, struct mail **real_mail_r)
 {
 	struct mail_private *p = (struct mail_private *)mail;
-
-	*real_mail_r = p->v.get_real_mail(mail);
-	return *real_mail_r == NULL ? -1 : 0;
-}
-
-struct mail *mail_get_real_mail(struct mail *mail)
-{
-	struct mail *backend_mail;
-
-	if (mail_get_backend_mail(mail, &backend_mail) < 0) {
-		i_panic("FIXME: Error occurred in mail_get_real_mail(), "
-			"switch to using mail_get_backend_mail() instead");
-	}
-	return backend_mail;
+	return p->v.get_backend_mail(mail, real_mail_r);
 }
 
 void mail_update_flags(struct mail *mail, enum modify_type modify_type,
@@ -436,24 +423,12 @@ void mail_precache(struct mail *mail)
 	} T_END;
 }
 
-void mail_set_cache_corrupted(struct mail *mail, enum mail_fetch_field field)
-{
-	mail_set_cache_corrupted_reason(mail, field, "");
-}
-
-void mail_set_cache_corrupted_reason(struct mail *mail,
-				     enum mail_fetch_field field,
-				     const char *reason)
+void mail_set_cache_corrupted(struct mail *mail,
+			      enum mail_fetch_field field,
+			      const char *reason)
 {
 	struct mail_private *p = (struct mail_private *)mail;
-
-	/* FIXME: v2.3: rename set_cache_corrupted_reason() to just
-	   set_cache_corrupted(). we have two here for backwards API
-	   compatibility. */
-	if (p->v.set_cache_corrupted_reason != NULL)
-		p->v.set_cache_corrupted_reason(mail, field, reason);
-	else
-		p->v.set_cache_corrupted(mail, field);
+	p->v.set_cache_corrupted(mail, field, reason);
 }
 
 void mail_generate_guid_128_hash(const char *guid, guid_128_t guid_128_r)
@@ -466,7 +441,7 @@ void mail_generate_guid_128_hash(const char *guid, guid_128_t guid_128_r)
 		buffer_create_from_data(&buf, guid_128_r, GUID_128_SIZE);
 		buffer_set_used_size(&buf, 0);
 		sha1_get_digest(guid, strlen(guid), sha1_sum);
-#if SHA1_RESULTLEN < DBOX_GUID_BIN_LEN
+#if SHA1_RESULTLEN < GUID_128_SIZE
 #  error not possible
 #endif
 		buffer_append(&buf,

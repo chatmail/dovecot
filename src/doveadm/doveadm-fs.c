@@ -19,6 +19,14 @@
 static void fs_cmd_help(doveadm_command_t *cmd);
 static void cmd_fs_delete(int argc, char *argv[]);
 
+static void cmd_fs_getopt(int *argc, char **argv[])
+{
+	 if (getopt(*argc, *argv, "") == '?')
+		i_fatal("fs_init: Add -- if you have - in arguments");
+	*argc -= optind;
+	*argv += optind;
+}
+
 static struct fs *
 cmd_fs_init(int *argc, char **argv[], int own_arg_count, doveadm_command_t *cmd)
 {
@@ -28,10 +36,10 @@ cmd_fs_init(int *argc, char **argv[], int own_arg_count, doveadm_command_t *cmd)
 	const char *error;
 
 	if (own_arg_count > 0) {
-		if (*argc != 3 + own_arg_count)
+		if (*argc != 2 + own_arg_count)
 			fs_cmd_help(cmd);
 	} else {
-		if (*argc <= 3)
+		if (*argc <= 2)
 			fs_cmd_help(cmd);
 	}
 
@@ -46,11 +54,11 @@ cmd_fs_init(int *argc, char **argv[], int own_arg_count, doveadm_command_t *cmd)
 	fs_set.base_dir = doveadm_settings->base_dir;
 	fs_set.debug = doveadm_debug;
 
-	if (fs_init((*argv)[1], (*argv)[2], &fs_set, &fs, &error) < 0)
+	if (fs_init((*argv)[0], (*argv)[1], &fs_set, &fs, &error) < 0)
 		i_fatal("fs_init() failed: %s", error);
 
-	*argc += 3;
-	*argv += 3;
+	*argc += 2;
+	*argv += 2;
 	return fs;
 }
 
@@ -66,11 +74,12 @@ static void cmd_fs_get(int argc, char *argv[])
 	doveadm_print_init(DOVEADM_PRINT_TYPE_PAGER);
 	doveadm_print_header("content", "content", DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
 
+	cmd_fs_getopt(&argc, &argv);
 	fs = cmd_fs_init(&argc, &argv, 1, cmd_fs_get);
 
 	file = fs_file_init(fs, argv[0], FS_OPEN_MODE_READONLY);
 	input = fs_read_stream(file, IO_BLOCK_SIZE);
-	while ((ret = i_stream_read_data(input, &data, &size, 0)) > 0) {
+	while ((ret = i_stream_read_more(input, &data, &size)) > 0) {
 		doveadm_print_stream(data, size);
 		i_stream_skip(input, size);
 	}
@@ -99,13 +108,12 @@ static void cmd_fs_put(int argc, char *argv[])
 	struct istream *input;
 	struct ostream *output;
 	buffer_t *hash = NULL;
-	off_t ret;
 	int c;
 
 	while ((c = getopt(argc, argv, "h:")) > 0) {
 		switch (c) {
 		case 'h':
-			hash = buffer_create_dynamic(pool_datastack_create(), 32);
+			hash = t_buffer_create(32);
 			if (hex_to_binary(optarg, hash) < 0)
 				i_fatal("Invalid -h parameter: Hash not in hex");
 			break;
@@ -113,7 +121,7 @@ static void cmd_fs_put(int argc, char *argv[])
 			fs_cmd_help(cmd_fs_put);
 		}
 	}
-	argc -= optind-1; argv += optind-1;
+	argc -= optind; argv += optind;
 
 	fs = cmd_fs_init(&argc, &argv, 2, cmd_fs_put);
 	src_path = argv[0];
@@ -137,16 +145,7 @@ static void cmd_fs_put(int argc, char *argv[])
 
 	output = fs_write_stream(file);
 	input = i_stream_create_file(src_path, IO_BLOCK_SIZE);
-	if ((ret = o_stream_send_istream(output, input)) < 0) {
-		if (output->stream_errno != 0) {
-			i_error("write(%s) failed: %s", dest_path,
-				o_stream_get_error(output));
-		} else {
-			i_error("read(%s) failed: %s", src_path,
-				i_stream_get_error(input));
-		}
-		doveadm_exit_code = EX_TEMPFAIL;
-	}
+	o_stream_nsend_istream(output, input);
 	i_stream_destroy(&input);
 	if (fs_write_stream_finish(file, &output) < 0) {
 		i_error("fs_write_stream_finish() failed: %s",
@@ -163,6 +162,7 @@ static void cmd_fs_copy(int argc, char *argv[])
 	struct fs_file *src_file, *dest_file;
 	const char *src_path, *dest_path;
 
+	cmd_fs_getopt(&argc, &argv);
 	fs = cmd_fs_init(&argc, &argv, 2, cmd_fs_copy);
 	src_path = argv[0];
 	dest_path = argv[1];
@@ -190,6 +190,7 @@ static void cmd_fs_stat(int argc, char *argv[])
 	struct fs_file *file;
 	struct stat st;
 
+	cmd_fs_getopt(&argc, &argv);
 	fs = cmd_fs_init(&argc, &argv, 1, cmd_fs_stat);
 
 	file = fs_file_init(fs, argv[0], FS_OPEN_MODE_READONLY);
@@ -222,6 +223,7 @@ static void cmd_fs_metadata(int argc, char *argv[])
 	const struct fs_metadata *m;
 	const ARRAY_TYPE(fs_metadata) *metadata;
 
+	cmd_fs_getopt(&argc, &argv);
 	fs = cmd_fs_init(&argc, &argv, 1, cmd_fs_metadata);
 
 	file = fs_file_init(fs, argv[0], FS_OPEN_MODE_READONLY);
@@ -306,11 +308,8 @@ static int doveadm_fs_delete_async_fname(struct fs_delete_ctx *ctx,
 	if ((ret = cmd_fs_delete_ctx_run(ctx)) < 0)
 		return -1;
 	if (fname != NULL) {
-		if (ret > 0 && fs_wait_async(ctx->fs) < 0) {
-			i_error("fs_wait_async() failed: %s", fs_last_error(ctx->fs));
-			doveadm_exit_code = EX_TEMPFAIL;
-			return -1;;
-		}
+		if (ret > 0)
+			fs_wait_async(ctx->fs);
 		return doveadm_fs_delete_async_fname(ctx, fname);
 	}
 	return 0;
@@ -321,11 +320,7 @@ static void doveadm_fs_delete_async_finish(struct fs_delete_ctx *ctx)
 	unsigned int i;
 
 	while (doveadm_exit_code == 0 && cmd_fs_delete_ctx_run(ctx) > 0) {
-		if (fs_wait_async(ctx->fs) < 0) {
-			i_error("fs_wait_async() failed: %s", fs_last_error(ctx->fs));
-			doveadm_exit_code = EX_TEMPFAIL;
-			break;
-		}
+		fs_wait_async(ctx->fs);
 	}
 	for (i = 0; i < ctx->files_count; i++) {
 		if (ctx->files[i] != NULL)
@@ -479,7 +474,7 @@ static void cmd_fs_delete(int argc, char *argv[])
 			fs_cmd_help(cmd_fs_delete);
 		}
 	}
-	argc -= optind-1; argv += optind-1;
+	argc -= optind; argv += optind;
 
 	if (recursive)
 		cmd_fs_delete_recursive(argc, argv, async_count);
@@ -494,6 +489,7 @@ static void cmd_fs_iter_full(int argc, char *argv[], enum fs_iter_flags flags,
 	struct fs_iter *iter;
 	const char *fname;
 
+	cmd_fs_getopt(&argc, &argv);
 	fs = cmd_fs_init(&argc, &argv, 1, cmd);
 
 	doveadm_print_init(DOVEADM_PRINT_TYPE_FORMATTED);

@@ -43,7 +43,7 @@ static unsigned int append_string(buffer_t *buf, const char *str,
 {
 	unsigned int length = 0;
 
-	for ( ; *str; str++) {
+	for ( ; *str != '\0'; str++) {
 		buffer_append_c(buf, ucase ? i_toupper(*str) : *str);
 		if (unicode) {
 			buffer_append_c(buf, 0);
@@ -56,12 +56,12 @@ static unsigned int append_string(buffer_t *buf, const char *str,
 }
 
 static void ntlmssp_append_string(buffer_t *buf, size_t buffer_offset,
-				  const char *str, int unicode)
+				  const char *str, bool unicode)
 {
 	struct ntlmssp_buffer buffer;
 	unsigned int length;
 
-	write_le32(&buffer.offset, buffer_get_used_size(buf));
+	write_le32(&buffer.offset, buf->used);
 
 	length = append_string(buf, str, FALSE, unicode);
 
@@ -78,7 +78,7 @@ static void ntlmssp_append_target_info(buffer_t *buf, size_t buffer_offset, ...)
 	unsigned int length, total_length = 0;
 	int type;
 
-	write_le32(&buffer.offset, buffer_get_used_size(buf));
+	write_le32(&buffer.offset, buf->used);
 
 	va_start(args, buffer_offset);
 
@@ -126,15 +126,15 @@ static inline uint32_t ntlmssp_flags(uint32_t client_flags)
 	uint32_t flags = NTLMSSP_NEGOTIATE_NTLM |
 			 NTLMSSP_NEGOTIATE_TARGET_INFO;
 
-	if (client_flags & NTLMSSP_NEGOTIATE_UNICODE)
+	if ((client_flags & NTLMSSP_NEGOTIATE_UNICODE) != 0)
 		flags |= NTLMSSP_NEGOTIATE_UNICODE;
 	else
 		flags |= NTLMSSP_NEGOTIATE_OEM;
 
-	if (client_flags & NTLMSSP_NEGOTIATE_NTLM2)
+	if ((client_flags & NTLMSSP_NEGOTIATE_NTLM2) != 0)
 		flags |= NTLMSSP_NEGOTIATE_NTLM2;
 
-	if (client_flags & NTLMSSP_REQUEST_TARGET)
+	if ((client_flags & NTLMSSP_REQUEST_TARGET) != 0)
 		flags |= NTLMSSP_REQUEST_TARGET | NTLMSSP_TARGET_TYPE_SERVER;
 
 	return flags;
@@ -146,7 +146,7 @@ ntlmssp_create_challenge(pool_t pool, const struct ntlmssp_request *request,
 {
 	buffer_t *buf;
 	uint32_t flags = ntlmssp_flags(read_le32(&request->flags));
-	int unicode = flags & NTLMSSP_NEGOTIATE_UNICODE;
+	bool unicode = (flags & NTLMSSP_NEGOTIATE_UNICODE) != 0;
 	struct ntlmssp_challenge c;
 
 	buf = buffer_create_dynamic(pool, sizeof(struct ntlmssp_challenge));
@@ -159,7 +159,7 @@ ntlmssp_create_challenge(pool_t pool, const struct ntlmssp_request *request,
 
 	buffer_write(buf, 0, &c, sizeof(c));
 
-	if (flags & NTLMSSP_TARGET_TYPE_SERVER)
+	if ((flags & NTLMSSP_TARGET_TYPE_SERVER) != 0)
 		ntlmssp_append_string(buf,
 			offsetof(struct ntlmssp_challenge, target_name),
 			my_hostname, unicode);
@@ -169,12 +169,12 @@ ntlmssp_create_challenge(pool_t pool, const struct ntlmssp_request *request,
 				   NTPLMSSP_V2_TARGET_FQDN, my_hostname,
 				   NTPLMSSP_V2_TARGET_END);
 
-	*size = buffer_get_used_size(buf);
+	*size = buf->used;
 	return buffer_free_without_data(&buf);
 }
 
-static int ntlmssp_check_buffer(const struct ntlmssp_buffer *buffer,
-				size_t data_size, const char **error)
+static bool ntlmssp_check_buffer(const struct ntlmssp_buffer *buffer,
+				 size_t data_size, const char **error)
 {
 	uint32_t offset = read_le32(&buffer->offset);
 	uint16_t length = read_le16(&buffer->length);
@@ -182,19 +182,19 @@ static int ntlmssp_check_buffer(const struct ntlmssp_buffer *buffer,
 
 	/* Empty buffer is ok */
 	if (length == 0 && space == 0)
-		return 1;
+		return TRUE;
 
 	if (offset >= data_size) {
 		*error = "buffer offset out of bounds";
-		return 0;
+		return FALSE;
 	}
 
 	if (offset + space > data_size) {
 		*error = "buffer end out of bounds";
-		return 0;
+		return FALSE;
 	}
 
-	return 1;
+	return TRUE;
 }
 
 bool ntlmssp_check_request(const struct ntlmssp_request *request,

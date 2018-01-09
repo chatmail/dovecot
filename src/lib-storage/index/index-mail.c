@@ -7,6 +7,7 @@
 #include "istream.h"
 #include "hex-binary.h"
 #include "str.h"
+#include "mailbox-recent-flags.h"
 #include "message-date.h"
 #include "message-part-data.h"
 #include "message-part-serialize.h"
@@ -89,7 +90,7 @@ static int get_serialized_parts(struct index_mail *mail, buffer_t **part_buf_r)
 	const unsigned int field_idx =
 		mail->ibox->cache_fields[MAIL_CACHE_MESSAGE_PARTS].idx;
 
-	*part_buf_r = buffer_create_dynamic(pool_datastack_create(), 128);
+	*part_buf_r = t_buffer_create(128);
 	return index_mail_cache_lookup_field(mail, *part_buf_r, field_idx);
 }
 
@@ -153,12 +154,12 @@ void index_mail_set_message_parts_corrupted(struct mail *mail, const char *error
 	buffer_t *part_buf;
 	const char *parts_str;
 
-	if (get_serialized_parts((struct index_mail *)mail, &part_buf) <= 0)
+	if (get_serialized_parts(INDEX_MAIL(mail), &part_buf) <= 0)
 		parts_str = "";
 	else
 		parts_str = binary_to_hex(part_buf->data, part_buf->used);
 
-	mail_set_cache_corrupted_reason(mail,
+	mail_set_cache_corrupted(mail,
 		MAIL_FETCH_MESSAGE_PARTS, t_strdup_printf(
 		"Cached MIME parts don't match message during parsing: %s (parts=%s)",
 		error, parts_str));
@@ -170,7 +171,7 @@ static bool index_mail_get_fixed_field(struct index_mail *mail,
 {
 	const unsigned int field_idx = mail->ibox->cache_fields[field].idx;
 	buffer_t buf;
-	int ret;
+	bool ret;
 
 	buffer_create_from_data(&buf, data, data_size);
 	if (index_mail_cache_lookup_field(mail, &buf, field_idx) <= 0)
@@ -238,7 +239,7 @@ enum mail_flags index_mail_get_flags(struct mail *_mail)
 
 uint64_t index_mail_get_modseq(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 
 	if (mail->data.modseq != 0)
 		return mail->data.modseq;
@@ -251,7 +252,7 @@ uint64_t index_mail_get_modseq(struct mail *_mail)
 
 uint64_t index_mail_get_pvt_modseq(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 
 	if (mail->data.pvt_modseq != 0)
 		return mail->data.pvt_modseq;
@@ -269,7 +270,7 @@ uint64_t index_mail_get_pvt_modseq(struct mail *_mail)
 
 const char *const *index_mail_get_keywords(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	const char *const *names;
 	const unsigned int *keyword_indexes;
@@ -299,7 +300,7 @@ const char *const *index_mail_get_keywords(struct mail *_mail)
 const ARRAY_TYPE(keyword_indexes) *
 index_mail_get_keyword_indexes(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 
 	if (!array_is_created(&data->keyword_indexes)) {
@@ -313,7 +314,7 @@ index_mail_get_keyword_indexes(struct mail *_mail)
 
 int index_mail_get_parts(struct mail *_mail, struct message_part **parts_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 
 	data->cache_fetch_fields |= MAIL_FETCH_MESSAGE_PARTS;
@@ -342,7 +343,7 @@ int index_mail_get_parts(struct mail *_mail, struct message_part **parts_r)
 
 int index_mail_get_received_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 
 	data->cache_fetch_fields |= MAIL_FETCH_RECEIVED_DATE;
@@ -360,7 +361,7 @@ int index_mail_get_received_date(struct mail *_mail, time_t *date_r)
 
 int index_mail_get_save_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 
 	data->cache_fetch_fields |= MAIL_FETCH_SAVE_DATE;
@@ -405,7 +406,7 @@ static int index_mail_cache_sent_date(struct index_mail *mail)
 
 int index_mail_get_date(struct mail *_mail, time_t *date_r, int *timezone_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct mail_sent_date sentdate;
 
@@ -451,7 +452,7 @@ static bool get_cached_msgpart_sizes(struct index_mail *mail)
 
 const uint32_t *index_mail_get_vsize_extension(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	const void *idata;
 	bool expunged ATTR_UNUSED;
 
@@ -538,7 +539,7 @@ static void index_mail_get_cached_body_size(struct index_mail *mail)
 
 int index_mail_get_virtual_size(struct mail *_mail, uoff_t *size_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct message_size hdr_size, body_size;
 	struct istream *input;
@@ -560,7 +561,7 @@ int index_mail_get_virtual_size(struct mail *_mail, uoff_t *size_r)
 
 int index_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	uoff_t size;
 
@@ -716,7 +717,7 @@ static void index_mail_body_parsed_cache_message_parts(struct index_mail *mail)
 	}
 
 	T_BEGIN {
-		buffer = buffer_create_dynamic(pool_datastack_create(), 1024);
+		buffer = t_buffer_create(1024);
 		message_part_serialize(mail->data.parts, buffer);
 		index_mail_cache_add_idx(mail, cache_field,
 					 buffer->data, buffer->used);
@@ -1147,10 +1148,9 @@ void index_mail_stream_log_failure_for(struct index_mail *mail,
 		if (_mail->expunged)
 			return;
 	}
-	mail_storage_set_critical(_mail->box->storage,
-		"read(%s) failed: %s (uid=%u, box=%s, read reason=%s)",
+	mail_set_critical(_mail,
+		"read(%s) failed: %s (read reason=%s)",
 		i_stream_get_name(input), i_stream_get_error(input),
-		_mail->uid, mailbox_get_vname(_mail->box),
 		mail->mail.get_stream_reason == NULL ? "" :
 		mail->mail.get_stream_reason);
 }
@@ -1195,7 +1195,7 @@ static void index_mail_stream_destroy_callback(struct index_mail *mail)
 
 void index_mail_set_read_buffer_size(struct mail *_mail, struct istream *input)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	unsigned int block_size;
 
 	i_stream_set_max_buffer_size(input, MAIL_READ_FULL_BLOCK_SIZE);
@@ -1441,7 +1441,7 @@ bool index_mail_get_cached_body(struct index_mail *mail, const char **value_r)
 		if (imap_body_parse_from_bodystructure(data->bodystructure,
 						       str, &error) < 0) {
 			/* broken, continue.. */
-			mail_set_cache_corrupted_reason(&mail->mail.mail,
+			mail_set_cache_corrupted(&mail->mail.mail,
 				MAIL_FETCH_IMAP_BODYSTRUCTURE, t_strdup_printf(
 				"Invalid BODYSTRUCTURE %s: %s",
 				data->bodystructure, error));
@@ -1488,7 +1488,7 @@ bool index_mail_get_cached_bodystructure(struct index_mail *mail,
 int index_mail_get_special(struct mail *_mail,
 			   enum mail_fetch_field field, const char **value_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 
 	switch (field) {
@@ -1539,13 +1539,14 @@ int index_mail_get_special(struct mail *_mail,
 		return 0;
 	default:
 		i_unreached();
-		return -1;
 	}
 }
 
-struct mail *index_mail_get_real_mail(struct mail *mail)
+int index_mail_get_backend_mail(struct mail *mail,
+				struct mail **real_mail_r)
 {
-	return mail;
+	*real_mail_r = mail;
+	return 0;
 }
 
 struct mail *
@@ -1564,6 +1565,12 @@ index_mail_alloc(struct mailbox_transaction_context *t,
 	return &mail->mail.mail;
 }
 
+static void index_mail_init_event(struct mail *mail)
+{
+	mail->event = event_create(mail->box->event);
+	event_add_category(mail->event, &event_category_mail);
+}
+
 void index_mail_init(struct index_mail *mail,
 		     struct mailbox_transaction_context *t,
 		     enum mail_fetch_field wanted_fields,
@@ -1575,6 +1582,7 @@ void index_mail_init(struct index_mail *mail,
 	mail->mail.v = *t->box->mail_vfuncs;
 	mail->mail.mail.box = t->box;
 	mail->mail.mail.transaction = t;
+	index_mail_init_event(&mail->mail.mail);
 	t->mail_ref_count++;
 	mail->mail.data_pool = pool_alloconly_create("index_mail", 16384);
 	mail->ibox = INDEX_STORAGE_CONTEXT(t->box);
@@ -1599,8 +1607,7 @@ static void index_mail_close_streams_full(struct index_mail *mail, bool closing)
 		if (mail->data.save_bodystructure_body)
 			mail->data.save_bodystructure_header = TRUE;
 	}
-	if (data->filter_stream != NULL)
-		i_stream_unref(&data->filter_stream);
+	i_stream_unref(&data->filter_stream);
 	if (data->stream != NULL) {
 		struct istream *orig_stream = data->stream;
 
@@ -1670,7 +1677,7 @@ static void index_mail_reset_data(struct index_mail *mail)
 
 void index_mail_close(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 
 	if (mail->mail.mail.seq == 0) {
 		/* mail_set_seq*() hasn't been called yet, or is being called
@@ -1681,6 +1688,11 @@ void index_mail_close(struct mail *_mail)
 		   mail_save_context.dest_mail. */
 		return;
 	}
+
+	/* make sure old mail isn't visible in the event anymore even if it's
+	   attempted to be used. */
+	event_unref(&_mail->event);
+	index_mail_init_event(&mail->mail.mail);
 
 	/* If uid == 0 but seq != 0, we came here from saving a (non-mbox)
 	   message. If that happens, don't bother checking if anything should
@@ -1735,7 +1747,7 @@ static void check_envelope(struct index_mail *mail)
 
 void index_mail_update_access_parts_pre(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct mail_storage *storage = _mail->box->storage;
 	const struct mail_cache_field *cache_fields = mail->ibox->cache_fields;
@@ -1854,7 +1866,7 @@ void index_mail_update_access_parts_pre(struct mail *_mail)
 
 void index_mail_update_access_parts_post(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	const struct mail_index_header *hdr;
 	struct istream *input;
@@ -1886,7 +1898,7 @@ void index_mail_update_access_parts_post(struct mail *_mail)
 
 void index_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 
 	if (mail->data.seq == seq) {
 		if (!saving)
@@ -1903,6 +1915,11 @@ void index_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
 	mail->mail.mail.saving = saving;
 	mail_index_lookup_uid(_mail->transaction->view, seq,
 			      &mail->mail.mail.uid);
+
+	event_add_int(_mail->event, "seq", _mail->seq);
+	event_add_int(_mail->event, "uid", _mail->uid);
+	event_set_append_log_prefix(_mail->event, t_strdup_printf(
+		"%sUID %u: ", saving ? "saving " : "", _mail->uid));
 
 	if (mail_index_view_is_inconsistent(_mail->transaction->view)) {
 		mail_set_expunged(&mail->mail.mail);
@@ -1922,7 +1939,7 @@ void index_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
 
 bool index_mail_prefetch(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 /* HAVE_POSIX_FADVISE alone isn't enough for CentOS 4.9 */
 #if defined(HAVE_POSIX_FADVISE) && defined(POSIX_FADV_WILLNEED)
 	struct mail_storage *storage = _mail->box->storage;
@@ -1964,7 +1981,7 @@ bool index_mail_prefetch(struct mail *_mail)
 
 bool index_mail_set_uid(struct mail *_mail, uint32_t uid)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	uint32_t seq;
 
 	if (mail_index_lookup_seq(_mail->transaction->view, uid, &seq)) {
@@ -1982,7 +1999,7 @@ void index_mail_add_temp_wanted_fields(struct mail *_mail,
 				       enum mail_fetch_field fields,
 				       struct mailbox_header_lookup_ctx *headers)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct mailbox_header_lookup_ctx *new_wanted_headers;
 	ARRAY_TYPE(const_string) names;
@@ -2024,14 +2041,14 @@ void index_mail_add_temp_wanted_fields(struct mail *_mail,
 
 void index_mail_set_uid_cache_updates(struct mail *_mail, bool set)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 
 	mail->data.no_caching = set || mail->data.forced_no_caching;
 }
 
 void index_mail_free(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct mailbox_header_lookup_ctx *headers_ctx =
 		(struct mailbox_header_lookup_ctx *)mail->mail.wanted_headers;
 
@@ -2045,8 +2062,7 @@ void index_mail_free(struct mail *_mail)
 	i_assert(_mail->transaction->mail_ref_count > 0);
 	_mail->transaction->mail_ref_count--;
 
-	if (mail->header_data != NULL)
-		buffer_free(&mail->header_data);
+	buffer_free(&mail->header_data);
 	if (array_is_created(&mail->header_lines))
 		array_free(&mail->header_lines);
 	if (array_is_created(&mail->header_match))
@@ -2056,13 +2072,14 @@ void index_mail_free(struct mail *_mail)
 
 	if (headers_ctx != NULL)
 		mailbox_header_lookup_unref(&headers_ctx);
+	event_unref(&_mail->event);
 	pool_unref(&mail->mail.data_pool);
 	pool_unref(&mail->mail.pool);
 }
 
 void index_mail_cache_parse_continue(struct mail *_mail)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct message_block block;
 
 	while (message_parser_parse_next_block(mail->data.parser_ctx,
@@ -2084,7 +2101,7 @@ void index_mail_cache_parse_continue(struct mail *_mail)
 void index_mail_cache_parse_deinit(struct mail *_mail, time_t received_date,
 				   bool success)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 
 	if (!success) {
 		/* we're going to delete this mail anyway,
@@ -2180,7 +2197,7 @@ void index_mail_update_flags(struct mail *_mail, enum modify_type modify_type,
 void index_mail_update_keywords(struct mail *mail, enum modify_type modify_type,
 				struct mail_keywords *keywords)
 {
-	struct index_mail *imail = (struct index_mail *)mail;
+	struct index_mail *imail = INDEX_MAIL(mail);
 
 	if (array_is_created(&imail->data.keyword_indexes))
 		array_free(&imail->data.keyword_indexes);
@@ -2232,7 +2249,7 @@ void index_mail_expunge(struct mail *mail)
 
 static void index_mail_parse(struct mail *mail, bool parse_body)
 {
-	struct index_mail *imail = (struct index_mail *)mail;
+	struct index_mail *imail = INDEX_MAIL(mail);
 
 	imail->data.access_part |= PARSE_HDR;
 	if (index_mail_parse_headers(imail, NULL, "precache") == 0) {
@@ -2245,7 +2262,7 @@ static void index_mail_parse(struct mail *mail, bool parse_body)
 
 void index_mail_precache(struct mail *mail)
 {
-	struct index_mail *imail = (struct index_mail *)mail;
+	struct index_mail *imail = INDEX_MAIL(mail);
 	enum mail_fetch_field cache;
 	time_t date;
 	uoff_t size;
@@ -2291,16 +2308,10 @@ index_mail_reset_vsize_ext(struct mail *mail)
 }
 
 void index_mail_set_cache_corrupted(struct mail *mail,
-				    enum mail_fetch_field field)
+				    enum mail_fetch_field field,
+				    const char *reason)
 {
-	index_mail_set_cache_corrupted_reason(mail, field, "");
-}
-
-void index_mail_set_cache_corrupted_reason(struct mail *mail,
-					   enum mail_fetch_field field,
-					   const char *reason)
-{
-	struct index_mail *imail = (struct index_mail *)mail;
+	struct index_mail *imail = INDEX_MAIL(mail);
 	const char *field_name;
 
 	switch ((int)field) {
@@ -2343,7 +2354,12 @@ void index_mail_set_cache_corrupted_reason(struct mail *mail,
 	mail_cache_transaction_reset(mail->transaction->cache_trans);
 	imail->data.no_caching = TRUE;
 	imail->data.forced_no_caching = TRUE;
-	if (reason[0] == '\0') {
+
+	if (mail->saving) {
+		mail_set_critical(mail,
+			"BUG: Broken %s found while saving a new mail: %s",
+			field_name, reason);
+	} else if (reason[0] == '\0') {
 		mail_set_mail_cache_corrupted(mail,
 			"Broken %s in mailbox %s",
 			field_name, mail->box->vname);
@@ -2362,7 +2378,7 @@ int index_mail_opened(struct mail *mail ATTR_UNUSED,
 
 void index_mail_save_finish(struct mail_save_context *ctx)
 {
-	struct index_mail *imail = (struct index_mail *)ctx->dest_mail;
+	struct index_mail *imail = INDEX_MAIL(ctx->dest_mail);
 
 	if (ctx->data.from_envelope != NULL &&
 	    imail->data.from_envelope == NULL) {

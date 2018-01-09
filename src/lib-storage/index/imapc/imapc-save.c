@@ -28,8 +28,8 @@ struct imapc_save_context {
 	ARRAY_TYPE(seq_range) dest_saved_uids;
 	unsigned int save_count;
 
-	unsigned int failed:1;
-	unsigned int finished:1;
+	bool failed:1;
+	bool finished:1;
 };
 
 struct imapc_save_cmd_context {
@@ -37,12 +37,14 @@ struct imapc_save_cmd_context {
 	int ret;
 };
 
+#define IMAPC_SAVECTX(s)	container_of(s, struct imapc_save_context, ctx)
+
 void imapc_transaction_save_rollback(struct mail_save_context *_ctx);
 
 struct mail_save_context *
 imapc_save_alloc(struct mailbox_transaction_context *t)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)t->box;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(t->box);
 	struct imapc_save_context *ctx;
 
 	i_assert((t->flags & MAILBOX_TRANSACTION_FLAG_EXTERNAL) != 0);
@@ -60,8 +62,7 @@ imapc_save_alloc(struct mailbox_transaction_context *t)
 
 int imapc_save_begin(struct mail_save_context *_ctx, struct istream *input)
 {
-	struct imapc_save_context *ctx = (struct imapc_save_context *)_ctx;
-	struct mail_storage *storage = _ctx->transaction->box->storage;
+	struct imapc_save_context *ctx = IMAPC_SAVECTX(_ctx);
 	const char *path;
 
 	i_assert(ctx->fd == -1);
@@ -72,8 +73,8 @@ int imapc_save_begin(struct mail_save_context *_ctx, struct istream *input)
 	ctx->fd = imapc_client_create_temp_fd(ctx->mbox->storage->client->client,
 					      &path);
 	if (ctx->fd == -1) {
-		mail_storage_set_critical(storage,
-					  "Couldn't create temp file %s", path);
+		mail_set_critical(_ctx->dest_mail,
+				  "Couldn't create temp file %s", path);
 		ctx->failed = TRUE;
 		return -1;
 	}
@@ -90,18 +91,12 @@ int imapc_save_begin(struct mail_save_context *_ctx, struct istream *input)
 
 int imapc_save_continue(struct mail_save_context *_ctx)
 {
-	struct imapc_save_context *ctx = (struct imapc_save_context *)_ctx;
-	struct mail_storage *storage = _ctx->transaction->box->storage;
+	struct imapc_save_context *ctx = IMAPC_SAVECTX(_ctx);
 
 	if (ctx->failed)
 		return -1;
 
-	if (o_stream_send_istream(_ctx->data.output, ctx->input) < 0) {
-		if (!mail_storage_set_error_from_errno(storage)) {
-			mail_storage_set_critical(storage,
-				"o_stream_send_istream(%s) failed: %m",
-				ctx->temp_path);
-		}
+	if (index_storage_save_continue(_ctx, ctx->input, NULL) < 0) {
 		ctx->failed = TRUE;
 		return -1;
 	}
@@ -140,7 +135,7 @@ static void
 imapc_save_add_to_index(struct imapc_save_context *ctx, uint32_t uid)
 {
 	struct mail *_mail = ctx->ctx.dest_mail;
-	struct index_mail *imail = (struct index_mail *)_mail;
+	struct index_mail *imail = INDEX_MAIL(_mail);
 	uint32_t seq;
 
 	/* we'll temporarily append messages and at commit time expunge
@@ -152,7 +147,7 @@ imapc_save_add_to_index(struct imapc_save_context *ctx, uint32_t uid)
 	imail->data.forced_no_caching = TRUE;
 
 	if (ctx->fd != -1) {
-		struct imapc_mail *imapc_mail = (struct imapc_mail *)imail;
+		struct imapc_mail *imapc_mail = IMAPC_MAIL(_mail);
 		imail->data.stream = i_stream_create_fd_autoclose(&ctx->fd, 0);
 		imapc_mail->header_fetched = TRUE;
 		imapc_mail->body_fetched = TRUE;
@@ -181,7 +176,7 @@ static void imapc_save_callback(const struct imapc_command_reply *reply,
 					    MAIL_ERROR_PARAMS, reply);
 		ctx->ret = -1;
 	} else {
-		mail_storage_set_critical(&ctx->ctx->mbox->storage->storage,
+		mailbox_set_critical(&ctx->ctx->mbox->box,
 			"imapc: APPEND failed: %s", reply->text_full);
 		ctx->ret = -1;
 	}
@@ -241,7 +236,7 @@ static int imapc_save_append(struct imapc_save_context *ctx)
 
 	ctx->mbox->exists_received = FALSE;
 
-	input = i_stream_create_fd(ctx->fd, IO_BLOCK_SIZE, FALSE);
+	input = i_stream_create_fd(ctx->fd, IO_BLOCK_SIZE);
 	sctx.ctx = ctx;
 	sctx.ret = -2;
 	cmd = imapc_client_cmd(ctx->mbox->storage->client->client,
@@ -272,15 +267,15 @@ static int imapc_save_append(struct imapc_save_context *ctx)
 
 int imapc_save_finish(struct mail_save_context *_ctx)
 {
-	struct imapc_save_context *ctx = (struct imapc_save_context *)_ctx;
+	struct imapc_save_context *ctx = IMAPC_SAVECTX(_ctx);
 	struct mail_storage *storage = _ctx->transaction->box->storage;
 
 	ctx->finished = TRUE;
 
 	if (!ctx->failed) {
-		if (o_stream_nfinish(_ctx->data.output) < 0) {
+		if (o_stream_finish(_ctx->data.output) < 0) {
 			if (!mail_storage_set_error_from_errno(storage)) {
-				mail_storage_set_critical(storage,
+				mail_set_critical(_ctx->dest_mail,
 					"write(%s) failed: %s", ctx->temp_path,
 					o_stream_get_error(_ctx->data.output));
 			}
@@ -293,15 +288,9 @@ int imapc_save_finish(struct mail_save_context *_ctx)
 			ctx->failed = TRUE;
 	}
 
-	if (_ctx->data.output != NULL)
-		o_stream_unref(&_ctx->data.output);
-	if (ctx->input != NULL)
-		i_stream_unref(&ctx->input);
-	if (ctx->fd != -1) {
-		if (close(ctx->fd) < 0)
-			i_error("close(%s) failed: %m", ctx->temp_path);
-		ctx->fd = -1;
-	}
+	o_stream_unref(&_ctx->data.output);
+	i_stream_unref(&ctx->input);
+	i_close_fd_path(&ctx->fd, ctx->temp_path);
 	i_free(ctx->temp_path);
 	index_save_context_free(_ctx);
 	return ctx->failed ? -1 : 0;
@@ -309,7 +298,7 @@ int imapc_save_finish(struct mail_save_context *_ctx)
 
 void imapc_save_cancel(struct mail_save_context *_ctx)
 {
-	struct imapc_save_context *ctx = (struct imapc_save_context *)_ctx;
+	struct imapc_save_context *ctx = IMAPC_SAVECTX(_ctx);
 
 	ctx->failed = TRUE;
 	(void)imapc_save_finish(_ctx);
@@ -317,7 +306,7 @@ void imapc_save_cancel(struct mail_save_context *_ctx)
 
 int imapc_transaction_save_commit_pre(struct mail_save_context *_ctx)
 {
-	struct imapc_save_context *ctx = (struct imapc_save_context *)_ctx;
+	struct imapc_save_context *ctx = IMAPC_SAVECTX(_ctx);
 	struct mail_transaction_commit_changes *changes =
 		_ctx->transaction->changes;
 	uint32_t i, last_seq;
@@ -344,7 +333,7 @@ void imapc_transaction_save_commit_post(struct mail_save_context *_ctx,
 
 void imapc_transaction_save_rollback(struct mail_save_context *_ctx)
 {
-	struct imapc_save_context *ctx = (struct imapc_save_context *)_ctx;
+	struct imapc_save_context *ctx = IMAPC_SAVECTX(_ctx);
 
 	/* FIXME: if we really want to rollback, we should expunge messages
 	   we already saved */
@@ -402,7 +391,7 @@ static void imapc_copy_callback(const struct imapc_command_reply *reply,
 					    MAIL_ERROR_PARAMS, reply);
 		ctx->ret = -1;
 	} else {
-		mail_storage_set_critical(&ctx->ctx->mbox->storage->storage,
+		mailbox_set_critical(&ctx->ctx->mbox->box,
 			"imapc: COPY failed: %s", reply->text_full);
 		ctx->ret = -1;
 	}
@@ -411,9 +400,9 @@ static void imapc_copy_callback(const struct imapc_command_reply *reply,
 
 int imapc_copy(struct mail_save_context *_ctx, struct mail *mail)
 {
-	struct imapc_save_context *ctx = (struct imapc_save_context *)_ctx;
+	struct imapc_save_context *ctx = IMAPC_SAVECTX(_ctx);
 	struct mailbox_transaction_context *_t = _ctx->transaction;
-	struct imapc_mailbox *src_mbox = (struct imapc_mailbox *)mail->box;
+	struct imapc_mailbox *src_mbox = IMAPC_MAILBOX(mail->box);
 	struct imapc_command *cmd;
 	struct imapc_save_cmd_context sctx;
 

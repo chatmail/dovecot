@@ -20,9 +20,9 @@ mbox_list_get_ext_id(struct mbox_mailbox *mbox,
 
 int mbox_list_index_has_changed(struct mailbox *box,
 				struct mail_index_view *list_view,
-				uint32_t seq)
+				uint32_t seq, bool quick)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 	const struct mbox_list_index_record *rec;
 	const void *data;
 	const char *path;
@@ -31,7 +31,7 @@ int mbox_list_index_has_changed(struct mailbox *box,
 	bool expunged;
 	int ret;
 
-	ret = index_storage_list_index_has_changed(box, list_view, seq);
+	ret = index_storage_list_index_has_changed(box, list_view, seq, quick);
 	if (ret != 0 || box->storage->set->mailbox_list_index_very_dirty_syncs)
 		return ret;
 
@@ -50,8 +50,7 @@ int mbox_list_index_has_changed(struct mailbox *box,
 	i_assert(ret > 0);
 
 	if (stat(path, &st) < 0) {
-		mail_storage_set_critical(box->storage,
-					  "stat(%s) failed: %m", path);
+		mailbox_set_critical(box, "stat(%s) failed: %m", path);
 		return -1;
 	}
 	if ((time_t)rec->mtime != st.st_mtime ||
@@ -64,7 +63,7 @@ void mbox_list_index_update_sync(struct mailbox *box,
 				 struct mail_index_transaction *trans,
 				 uint32_t seq)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 	struct mail_index_view *list_view;
 	const struct mbox_index_header *mhdr = &mbox->mbox_hdr;
 	const struct mbox_list_index_record *old_rec;

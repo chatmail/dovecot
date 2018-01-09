@@ -5,12 +5,18 @@
 #include "istream-private.h"
 #include "istream-base64.h"
 
-static struct test {
+static const struct test {
 	const char *input;
 	unsigned int chars_per_line;
 	bool crlf;
 	const char *output;
 } tests[] = {
+	{ "", 80, FALSE, "" },
+	{ "1", 80, FALSE, "MQ==" },
+	{ "12", 80, FALSE, "MTI=" },
+	{ "123", 80, FALSE, "MTIz" },
+	{ "1234", 80, FALSE, "MTIzNA==" },
+	{ "12345", 80, FALSE, "MTIzNDU=" },
 	{ "hello world", 80, FALSE, "aGVsbG8gd29ybGQ=" },
 	{ "hello world", 4, FALSE, "aGVs\nbG8g\nd29y\nbGQ=" },
 	{ "hello world", 4, TRUE, "aGVs\r\nbG8g\r\nd29y\r\nbGQ=" },

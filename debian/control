@@ -1,0 +1,369 @@
+Source: dovecot-ce
+Section: mail
+Priority: optional
+Maintainer: Dovecot CE Maintainers <dovecot-ce@dovecot.org>
+Build-Depends: debhelper (>= 9),
+               dpkg-dev (>= 1.16.1),
+               pkg-config,
+               libssl-dev,
+               libpam0g-dev,
+               libldap2-dev,
+               libpq-dev,
+               default-libmysqlclient-dev | libmysqlclient-dev,
+               libsqlite3-dev,
+               libsasl2-dev,
+               zlib1g-dev,
+               krb5-multidev,
+               libbz2-dev,
+               libdb-dev,
+               libcurl4-gnutls-dev,
+               libexpat-dev,
+               libwrap0-dev,
+               dh-systemd,
+               lsb-release,
+               libclucene-dev (>= 2.3),
+               liblzma-dev,
+               liblz4-dev,
+               libexttextcat-dev,
+               libstemmer-dev,
+               autotools-dev,
+               dh-exec,
+               liblua5.2-dev
+Standards-Version: 3.9.8
+Homepage: http://dovecot.org/
+
+Package: dovecot-ce-core
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime (>= 0.76-13.1), openssl, adduser, ucf (>= 2.0020), lsb-base
+Suggests: ntp, dovecot-ce-gssapi, dovecot-ce-sieve, dovecot-ce-pgsql, dovecot-ce-mysql, dovecot-ce-sqlite, dovecot-ce-ldap, dovecot-ce-imapd, dovecot-ce-pop3d, dovecot-ce-lmtpd, dovecot-ce-managesieved, dovecot-ce-solr, dovecot-ce-lucene, dovecot-ce-submissiond
+Provides: dovecot-common, dovecot-abi-${dovecot:ABI-Version}, dovecot-core
+Replaces: dovecot-core (<< 2:2.3.0), dovecot-common (<< 2:2.3.0), mailavenger (<< 0.8.1-4)
+Breaks: dovecot-core (<< 2:2.3.0), dovecot-common (<< 2:2.3.0), mailavenger (<< 0.8.1-4)
+Conflicts: dovecot-antispam
+Description: secure POP3/IMAP server - core files
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package contains the Dovecot main server and its command line utility.
+
+Package: dovecot-ce-dev
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version})
+Provides: dovecot-dev
+Replaces: dovecot-dev (<< 2:2.3.0)
+Breaks: dovecot-dev (<< 2:2.3.0), dovecot-core (<< 2:2.3.0)
+Description: secure POP3/IMAP server - header files
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package contains header files needed to compile plugins for the Dovecot
+ mail server.
+
+Package: dovecot-ce-imapd
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version}), ucf (>= 2.0020)
+Suggests: ufw
+Provides: imap-server, dovecot-imapd
+Replaces: dovecot-imapd (<< 2:2.3.0)
+Breaks: dovecot-imapd (<< 2:2.3.0)
+Description: secure POP3/IMAP server - IMAP daemon
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package contains the Dovecot IMAP server.
+
+Package: dovecot-ce-pop3d
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version}), ucf (>= 2.0020)
+Suggests: ufw
+Provides: pop3-server, dovecot-pop3d
+Replaces: dovecot-pop3d (<< 2:2.3.0)
+Breaks: dovecot-pop3d (<< 2:2.3.0)
+Description: secure POP3/IMAP server - POP3 daemon
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package contains the Dovecot POP3 server.
+
+Package: dovecot-ce-lmtpd
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version}), ucf (>= 2.0020)
+Provides: dovecot-lmtpd
+Replaces: dovecot-lmtpd (<< 2:2.3.0)
+Breaks: dovecot-lmtpd (<< 2:2.3.0)
+Description: secure POP3/IMAP server - LMTP server
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package contains the Dovecot LMTP server.
+
+Package: dovecot-ce-submissiond
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version}), ucf (>= 2.0020)
+Provides: dovecot-submissiond
+Replaces: dovecot-submissiond (<< 2:2.3.0)
+Breaks: dovecot-submissiond (<< 2:2.3.0)
+Description: secure POP3/IMAP server - SMTP Submission server
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package contains the Dovecot SMTP Submission server.
+
+Package: dovecot-ce-pgsql
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version})
+Provides: dovecot-pgsql
+Replaces: dovecot-pgsql (<< 2:2.3.0)
+Breaks: dovecot-pgsql (<< 2:2.3.0)
+Description: secure POP3/IMAP server - PostgreSQL support
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package provides PostgreSQL support for Dovecot.
+
+Package: dovecot-ce-mysql
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version})
+Provides: dovecot-mysql
+Replaces: dovecot-mysql (<< 2:2.3.0)
+Breaks: dovecot-mysql (<< 2:2.3.0)
+Description: secure POP3/IMAP server - MySQL support
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package provides MySQL support for Dovecot.
+
+Package: dovecot-ce-sqlite
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version})
+Provides: dovecot-sqlite
+Replaces: dovecot-sqlite (<< 2:2.3.0)
+Breaks: dovecot-sqlite (<< 2:2.3.0)
+Description: secure POP3/IMAP server - SQLite support
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package provides SQLite support for Dovecot.
+
+Package: dovecot-ce-ldap
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version}), ucf (>= 2.0020)
+Provides: dovecot-ldap
+Replaces: dovecot-ldap (<< 2:2.3.0)
+Breaks: dovecot-ldap (<< 2:2.3.0)
+Description: secure POP3/IMAP server - LDAP support
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package provides LDAP support for Dovecot.
+
+Package: dovecot-ce-gssapi
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version})
+Provides: dovecot-gssapi
+Replaces: dovecot-gssapi (<< 2:2.3.0)
+Breaks: dovecot-gssapi (<< 2:2.3.0)
+Description: secure POP3/IMAP server - GSSAPI support
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package provides GSSAPI authentication support for Dovecot.
+
+Package: dovecot-ce-solr
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version})
+Provides: dovecot-solr
+Replaces: dovecot-solr (<< 2:2.3.0)
+Breaks: dovecot-solr (<< 2:2.3.0)
+Description: secure POP3/IMAP server - Solr support
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package provides Solr full text search support for Dovecot.
+
+Package: dovecot-ce-lucene
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version})
+Provides: dovecot-lucene
+Replaces: dovecot-lucene (<< 2:2.3.0)
+Breaks: dovecot-lucene (<< 2:2.3.0)
+Description: secure POP3/IMAP server - Lucene support
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package provides Lucene full text search support for Dovecot.
+
+Package: dovecot-ce-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Depends: ${misc:Depends}, dovecot-ce-core (= ${binary:Version})
+Provides: dovecot-dbg
+Replaces: dovecot-dbg (<< 2:2.3.0)
+Breaks: dovecot-dbg (<< 2:2.3.0)
+Description: secure POP3/IMAP server - debug symbols
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package contains debug symbols for Dovecot.
+
+Package: dovecot-ce-lua
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, dovecot-ce-core (= ${binary:Version})
+Provides: dovecot-lua
+Replaces: dovecot-lua (<< 2:2.3.0)
+Breaks: dovecot-lua (<< 2:2.3.0)
+Description: secure POP3/IMAP server - LUA support
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package provides LUA scripting support for Dovecot.
+
+Package: dovecot-core
+Depends: dovecot-ce-core, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-dev
+Depends: dovecot-ce-dev, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-imapd
+Depends: dovecot-ce-imapd, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-pop3d
+Depends: dovecot-ce-pop3d, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-lmtpd
+Depends: dovecot-ce-lmtpd, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-pgsql
+Depends: dovecot-ce-pgsql, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-mysql
+Depends: dovecot-ce-mysql, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-sqlite
+Depends: dovecot-ce-sqlite, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-ldap
+Depends: dovecot-ce-ldap, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-gssapi
+Depends: dovecot-ce-gssapi, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-solr
+Depends: dovecot-ce-solr, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-lucene
+Depends: dovecot-ce-lucene, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.
+
+Package: dovecot-dbg
+Depends: dovecot-ce-dbg, ${misc:Depends}
+Architecture: all
+Priority: optional
+Section: oldlibs
+Description: transitional package
+  This is a transitional package. It can safely be removed.

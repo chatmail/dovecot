@@ -33,11 +33,12 @@ struct mail_host {
 	time_t last_updown_change;
 
 	struct ip_addr ip;
+	char *ip_str;
 	char *hostname;
 	struct mail_tag *tag;
 
 	/* host was recently changed and ring hasn't synced yet since */
-	unsigned int desynced:1;
+	bool desynced:1;
 };
 ARRAY_DEFINE_TYPE(mail_host, struct mail_host *);
 
@@ -47,9 +48,6 @@ mail_host_add_ip(struct mail_host_list *list, const struct ip_addr *ip,
 struct mail_host *
 mail_host_add_hostname(struct mail_host_list *list, const char *hostname,
 		       const struct ip_addr *ip, const char *tag_name);
-struct mail_host *
-mail_host_add_hostname(struct mail_host_list *list, const char *hostname,
-		       const struct ip_addr *ip, const char *tag);
 struct mail_host *
 mail_host_lookup(struct mail_host_list *list, const struct ip_addr *ip);
 struct mail_host *
@@ -80,7 +78,7 @@ mail_hosts_find_user(struct mail_host_list *list, const char *tag_name,
 		     unsigned int username_hash);
 
 struct mail_host_list *
-mail_hosts_init(unsigned int user_expire_secs, bool consistent_hashing,
+mail_hosts_init(unsigned int user_expire_secs,
 		user_free_hook_t *user_free_hook);
 void mail_hosts_deinit(struct mail_host_list **list);
 

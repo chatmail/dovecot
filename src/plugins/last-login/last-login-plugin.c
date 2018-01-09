@@ -30,13 +30,12 @@ static void last_login_dict_deinit(struct mail_user *user)
 	struct last_login_user *luser = LAST_LOGIN_USER_CONTEXT(user);
 
 	if (luser->dict != NULL) {
-		(void)dict_wait(luser->dict);
+		dict_wait(luser->dict);
 		dict_deinit(&luser->dict);
 	}
 	/* remove timeout after dict_wait(), which may trigger
 	   last_login_dict_commit() */
-	if (luser->to != NULL)
-		timeout_remove(&luser->to);
+	timeout_remove(&luser->to);
 }
 
 static void last_login_user_deinit(struct mail_user *user)
@@ -47,22 +46,24 @@ static void last_login_user_deinit(struct mail_user *user)
 	luser->module_ctx.super.deinit(user);
 }
 
-static void last_login_dict_commit(int ret, void *context)
+static void
+last_login_dict_commit(const struct dict_commit_result *result,
+		       void *context)
 {
 	struct mail_user *user = context;
 	struct last_login_user *luser = LAST_LOGIN_USER_CONTEXT(user);
 
-	switch(ret) {
+	switch(result->ret) {
 	case DICT_COMMIT_RET_OK:
 	case DICT_COMMIT_RET_NOTFOUND:
 		break;
 	case DICT_COMMIT_RET_FAILED:
-		i_error("last_login_dict: Failed to write value for user %s",
-			user->username);
+		i_error("last_login_dict: Failed to write value for user %s: %s",
+			user->username, result->error);
 		break;
 	case DICT_COMMIT_RET_WRITE_UNCERTAIN:
-		i_error("last_login_dict: Write was unconfirmed (timeout or disconnect) for user %s",
-			 user->username);
+		i_error("last_login_dict: Write was unconfirmed (timeout or disconnect) for user %s: %s",
+			 user->username, result->error);
 		break;
 	};
 
@@ -98,7 +99,7 @@ static void last_login_mail_user_created(struct mail_user *user)
 	set.base_dir = user->set->base_dir;
 	if (mail_user_get_home(user, &set.home_dir) <= 0)
 		set.home_dir = NULL;
-	if (dict_init_full(dict_value, &set, &dict, &error) < 0) {
+	if (dict_init(dict_value, &set, &dict, &error) < 0) {
 		i_error("last_login_dict: dict_init(%s) failed: %s",
 			dict_value, error);
 		return;

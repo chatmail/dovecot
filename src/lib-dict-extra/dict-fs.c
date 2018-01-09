@@ -21,7 +21,7 @@ struct fs_dict_iterate_context {
 	enum dict_iterate_flags flags;
 	pool_t value_pool;
 	struct fs_iter *fs_iter;
-	bool failed;
+	char *error;
 };
 
 static int
@@ -79,24 +79,25 @@ static const char *fs_dict_get_full_key(struct fs_dict *dict, const char *key)
 	}
 }
 
-static int fs_dict_lookup(struct dict *_dict, pool_t pool,
-			  const char *key, const char **value_r)
+static int fs_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
+			  const char **value_r, const char **error_r)
 {
 	struct fs_dict *dict = (struct fs_dict *)_dict;
 	struct fs_file *file;
 	struct istream *input;
 	const unsigned char *data;
 	size_t size;
+	const char *path;
 	string_t *str;
 	int ret;
 
-	file = fs_file_init(dict->fs, fs_dict_get_full_key(dict, key),
-			    FS_OPEN_MODE_READONLY);
+	path = fs_dict_get_full_key(dict, key);
+	file = fs_file_init(dict->fs, path, FS_OPEN_MODE_READONLY);
 	input = fs_read_stream(file, IO_BLOCK_SIZE);
 	(void)i_stream_read(input);
 
 	str = str_new(pool, i_stream_get_data_size(input)+1);
-	while ((ret = i_stream_read_data(input, &data, &size, 0)) > 0) {
+	while ((ret = i_stream_read_more(input, &data, &size)) > 0) {
 		str_append_n(str, data, size);
 		i_stream_skip(input, size);
 	}
@@ -109,6 +110,10 @@ static int fs_dict_lookup(struct dict *_dict, pool_t pool,
 		*value_r = NULL;
 		if (input->stream_errno == ENOENT)
 			ret = 0;
+		else {
+			*error_r = t_strdup_printf("read(%s) failed: %s",
+				path, i_stream_get_error(input));
+		}
 	}
 
 	i_stream_unref(&input);
@@ -145,13 +150,16 @@ static bool fs_dict_iterate(struct dict_iterate_context *ctx,
 	struct fs_dict_iterate_context *iter =
 		(struct fs_dict_iterate_context *)ctx;
 	struct fs_dict *dict = (struct fs_dict *)ctx->dict;
-	const char *path;
+	const char *path, *error;
 	int ret;
+
+	if (iter->error != NULL)
+		return FALSE;
 
 	*key_r = fs_iter_next(iter->fs_iter);
 	if (*key_r == NULL) {
 		if (fs_iter_deinit(&iter->fs_iter) < 0) {
-			iter->failed = TRUE;
+			iter->error = i_strdup(fs_last_error(dict->fs));
 			return FALSE;
 		}
 		if (iter->paths[++iter->path_idx] == NULL)
@@ -166,9 +174,9 @@ static bool fs_dict_iterate(struct dict_iterate_context *ctx,
 	}
 	p_clear(iter->value_pool);
 	path = t_strconcat(iter->paths[iter->path_idx], *key_r, NULL);
-	if ((ret = fs_dict_lookup(ctx->dict, iter->value_pool, path, value_r)) < 0) {
+	if ((ret = fs_dict_lookup(ctx->dict, iter->value_pool, path, value_r, &error)) < 0) {
 		/* I/O error */
-		iter->failed = TRUE;
+		iter->error = i_strdup(error);
 		return FALSE;
 	} else if (ret == 0) {
 		/* file was just deleted, just skip to next one */
@@ -177,20 +185,24 @@ static bool fs_dict_iterate(struct dict_iterate_context *ctx,
 	return TRUE;
 }
 
-static int fs_dict_iterate_deinit(struct dict_iterate_context *ctx)
+static int fs_dict_iterate_deinit(struct dict_iterate_context *ctx,
+				  const char **error_r)
 {
 	struct fs_dict_iterate_context *iter =
 		(struct fs_dict_iterate_context *)ctx;
+	struct fs_dict *dict = (struct fs_dict *)ctx->dict;
 	int ret;
 
 	if (iter->fs_iter != NULL) {
-		if (fs_iter_deinit(&iter->fs_iter) < 0)
-			iter->failed = TRUE;
+		if (fs_iter_deinit(&iter->fs_iter) < 0 && iter->error == NULL)
+			iter->error = i_strdup(fs_last_error(dict->fs));
 	}
-	ret = iter->failed ? -1 : 0;
+	ret = iter->error != NULL ? -1 : 0;
+	*error_r = t_strdup(iter->error);
 
 	pool_unref(&iter->value_pool);
 	i_free(iter->paths);
+	i_free(iter->error);
 	i_free(iter);
 	return ret;
 }
@@ -207,7 +219,8 @@ fs_dict_transaction_init(struct dict *_dict)
 	return &ctx->ctx;
 }
 
-static int fs_dict_write_changes(struct dict_transaction_memory_context *ctx)
+static int fs_dict_write_changes(struct dict_transaction_memory_context *ctx,
+				 const char **error_r)
 {
 	struct fs_dict *dict = (struct fs_dict *)ctx->ctx.dict;
 	struct fs_file *file;
@@ -222,7 +235,8 @@ static int fs_dict_write_changes(struct dict_transaction_memory_context *ctx)
 			file = fs_file_init(dict->fs, key,
 					    FS_OPEN_MODE_REPLACE);
 			if (fs_write(file, change->value.str, strlen(change->value.str)) < 0) {
-				i_error("fs_write(%s) failed: %s", key,
+				*error_r = t_strdup_printf(
+					"fs_write(%s) failed: %s", key,
 					fs_file_last_error(file));
 				ret = -1;
 			}
@@ -231,13 +245,13 @@ static int fs_dict_write_changes(struct dict_transaction_memory_context *ctx)
 		case DICT_CHANGE_TYPE_UNSET:
 			file = fs_file_init(dict->fs, key, FS_OPEN_MODE_READONLY);
 			if (fs_delete(file) < 0) {
-				i_error("fs_delete(%s) failed: %s", key,
+				*error_r = t_strdup_printf(
+					"fs_delete(%s) failed: %s", key,
 					fs_file_last_error(file));
 				ret = -1;
 			}
 			fs_file_deinit(&file);
 			break;
-		case DICT_CHANGE_TYPE_APPEND:
 		case DICT_CHANGE_TYPE_INC:
 			i_unreached();
 		}
@@ -247,7 +261,7 @@ static int fs_dict_write_changes(struct dict_transaction_memory_context *ctx)
 	return 0;
 }
 
-static int
+static void
 fs_dict_transaction_commit(struct dict_transaction_context *_ctx,
 			   bool async ATTR_UNUSED,
 			   dict_transaction_commit_callback_t *callback,
@@ -255,17 +269,14 @@ fs_dict_transaction_commit(struct dict_transaction_context *_ctx,
 {
 	struct dict_transaction_memory_context *ctx =
 		(struct dict_transaction_memory_context *)_ctx;
-	int ret;
+	struct dict_commit_result result = { .ret = 1 };
 
-	if (fs_dict_write_changes(ctx) < 0)
-		ret = -1;
-	else
-		ret = 1;
+
+	if (fs_dict_write_changes(ctx, &result.error) < 0)
+		result.ret = -1;
 	pool_unref(&ctx->pool);
 
-	if (callback != NULL)
-		callback(ret, context);
-	return ret;
+	callback(&result, context);
 }
 
 struct dict dict_driver_fs = {

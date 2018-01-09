@@ -3,12 +3,13 @@
 #include "lib.h"
 #include "dovecot-version.h"
 #include "array.h"
+#include "event-filter.h"
 #include "env-util.h"
 #include "hostpid.h"
-#include "fd-close-on-exec.h"
 #include "ipwd.h"
 #include "process-title.h"
 #include "var-expand-private.h"
+#include "randgen.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -27,37 +28,6 @@ struct atexit_callback {
 };
 
 static ARRAY(struct atexit_callback) atexit_callbacks = ARRAY_INIT;
-
-int close_keep_errno(int *fd)
-{
-	int ret, old_errno = errno;
-
-	i_assert(*fd != -1);
-
-	ret = close(*fd);
-	*fd = -1;
-	errno = old_errno;
-	return ret;
-}
-
-void fd_close_maybe_stdio(int *fd_in, int *fd_out)
-{
-	int *fdp[2] = { fd_in, fd_out };
-
-	if (*fd_in == *fd_out)
-		*fd_in = -1;
-
-	for (unsigned int i = 0; i < N_ELEMENTS(fdp); i++) {
-		if (*fdp[i] == -1)
-			;
-		else if (*fdp[i] > 1)
-			i_close_fd(fdp[i]);
-		else if (dup2(dev_null_fd, *fdp[i]) == *fdp[i])
-			*fdp[i] = -1;
-		else
-			i_fatal("dup2(/dev/null, %d) failed: %m", *fdp[i]);
-	}
-}
 
 #undef i_unlink
 int i_unlink(const char *path, const char *source_fname,
@@ -163,17 +133,13 @@ static void lib_open_non_stdio_dev_null(void)
 
 void lib_init(void)
 {
-	struct timeval tv;
 	i_assert(!lib_initialized);
-
-	/* standard way to get rand() return different values. */
-	if (gettimeofday(&tv, NULL) < 0)
-		i_fatal("gettimeofday(): %m");
-	rand_set_seed((unsigned int) (tv.tv_sec ^ tv.tv_usec ^ getpid()));
-
+	random_init();
 	data_stack_init();
 	hostpid_init();
 	lib_open_non_stdio_dev_null();
+	lib_event_init();
+	event_filter_init();
 	var_expand_extensions_init();
 
 	lib_initialized = TRUE;
@@ -192,9 +158,12 @@ void lib_deinit(void)
 	ipwd_deinit();
 	hostpid_deinit();
 	var_expand_extensions_deinit();
+	event_filter_deinit();
+	lib_event_deinit();
 	i_close_fd(&dev_null_fd);
 	data_stack_deinit();
 	env_deinit();
 	failures_deinit();
 	process_title_deinit();
+	random_deinit();
 }

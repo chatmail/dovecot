@@ -202,7 +202,8 @@ static void test_http_response_parse_valid(void)
 				buffer_set_used_size(payload_buffer, 0);
 				output = o_stream_create_buffer(payload_buffer);
 				test_out("payload receive", 
-					o_stream_send_istream(output, presponse.payload));
+					o_stream_send_istream(output, presponse.payload)
+						== OSTREAM_SEND_ISTREAM_RESULT_FINISHED);
 				o_stream_destroy(&output);
 				payload = str_c(payload_buffer);
 			} else {
@@ -329,7 +330,7 @@ static void test_http_response_parse_invalid(void)
 
 		test_begin(t_strdup_printf("http response invalid [%d]", i));
 
-		while ((ret=http_response_parse_next(parser, FALSE, &response, &error)) > 0);
+		while ((ret=http_response_parse_next(parser, HTTP_RESPONSE_PAYLOAD_TYPE_ALLOWED, &response, &error)) > 0);
 
 		test_out_reason("parse failure", ret < 0, error);
 		test_end();
@@ -395,7 +396,7 @@ static void test_http_response_parse_bad(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_http_response_parse_valid,
 		test_http_response_parse_invalid,
 		test_http_response_parse_bad,

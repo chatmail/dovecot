@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# maildirmake.dovecot -- create maildirs
+# Copyright (c) 2003, Jaldhar H. Vyas
+# "Do what thou wilt" shall be the whole of the license.
+#
+dir="$1"
+owner="$2"
+if [ -z "$dir" ]; then
+  echo "Must supply a directory path"
+  exit 1
+fi 
+
+if [ "$dir" = "-h" ]; then
+  echo "usage: $0 directory [user]"
+  exit 0
+fi 
+
+umask 077
+mkdir -p "$dir/cur" "$dir/new" "$dir/tmp" || exit 1
+chmod 0700 "$dir" "$dir/cur" "$dir/new" "$dir/tmp" || exit 1
+
+if [ -n "$owner" ]; then 
+  chown -R "$owner" "$dir" || exit 1
+fi
+
+exit 0
+

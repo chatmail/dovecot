@@ -2,7 +2,6 @@
 
 #include "lib.h"
 #include "array.h"
-#include "fd-set-nonblock.h"
 #include "safe-mkstemp.h"
 #include "ioloop.h"
 #include "istream.h"
@@ -164,15 +163,15 @@ struct dsync_ibc_stream {
 	char value_output_last;
 
 	enum item_type last_recv_item, last_sent_item;
-	unsigned int last_recv_item_eol:1;
-	unsigned int last_sent_item_eol:1;
+	bool last_recv_item_eol:1;
+	bool last_sent_item_eol:1;
 
-	unsigned int version_received:1;
-	unsigned int handshake_received:1;
-	unsigned int has_pending_data:1;
-	unsigned int finish_received:1;
-	unsigned int done_received:1;
-	unsigned int stopped:1;
+	bool version_received:1;
+	bool handshake_received:1;
+	bool has_pending_data:1;
+	bool finish_received:1;
+	bool done_received:1;
+	bool stopped:1;
 };
 
 static const char *dsync_ibc_stream_get_state(struct dsync_ibc_stream *ibc)
@@ -241,8 +240,7 @@ static int dsync_ibc_stream_send_value_stream(struct dsync_ibc_stream *ibc)
 	size_t i, size;
 	int ret;
 
-	while ((ret = i_stream_read_data(ibc->value_output,
-					 &data, &size, 0)) > 0) {
+	while ((ret = i_stream_read_more(ibc->value_output, &data, &size)) > 0) {
 		add = '\0';
 		for (i = 0; i < size; i++) {
 			if (data[i] == '.' &&
@@ -300,7 +298,6 @@ static int dsync_ibc_stream_output(struct dsync_ibc_stream *ibc)
 	struct ostream *output = ibc->output;
 	int ret;
 
-	o_stream_cork(ibc->output);
 	if ((ret = o_stream_flush(output)) < 0)
 		ret = 1;
 	else if (ibc->value_output != NULL) {
@@ -311,7 +308,6 @@ static int dsync_ibc_stream_output(struct dsync_ibc_stream *ibc)
 
 	if (!dsync_ibc_is_send_queue_full(&ibc->ibc))
 		ibc->ibc.io_callback(ibc->ibc.io_context);
-	o_stream_uncork(ibc->output);
 	return ret;
 }
 
@@ -388,12 +384,11 @@ static void dsync_ibc_stream_deinit(struct dsync_ibc *_ibc)
 			o_stream_nsend_str(ibc->output,
 				t_strdup_printf("%c\n", items[ITEM_DONE].chr));
 		}
-		(void)o_stream_nfinish(ibc->output);
+		(void)o_stream_finish(ibc->output);
 	}
 
 	timeout_remove(&ibc->to);
-	if (ibc->io != NULL)
-		io_remove(&ibc->io);
+	io_remove(&ibc->io);
 	i_stream_destroy(&ibc->input);
 	o_stream_destroy(&ibc->output);
 	pool_unref(&ibc->ret_pool);
@@ -724,7 +719,7 @@ dsync_ibc_stream_send_handshake(struct dsync_ibc *_ibc,
 	}
 	if (set->sync_max_size > 0) {
 		dsync_serializer_encode_add(encoder, "sync_max_size",
-			t_strdup_printf("%llu", (unsigned long long)set->sync_max_size));
+			t_strdup_printf("%"PRIu64, set->sync_max_size));
 	}
 	if (set->sync_flags != NULL) {
 		dsync_serializer_encode_add(encoder, "sync_flags",
@@ -1691,7 +1686,7 @@ dsync_ibc_stream_send_change(struct dsync_ibc *_ibc,
 	}
 	if (change->received_timestamp > 0) {
 		dsync_serializer_encode_add(encoder, "received_timestamp",
-			t_strdup_printf("%lx", (unsigned long)change->received_timestamp));
+			t_strdup_printf("%"PRIxTIME_T, change->received_timestamp));
 	}
 	if (change->virtual_size > 0) {
 		dsync_serializer_encode_add(encoder, "virtual_size",

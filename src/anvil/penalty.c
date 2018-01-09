@@ -31,7 +31,7 @@ struct penalty_rec {
 
 	unsigned int penalty:16;
 	unsigned int last_update:LAST_UPDATE_BITS; /* last_penalty + n */
-	unsigned int checksum_is_pointer:1;
+	bool checksum_is_pointer:1;
 	/* we use value up to two different checksums.
 	   after that switch to pointer. */
 	union {
@@ -78,8 +78,7 @@ void penalty_deinit(struct penalty **_penalty)
 		penalty_rec_free(penalty, penalty->oldest);
 	hash_table_destroy(&penalty->hash);
 
-	if (penalty->to != NULL)
-		timeout_remove(&penalty->to);
+	timeout_remove(&penalty->to);
 	i_free(penalty);
 }
 

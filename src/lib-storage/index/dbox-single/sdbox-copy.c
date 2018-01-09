@@ -45,7 +45,7 @@ sdbox_file_copy_attachments(struct sdbox_file *src_file,
 	pool = pool_alloconly_create("sdbox attachments copy", 1024);
 	p_array_init(&extrefs, pool, 16);
 	if (!index_attachment_parse_extrefs(extrefs_line, pool, &extrefs)) {
-		mail_storage_set_critical(&dest_storage->storage,
+		mailbox_set_critical(&dest_file->mbox->box,
 			"Can't copy %s with corrupted extref metadata: %s",
 			src_file->file.cur_path, extrefs_line);
 		pool_unref(&pool);
@@ -75,7 +75,7 @@ sdbox_file_copy_attachments(struct sdbox_file *src_file,
 		dest_fsfile = fs_file_init(dest_storage->attachment_fs, dest,
 					   FS_OPEN_MODE_READONLY);
 		if (fs_copy(src_fsfile, dest_fsfile) < 0) {
-			mail_storage_set_critical(&dest_storage->storage, "%s",
+			mailbox_set_critical(&dest_file->mbox->box, "%s",
 				fs_last_error(dest_storage->attachment_fs));
 			ret = -1;
 		} else {
@@ -92,16 +92,15 @@ sdbox_file_copy_attachments(struct sdbox_file *src_file,
 static int
 sdbox_copy_hardlink(struct mail_save_context *_ctx, struct mail *mail)
 {
-	struct dbox_save_context *ctx = (struct dbox_save_context *)_ctx;
-	struct sdbox_mailbox *dest_mbox =
-		(struct sdbox_mailbox *)_ctx->transaction->box;
+	struct dbox_save_context *ctx = DBOX_SAVECTX(_ctx);
+	struct sdbox_mailbox *dest_mbox = SDBOX_MAILBOX(_ctx->transaction->box);
 	struct sdbox_mailbox *src_mbox;
 	struct dbox_file *src_file, *dest_file;
 	const char *src_path, *dest_path;
 	int ret;
 
 	if (strcmp(mail->box->storage->name, SDBOX_STORAGE_NAME) == 0)
-		src_mbox = (struct sdbox_mailbox *)mail->box;
+		src_mbox = SDBOX_MAILBOX(mail->box);
 	else {
 		/* Source storage isn't sdbox, can't hard link */
 		return 0;
@@ -132,9 +131,8 @@ sdbox_copy_hardlink(struct mail_save_context *_ctx, struct mail *mail)
 			   stream open) */
 			ret = 0;
 		} else {
-			mail_storage_set_critical(
-				_ctx->transaction->box->storage,
-				"link(%s, %s) failed: %m", src_path, dest_path);
+			mail_set_critical(mail, "link(%s, %s) failed: %m",
+					  src_path, dest_path);
 		}
 		dbox_file_unref(&src_file);
 		dbox_file_unref(&dest_file);

@@ -194,9 +194,11 @@ fail_mail_get_special(struct mail *mail ATTR_UNUSED,
 	return -1;
 }
 
-static struct mail * fail_mail_get_real_mail(struct mail *mail)
+static int fail_mail_get_backend_mail(struct mail *mail,
+				      struct mail **real_mail_r)
 {
-	return mail;
+	*real_mail_r = mail;
+	return 0;
 }
 
 static void
@@ -224,14 +226,8 @@ static void fail_mail_expunge(struct mail *mail ATTR_UNUSED)
 
 static void
 fail_mail_set_cache_corrupted(struct mail *mail ATTR_UNUSED,
-			      enum mail_fetch_field field ATTR_UNUSED)
-{
-}
-
-static void
-fail_mail_set_cache_corrupted_reason(struct mail *mail ATTR_UNUSED,
-				     enum mail_fetch_field field ATTR_UNUSED,
-				     const char *reason ATTR_UNUSED)
+			      enum mail_fetch_field field ATTR_UNUSED,
+			      const char *reason ATTR_UNUSED)
 {
 }
 
@@ -262,7 +258,7 @@ struct mail_vfuncs fail_mail_vfuncs = {
 	fail_mail_get_stream,
 	fail_mail_get_binary_stream,
 	fail_mail_get_special,
-	fail_mail_get_real_mail,
+	fail_mail_get_backend_mail,
 	fail_mail_update_flags,
 	fail_mail_update_keywords,
 	fail_mail_update_modseq,
@@ -271,5 +267,4 @@ struct mail_vfuncs fail_mail_vfuncs = {
 	fail_mail_expunge,
 	fail_mail_set_cache_corrupted,
 	NULL,
-	fail_mail_set_cache_corrupted_reason
 };

@@ -325,17 +325,16 @@ void restrict_access(const struct restrict_access_settings *set,
 
 		if (chroot(set->chroot_dir) != 0)
 			i_fatal("chroot(%s) failed: %m", set->chroot_dir);
+		/* makes static analyzers happy, and is more secure */
+		if (chdir("/") != 0)
+			i_fatal("chdir(/) failed: %m");
+
 		chroot_dir = i_strdup(set->chroot_dir);
 
 		if (home != NULL) {
 			if (chdir(home) < 0) {
 				i_error("chdir(%s) failed: %m", home);
-				home = NULL;
 			}
-		}
-		if (home == NULL) {
-			if (chdir("/") != 0)
-				i_fatal("chdir(/) failed: %m");
 		}
 	}
 
@@ -480,7 +479,10 @@ const char *restrict_access_get_current_chroot(void)
 void restrict_access_allow_coredumps(bool allow ATTR_UNUSED)
 {
 #ifdef HAVE_PR_SET_DUMPABLE
-	(void)prctl(PR_SET_DUMPABLE, allow, 0, 0, 0);
+	if (getenv("PR_SET_DUMPABLE") != NULL) {
+		if (prctl(PR_SET_DUMPABLE, allow ? 1 : 0, 0, 0, 0) < 0)
+			i_error("prctl(PR_SET_DUMPABLE) failed: %m");
+	}
 #endif
 }
 

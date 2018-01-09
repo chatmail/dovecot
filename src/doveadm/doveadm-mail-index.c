@@ -22,8 +22,8 @@ struct index_cmd_context {
 
 	int queue_fd;
 	unsigned int max_recent_msgs;
-	unsigned int queue:1;
-	unsigned int have_wildcards:1;
+	bool queue:1;
+	bool have_wildcards:1;
 };
 
 static int cmd_index_box_precache(struct mailbox *box)
@@ -65,7 +65,8 @@ static int cmd_index_box_precache(struct mailbox *box)
 		       mailbox_get_vname(box), seq, status.messages);
 	}
 
-	trans = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_NO_CACHE_DEC);
+	trans = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_NO_CACHE_DEC,
+					  __func__);
 	search_args = mail_search_build_init();
 	mail_search_build_add_seqset(search_args, seq, status.messages);
 	ctx = mailbox_search_init(trans, search_args, NULL,

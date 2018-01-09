@@ -38,8 +38,7 @@ static void test_fs_metawrap_stat(void)
 
 		test_assert_idx(fs_stat(file, &st) == 0 && st.st_size == 20, i);
 
-		if (input != NULL)
-			i_stream_unref(&input);
+		i_stream_unref(&input);
 		fs_file_deinit(&file);
 	}
 	fs_deinit(&fs);
@@ -71,7 +70,7 @@ static void test_fs_metawrap_write_empty(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_fs_metawrap_stat,
 		test_fs_metawrap_async,
 		test_fs_metawrap_write_empty,

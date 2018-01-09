@@ -20,12 +20,12 @@
 
 static inline const char *otp_skip_lws(const char *data)
 {
-	while (*data && IS_LWS(*data))
+	while (*data != '\0' && IS_LWS(*data))
 		data++;
 	return data;
 }
 
-static inline int otp_check_tail(const char *data)
+static inline bool otp_check_tail(const char *data)
 {
 	data = otp_skip_lws(data);
 
@@ -44,7 +44,7 @@ int otp_read_hex(const char *data, const char **endptr, unsigned char *hash)
 	str = t_str_new(18);
 	buffer_create_from_data(&buf, hash, OTP_HASH_SIZE);
 
-	while (*data) {
+	while (*data != '\0') {
 		char c = *data;
 
 		if (i_isxdigit(c)) {
@@ -91,7 +91,7 @@ int otp_read_words(const char *data, const char **endptr, unsigned char *hash)
 
 	buffer_create_from_data(&buf, bits, sizeof(bits));
 
-	for (; *data && (count < OTP_WORDS_NUMBER); data++) {
+	for (; *data != '\0' && (count < OTP_WORDS_NUMBER); data++) {
 		char c = *data;
 
 		if (space) {
@@ -124,7 +124,7 @@ int otp_read_words(const char *data, const char **endptr, unsigned char *hash)
 	if ((str_len(word) > 0) && (count == OTP_WORDS_NUMBER - 1))
 		add_word();
 
-	if (endptr)
+	if (endptr != NULL)
 		*endptr = data;
 
 	if (count < OTP_WORDS_NUMBER)
@@ -140,7 +140,7 @@ int otp_read_words(const char *data, const char **endptr, unsigned char *hash)
 	hash[7] = (bits[5] >> 2) & 0xff;
 	parity = bits[5] & 3;
 
-	return otp_parity(hash) != parity;
+	return otp_parity(hash) != parity ? 1 : 0;
 }
 
 int otp_read_new_params(const char *data, const char **endptr,
@@ -182,7 +182,7 @@ int otp_parse_response(const char *data, unsigned char *hash, bool hex)
 	if (ret < 0)
 		return ret;
 
-	return otp_check_tail(end);
+	return otp_check_tail(end) ? 1 : 0;
 }
 
 int otp_parse_init_response(const char *data, struct otp_state *new_state,
@@ -221,7 +221,7 @@ int otp_parse_init_response(const char *data, struct otp_state *new_state,
 		return -1;
 	}
 
-	if (otp_check_tail(end) != 0) {
+	if (otp_check_tail(end)) {
 		*error = "trailing garbage found";
 		return -1;
 	}

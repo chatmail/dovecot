@@ -245,6 +245,8 @@ int mail_cache_reopen(struct mail_cache *cache)
 
 static void mail_cache_update_need_compress(struct mail_cache *cache)
 {
+	const struct mail_index_cache_optimization_settings *set =
+		&cache->index->optimization_set.cache;
 	const struct mail_cache_header *hdr = cache->hdr;
 	struct stat st;
 	unsigned int msg_count;
@@ -274,14 +276,14 @@ static void mail_cache_update_need_compress(struct mail_cache *cache)
 	}
 
 	cont_percentage = hdr->continued_record_count * 100 / records_count;
-	if (cont_percentage >= MAIL_CACHE_COMPRESS_CONTINUED_PERCENTAGE) {
+	if (cont_percentage >= set->compress_continued_percentage) {
 		/* too many continued rows, compress */
 		want_compress = TRUE;
 	}
 
 	delete_percentage = hdr->deleted_record_count * 100 /
 		(records_count + hdr->deleted_record_count);
-	if (delete_percentage >= MAIL_CACHE_COMPRESS_DELETE_PERCENTAGE) {
+	if (delete_percentage >= set->compress_delete_percentage) {
 		/* too many deleted records, compress */
 		want_compress = TRUE;
 	}
@@ -292,7 +294,7 @@ static void mail_cache_update_need_compress(struct mail_cache *cache)
 				mail_cache_set_syscall_error(cache, "fstat()");
 			return;
 		}
-		if (st.st_size >= MAIL_CACHE_COMPRESS_MIN_SIZE)
+		if ((uoff_t)st.st_size >= set->compress_min_size)
 			cache->need_compress_file_seq = hdr->file_seq;
 	}
 
@@ -455,7 +457,7 @@ int mail_cache_map(struct mail_cache *cache, size_t offset, size_t size,
                            messages. The caller will then just have to
                            fallback to generating the value itself.
 
-                           We can't simply reopen the cache flie, because
+                           We can't simply reopen the cache file, because
                            using it requires also having updated file
                            offsets. */
                         if (errno != ESTALE)
@@ -533,15 +535,15 @@ int mail_cache_open_and_verify(struct mail_cache *cache)
 	return ret;
 }
 
-static struct mail_cache *mail_cache_alloc(struct mail_index *index)
+struct mail_cache *
+mail_cache_open_or_create_path(struct mail_index *index, const char *path)
 {
 	struct mail_cache *cache;
 
 	cache = i_new(struct mail_cache, 1);
 	cache->index = index;
 	cache->fd = -1;
-	cache->filepath =
-		i_strconcat(index->filepath, MAIL_CACHE_FILE_SUFFIX, NULL);
+	cache->filepath = i_strdup(path);
 	cache->field_pool = pool_alloconly_create("Cache fields", 2048);
 	hash_table_create(&cache->field_name_hash, cache->field_pool, 0,
 			  strcase_hash, strcasecmp);
@@ -570,10 +572,9 @@ static struct mail_cache *mail_cache_alloc(struct mail_index *index)
 
 struct mail_cache *mail_cache_open_or_create(struct mail_index *index)
 {
-	struct mail_cache *cache;
-
-	cache = mail_cache_alloc(index);
-	return cache;
+	const char *path = t_strconcat(index->filepath,
+				       MAIL_CACHE_FILE_SUFFIX, NULL);
+	return mail_cache_open_or_create_path(index, path);
 }
 
 void mail_cache_free(struct mail_cache **_cache)
@@ -587,8 +588,7 @@ void mail_cache_free(struct mail_cache **_cache)
 	mail_index_unregister_expunge_handler(cache->index, cache->ext_id);
 	mail_cache_file_close(cache);
 
-	if (cache->read_buf != NULL)
-		buffer_free(&cache->read_buf);
+	buffer_free(&cache->read_buf);
 	hash_table_destroy(&cache->field_name_hash);
 	pool_unref(&cache->field_pool);
 	i_free(cache->field_file_map);

@@ -839,8 +839,7 @@ void mail_index_sync_map_deinit(struct mail_index_sync_map_ctx *sync_map_ctx)
 {
 	i_assert(sync_map_ctx->modseq_ctx == NULL);
 
-	if (sync_map_ctx->unknown_extensions != NULL)
-		buffer_free(&sync_map_ctx->unknown_extensions);
+	buffer_free(&sync_map_ctx->unknown_extensions);
 	if (sync_map_ctx->expunge_handlers_used)
 		mail_index_sync_deinit_expunge_handlers(sync_map_ctx);
 	mail_index_sync_deinit_handlers(sync_map_ctx);
@@ -880,11 +879,11 @@ void mail_index_map_check(struct mail_index_map *map)
 		i_assert(rec->uid > prev_uid);
 		prev_uid = rec->uid;
 
-		if (rec->flags & MAIL_DELETED) {
+		if ((rec->flags & MAIL_DELETED) != 0) {
 			i_assert(rec->uid >= hdr->first_deleted_uid_lowwater);
 			del++;
 		}
-		if (rec->flags & MAIL_SEEN)
+		if ((rec->flags & MAIL_SEEN) != 0)
 			seen++;
 		else
 			i_assert(rec->uid >= hdr->first_unseen_uid_lowwater);
@@ -973,7 +972,7 @@ int mail_index_sync_map(struct mail_index_map **_map,
 	mail_transaction_log_get_head(index->log, &prev_seq, &prev_offset);
 	if (prev_seq != map->hdr.log_file_seq ||
 	    prev_offset - map->hdr.log_file_tail_offset >
-	    				MAIL_INDEX_MIN_WRITE_BYTES) {
+	    		index->optimization_set.index.rewrite_min_log_bytes) {
 		/* we're reading more from log than we would have preferred.
 		   remember that we probably want to rewrite index soon. */
 		index->index_min_write = TRUE;
@@ -992,7 +991,7 @@ int mail_index_sync_map(struct mail_index_map **_map,
 		   and updates hdr_base to hdr_copy_buf. so the buffer must
 		   initially contain a valid header or we'll break it when
 		   writing it. */
-		buffer_reset(map->hdr_copy_buf);
+		buffer_set_used_size(map->hdr_copy_buf, 0);
 		buffer_append(map->hdr_copy_buf, map->hdr_base,
 			      map->hdr.header_size);
 		map->hdr_base = map->hdr_copy_buf->data;

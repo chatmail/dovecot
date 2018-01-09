@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "upgrade" ] && dpkg --compare-versions "$2" lt "1:2.2.21-1~"; then
+    # Some versions prior to 1:2.2.21-1 did ship and activate dovecot.socket by
+    # default. This default was changed in 1:2.2.21-1 by disabling
+    # dovecot.socket on installation and also explicitly stopping
+    # dovecot.socket during prerm. However, if we are upgrading from older
+    # versions, an incoming IMAP connection between old prerm and upgrade end
+    # might re-activate dovecot.service with an inconsistent on-disk layout. We
+    # do a best-effort attempt to avoid this by stopping dovecot.socket and
+    # dovecot.service here. See #814999 for more details.
+    if [ -d /run/systemd/system ]; then
+        deb-systemd-invoke stop dovecot.socket dovecot.service || true
+    fi
+fi
+
+#DEBHELPER#

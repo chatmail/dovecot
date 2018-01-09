@@ -237,4 +237,4 @@ Note that you will have to change the password encryption in Horde to
 MD5-CRYPT. Also, the example above requires a 'dovecot' user in PostgreSQL with
 read (SELECT) privileges on the 'horde_users' table.
 
-(This file was created from the wiki on 2017-10-10 04:42)
+(This file was created from the wiki on 2017-12-22 04:42)

@@ -89,7 +89,7 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 	fs->lock_method = FS_POSIX_LOCK_METHOD_FLOCK;
 	fs->mode = FS_DEFAULT_MODE;
 
-	tmp = t_strsplit_spaces(args, ": ");
+	tmp = t_strsplit_spaces(args, ":");
 	for (; *tmp != NULL; tmp++) {
 		const char *arg = *tmp;
 
@@ -98,12 +98,8 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 		else if (strcmp(arg, "lock=dotlock") == 0)
 			fs->lock_method = FS_POSIX_LOCK_METHOD_DOTLOCK;
 		else if (strncmp(arg, "prefix=", 7) == 0) {
-			unsigned int len = strlen(arg + 7);
 			i_free(fs->path_prefix);
-			if (len > 0 && arg[7+len-1] != '/')
-				fs->path_prefix = i_strconcat(arg + 7, "/", NULL);
-			else
-				fs->path_prefix = i_strdup(arg + 7);
+			fs->path_prefix = i_strdup(arg + 7);
 		} else if (strcmp(arg, "mode=auto") == 0) {
 			fs->mode_auto = TRUE;
 		} else if (strcmp(arg, "dirs") == 0) {
@@ -310,16 +306,20 @@ static int fs_posix_open(struct posix_fs_file *file)
 	return 0;
 }
 
-static struct fs_file *
-fs_posix_file_init(struct fs *_fs, const char *path,
+static struct fs_file *fs_posix_file_alloc(void)
+{
+	struct posix_fs_file *file = i_new(struct posix_fs_file, 1);
+	return &file->file;
+}
+
+static void
+fs_posix_file_init(struct fs_file *_file, const char *path,
 		   enum fs_open_mode mode, enum fs_open_flags flags)
 {
-	struct posix_fs *fs = (struct posix_fs *)_fs;
-	struct posix_fs_file *file;
+	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs *fs = (struct posix_fs *)_file->fs;
 	guid_128_t guid;
 
-	file = i_new(struct posix_fs_file, 1);
-	file->file.fs = _fs;
 	if (mode != FS_OPEN_MODE_CREATE_UNIQUE_128)
 		file->file.path = i_strdup(path);
 	else {
@@ -332,7 +332,6 @@ fs_posix_file_init(struct fs *_fs, const char *path,
 	file->open_mode = mode;
 	file->open_flags = flags;
 	file->fd = -1;
-	return &file->file;
 }
 
 static void fs_posix_file_close(struct fs_file *_file)
@@ -399,7 +398,7 @@ static bool fs_posix_prefetch(struct fs_file *_file, uoff_t length ATTR_UNUSED)
 /* HAVE_POSIX_FADVISE alone isn't enough for CentOS 4.9 */
 #if defined(HAVE_POSIX_FADVISE) && defined(POSIX_FADV_WILLNEED)
 	if (posix_fadvise(file->fd, 0, length, POSIX_FADV_WILLNEED) < 0) {
-		i_error("posix_fadvise(%s) failed: %m", file->full_path);
+		e_error(_file->event, "posix_fadvise(%s) failed: %m", file->full_path);
 		return TRUE;
 	}
 #endif
@@ -783,15 +782,19 @@ static int fs_posix_delete(struct fs_file *_file)
 	return 0;
 }
 
-static struct fs_iter *
-fs_posix_iter_init(struct fs *_fs, const char *path, enum fs_iter_flags flags)
+static struct fs_iter *fs_posix_iter_alloc(void)
 {
-	struct posix_fs *fs = (struct posix_fs *)_fs;
-	struct posix_fs_iter *iter;
+	struct posix_fs_iter *iter = i_new(struct posix_fs_iter, 1);
+	return &iter->iter;
+}
 
-	iter = i_new(struct posix_fs_iter, 1);
-	iter->iter.fs = _fs;
-	iter->iter.flags = flags;
+static void
+fs_posix_iter_init(struct fs_iter *_iter, const char *path,
+		   enum fs_iter_flags flags ATTR_UNUSED)
+{
+	struct posix_fs_iter *iter = (struct posix_fs_iter *)_iter;
+	struct posix_fs *fs = (struct posix_fs *)_iter->fs;
+
 	iter->path = fs->path_prefix == NULL ? i_strdup(path) :
 		i_strconcat(fs->path_prefix, path, NULL);
 	if (iter->path[0] == '\0') {
@@ -801,9 +804,8 @@ fs_posix_iter_init(struct fs *_fs, const char *path, enum fs_iter_flags flags)
 	iter->dir = opendir(iter->path);
 	if (iter->dir == NULL && errno != ENOENT) {
 		iter->err = errno;
-		fs_set_error(_fs, "opendir(%s) failed: %m", iter->path);
+		fs_set_error(_iter->fs, "opendir(%s) failed: %m", iter->path);
 	}
-	return &iter->iter;
 }
 
 static bool fs_posix_iter_want(struct posix_fs_iter *iter, const char *fname)
@@ -896,6 +898,7 @@ const struct fs fs_class_posix = {
 		fs_posix_init,
 		fs_posix_deinit,
 		fs_posix_get_properties,
+		fs_posix_file_alloc,
 		fs_posix_file_init,
 		fs_posix_file_deinit,
 		fs_posix_file_close,
@@ -916,6 +919,7 @@ const struct fs fs_class_posix = {
 		fs_posix_copy,
 		fs_posix_rename,
 		fs_posix_delete,
+		fs_posix_iter_alloc,
 		fs_posix_iter_init,
 		fs_posix_iter_next,
 		fs_posix_iter_deinit,

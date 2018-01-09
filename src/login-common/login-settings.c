@@ -26,6 +26,7 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, login_log_format_elements),
 	DEF(SET_STR, login_log_format),
 	DEF(SET_STR, login_access_sockets),
+	DEF(SET_STR_VARS, login_proxy_notify_path),
 	DEF(SET_STR, login_plugin_dir),
 	DEF(SET_STR, login_plugins),
 	DEF(SET_TIME, login_proxy_max_disconnect_delay),
@@ -54,6 +55,7 @@ static const struct login_settings login_default_settings = {
 	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
 	.login_log_format = "%$: %s",
 	.login_access_sockets = "",
+	.login_proxy_notify_path = "proxy-notify",
 	.login_plugin_dir = MODULEDIR"/login",
 	.login_plugins = "",
 	.login_proxy_max_disconnect_delay = 0,
@@ -115,24 +117,18 @@ static bool login_settings_check(void *_set, pool_t pool,
 static const struct var_expand_table *
 login_set_var_expand_table(const struct master_service_settings_input *input)
 {
-	static struct var_expand_table static_tab[] = {
-		{ 'l', NULL, "lip" },
-		{ 'r', NULL, "rip" },
-		{ 'p', NULL, "pid" },
-		{ 's', NULL, "service" },
-		{ '\0', NULL, "local_name" },
+	const struct var_expand_table stack_tab[] = {
+		{ 'l', net_ip2addr(&input->local_ip), "lip" },
+		{ 'r', net_ip2addr(&input->remote_ip), "rip" },
+		{ 'p', my_pid, "pid" },
+		{ 's', input->service, "service" },
+		{ '\0', input->local_name, "local_name" },
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
 
-	tab = t_malloc(sizeof(static_tab));
-	memcpy(tab, static_tab, sizeof(static_tab));
-
-	tab[0].value = net_ip2addr(&input->local_ip);
-	tab[1].value = net_ip2addr(&input->remote_ip);
-	tab[2].value = my_pid;
-	tab[3].value = input->service;
-	tab[4].value = input->local_name;
+	tab = t_malloc_no0(sizeof(stack_tab));
+	memcpy(tab, stack_tab, sizeof(stack_tab));
 	return tab;
 }
 
@@ -196,8 +192,9 @@ login_settings_read(pool_t pool,
 	for (i = 0; i < count; i++)
 		sets[i] = login_setting_dup(pool, input.roots[i], cache_sets[i]);
 
-	settings_var_expand(&login_setting_parser_info, sets[0], pool,
-			    login_set_var_expand_table(&input));
+	if (settings_var_expand(&login_setting_parser_info, sets[0], pool,
+				login_set_var_expand_table(&input), &error) <= 0)
+		i_fatal("Failed to expand settings: %s", error);
 
 	*ssl_set_r =
 		login_setting_dup(pool, &master_service_ssl_setting_parser_info,

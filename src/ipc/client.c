@@ -122,8 +122,8 @@ struct client *client_create(int fd)
 	client = i_new(struct client, 1);
 	client->fd = fd;
 	client->io = io_add(fd, IO_READ, client_input, client);
-	client->input = i_stream_create_fd(fd, (size_t)-1, FALSE);
-	client->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	client->input = i_stream_create_fd(fd, (size_t)-1);
+	client->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(client->output, TRUE);
 
 	DLLIST_PREPEND(&clients, client);
@@ -137,8 +137,7 @@ void client_destroy(struct client **_client)
 	*_client = NULL;
 
 	DLLIST_REMOVE(&clients, client);
-	if (client->io != NULL)
-		io_remove(&client->io);
+	io_remove(&client->io);
 	i_stream_destroy(&client->input);
 	o_stream_destroy(&client->output);
 	if (close(client->fd) < 0)

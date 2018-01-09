@@ -1,9 +1,8 @@
 /* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "ioloop.h"
-#include "abspath.h"
 #include "fs-api.h"
 #include "mkdir-parents.h"
 #include "unlink-old-files.h"
@@ -34,12 +33,12 @@ static bool
 dbox_alt_path_has_changed(const char *root_dir, const char *alt_path,
 			  const char *alt_path2, const char *alt_symlink_path)
 {
-	const char *linkpath;
+	const char *linkpath, *error;
 
-	if (t_readlink(alt_symlink_path, &linkpath) < 0) {
+	if (t_readlink(alt_symlink_path, &linkpath, &error) < 0) {
 		if (errno == ENOENT)
 			return alt_path != NULL;
-		i_error("readlink(%s) failed: %m", alt_symlink_path);
+		i_error("t_readlink(%s) failed: %s", alt_symlink_path, error);
 		return FALSE;
 	}
 
@@ -80,8 +79,15 @@ static void dbox_verify_alt_path(struct mailbox_list *list)
 	/* unlink/create the current alt path symlink */
 	i_unlink_if_exists(alt_symlink_path);
 	if (alt_path != NULL) {
-		if (symlink(alt_path, alt_symlink_path) < 0 &&
-		    errno != EEXIST) {
+		int ret = symlink(alt_path, alt_symlink_path);
+		if (ret < 0 && errno == ENOENT) {
+			/* root_dir doesn't exist yet - create it */
+			if (mailbox_list_mkdir_root(list, root_dir,
+					MAILBOX_LIST_PATH_TYPE_DIR) < 0)
+				return;
+			ret = symlink(alt_path, alt_symlink_path);
+		}
+		if (ret < 0 && errno != EEXIST) {
 			i_error("symlink(%s, %s) failed: %m",
 				alt_path, alt_symlink_path);
 		}
@@ -92,7 +98,7 @@ int dbox_storage_create(struct mail_storage *_storage,
 			struct mail_namespace *ns,
 			const char **error_r)
 {
-	struct dbox_storage *storage = (struct dbox_storage *)_storage;
+	struct dbox_storage *storage = DBOX_STORAGE(_storage);
 	const struct mail_storage_settings *set = _storage->set;
 	const char *error;
 
@@ -135,7 +141,7 @@ int dbox_storage_create(struct mail_storage *_storage,
 
 void dbox_storage_destroy(struct mail_storage *_storage)
 {
-	struct dbox_storage *storage = (struct dbox_storage *)_storage;
+	struct dbox_storage *storage = DBOX_STORAGE(_storage);
 
 	if (storage->attachment_fs != NULL)
 		fs_deinit(&storage->attachment_fs);
@@ -247,12 +253,11 @@ int dbox_mailbox_check_existence(struct mailbox *box, time_t *path_ctime_r)
 			T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
 		return -1;
 	} else if (errno == EACCES) {
-		mail_storage_set_critical(box->storage, "%s",
+		mailbox_set_critical(box, "%s",
 			mail_error_eacces_msg("stat", box_path));
 		return -1;
 	} else {
-		mail_storage_set_critical(box->storage,
-					  "stat(%s) failed: %m", box_path);
+		mailbox_set_critical(box, "stat(%s) failed: %m", box_path);
 		return -1;
 	}
 }
@@ -311,7 +316,7 @@ static int dir_is_empty(struct mail_storage *storage, const char *path)
 int dbox_mailbox_create(struct mailbox *box,
 			const struct mailbox_update *update, bool directory)
 {
-	struct dbox_storage *storage = (struct dbox_storage *)box->storage;
+	struct dbox_storage *storage = DBOX_STORAGE(box->storage);
 	const char *alt_path;
 	struct stat st;
 	int ret;
@@ -335,10 +340,9 @@ int dbox_mailbox_create(struct mailbox *box,
 		if (ret < 0)
 			return -1;
 		if (ret == 0) {
-			mail_storage_set_critical(&storage->storage,
-				"Mailbox %s has existing files in alt path, "
-				"rebuilding storage to avoid losing messages",
-				box->vname);
+			mailbox_set_critical(box,
+				"Existing files in alt path, "
+				"rebuilding storage to avoid losing messages");
 			storage->v.set_mailbox_corrupted(box);
 			return -1;
 		}
@@ -350,7 +354,7 @@ int dbox_mailbox_create(struct mailbox *box,
 int dbox_mailbox_create_indexes(struct mailbox *box,
 				const struct mailbox_update *update)
 {
-	struct dbox_storage *storage = (struct dbox_storage *)box->storage;
+	struct dbox_storage *storage = DBOX_STORAGE(box->storage);
 	struct mail_index_sync_ctx *sync_ctx;
 	struct mail_index_view *view;
 	struct mail_index_transaction *trans;

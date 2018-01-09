@@ -11,6 +11,8 @@
 #include "master-service.h"
 #include "director.h"
 #include "director-request.h"
+#include "mail-host.h"
+#include "auth-client-interface.h"
 #include "auth-connection.h"
 #include "login-connection.h"
 
@@ -32,8 +34,8 @@ struct login_connection {
 	struct auth_connection *auth;
 	struct director *dir;
 
-	unsigned int handshaked:1;
-	unsigned int destroyed:1;
+	bool handshaked:1;
+	bool destroyed:1;
 };
 
 struct login_host_request {
@@ -132,7 +134,7 @@ static bool login_host_request_is_self(struct login_host_request *request,
 }
 
 static void
-login_host_callback(const struct ip_addr *ip, const char *hostname,
+login_host_callback(const struct mail_host *host, const char *hostname,
 		    const char *errormsg, void *context)
 {
 	struct login_host_request *request = context;
@@ -140,7 +142,7 @@ login_host_callback(const struct ip_addr *ip, const char *hostname,
 	const char *line, *line_params;
 	unsigned int secs;
 
-	if (ip == NULL) {
+	if (host == NULL) {
 		if (strncmp(request->line, "OK\t", 3) == 0)
 			line_params = request->line + 3;
 		else if (strncmp(request->line, "PASS\t", 5) == 0)
@@ -151,20 +153,25 @@ login_host_callback(const struct ip_addr *ip, const char *hostname,
 		i_error("director: User %s host lookup failed: %s",
 			request->username, errormsg);
 		line = t_strconcat("FAIL\t", t_strcut(line_params, '\t'),
-				   "\ttemp", NULL);
+				   "\tcode="AUTH_CLIENT_FAIL_CODE_TEMPFAIL, NULL);
 	} else if (request->director_proxy_maybe &&
-		   login_host_request_is_self(request, ip)) {
+		   login_host_request_is_self(request, &host->ip)) {
 		line = request->line;
 	} else {
 		string_t *str = t_str_new(64);
+		char secs_buf[MAX_INT_STRLEN];
 
 		secs = dir->set->director_user_expire / 2;
-		str_printfa(str, "%s\tproxy_refresh=%u\t", request->line, secs);
+		str_append(str, request->line);
+		str_append(str, "\tproxy_refresh=");
+		str_append(str, dec2str_buf(secs_buf, secs));
+		str_append(str, "\thost=");
 		if (hostname == NULL || hostname[0] == '\0')
-			str_printfa(str, "host=%s", net_ip2addr(ip));
+			str_append(str, host->ip_str);
 		else {
-			str_printfa(str, "host=%s\thostip=%s",
-				    hostname, net_ip2addr(ip));
+			str_append(str, hostname);
+			str_append(str, "\thostip=");
+			str_append(str, host->ip_str);
 		}
 		line = str_c(str);
 	}
@@ -269,7 +276,7 @@ login_connection_init(struct director *dir, int fd,
 	conn->refcount = 1;
 	conn->fd = fd;
 	conn->dir = dir;
-	conn->output = o_stream_create_fd(conn->fd, (size_t)-1, FALSE);
+	conn->output = o_stream_create_fd(conn->fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	if (type != LOGIN_CONNECTION_TYPE_AUTHREPLY) {
 		i_assert(auth != NULL);
@@ -279,7 +286,7 @@ login_connection_init(struct director *dir, int fd,
 		auth_connection_set_callback(conn->auth, auth_input_line, conn);
 	} else {
 		i_assert(auth == NULL);
-		conn->input = i_stream_create_fd(conn->fd, IO_BLOCK_SIZE, FALSE);
+		conn->input = i_stream_create_fd(conn->fd, IO_BLOCK_SIZE);
 		conn->io = io_add(conn->fd, IO_READ,
 				  login_connection_authreply_input, conn);
 		o_stream_nsend_str(conn->output, t_strdup_printf(
@@ -305,8 +312,7 @@ void login_connection_deinit(struct login_connection **_conn)
 
 	DLLIST_REMOVE(&login_connections, conn);
 	io_remove(&conn->io);
-	if (conn->input != NULL)
-		i_stream_destroy(&conn->input);
+	i_stream_destroy(&conn->input);
 	o_stream_destroy(&conn->output);
 	if (close(conn->fd) < 0)
 		i_error("close(login connection) failed: %m");

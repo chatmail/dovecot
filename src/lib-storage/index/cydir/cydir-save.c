@@ -30,9 +30,11 @@ struct cydir_save_context {
 	struct istream *input;
 	int fd;
 
-	unsigned int failed:1;
-	unsigned int finished:1;
+	bool failed:1;
+	bool finished:1;
 };
+
+#define CYDIR_SAVECTX(s)	container_of(s, struct cydir_save_context, ctx)
 
 static char *cydir_generate_tmp_filename(void)
 {
@@ -56,7 +58,7 @@ cydir_get_save_path(struct cydir_save_context *ctx, unsigned int num)
 struct mail_save_context *
 cydir_save_alloc(struct mailbox_transaction_context *t)
 {
-	struct cydir_mailbox *mbox = (struct cydir_mailbox *)t->box;
+	struct cydir_mailbox *mbox = CYDIR_MAILBOX(t->box);
 	struct cydir_save_context *ctx;
 
 	i_assert((t->flags & MAILBOX_TRANSACTION_FLAG_EXTERNAL) != 0);
@@ -75,7 +77,7 @@ cydir_save_alloc(struct mailbox_transaction_context *t)
 
 int cydir_save_begin(struct mail_save_context *_ctx, struct istream *input)
 {
-	struct cydir_save_context *ctx = (struct cydir_save_context *)_ctx;
+	struct cydir_save_context *ctx = CYDIR_SAVECTX(_ctx);
 	struct mailbox_transaction_context *trans = _ctx->transaction;
 	enum mail_flags save_flags;
 	struct istream *crlf_input;
@@ -90,10 +92,11 @@ int cydir_save_begin(struct mail_save_context *_ctx, struct istream *input)
 		if (ctx->fd != -1) {
 			_ctx->data.output =
 				o_stream_create_fd_file(ctx->fd, 0, FALSE);
+			o_stream_set_name(_ctx->data.output, path);
 			o_stream_cork(_ctx->data.output);
 		} else {
-			mail_storage_set_critical(trans->box->storage,
-						  "open(%s) failed: %m", path);
+			mailbox_set_critical(trans->box, "open(%s) failed: %m",
+					     path);
 			ctx->failed = TRUE;
 		}
 	} T_END;
@@ -124,47 +127,35 @@ int cydir_save_begin(struct mail_save_context *_ctx, struct istream *input)
 
 int cydir_save_continue(struct mail_save_context *_ctx)
 {
-	struct cydir_save_context *ctx = (struct cydir_save_context *)_ctx;
-	struct mail_storage *storage = &ctx->mbox->storage->storage;
+	struct cydir_save_context *ctx = CYDIR_SAVECTX(_ctx);
 
 	if (ctx->failed)
 		return -1;
 
-	do {
-		if (o_stream_send_istream(_ctx->data.output, ctx->input) < 0) {
-			if (!mail_storage_set_error_from_errno(storage)) {
-				mail_storage_set_critical(storage,
-					"write(%s) failed: %m",
-					cydir_get_save_path(ctx, ctx->mail_count));
-			}
-			ctx->failed = TRUE;
-			return -1;
-		}
-		index_mail_cache_parse_continue(_ctx->dest_mail);
-
-		/* both tee input readers may consume data from our primary
-		   input stream. we'll have to make sure we don't return with
-		   one of the streams still having data in them. */
-	} while (i_stream_read(ctx->input) > 0);
+	if (index_storage_save_continue(_ctx, ctx->input,
+					_ctx->dest_mail) < 0) {
+		ctx->failed = TRUE;
+		return -1;
+	}
 	return 0;
 }
 
 static int cydir_save_flush(struct cydir_save_context *ctx, const char *path)
 {
 	struct mail_storage *storage = &ctx->mbox->storage->storage;
+	struct mailbox *box = &ctx->mbox->box;
 	struct stat st;
 	int ret = 0;
 
-	if (o_stream_nfinish(ctx->ctx.data.output) < 0) {
-		mail_storage_set_critical(storage, "write(%s) failed: %s", path,
+	if (o_stream_finish(ctx->ctx.data.output) < 0) {
+		mailbox_set_critical(box, "write(%s) failed: %s", path,
 			o_stream_get_error(ctx->ctx.data.output));
 		ret = -1;
 	}
 
 	if (storage->set->parsed_fsync_mode != FSYNC_MODE_NEVER) {
 		if (fsync(ctx->fd) < 0) {
-			mail_storage_set_critical(storage,
-						  "fsync(%s) failed: %m", path);
+			mailbox_set_critical(box, "fsync(%s) failed: %m", path);
 			ret = -1;
 		}
 	}
@@ -173,8 +164,7 @@ static int cydir_save_flush(struct cydir_save_context *ctx, const char *path)
 		if (fstat(ctx->fd, &st) == 0)
 			ctx->ctx.data.received_date = st.st_mtime;
 		else {
-			mail_storage_set_critical(storage,
-						  "fstat(%s) failed: %m", path);
+			mailbox_set_critical(box, "fstat(%s) failed: %m", path);
 			ret = -1;
 		}
 	} else {
@@ -183,16 +173,14 @@ static int cydir_save_flush(struct cydir_save_context *ctx, const char *path)
 		ut.actime = ioloop_time;
 		ut.modtime = ctx->ctx.data.received_date;
 		if (utime(path, &ut) < 0) {
-			mail_storage_set_critical(storage,
-						  "utime(%s) failed: %m", path);
+			mailbox_set_critical(box, "utime(%s) failed: %m", path);
 			ret = -1;
 		}
 	}
 
 	o_stream_destroy(&ctx->ctx.data.output);
 	if (close(ctx->fd) < 0) {
-		mail_storage_set_critical(storage,
-					  "close(%s) failed: %m", path);
+		mailbox_set_critical(box, "close(%s) failed: %m", path);
 		ret = -1;
 	}
 	ctx->fd = -1;
@@ -201,7 +189,7 @@ static int cydir_save_flush(struct cydir_save_context *ctx, const char *path)
 
 int cydir_save_finish(struct mail_save_context *_ctx)
 {
-	struct cydir_save_context *ctx = (struct cydir_save_context *)_ctx;
+	struct cydir_save_context *ctx = CYDIR_SAVECTX(_ctx);
 	const char *path = cydir_get_save_path(ctx, ctx->mail_count);
 
 	ctx->finished = TRUE;
@@ -218,8 +206,7 @@ int cydir_save_finish(struct mail_save_context *_ctx)
 
 	index_mail_cache_parse_deinit(_ctx->dest_mail,
 				      _ctx->data.received_date, !ctx->failed);
-	if (ctx->input != NULL)
-		i_stream_unref(&ctx->input);
+	i_stream_unref(&ctx->input);
 
 	index_save_context_free(_ctx);
 	return ctx->failed ? -1 : 0;
@@ -227,7 +214,7 @@ int cydir_save_finish(struct mail_save_context *_ctx)
 
 void cydir_save_cancel(struct mail_save_context *_ctx)
 {
-	struct cydir_save_context *ctx = (struct cydir_save_context *)_ctx;
+	struct cydir_save_context *ctx = CYDIR_SAVECTX(_ctx);
 
 	ctx->failed = TRUE;
 	(void)cydir_save_finish(_ctx);
@@ -235,7 +222,7 @@ void cydir_save_cancel(struct mail_save_context *_ctx)
 
 int cydir_transaction_save_commit_pre(struct mail_save_context *_ctx)
 {
-	struct cydir_save_context *ctx = (struct cydir_save_context *)_ctx;
+	struct cydir_save_context *ctx = CYDIR_SAVECTX(_ctx);
 	struct mailbox_transaction_context *_t = _ctx->transaction;
 	const struct mail_index_header *hdr;
 	struct seq_range_iter iter;
@@ -270,14 +257,14 @@ int cydir_transaction_save_commit_pre(struct mail_save_context *_ctx)
 	dest_prefixlen = str_len(dest_path);
 
 	seq_range_array_iter_init(&iter, &_t->changes->saved_uids); n = 0;
-	while (seq_range_array_iter_nth(&iter, n++, &uid) > 0) {
+	while (seq_range_array_iter_nth(&iter, n++, &uid)) {
 		str_truncate(src_path, src_prefixlen);
 		str_truncate(dest_path, dest_prefixlen);
 		str_printfa(src_path, "%u", n-1);
 		str_printfa(dest_path, "%u.", uid);
 
 		if (rename(str_c(src_path), str_c(dest_path)) < 0) {
-			mail_storage_set_critical(&ctx->mbox->storage->storage,
+			mailbox_set_critical(&ctx->mbox->box,
 				"rename(%s, %s) failed: %m",
 				str_c(src_path), str_c(dest_path));
 			ctx->failed = TRUE;
@@ -291,7 +278,7 @@ int cydir_transaction_save_commit_pre(struct mail_save_context *_ctx)
 void cydir_transaction_save_commit_post(struct mail_save_context *_ctx,
 					struct mail_index_transaction_commit_result *result)
 {
-	struct cydir_save_context *ctx = (struct cydir_save_context *)_ctx;
+	struct cydir_save_context *ctx = CYDIR_SAVECTX(_ctx);
 
 	_ctx->transaction = NULL; /* transaction is already freed */
 
@@ -304,7 +291,7 @@ void cydir_transaction_save_commit_post(struct mail_save_context *_ctx,
 
 void cydir_transaction_save_rollback(struct mail_save_context *_ctx)
 {
-	struct cydir_save_context *ctx = (struct cydir_save_context *)_ctx;
+	struct cydir_save_context *ctx = CYDIR_SAVECTX(_ctx);
 
 	if (!ctx->finished)
 		cydir_save_cancel(&ctx->ctx);

@@ -28,10 +28,6 @@ There are two choices for synchronizing your clock:
     clockspeed [http://cr.yp.to/clockspeed.html] or chrony
     [http://chrony.sunsite.dk/] as well.
 
-If all else fails, you can just go and remove the error checking code from
-'src/lib/ioloop.c'. It's unlikely that anything will break badly, but you might
-get some errors logged once in a while.
-
 In some systems ntpd/ntpdate is run at boot, but only after Dovecot has
 started. That can cause Dovecot to die immediately. If you have this problem,
 fix your init scripts to run ntpd/ntpdate first, before starting Dovecot. 
@@ -88,4 +84,4 @@ a while is to avoid problems related to timestamps. Some issues are:
 While killing mail processes doesn't fully solve any of those issues, they're
 at least less likely to happen then.
 
-(This file was created from the wiki on 2017-10-10 04:42)
+(This file was created from the wiki on 2017-12-22 04:42)

@@ -43,9 +43,9 @@ struct auth_master_connection {
 			       void *context);
 	void *reply_context;
 
-	unsigned int sent_handshake:1;
-	unsigned int handshaked:1;
-	unsigned int aborted:1;
+	bool sent_handshake:1;
+	bool handshaked:1;
+	bool aborted:1;
 };
 
 struct auth_master_lookup_ctx {
@@ -82,13 +82,8 @@ auth_master_init(const char *auth_socket_path, enum auth_master_flags flags)
 
 static void auth_connection_close(struct auth_master_connection *conn)
 {
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
-	if (conn->fd != -1) {
-		if (close(conn->fd) < 0)
-			i_error("close(%s) failed: %m", conn->auth_socket_path);
-		conn->fd = -1;
-	}
+	timeout_remove(&conn->to);
+	i_close_fd_path(&conn->fd, conn->auth_socket_path);
 
 	conn->sent_handshake = FALSE;
 	conn->handshaked = FALSE;
@@ -209,7 +204,7 @@ static bool auth_lookup_reply_callback(const char *cmd, const char *const *args,
 	if (ctx->return_value >= 0) {
 		ctx->fields = p_new(ctx->pool, const char *, len + 1);
 		for (i = 0; i < len; i++)
-			ctx->fields[i] = str_tabunescape(p_strdup(ctx->pool, args[i]));
+			ctx->fields[i] = p_strdup(ctx->pool, args[i]);
 	} else {
 		/* put the reason string into first field */
 		ctx->fields = p_new(ctx->pool, const char *, 2);
@@ -234,7 +229,7 @@ auth_handle_line(struct auth_master_connection *conn, const char *line)
 {
 	const char *cmd, *const *args, *id, *wanted_id;
 
-	args = t_strsplit_tab(line);
+	args = t_strsplit_tabescaped(line);
 	cmd = *args; args++;
 	if (*args == NULL)
 		id = "";
@@ -338,24 +333,21 @@ static void auth_master_set_io(struct auth_master_connection *conn)
 	if (conn->ioloop != NULL)
 		return;
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 
 	conn->prev_ioloop = current_ioloop;
 	conn->ioloop = io_loop_create();
-	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE, FALSE);
-	conn->output = o_stream_create_fd(conn->fd, MAX_OUTBUF_SIZE, FALSE);
+	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE);
+	conn->output = o_stream_create_fd(conn->fd, MAX_OUTBUF_SIZE);
 	conn->io = io_add(conn->fd, IO_READ, auth_input, conn);
 	conn->to = timeout_add(1000*MASTER_AUTH_LOOKUP_TIMEOUT_SECS,
 			       auth_request_timeout, conn);
-	lib_signals_reset_ioloop();
 }
 
 static void auth_master_unset_io(struct auth_master_connection *conn)
 {
 	if (conn->prev_ioloop != NULL) {
 		io_loop_set_current(conn->prev_ioloop);
-		lib_signals_reset_ioloop();
 	}
 	if (conn->ioloop != NULL) {
 		io_loop_set_current(conn->ioloop);
@@ -414,7 +406,7 @@ static int auth_master_run_cmd_pre(struct auth_master_connection *conn,
 	o_stream_nsend_str(conn->output, cmd);
 	o_stream_uncork(conn->output);
 
-	if (o_stream_nfinish(conn->output) < 0) {
+	if (o_stream_flush(conn->output) < 0) {
 		i_error("write(auth socket) failed: %s",
 			o_stream_get_error(conn->output));
 		auth_master_unset_io(conn);
