@@ -30,10 +30,10 @@ Bug: #608719
  
  # If key file is password protected, give the password here. Alternatively
  # give it when starting dovecot with -p parameter. Since this file is often
-@@ -30,7 +30,7 @@
- # when Dovecot needs to act as an SSL client (e.g. imapc backend). The
- # directory is usually /etc/ssl/certs in Debian-based systems and the file is
- # /etc/pki/tls/cert.pem in RedHat-based systems.
+@@ -31,7 +31,7 @@
+ # submission service). The directory is usually /etc/ssl/certs in
+ # Debian-based systems and the file is /etc/pki/tls/cert.pem in
+ # RedHat-based systems.
 -#ssl_client_ca_dir =
 +ssl_client_ca_dir = /etc/ssl/certs
  #ssl_client_ca_file =
