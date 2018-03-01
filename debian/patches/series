@@ -12,3 +12,4 @@ fix-sha3-on-big-endian.patch
 CVE-2017-2669
 escape-fts-solr-chars.patch
 CVE-2017-14461
+CVE-2017-15130
