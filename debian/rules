@@ -71,7 +71,12 @@ dev_files = usr/include/* \
 	    usr/share/aclocal/*.m4
 
 %:
-	dh $@ --with=systemd,autotools-dev
+	dh $@ --with=systemd,autotools-dev,autoreconf
+
+override_dh_autoreconf:
+	-mkdir $(CURDIR)/m4
+	dh_autoreconf
+	-rmdir $(CURDIR)/m4
 
 override_dh_auto_configure:
 	KRB5CONFIG=krb5-config.mit ./configure \
