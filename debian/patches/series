@@ -14,3 +14,5 @@ fix-mbox-corruption-18534.patch
 fix-mbox-corruption-18679.patch
 
 0001-Fix-CVE-2017-14461-rfc822_parse_domain-information-l.patch
+0002-lib-dns-Add-DNS-specific-matching-algorithms.patch
+0003-Fix-CVE-2017-15130-TLS-SNI-config-lookups-are-ineffi.patch

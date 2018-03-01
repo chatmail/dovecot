@@ -1,0 +1,171 @@
+From 176cf2e71e9900a92876a5a907111a499e7147e2 Mon Sep 17 00:00:00 2001
+From: Aki Tuomi <aki.tuomi@dovecot.fi>
+Date: Fri, 11 Nov 2016 13:13:29 +0200
+Subject: [PATCH 2/4] lib-dns: Add DNS specific matching algorithms
+
+RFC4343 and RFCRFC4592 compare and match algorithms
+
+(cherry picked from commit 04408131c54813ff8b7e7567d29c7f581c661caf)
+---
+ src/lib-dns/Makefile.am |  6 ++--
+ src/lib-dns/dns-util.c  | 85 +++++++++++++++++++++++++++++++++++++++++++++++++
+ src/lib-dns/dns-util.h  | 36 +++++++++++++++++++++
+ 3 files changed, 125 insertions(+), 2 deletions(-)
+ create mode 100644 src/lib-dns/dns-util.c
+ create mode 100644 src/lib-dns/dns-util.h
+
+diff --git a/src/lib-dns/Makefile.am b/src/lib-dns/Makefile.am
+index 751860a7c..4a0e8bc46 100644
+--- a/src/lib-dns/Makefile.am
++++ b/src/lib-dns/Makefile.am
+@@ -4,10 +4,12 @@ AM_CPPFLAGS = \
+ 	-I$(top_srcdir)/src/lib
+ 
+ libdns_la_SOURCES = \
+-	dns-lookup.c
++	dns-lookup.c \
++	dns-util.c
+ 
+ headers = \
+-	dns-lookup.h
++	dns-lookup.h \
++	dns-util.h
+ 
+ pkginc_libdir=$(pkgincludedir)
+ pkginc_lib_HEADERS = $(headers)
+diff --git a/src/lib-dns/dns-util.c b/src/lib-dns/dns-util.c
+new file mode 100644
+index 000000000..e88008ff7
+--- /dev/null
++++ b/src/lib-dns/dns-util.c
+@@ -0,0 +1,85 @@
++/* Copyright (c) 2010-2016 Dovecot authors, see the included COPYING file */
++#include "lib.h"
++#include "dns-util.h"
++
++/**
++  return first position from b->a of c or a if not found
++ */
++static inline
++const char *strchr_ba(const char *a, const char *b, char c)
++{
++	for(;b>a && *b != c; b--);
++	return b;
++}
++
++int dns_ncompare(const char *a, const char *b, size_t n)
++{
++	if (a == NULL && b == NULL) return 0;
++	if (a == NULL && b != NULL) return 1;
++	if (a != NULL && b == NULL) return -1;
++
++	for(size_t i = 0; i < n &&
++			  *a != '\0' &&
++			  *b != '\0' &&
++			  dns_tolower(*a) == dns_tolower(*b);
++	    i++, a++, b++);
++
++	return dns_tolower(*a) - dns_tolower(*b);
++}
++
++int dns_compare(const char *a, const char *b)
++{
++	return dns_ncompare(a, b, (size_t)-1);
++}
++
++int dns_compare_labels(const char *a, const char *b)
++{
++	if (a == NULL && b == NULL) return 0;
++	if (a == NULL && b != NULL) return 1;
++	if (a != NULL && b == NULL) return -1;
++
++	const char *ptr_a = a + strlen(a);
++	const char *ptr_b = b + strlen(b);
++	const char *label_a = ptr_a, *label_b = ptr_b;
++	int comp = 0;
++
++	while(comp == 0 && ptr_a > a && ptr_b > b) {
++		/* look for start of label, including dot */
++		label_a = strchr_ba(a, ptr_a, '.');
++		label_b = strchr_ba(b, ptr_b, '.');
++		if (ptr_a - label_a != ptr_b - label_b)
++			/* compare labels up to minimum length
++			   but include \0 to make sure that we
++			   don't consider alpha and alphabet
++			   equal */
++			return dns_ncompare(label_a, label_b,
++					   I_MIN(ptr_a - label_a,
++						 ptr_b - label_b)+1);
++		comp = dns_ncompare(label_a, label_b, ptr_a -label_a);
++		ptr_a = label_a - 1;
++		ptr_b = label_b - 1;
++	}
++
++	return dns_tolower(*label_a) - dns_tolower(*label_b);
++}
++
++int dns_match_wildcard(const char *name, const char *mask)
++{
++	i_assert(name != NULL && mask != NULL);
++
++	for(;*name != '\0' && *mask != '\0'; name++, mask++) {
++		switch(*mask) {
++		case '*':
++			name = strchr(name, '.');
++			if (name == NULL || mask[1] != '.') return -1;
++			mask++;
++			break;
++		case '?':
++			break;
++		default:
++			if (dns_tolower(*name) != dns_tolower(*mask)) return -1;
++		}
++	}
++	if (*mask == '*') mask++;
++	return dns_tolower(*name) == dns_tolower(*mask) ? 0 : -1;
++}
+diff --git a/src/lib-dns/dns-util.h b/src/lib-dns/dns-util.h
+new file mode 100644
+index 000000000..cff52ffaf
+--- /dev/null
++++ b/src/lib-dns/dns-util.h
+@@ -0,0 +1,36 @@
++#ifndef DNS_UTIL_H
++#define DNS_UTIL_H 1
++
++static inline char
++dns_tolower(char c)
++{
++	if (c >= 'A' && c <= 'Z')
++		c+='a'-'A';
++	return c;
++}
++
++/**
++ * Will compare names in accordance with RFC4343
++ */
++int dns_compare(const char *a, const char *b) ATTR_PURE;
++int dns_ncompare(const char *a, const char *b, size_t n) ATTR_PURE;
++
++/**
++ * Same as above but done by labels from right to left
++ *
++ * www.example.org and www.example.net would be compared as
++ * org = net (return first difference)
++ * example = example
++ * www = www
++ */
++int dns_compare_labels(const char *a, const char *b) ATTR_PURE;
++
++/**
++ * Will match names in RFC4592 style
++ *
++ * this means *.foo.bar will match name.foo.bar
++ * but *DOES NOT* match something.name.foo.bar
++ */
++int dns_match_wildcard(const char *name, const char *mask) ATTR_PURE;
++
++#endif
+-- 
+2.15.1
+
