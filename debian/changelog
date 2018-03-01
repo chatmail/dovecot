@@ -1,3 +1,18 @@
+dovecot (1:2.2.13-12~deb8u4) jessie-security; urgency=high
+
+  * [eb6eab8] Fix CVE-2017-14461: rfc822_parse_domain information leak
+    (Closes: #891819)
+  * [df2ccf9] Fix CVE-2017-15130: TLS SNI config lookups are inefficient and
+    can be used for DoS (Closes: #891820)
+     + Use dh-autoreconf, as src/Makefile.in needs to be regenerated. Also
+       disable dovecot_name.patch, since it changes dovecot's banner in
+       conjunction with dh_autoreconf.
+  * [292742f] Fix CVE-2017-15132: memory leak on aborted SASL auth
+    (Closes: #888432)
+  * [3e2ccd1] Add myself to Uploaders
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 01 Mar 2018 19:12:05 +0200
+
 dovecot (1:2.2.13-12~deb8u3) jessie-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
