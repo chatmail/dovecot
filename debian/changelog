@@ -1,3 +1,17 @@
+dovecot (1:2.2.27-3+deb9u2) stretch-security; urgency=high
+
+  * [794e743] Fix CVE-2017-14461: rfc822_parse_domain information leak
+    vulnerability (Closes: #891819)
+  * [530ca6d] Fix CVE-2017-15130: TLS SNI config lookups are inefficient and
+    can be used for DoS (Closes: #891820)
+     + Use dh-autoreconf, as src/Makefile.in needs to be regenerated. Also
+       disable dovecot_name.patch, since it changes dovecot's banner in
+       conjunction with dh_autoreconf.
+  * [68c2156] Fix CVE-2017-15132: memory leak on aborted SASL auth (Closes:
+    #888432)
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 01 Mar 2018 15:15:45 +0200
+
 dovecot (1:2.2.27-3+deb9u1) stretch; urgency=medium
 
   * [8b8226f] Fix fts-solr: escape {} chars when sending queries (Closes:
