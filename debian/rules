@@ -26,6 +26,9 @@ endif
 config-stamp: configure
 	dh_testdir
 	dh_autotools-dev_updateconfig
+	-mkdir $(CURDIR)/m4
+	ACLOCAL="aclocal -I ." dh_autoreconf
+	-rmdir $(CURDIR)/m4
 	# Dovecot
 	$(shell $(dpkg_buildflags) --export=configure) sh configure \
 	            --with-ldap=plugin \
