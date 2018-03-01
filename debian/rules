@@ -119,6 +119,7 @@ install: build
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/dovecot-openssl.cnf
 	install -o root -g root -m 0755 $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/mkcert.sh \
 		$(CURDIR)/debian/dovecot-core/usr/share/dovecot/
+	install -o root -g root -m 0755 -d $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core/
 	rm $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/mkcert.sh
 	rm $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/dovecot-openssl.cnf
 	mv $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot/*.txt $(CURDIR)/debian/dovecot-core/usr/share/doc/dovecot-core
