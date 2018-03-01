@@ -7,10 +7,12 @@ AM_CPPFLAGS = \
 libcharset_la_LIBADD = $(LTLIBICONV)
 libcharset_la_SOURCES = \
 	charset-iconv.c \
-	charset-utf8.c
+	charset-utf8.c \
+	charset-utf8-only.c
 
 headers = \
-	charset-utf8.h
+	charset-utf8.h \
+	charset-utf8-private.h
 
 pkginc_libdir=$(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)

@@ -1,4 +1,4 @@
-/* Copyright (c) 1999-2016 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 1999-2018 Dovecot authors, see the included COPYING file */
 
 #define _GNU_SOURCE /* For Linux's struct ucred */
 #include "lib.h"
@@ -931,13 +931,12 @@ int net_getunixcred(int fd, struct net_unix_cred *cred_r)
 const char *net_ip2addr(const struct ip_addr *ip)
 {
 #ifdef HAVE_IPV6
-	char addr[MAX_IP_LEN+1];
+	char *addr = t_malloc(MAX_IP_LEN+1);
 
-	addr[MAX_IP_LEN] = '\0';
 	if (inet_ntop(ip->family, &ip->u.ip6, addr, MAX_IP_LEN) == NULL)
 		return "";
 
-	return t_strdup(addr);
+	return addr;
 #else
 	unsigned long ip4;
 
@@ -953,9 +952,47 @@ const char *net_ip2addr(const struct ip_addr *ip)
 #endif
 }
 
+static bool net_addr2ip_inet4_fast(const char *addr, struct ip_addr *ip)
+{
+	uint8_t *saddr = (void *)&ip->u.ip4.s_addr;
+	unsigned int i, num;
+
+	if (str_parse_uint(addr, &num, &addr) < 0)
+		return FALSE;
+	if (*addr == '\0' && num <= 0xffffffff) {
+		/* single-number IPv4 address */
+		ip->u.ip4.s_addr = htonl(num);
+		ip->family = AF_INET;
+		return TRUE;
+	}
+
+	/* try to parse as a.b.c.d */
+	i = 0;
+	for (;;) {
+		if (num >= 256)
+			return FALSE;
+		saddr[i] = num;
+		if (i == 3)
+			break;
+		i++;
+		if (*addr != '.')
+			return FALSE;
+		addr++;
+		if (str_parse_uint(addr, &num, &addr) < 0)
+			return FALSE;
+	}
+	if (*addr != '\0')
+		return FALSE;
+	ip->family = AF_INET;
+	return TRUE;
+}
+
 int net_addr2ip(const char *addr, struct ip_addr *ip)
 {
 	int ret;
+
+	if (net_addr2ip_inet4_fast(addr, ip))
+		return 0;
 
 	if (strchr(addr, ':') != NULL) {
 		/* IPv6 */

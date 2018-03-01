@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -247,6 +247,29 @@ int index_storage_mailbox_alloc_index(struct mailbox *box)
 	mail_index_set_lock_method(box->index,
 		box->storage->set->parsed_lock_method,
 		mail_storage_get_lock_timeout(box->storage, UINT_MAX));
+
+	const struct mail_storage_settings *set = box->storage->set;
+	struct mail_index_optimization_settings optimization_set = {
+		.index = {
+			.rewrite_min_log_bytes = set->mail_index_rewrite_min_log_bytes,
+			.rewrite_max_log_bytes = set->mail_index_rewrite_max_log_bytes,
+		},
+		.log = {
+			.min_size = set->mail_index_log_rotate_min_size,
+			.max_size = set->mail_index_log_rotate_max_size,
+			.min_age_secs = set->mail_index_log_rotate_min_age,
+			.log2_max_age_secs = set->mail_index_log2_max_age,
+		},
+		.cache = {
+			.unaccessed_field_drop_secs = set->mail_cache_unaccessed_field_drop,
+			.record_max_size = set->mail_cache_record_max_size,
+			.compress_min_size = set->mail_cache_compress_min_size,
+			.compress_delete_percentage = set->mail_cache_compress_delete_percentage,
+			.compress_continued_percentage = set->mail_cache_compress_continued_percentage,
+			.compress_header_continue_count = set->mail_cache_compress_header_continue_count,
+		},
+	};
+	mail_index_set_optimization_settings(box->index, &optimization_set);
 	return 0;
 }
 
@@ -912,6 +935,7 @@ mail_copy_cache_field(struct mail_save_context *ctx, struct mail *src_mail,
 	const struct mail_cache_field *dest_field;
 	unsigned int src_field_idx, dest_field_idx;
 	uint32_t t;
+	bool add = FALSE;
 
 	src_field_idx = mail_cache_register_lookup(src_mail->box->cache, name);
 	i_assert(src_field_idx != UINT_MAX);
@@ -934,12 +958,14 @@ mail_copy_cache_field(struct mail_save_context *ctx, struct mail *src_mail,
 		/* save date must update when mail is copied */
 		t = ioloop_time;
 		buffer_append(buf, &t, sizeof(t));
+		add = TRUE;
+	} else if (mail_cache_lookup_field(src_mail->transaction->cache_view, buf,
+					   src_mail->seq, src_field_idx) <= 0) {
+		/* error / not found */
+		buffer_set_used_size(buf, 0);
 	} else {
-		if (mail_cache_lookup_field(src_mail->transaction->cache_view, buf,
-					    src_mail->seq, src_field_idx) <= 0)
-			buffer_set_used_size(buf, 0);
-		else if (strcmp(name, "size.physical") == 0 ||
-			 strcmp(name, "size.virtual") == 0) {
+		if (strcmp(name, "size.physical") == 0 ||
+		    strcmp(name, "size.virtual") == 0) {
 			/* FIXME: until mail_cache_lookup() can read unwritten
 			   cached data from buffer, we'll do this optimization
 			   to make quota plugin's work faster */
@@ -954,8 +980,11 @@ mail_copy_cache_field(struct mail_save_context *ctx, struct mail *src_mail,
 			else
 				imail->data.virtual_size = size;
 		}
+		/* NOTE: we'll want to add also nonexistent headers, which
+		   will keep the buf empty */
+		add = TRUE;
 	}
-	if (buf->used > 0) {
+	if (add) {
 		mail_cache_add(dest_trans->cache_trans, dest_seq,
 			       dest_field_idx, buf->data, buf->used);
 	}

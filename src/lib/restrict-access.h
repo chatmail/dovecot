@@ -51,9 +51,20 @@ void restrict_access_by_env(const char *home, bool disallow_root) ATTR_NULL(1);
    otherwise NULL. */
 const char *restrict_access_get_current_chroot(void);
 
-/* Try to set up the process in a way that core dumps are still allowed
-   after calling restrict_access_by_env(). */
+/*
+   Checks if PR_SET_DUMPABLE environment variable is set, and if it is,
+   calls restrict_access_set_dumpable(allow). 
+*/
 void restrict_access_allow_coredumps(bool allow);
+
+/* Sets process dumpable true or false. Setting this true allows core dumping,
+   reading /proc/self/io, attaching with PTRACE_ATTACH, and also changes
+   ownership of /proc/[pid] directory. */
+void restrict_access_set_dumpable(bool allow);
+
+/* Gets process dumpability, returns TRUE if not supported, because
+   we then assume that constraint is not present. */
+bool restrict_access_get_dumpable(void);
 
 /* If privileged_gid was set, these functions can be used to temporarily
    gain access to the group. */

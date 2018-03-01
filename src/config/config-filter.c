@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -249,6 +249,21 @@ config_filter_find_all(struct config_filter_context *ctx, pool_t pool,
 	array_sort(&matches, config_filter_parser_cmp);
 	array_append_zero(&matches);
 	return array_idx(&matches, 0);
+}
+
+struct config_filter_parser *const *
+config_filter_get_all(struct config_filter_context *ctx)
+{
+	ARRAY_TYPE(config_filter_parsers) filters;
+	unsigned int i;
+
+	t_array_init(&filters, 8);
+	for (i = 0; ctx->parsers[i] != NULL; i++) {
+		array_append(&filters, &ctx->parsers[i], 1);
+	}
+	array_sort(&filters, config_filter_parser_cmp_rev);
+	array_append_zero(&filters);
+	return array_idx(&filters, 0);
 }
 
 struct config_filter_parser *const *

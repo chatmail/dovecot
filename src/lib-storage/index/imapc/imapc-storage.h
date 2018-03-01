@@ -145,6 +145,8 @@ struct imapc_mailbox {
 	unsigned int initial_sync_done:1;
 	unsigned int selected:1;
 	unsigned int exists_received:1;
+	unsigned int state_fetching_uid1:1;
+	unsigned int state_fetched_success:1;
 };
 
 struct imapc_simple_context {

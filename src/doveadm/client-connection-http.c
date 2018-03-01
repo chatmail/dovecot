@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "compat.h"
@@ -105,6 +105,7 @@ client_connection_create_http(int fd, bool ssl)
 	pool = pool_alloconly_create("doveadm client", 1024*16);
 	conn = p_new(pool, struct client_connection_http, 1);
 	conn->client.pool = pool;
+	conn->client.http = TRUE;
 
 	if (client_connection_init(&conn->client, fd) < 0)
 		return NULL;
@@ -115,10 +116,35 @@ client_connection_create_http(int fd, bool ssl)
 	return &conn->client;
 }
 
-static void
-doveadm_http_server_connection_destroy(void *context, const char *reason ATTR_UNUSED)
+void client_connection_destroy_http(struct client_connection *conn)
 {
-	struct client_connection *conn = context;
+	struct client_connection_http *hconn =
+		(struct client_connection_http *)conn;
+
+	if (hconn->http_client != NULL) {
+		/* We're not in the lib-http/server's connection destroy callback. */
+		http_server_connection_close(&hconn->http_client,
+			"Server shutting down");
+	}
+}
+
+static void
+doveadm_http_server_connection_destroy(void *context,
+	const char *reason ATTR_UNUSED)
+{
+	struct client_connection_http *hconn =
+		(struct client_connection_http *)context;
+	struct client_connection *conn = &hconn->client;
+
+	if (hconn->http_client == NULL) {
+		/* already destroying client directly */
+		return;
+	}
+
+	/* HTTP connection is destroyed already now */
+	hconn->http_client = NULL;
+
+	/* destroy the connection itself */
 	client_connection_destroy(&conn);
 }
 
@@ -159,7 +185,6 @@ doveadm_http_server_request_destroy(void *context)
 
 	http_server_request_unref(&(conn->http_server_request));
 	http_server_switch_ioloop(doveadm_http_server);
-        http_server_connection_unref(&(conn->http_client));
 }
 
 static void doveadm_http_server_json_error(void *context, const char *error)
@@ -697,7 +722,6 @@ doveadm_http_server_handle_request(void *context, struct http_server_request *re
 	conn->http_request = http_server_request_get(req);
 	struct doveadm_http_server_mount *ep = NULL;
 
-	http_server_connection_ref(conn->http_client);
 	http_server_request_set_destroy_callback(req, doveadm_http_server_request_destroy, conn);
 	http_server_request_ref(conn->http_server_request);
 

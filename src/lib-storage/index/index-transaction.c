@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -91,6 +91,8 @@ index_transaction_index_commit(struct mail_index_transaction *index_trans,
 		index_mailbox_sync_pvt_deinit(&pvt_sync_ctx);
 	}
 
+	if (ret < 0)
+		mail_index_set_error_nolog(t->box->index, mailbox_get_last_error(t->box, NULL));
 	index_transaction_free(t);
 	return ret;
 }
@@ -156,6 +158,7 @@ void index_transaction_init(struct mailbox_transaction_context *t,
 	if ((flags & MAILBOX_TRANSACTION_FLAG_REFRESH) != 0)
 		mail_index_refresh(box->index);
 
+	t->flags = flags;
 	t->box = box;
 	t->itrans = mail_index_transaction_begin(box->view, itrans_flags);
 	t->view = mail_index_transaction_open_updated_view(t->itrans);

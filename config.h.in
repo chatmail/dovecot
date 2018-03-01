@@ -432,6 +432,9 @@
 /* Build with SSL_COMP_free_compression_methods() support */
 #undef HAVE_SSL_COMP_FREE_COMPRESSION_METHODS
 
+/* Define if you have SSL_CTX_set_min_proto_version */
+#undef HAVE_SSL_CTX_SET_MIN_PROTO_VERSION
+
 /* Build with TLS hostname support */
 #undef HAVE_SSL_GET_SERVERNAME
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -145,7 +145,7 @@ director_log_connect(struct director *dir, struct director_host *host,
 			    (int)(ioloop_time - host->last_protocol_failure));
 	}
 	i_info("Connecting to %s:%u (as %s%s): %s",
-	       net_ip2addr(&host->ip), host->port,
+	       host->ip_str, host->port,
 	       net_ip2addr(&dir->self_ip), str_c(str), reason);
 }
 
@@ -370,12 +370,14 @@ void director_sync_send(struct director *dir, struct director_host *host,
 {
 	string_t *str;
 
-	if (host == dir->self_host)
+	if (host == dir->self_host) {
 		dir->last_sync_sent_ring_change_counter = dir->ring_change_counter;
+		dir->last_sync_start_time = ioloop_timeval;
+	}
 
 	str = t_str_new(128);
 	str_printfa(str, "SYNC\t%s\t%u\t%u",
-		    net_ip2addr(&host->ip), host->port, seq);
+		    host->ip_str, host->port, seq);
 	if (minor_version > 0 &&
 	    director_connection_get_minor_version(dir->right) > 0) {
 		/* only minor_version>0 supports extra parameters */
@@ -392,9 +394,34 @@ void director_sync_send(struct director *dir, struct director_host *host,
 	director_connection_ping(dir->right);
 }
 
+static bool
+director_has_any_outgoing_connections(struct director *dir)
+{
+	struct director_connection *const *connp;
+
+	array_foreach(&dir->connections, connp) {
+		if (!director_connection_is_incoming(*connp))
+			return TRUE;
+	}
+	return FALSE;
+}
+
 bool director_resend_sync(struct director *dir)
 {
-	if (!dir->ring_synced && dir->left != NULL && dir->right != NULL) {
+	if (dir->ring_synced) {
+		/* everything ok, no need to do anything */
+		return FALSE;
+	}
+
+	if (dir->right == NULL) {
+		/* right side connection is missing. make sure we're not
+		   hanging due to some bug. */
+		if (dir->to_reconnect == NULL &&
+		    !director_has_any_outgoing_connections(dir)) {
+			i_warning("Right side connection is unexpectedly lost, reconnecting");
+			director_connect(dir, "Right side connection lost");
+		}
+	} else if (dir->left != NULL) {
 		/* send a new SYNC in case the previous one got dropped */
 		dir->self_host->last_sync_timestamp = ioloop_time;
 		director_sync_send(dir, dir->self_host, dir->sync_seq,
@@ -507,7 +534,7 @@ void director_notify_ring_added(struct director_host *added_host,
 
 	added_host->dir->ring_change_counter++;
 	cmd = t_strdup_printf("DIRECTOR\t%s\t%u\n",
-			      net_ip2addr(&added_host->ip), added_host->port);
+			      added_host->ip_str, added_host->port);
 	director_update_send(added_host->dir, src, cmd);
 }
 
@@ -563,8 +590,7 @@ void director_ring_remove(struct director_host *removed_host,
 	/* if our left or ride side gets removed, notify them first
 	   before disconnecting. */
 	cmd = t_strdup_printf("DIRECTOR-REMOVE\t%s\t%u\n",
-			      net_ip2addr(&removed_host->ip),
-			      removed_host->port);
+			      removed_host->ip_str, removed_host->port);
 	director_update_send_version(dir, src,
 				     DIRECTOR_VERSION_RING_REMOVE, cmd);
 
@@ -600,9 +626,8 @@ director_send_host(struct director *dir, struct director_host *src,
 
 	str = t_str_new(128);
 	str_printfa(str, "HOST\t%s\t%u\t%u\t%s\t%u",
-		    net_ip2addr(&orig_src->ip), orig_src->port,
-		    orig_src->last_seq,
-		    net_ip2addr(&host->ip), host->vhost_count);
+		    orig_src->ip_str, orig_src->port, orig_src->last_seq,
+		    host->ip_str, host->vhost_count);
 	if (dir->ring_min_version >= DIRECTOR_VERSION_TAGS_V2) {
 		str_append_c(str, '\t');
 		str_append_tabescaped(str, host_tag);
@@ -610,10 +635,10 @@ director_send_host(struct director *dir, struct director_host *src,
 		   dir->ring_min_version < DIRECTOR_VERSION_TAGS_V2) {
 		if (dir->ring_min_version < DIRECTOR_VERSION_TAGS) {
 			i_error("Ring has directors that don't support tags - removing host %s with tag '%s'",
-				net_ip2addr(&host->ip), host_tag);
+				host->ip_str, host_tag);
 		} else {
 			i_error("Ring has directors that support mixed versions of tags - removing host %s with tag '%s'",
-				net_ip2addr(&host->ip), host_tag);
+				host->ip_str, host_tag);
 		}
 		director_remove_host(dir, NULL, NULL, host);
 		return;
@@ -647,7 +672,7 @@ void director_update_host(struct director *dir, struct director_host *src,
 
 	dir_debug("Updating host %s vhost_count=%u "
 		  "down=%d last_updown_change=%ld (hosts_hash=%u)",
-		  net_ip2addr(&host->ip), host->vhost_count, host->down,
+		  host->ip_str, host->vhost_count, host->down,
 		  (long)host->last_updown_change,
 		  mail_hosts_hash(dir->mail_hosts));
 
@@ -674,8 +699,8 @@ void director_remove_host(struct director *dir, struct director_host *src,
 
 		director_update_send(dir, src, t_strdup_printf(
 			"HOST-REMOVE\t%s\t%u\t%u\t%s\n",
-			net_ip2addr(&orig_src->ip), orig_src->port,
-			orig_src->last_seq, net_ip2addr(&host->ip)));
+			orig_src->ip_str, orig_src->port,
+			orig_src->last_seq, host->ip_str));
 	}
 
 	user_directory_remove_host(users, host);
@@ -696,8 +721,8 @@ void director_flush_host(struct director *dir, struct director_host *src,
 
 	director_update_send(dir, src, t_strdup_printf(
 		"HOST-FLUSH\t%s\t%u\t%u\t%s\n",
-		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq,
-		net_ip2addr(&host->ip)));
+		orig_src->ip_str, orig_src->port, orig_src->last_seq,
+		host->ip_str));
 	user_directory_remove_host(users, host);
 	director_sync(dir);
 }
@@ -705,11 +730,24 @@ void director_flush_host(struct director *dir, struct director_host *src,
 void director_update_user(struct director *dir, struct director_host *src,
 			  struct user *user)
 {
-	i_assert(src != NULL);
+	struct director_connection *const *connp;
 
+	i_assert(src != NULL);
 	i_assert(!user->weak);
-	director_update_send(dir, src, t_strdup_printf("USER\t%u\t%s\n",
-		user->username_hash, net_ip2addr(&user->host->ip)));
+
+	array_foreach(&dir->connections, connp) {
+		if (director_connection_get_host(*connp) == src)
+			continue;
+
+		if (director_connection_get_minor_version(*connp) >= DIRECTOR_VERSION_USER_TIMESTAMP) {
+			director_connection_send(*connp, t_strdup_printf(
+				"USER\t%u\t%s\t%u\n", user->username_hash, user->host->ip_str,
+				user->timestamp));
+		} else {
+			director_connection_send(*connp, t_strdup_printf(
+				"USER\t%u\t%s\n", user->username_hash, user->host->ip_str));
+		}
+	}
 }
 
 void director_update_user_weak(struct director *dir, struct director_host *src,
@@ -728,8 +766,8 @@ void director_update_user_weak(struct director *dir, struct director_host *src,
 	}
 
 	cmd = t_strdup_printf("USER-WEAK\t%s\t%u\t%u\t%u\t%s\n",
-		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq,
-		user->username_hash, net_ip2addr(&user->host->ip));
+		orig_src->ip_str, orig_src->port, orig_src->last_seq,
+		user->username_hash, user->host->ip_str);
 
 	if (src != dir->self_host && dir->left != NULL && dir->right != NULL &&
 	    director_connection_get_host(dir->left) ==
@@ -773,8 +811,7 @@ director_flush_user_continue(int result, struct director_kill_context *ctx)
 			i_error("%s: Failed to flush user hash %u in host %s: %s",
 				ctx->socket_path,
 				ctx->username_hash,
-				net_ip2addr(&ctx->host_ip),
-				data);
+				net_ip2addr(&ctx->host_ip), data);
 		}
 		i_stream_unref(&is);
 	} else {
@@ -801,7 +838,7 @@ director_flush_user(struct director *dir, struct user *user)
 {
 	struct director_kill_context *ctx = user->kill_ctx;
 	struct var_expand_table tab[] = {
-		{ 'i', net_ip2addr(&user->host->ip), "ip" },
+		{ 'i', user->host->ip_str, "ip" },
 		{ 'h', user->host->hostname, "host" },
 		{ '\0', NULL, NULL }
 	};
@@ -839,7 +876,7 @@ director_flush_user(struct director *dir, struct user *user)
 		"FLUSH",
 		t_strdup_printf("%u", user->username_hash),
 		net_ip2addr(&ctx->old_host_ip),
-		net_ip2addr(&user->host->ip),
+		user->host->ip_str,
 		ctx->old_host_down ? "down" : "up",
 		dec2str(ctx->old_host_vhost_count),
 		NULL
@@ -854,7 +891,7 @@ director_flush_user(struct director *dir, struct user *user)
 		i_error("%s: Failed to flush user hash %u in host %s: %s",
 			ctx->socket_path,
 			user->username_hash,
-			net_ip2addr(&user->host->ip),
+			user->host->ip_str,
 			error);
 		director_flush_user_continue(0, ctx);
 		return;
@@ -863,7 +900,7 @@ director_flush_user(struct director *dir, struct user *user)
 	ctx->reply =
 		iostream_temp_create_named("/tmp", 0,
 					   t_strdup_printf("flush response from %s",
-							   net_ip2addr(&user->host->ip)));
+							   user->host->ip_str));
 	o_stream_set_no_error_handling(ctx->reply, TRUE);
 	program_client_set_output(ctx->pclient, ctx->reply);
 	ctx->callback_pending = TRUE;
@@ -972,6 +1009,7 @@ static void director_kill_user_callback(enum ipc_client_cmd_state state,
 	switch (state) {
 	case IPC_CLIENT_CMD_STATE_REPLY:
 		/* shouldn't get here. the command reply isn't finished yet. */
+		i_error("login process sent unexpected reply to kick: %s", data);
 		return;
 	case IPC_CLIENT_CMD_STATE_OK:
 		break;
@@ -983,6 +1021,12 @@ static void director_kill_user_callback(enum ipc_client_cmd_state state,
 		/* we can't really do anything but continue anyway */
 		break;
 	}
+
+	i_assert(ctx->dir->users_kicking_count > 0);
+	ctx->dir->users_kicking_count--;
+	if (ctx->dir->kick_callback != NULL)
+		ctx->dir->kick_callback(ctx->dir);
+
 
 	ctx->callback_pending = FALSE;
 
@@ -1062,6 +1106,7 @@ void director_kill_user(struct director *dir, struct director_host *src,
 		cmd = t_strdup_printf("proxy\t*\tKICK-DIRECTOR-HASH\t%u",
 				      user->username_hash);
 		ctx->callback_pending = TRUE;
+		dir->users_kicking_count++;
 		ipc_client_cmd(dir->ipc_proxy, cmd,
 			       director_kill_user_callback, ctx);
 	} else {
@@ -1112,7 +1157,7 @@ void director_move_user(struct director *dir, struct director_host *src,
 		old_host = user->host;
 		user->timestamp = ioloop_time;
 		dir_debug("User %u move forwarded: host is already %s",
-			  username_hash, net_ip2addr(&host->ip));
+			  username_hash, host->ip_str);
 	} else {
 		/* user is looked up via the new host's tag, so if it's found
 		   the old tag has to be the same. */
@@ -1124,8 +1169,8 @@ void director_move_user(struct director *dir, struct director_host *src,
 		user->host->user_count++;
 		user->timestamp = ioloop_time;
 		dir_debug("User %u move started: host %s -> %s",
-			  username_hash, net_ip2addr(&old_host->ip),
-			  net_ip2addr(&host->ip));
+			  username_hash, old_host->ip_str,
+			  host->ip_str);
 	}
 
 	if (orig_src == NULL) {
@@ -1134,18 +1179,29 @@ void director_move_user(struct director *dir, struct director_host *src,
 	}
 	director_update_send(dir, src, t_strdup_printf(
 		"USER-MOVE\t%s\t%u\t%u\t%u\t%s\n",
-		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq,
-		user->username_hash, net_ip2addr(&user->host->ip)));
+		orig_src->ip_str, orig_src->port, orig_src->last_seq,
+		user->username_hash, user->host->ip_str));
 	/* kill the user only after sending the USER-MOVE, because the kill
 	   may finish instantly. */
 	director_kill_user(dir, src, user, host->tag, old_host, FALSE);
 }
 
 static void
-director_kick_user_callback(enum ipc_client_cmd_state state ATTR_UNUSED,
-			    const char *data ATTR_UNUSED,
-			    void *context ATTR_UNUSED)
+director_kick_user_callback(enum ipc_client_cmd_state state,
+			    const char *data, void *context)
 {
+	struct director *dir = context;
+
+	if (state == IPC_CLIENT_CMD_STATE_REPLY) {
+		/* shouldn't get here. the command reply isn't finished yet. */
+		i_error("login process sent unexpected reply to kick: %s", data);
+		return;
+	}
+
+	i_assert(dir->users_kicking_count > 0);
+	dir->users_kicking_count--;
+	if (dir->kick_callback != NULL)
+		dir->kick_callback(dir);
 }
 
 void director_kick_user(struct director *dir, struct director_host *src,
@@ -1155,8 +1211,9 @@ void director_kick_user(struct director *dir, struct director_host *src,
 
 	str_append(cmd, "proxy\t*\tKICK\t");
 	str_append_tabescaped(cmd, username);
+	dir->users_kicking_count++;
 	ipc_client_cmd(dir->ipc_proxy, str_c(cmd),
-		       director_kick_user_callback, (void *)NULL);
+		       director_kick_user_callback, dir);
 
 	if (orig_src == NULL) {
 		orig_src = dir->self_host;
@@ -1164,7 +1221,7 @@ void director_kick_user(struct director *dir, struct director_host *src,
 	}
 	str_truncate(cmd, 0);
 	str_printfa(cmd, "USER-KICK\t%s\t%u\t%u\t",
-		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq);
+		orig_src->ip_str, orig_src->port, orig_src->last_seq);
 	str_append_tabescaped(cmd, username);
 	str_append_c(cmd, '\n');
 	director_update_send_version(dir, src, DIRECTOR_VERSION_USER_KICK, str_c(cmd));
@@ -1180,8 +1237,9 @@ void director_kick_user_alt(struct director *dir, struct director_host *src,
 	str_append_tabescaped(cmd, field);
 	str_append_c(cmd, '\t');
 	str_append_tabescaped(cmd, value);
+	dir->users_kicking_count++;
 	ipc_client_cmd(dir->ipc_proxy, str_c(cmd),
-		       director_kick_user_callback, (void *)NULL);
+		       director_kick_user_callback, dir);
 
 	if (orig_src == NULL) {
 		orig_src = dir->self_host;
@@ -1189,7 +1247,7 @@ void director_kick_user_alt(struct director *dir, struct director_host *src,
 	}
 	str_truncate(cmd, 0);
 	str_printfa(cmd, "USER-KICK-ALT\t%s\t%u\t%u\t",
-		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq);
+		orig_src->ip_str, orig_src->port, orig_src->last_seq);
 	str_append_tabescaped(cmd, field);
 	str_append_c(cmd, '\t');
 	str_append_tabescaped(cmd, value);
@@ -1206,15 +1264,16 @@ void director_kick_user_hash(struct director *dir, struct director_host *src,
 
 	cmd = t_strdup_printf("proxy\t*\tKICK-DIRECTOR-HASH\t%u\t%s",
 			      username_hash, net_ip2addr(except_ip));
+	dir->users_kicking_count++;
 	ipc_client_cmd(dir->ipc_proxy, cmd,
-		       director_kick_user_callback, (void *)NULL);
+		       director_kick_user_callback, dir);
 
 	if (orig_src == NULL) {
 		orig_src = dir->self_host;
 		orig_src->last_seq++;
 	}
 	cmd = t_strdup_printf("USER-KICK-HASH\t%s\t%u\t%u\t%u\t%s\n",
-		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq,
+		orig_src->ip_str, orig_src->port, orig_src->last_seq,
 		username_hash, net_ip2addr(except_ip));
 	director_update_send_version(dir, src, DIRECTOR_VERSION_USER_KICK, cmd);
 }
@@ -1231,7 +1290,7 @@ director_send_user_killed_everywhere(struct director *dir,
 	}
 	director_update_send(dir, src, t_strdup_printf(
 		"USER-KILLED-EVERYWHERE\t%s\t%u\t%u\t%u\n",
-		net_ip2addr(&orig_src->ip), orig_src->port, orig_src->last_seq,
+		orig_src->ip_str, orig_src->port, orig_src->last_seq,
 		username_hash));
 }
 
@@ -1379,7 +1438,8 @@ static void director_user_freed(struct user *user)
 struct director *
 director_init(const struct director_settings *set,
 	      const struct ip_addr *listen_ip, in_port_t listen_port,
-	      director_state_change_callback_t *callback)
+	      director_state_change_callback_t *callback,
+	      director_kick_callback_t *kick_callback)
 {
 	struct director *dir;
 
@@ -1388,6 +1448,7 @@ director_init(const struct director_settings *set,
 	dir->self_port = listen_port;
 	dir->self_ip = *listen_ip;
 	dir->state_change_callback = callback;
+	dir->kick_callback = kick_callback;
 	i_array_init(&dir->dir_hosts, 16);
 	i_array_init(&dir->pending_requests, 16);
 	i_array_init(&dir->connections, 8);
@@ -1459,12 +1520,15 @@ struct director_user_iter {
 	struct director *dir;
 	unsigned int tag_idx;
 	struct user_directory_iter *user_iter;
+	bool iter_until_current_tail;
 };
 
-struct director_user_iter *director_iterate_users_init(struct director *dir)
+struct director_user_iter *
+director_iterate_users_init(struct director *dir, bool iter_until_current_tail)
 {
 	struct director_user_iter *iter = i_new(struct director_user_iter, 1);
 	iter->dir = dir;
+	iter->iter_until_current_tail = iter_until_current_tail;
 	return iter;
 }
 
@@ -1480,7 +1544,8 @@ struct user *director_iterate_users_next(struct director_user_iter *iter)
 		if (iter->tag_idx >= array_count(tags))
 			return NULL;
 		struct mail_tag *const *tagp = array_idx(tags, iter->tag_idx);
-		iter->user_iter = user_directory_iter_init((*tagp)->users);
+		iter->user_iter = user_directory_iter_init((*tagp)->users,
+			iter->iter_until_current_tail);
 	}
 	user = user_directory_iter_next(iter->user_iter);
 	if (user == NULL) {

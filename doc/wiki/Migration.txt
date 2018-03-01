@@ -9,7 +9,8 @@ or POP3 server to Dovecot. You should read this page, and then look at the
 server-specific instructions:
 
  * <Migrating from any IMAP/POP3 server to Dovecot via dsync>
-   [Migration.Dsync.txt]
+   [Migration.Dsync.txt] - this is the recommended way to do all migrations
+   nowadays
  * <UW-IMAP / UW-POP3> [Migration.UW.txt]
  * <Linuxconf / VIMAP> [Migration.Linuxconf.txt]
  * <Courier IMAP and POP3> [Migration.Courier.txt]
@@ -119,10 +120,13 @@ if you know more:
 IMAP <-> IMAP copying
 ---------------------
 
-If you don't care about preserving messages' UIDs, or if there isn't a simple
-way to preserve them, you can always migrate from another IMAP server to
-Dovecot by downloading the messages via IMAP from the old server and then
-uploading them to Dovecot via IMAP.
+Note that you can do IMAP -> Dovecot migration using <dsync>
+[Migration.Dsync.txt], which preserves IMAP UIDs and other metadata. This is
+the recommended way of doing migrations. But there are also other options:
+
+If you don't care about preserving messages' UIDs, you can always migrate from
+another IMAP server to Dovecot by downloading the messages via IMAP from the
+old server and then uploading them to Dovecot via IMAP.
 
 There are several different tools for this, for example UW-IMAP
 [http://www.washington.edu/imap/]'s mailutil, imapsync
@@ -159,4 +163,4 @@ larch --from imap://mail1.example.com --to imap://mail2.example.com
 When run it will ask you for usernames and passwords that will be used for
 logging into servers, but you can also specify them on the command line.
 
-(This file was created from the wiki on 2017-10-10 04:42)
+(This file was created from the wiki on 2018-02-28 04:42)

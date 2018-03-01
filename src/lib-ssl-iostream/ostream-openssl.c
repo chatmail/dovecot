@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -117,6 +117,7 @@ static int o_stream_ssl_flush_buffer(struct ssl_ostream *sstream)
 static int o_stream_ssl_flush(struct ostream_private *stream)
 {
 	struct ssl_ostream *sstream = (struct ssl_ostream *)stream;
+	struct ostream *plain_output = sstream->ssl_io->plain_output;
 	int ret;
 
 	if ((ret = openssl_iostream_more(sstream->ssl_io)) < 0) {
@@ -132,12 +133,17 @@ static int o_stream_ssl_flush(struct ostream_private *stream)
 
 	if (ret == 0 && sstream->ssl_io->want_read) {
 		/* we need to read more data until we can continue. */
-		o_stream_set_flush_pending(sstream->ssl_io->plain_output,
-					   FALSE);
+		o_stream_set_flush_pending(plain_output, FALSE);
 		sstream->ssl_io->ostream_flush_waiting_input = TRUE;
 		ret = 1;
 	}
-	return ret;
+
+	if (ret <= 0)
+		return ret;
+
+	/* return 1 only when the output buffer is empty, which is what the
+	   caller expects. */
+	return o_stream_get_buffer_used_size(plain_output) == 0 ? 1 : 0;
 }
 
 static ssize_t

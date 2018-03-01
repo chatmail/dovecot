@@ -41,6 +41,14 @@ work. To activate this feature, you need to configure it.
     * /Default/: 'auth_policy_reject_on_fail = no'
  * *auth_policy_hash_truncate*: How many *bits* to use from password hash.
     * /Default/: 'auth_policy_hash_truncate = 12'
+ * *auth_policy_check_before_auth*: Whether to do policy lookup before
+   authentication is started
+    * /Default/: 'auth_policy_check_before_auth = yes'
+ * *auth_policy_check_after_auth*: Whether to do policy lookup after
+   authentication is completed
+    * /Default/: 'auth_policy_check_after_auth = yes'
+ * *auth_policy_report_after_auth*: Whether to report authentication result
+    * /Default/: 'auth_policy_report_after_auth = yes'
 
 Required Minimum Configuration
 ------------------------------
@@ -55,6 +63,9 @@ auth_policy_hash_nonce = localized_random_string
 pwhash=%{hashed_password} remote=%{real_rip}
 #auth_policy_reject_on_fail = no
 #auth_policy_hash_truncate = 12
+#auth_policy_check_before_auth = yes
+#auth_policy_check_after_auth = yes
+#auth_policy_report_after_auth = yes
 ---%<-------------------------------------------------------------------------
 
 Password hash algorithm
@@ -172,4 +183,4 @@ External Auth Policy Servers
 
  * http://oxpedia.org/wiki/index.php?title=AppSuite:Dovecot_Antiabuse_Shield
 
-(This file was created from the wiki on 2017-10-10 04:42)
+(This file was created from the wiki on 2018-02-28 04:42)

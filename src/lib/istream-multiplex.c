@@ -1,4 +1,4 @@
-/* Copyright (c) 2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -56,8 +56,15 @@ static void propagate_eof(struct multiplex_istream *mstream)
 {
 	struct multiplex_ichannel **channelp;
 	array_foreach_modifiable(&mstream->channels, channelp) {
-		if (*channelp != NULL) {
-			(*channelp)->istream.istream.eof = TRUE;
+		if (*channelp == NULL)
+			continue;
+
+		(*channelp)->istream.istream.eof = TRUE;
+		if (mstream->remain > 0) {
+			(*channelp)->istream.istream.stream_errno = EPIPE;
+			io_stream_set_error(&(*channelp)->istream.iostream,
+				"Unexpected EOF - %u bytes remaining in packet",
+				mstream->remain);
 		}
 	}
 }

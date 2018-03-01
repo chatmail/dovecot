@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hostpid.h"
@@ -573,6 +573,35 @@ static int index_list_mailbox_open(struct mailbox *box)
 	return 0;
 }
 
+void mailbox_list_index_backend_sync_init(struct mailbox *box,
+					  enum mailbox_sync_flags flags)
+{
+	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(box->list);
+
+	if ((flags & MAILBOX_SYNC_FLAG_FORCE_RESYNC) != 0 &&
+	    !ilist->force_resynced) {
+		box->storage->list_index_rebuild_reason =
+			MAIL_STORAGE_LIST_INDEX_REBUILD_REASON_FORCE_RESYNC;
+		if (box->storage->v.list_index_corrupted != NULL &&
+		    box->storage->v.list_index_corrupted(box->storage) < 0)
+			ilist->force_resync_failed = TRUE;
+		/* try to rebuild list index only once - even if it failed */
+		ilist->force_resynced = TRUE;
+	}
+}
+
+int mailbox_list_index_backend_sync_deinit(struct mailbox *box)
+{
+	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(box->list);
+
+	if (ilist->force_resync_failed) {
+		/* fail this only once */
+		ilist->force_resync_failed = FALSE;
+		return -1;
+	}
+	return 0;
+}
+
 static void
 index_list_try_delete(struct mailbox_list *_list, const char *name,
 		      enum mailbox_list_path_type type)
@@ -846,13 +875,18 @@ struct mailbox_list index_mailbox_list = {
 	}
 };
 
-void mailbox_list_index_backend_init_mailbox(struct mailbox *box,
+bool mailbox_list_index_backend_init_mailbox(struct mailbox *box,
 					     struct mailbox_vfuncs *v)
 {
 	if (strcmp(box->list->name, MAILBOX_LIST_NAME_INDEX) != 0)
-		return;
+		return TRUE;
+
+	/* NOTE: this is using the same v as
+	   mailbox_list_index_status_init_mailbox(), so don't have them
+	   accidentally override each others. */
 	v->create_box = index_list_mailbox_create;
 	v->update_box = index_list_mailbox_update;
 	v->exists = index_list_mailbox_exists;
 	v->open = index_list_mailbox_open;
+	return FALSE;
 }

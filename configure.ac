@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.2.33.2],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv33($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.2.34],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.2.ABIv34($PACKAGE_VERSION)", [Dovecot ABI version])
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_SRCDIR([src])
 
@@ -328,7 +328,7 @@ AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", [Dovecot version])
 AC_DEFINE([DOVECOT_VERSION_MAJOR], regexp(AC_PACKAGE_VERSION, [^\([0-9]+\)\.\([0-9]+\)], [\1]), [Dovecot major version])
 AC_DEFINE([DOVECOT_VERSION_MINOR], regexp(AC_PACKAGE_VERSION, [^\([0-9]+\)\.\([0-9]+\)], [\2]), [Dovecot minor version])
 
-AC_CHECK_HEADERS(strings.h stdint.h unistd.h dirent.h malloc.h inttypes.h \
+AC_CHECK_HEADERS(strings.h stdint.h unistd.h dirent.h malloc.h \
   sys/uio.h sys/sysmacros.h sys/resource.h sys/select.h libgen.h \
   sys/quota.h sys/fs/ufs_quota.h ufs/ufs/quota.h jfs/quota.h \
   quota.h sys/fs/quota_common.h \
@@ -898,6 +898,8 @@ AC_DEFUN([AC_CHECKTYPE2], [
   $2]], [[$1 t;]])],[i_cv_type_$1=yes],[i_cv_type_$1=no])])
   AC_MSG_RESULT($i_cv_type_$1)
 ])
+dnl we require inttypes.h for PRIu{8,16,32,64} macros
+AC_CHECK_HEADER(inttypes.h,,AC_MSG_ERROR([inttypes.h missing but required]))
 
 dnl some systems don't have stdint.h, but still have some of the types
 dnl defined elsewhere
@@ -1767,6 +1769,25 @@ if test $want_openssl != no && test $have_ssl = no; then
     ])
     if test $i_cv_have_ssl_new_mem_funcs = yes; then
       AC_DEFINE(HAVE_SSL_NEW_MEM_FUNCS,, [Define if CRYPTO_set_mem_functions has new style parameters])
+    fi
+
+    # SSL_CTX_set_min_proto_version is also a macro so AC_CHECK_LIB fails here.
+    AC_CACHE_CHECK([whether SSL_CTX_set_min_proto_version exists],i_cv_have_ssl_ctx_set_min_proto_version,[
+      old_LIBS=$LIBS
+      LIBS="$LIBS -lssl"
+      AC_TRY_LINK([
+        #include <openssl/ssl.h>
+      ], [
+        SSL_CTX_set_min_proto_version((void*)0, 0);
+      ], [
+        i_cv_have_ssl_ctx_set_min_proto_version=yes
+      ], [
+        i_cv_have_ssl_ctx_set_min_proto_version=no
+      ])
+      LIBS=$old_LIBS
+    ])
+    if test $i_cv_have_ssl_ctx_set_min_proto_version = yes; then
+      AC_DEFINE(HAVE_SSL_CTX_SET_MIN_PROTO_VERSION,, [Define if you have SSL_CTX_set_min_proto_version])
     fi
 
     AC_CHECK_LIB(ssl, ERR_remove_thread_state, [
@@ -2951,7 +2972,7 @@ dnl **
 dnl IDLE doesn't really belong to banner. It's there just to make Blackberries
 dnl happy, because otherwise BIS server disables push email.
 capability_banner="IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE"
-capability="$capability_banner SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE"
+capability="$capability_banner SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE SNIPPET=FUZZY"
 AC_DEFINE_UNQUOTED(CAPABILITY_STRING, "$capability", [IMAP capabilities])
 AC_DEFINE_UNQUOTED(CAPABILITY_BANNER_STRING, "$capability_banner", [IMAP capabilities advertised in banner])
 
@@ -3092,6 +3113,7 @@ src/plugins/imap-zlib/Makefile
 src/plugins/mail-crypt/Makefile
 src/plugins/var-expand-crypt/Makefile
 src/plugins/apparmor/Makefile
+src/plugins/charset-alias/Makefile
 stamp.h
 dovecot-config.in])
 

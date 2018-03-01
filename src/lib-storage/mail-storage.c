@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -9,6 +9,7 @@
 #include "sha1.h"
 #include "unichar.h"
 #include "hex-binary.h"
+#include "file-dotlock.h"
 #include "file-create-locked.h"
 #include "istream.h"
 #include "eacces-error.h"
@@ -616,10 +617,14 @@ void mailbox_set_index_error(struct mailbox *box)
 void mail_storage_set_index_error(struct mail_storage *storage,
 				  struct mail_index *index)
 {
+	const char *index_error;
+
 	mail_storage_set_internal_error(storage);
 	/* use the lib-index's error as our internal error string */
-	storage->last_internal_error =
-		i_strdup(mail_index_get_error_message(index));
+	index_error = mail_index_get_error_message(index);
+	if (index_error == NULL)
+		index_error = "BUG: Unknown internal index error";
+	storage->last_internal_error = i_strdup(index_error);
 	storage->last_error_is_internal = TRUE;
 	mail_index_reset_error(index);
 }
@@ -1462,9 +1467,20 @@ int mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 	if (mailbox_verify_create_name(box) < 0)
 		return -1;
 
+	/* Avoid race conditions by keeping mailbox list locked during changes.
+	   This especially fixes a race during INBOX creation with LAYOUT=index
+	   because it scans for missing mailboxes if INBOX doesn't exist. The
+	   second process's scan can find a half-created INBOX and add it,
+	   causing the first process to become confused. */
+	if (mailbox_list_lock(box->list) < 0) {
+		mail_storage_copy_list_error(box->storage, box->list);
+		return -1;
+	}
 	box->creating = TRUE;
 	ret = box->v.create_box(box, update, directory);
 	box->creating = FALSE;
+	mailbox_list_unlock(box->list);
+
 	if (ret == 0) {
 		box->list->guid_cache_updated = TRUE;
 		if (!box->inbox_any)
@@ -1551,6 +1567,7 @@ static void mailbox_close_reset_path(struct mailbox *box)
 
 int mailbox_delete(struct mailbox *box)
 {
+	bool list_locked;
 	int ret;
 
 	if (*box->name == '\0') {
@@ -1567,13 +1584,22 @@ int mailbox_delete(struct mailbox *box)
 		/* might be a \noselect mailbox, so continue deletion */
 	}
 
-	ret = box->v.delete_box(box);
+	if (mailbox_list_lock(box->list) < 0) {
+		mail_storage_copy_list_error(box->storage, box->list);
+		list_locked = FALSE;
+		ret = -1;
+	} else {
+		list_locked = TRUE;
+		ret = box->v.delete_box(box);
+	}
 	if (ret < 0 && box->marked_deleted) {
 		/* deletion failed. revert the mark so it can maybe be
 		   tried again later. */
 		if (mailbox_mark_index_deleted(box, FALSE) < 0)
-			return -1;
+			ret = -1;
 	}
+	if (list_locked)
+		mailbox_list_unlock(box->list);
 
 	box->deleting = FALSE;
 	mailbox_close(box);
@@ -1664,7 +1690,7 @@ int mailbox_rename_check_children(struct mailbox *src, struct mailbox *dest)
 			continue; /* not our child */
 		/* if total length of new name exceeds the limit, fail */
 		if (strlen(child->vname + src_prefix_len)+dest_prefix_len > MAILBOX_LIST_NAME_MAX_LENGTH) {
-			mail_storage_set_error(dest->storage, MAIL_ERROR_PARAMS,
+			mail_storage_set_error(src->storage, MAIL_ERROR_PARAMS,
 				"Mailbox or child name too long");
 			ret = -1;
 			break;
@@ -1673,7 +1699,7 @@ int mailbox_rename_check_children(struct mailbox *src, struct mailbox *dest)
 
 	/* something went bad */
 	if (mailbox_list_iter_deinit(&iter) < 0) {
-		mail_storage_copy_list_error(dest->storage, src->list);
+		mail_storage_copy_list_error(src->storage, src->list);
 		ret = -1;
 	}
 	return ret;
@@ -1692,7 +1718,7 @@ int mailbox_rename(struct mailbox *src, struct mailbox *dest)
 		return -1;
 	}
 	if (mailbox_verify_create_name(dest) < 0) {
-		mail_storage_copy_error(dest->storage, src->storage);
+		mail_storage_copy_error(src->storage, dest->storage);
 		return -1;
 	}
 	if (mailbox_rename_check_children(src, dest) != 0) {
@@ -1724,7 +1750,16 @@ int mailbox_rename(struct mailbox *src, struct mailbox *dest)
 		return -1;
 	}
 
-	if (src->v.rename_box(src, dest) < 0)
+	/* It would be safer to lock both source and destination, but that
+	   could lead to deadlocks. So at least for now lets just lock only the
+	   destination list. */
+	if (mailbox_list_lock(dest->list) < 0) {
+		mail_storage_copy_list_error(src->storage, dest->list);
+		return -1;
+	}
+	int ret = src->v.rename_box(src, dest);
+	mailbox_list_unlock(dest->list);
+	if (ret < 0)
 		return -1;
 	src->list->guid_cache_invalidated = TRUE;
 	dest->list->guid_cache_invalidated = TRUE;
@@ -2063,7 +2098,6 @@ mailbox_transaction_begin(struct mailbox *box,
 
 	box->transaction_count++;
 	trans = box->v.transaction_begin(box, flags);
-	trans->flags = flags;
 	return trans;
 }
 
@@ -2159,7 +2193,8 @@ struct mail_save_context *
 mailbox_save_alloc(struct mailbox_transaction_context *t)
 {
 	struct mail_save_context *ctx;
-
+	const struct mail_storage_settings *mail_set =
+		mailbox_get_settings(t->box);
 	T_BEGIN {
 		ctx = t->box->v.save_alloc(t);
 	} T_END;
@@ -2176,6 +2211,12 @@ mailbox_save_alloc(struct mailbox_transaction_context *t)
 		/* make sure the mail isn't used before mail_set_seq_saving() */
 		mailbox_save_dest_mail_close(ctx);
 	}
+
+	/* make sure parts get parsed early on */
+	if (mail_set->parsed_mail_attachment_detection_add_flags_on_save)
+		mail_add_temp_wanted_fields(ctx->dest_mail,
+					    MAIL_FETCH_MESSAGE_PARTS, NULL);
+
 	return ctx;
 }
 
@@ -2383,6 +2424,8 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 {
 	struct mail_save_context *ctx = *_ctx;
 	struct mailbox_transaction_context *t = ctx->transaction;
+	const struct mail_storage_settings *mail_set =
+		mailbox_get_settings(t->box);
 	/* we need to keep a copy of this because save_finish implementations
 	   will likely zero the data structure during cleanup */
 	struct mail_keywords *keywords = ctx->data.keywords;
@@ -2412,6 +2455,11 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 			mailbox_save_add_pvt_flags(t, pvt_flags);
 		t->save_count++;
 	}
+
+	if (mail_set->parsed_mail_attachment_detection_add_flags_on_save &&
+	    !mail_has_attachment_keywords(ctx->dest_mail))
+		mail_set_attachment_keywords(ctx->dest_mail);
+
 	if (keywords != NULL)
 		mailbox_keywords_unref(&keywords);
 	mailbox_save_context_reset(ctx, TRUE);
@@ -2837,6 +2885,53 @@ void mail_set_mail_cache_corrupted(struct mail *mail, const char *fmt, ...)
 	va_end(va);
 }
 
+static int
+mail_storage_dotlock_create(const char *lock_path,
+			    const struct file_create_settings *lock_set,
+			    const struct mail_storage_settings *mail_set,
+			    struct file_lock **lock_r, const char **error_r)
+{
+	const struct dotlock_settings dotlock_set = {
+		.timeout = lock_set->lock_timeout_secs,
+		.stale_timeout = I_MAX(60*5, lock_set->lock_timeout_secs),
+		.lock_suffix = "",
+
+		.use_excl_lock = mail_set->dotlock_use_excl,
+		.nfs_flush = mail_set->mail_nfs_storage,
+		.use_io_notify = TRUE,
+	};
+	struct dotlock *dotlock;
+	int ret = file_dotlock_create(&dotlock_set, lock_path, 0, &dotlock);
+	if (ret <= 0) {
+		*error_r = t_strdup_printf("file_dotlock_create(%s) failed: %m",
+					   lock_path);
+		return ret;
+	}
+	*lock_r = file_lock_from_dotlock(&dotlock);
+	return 1;
+}
+
+int mail_storage_lock_create(const char *lock_path,
+			     const struct file_create_settings *lock_set,
+			     const struct mail_storage_settings *mail_set,
+			     struct file_lock **lock_r, const char **error_r)
+{
+	bool created;
+
+	if (lock_set->lock_method == FILE_LOCK_METHOD_DOTLOCK)
+		return mail_storage_dotlock_create(lock_path, lock_set, mail_set, lock_r, error_r);
+
+	if (file_create_locked(lock_path, lock_set, lock_r,
+			       &created, error_r) == -1) {
+		*error_r = t_strdup_printf("file_create_locked(%s) failed: %s",
+					   lock_path, *error_r);
+		return errno == EAGAIN ? 0 : -1;
+	}
+	file_lock_set_close_on_free(*lock_r, TRUE);
+	file_lock_set_unlink_on_free(*lock_r, TRUE);
+	return 1;
+}
+
 int mailbox_lock_file_create(struct mailbox *box, const char *lock_fname,
 			     unsigned int lock_secs, struct file_lock **lock_r,
 			     const char **error_r)
@@ -2844,7 +2939,6 @@ int mailbox_lock_file_create(struct mailbox *box, const char *lock_fname,
 	const struct mailbox_permissions *perm;
 	struct file_create_settings set;
 	const char *lock_path;
-	bool created;
 
 	perm = mailbox_get_permissions(box);
 	i_zero(&set);
@@ -2875,12 +2969,6 @@ int mailbox_lock_file_create(struct mailbox *box, const char *lock_fname,
 		set.mkdir_mode = 0700;
 	}
 
-	if (file_create_locked(lock_path, &set, lock_r, &created, error_r) == -1) {
-		*error_r = t_strdup_printf("file_create_locked(%s) failed: %s",
-					   lock_path, *error_r);
-		return errno == EAGAIN ? 0 : -1;
-	}
-	file_lock_set_close_on_free(*lock_r, TRUE);
-	file_lock_set_unlink_on_free(*lock_r, TRUE);
-	return 1;
+	return mail_storage_lock_create(lock_path, &set,
+					box->storage->set, lock_r, error_r);
 }
