@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -87,6 +87,7 @@ static void parse_content_type(struct attachment_istream *astream,
 		(void)rfc822_parse_content_type(&parser, content_type);
 		astream->part.content_type = i_strdup(str_c(content_type));
 	} T_END;
+	rfc822_parser_deinit(&parser);
 }
 
 static void

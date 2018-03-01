@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "hostpid.h"
@@ -26,6 +26,7 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, login_log_format_elements),
 	DEF(SET_STR, login_log_format),
 	DEF(SET_STR, login_access_sockets),
+	DEF(SET_STR_VARS, login_proxy_notify_path),
 	DEF(SET_STR, login_plugin_dir),
 	DEF(SET_STR, login_plugins),
 	DEF(SET_TIME, login_proxy_max_disconnect_delay),
@@ -54,6 +55,7 @@ static const struct login_settings login_default_settings = {
 	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
 	.login_log_format = "%$: %s",
 	.login_access_sockets = "",
+	.login_proxy_notify_path = "proxy-notify",
 	.login_plugin_dir = MODULEDIR"/login",
 	.login_plugins = "",
 	.login_proxy_max_disconnect_delay = 0,
@@ -183,6 +185,14 @@ login_settings_read(pool_t pool,
 		set_cache = master_service_settings_cache_init(master_service,
 							       input.module,
 							       input.service);
+		/* lookup filters
+
+		   this is only enabled if service_count > 1 because otherwise
+		   login process will process only one request and this is only
+		   useful when more than one request is processed.
+		*/
+		if (master_service_get_service_count(master_service) > 1)
+			master_service_settings_cache_init_filter(set_cache);
 	}
 
 	if (master_service_settings_cache_read(set_cache, &input, NULL,

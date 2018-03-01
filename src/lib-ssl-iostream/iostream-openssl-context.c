@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "safe-memset.h"
@@ -267,8 +267,8 @@ static int ssl_servername_callback(SSL *ssl, int *al ATTR_UNUSED,
 	ssl_io = SSL_get_ex_data(ssl, dovecot_ssl_extdata_index);
 	host = SSL_get_servername(ssl, TLSEXT_NAMETYPE_host_name);
 	if (SSL_get_servername_type(ssl) != -1) {
-		i_free(ssl_io->host);
-		ssl_io->host = i_strdup(host);
+		i_free(ssl_io->sni_host);
+		ssl_io->sni_host = i_strdup(host);
 	} else if (ssl_io->verbose) {
 		i_debug("SSL_get_servername() failed");
 	}
@@ -336,8 +336,25 @@ ssl_iostream_context_set(struct ssl_iostream_context *ctx,
 				    SSL_OP_CIPHER_SERVER_PREFERENCE);
 	}
 	if (ctx->set->protocols != NULL) {
+#ifdef HAVE_SSL_CTX_SET_MIN_PROTO_VERSION
+		int min_protocol;
+		const char *error;
+		if (ssl_protocols_to_min_protocol(ctx->set->protocols,
+						  &min_protocol, &error) < 0) {
+			*error_r = t_strdup_printf(
+				"Unknown ssl_protocols setting: %s", error);
+			return -1;
+		} else if (SSL_CTX_set_min_proto_version(ctx->ssl_ctx,
+							 min_protocol) != 1) {
+			*error_r = t_strdup_printf(
+				"Failed to set SSL minimum protocol version to %d",
+				min_protocol);
+			return -1;
+		}
+#else
 		SSL_CTX_set_options(ctx->ssl_ctx,
 			    openssl_get_protocol_options(ctx->set->protocols));
+#endif
 	}
 
 	if (set->cert != NULL &&
@@ -378,7 +395,7 @@ ssl_iostream_context_set(struct ssl_iostream_context *ctx,
 	return 0;
 }
 
-#if defined(HAVE_ECDH) && !defined(SSL_CTRL_SET_ECDH_AUTO)
+#if defined(HAVE_ECDH) && !defined(SSL_CTX_set_ecdh_auto)
 static int
 ssl_proxy_ctx_get_pkey_ec_curve_name(const struct ssl_iostream_settings *set,
 				     int *nid_r, const char **error_r)
@@ -412,7 +429,7 @@ ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
 				const struct ssl_iostream_settings *set ATTR_UNUSED,
 				const char **error_r ATTR_UNUSED)
 {
-#if defined(HAVE_ECDH) && !defined(SSL_CTRL_SET_ECDH_AUTO)
+#if defined(HAVE_ECDH) && !defined(SSL_CTX_set_ecdh_auto)
 	EC_KEY *ecdh;
 	int nid;
 	const char *curve_name;
@@ -425,7 +442,7 @@ ssl_proxy_ctx_set_crypto_params(SSL_CTX *ssl_ctx,
 	   used instead of ECDHE, do not reuse the same ECDH key pair for
 	   different sessions. This option improves forward secrecy. */
 	SSL_CTX_set_options(ssl_ctx, SSL_OP_SINGLE_ECDH_USE);
-#ifdef SSL_CTRL_SET_ECDH_AUTO
+#ifdef SSL_CTX_set_ecdh_auto
 	/* OpenSSL >= 1.0.2 automatically handles ECDH temporary key parameter
 	   selection. */
 	if (!SSL_CTX_set_ecdh_auto(ssl_ctx, 1)) {

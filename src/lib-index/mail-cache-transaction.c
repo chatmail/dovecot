@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -521,7 +521,7 @@ mail_cache_transaction_update_last_rec(struct mail_cache_transaction_ctx *ctx)
 	size_t size;
 
 	size = mail_cache_transaction_update_last_rec_size(ctx);
-	if (size > MAIL_CACHE_RECORD_MAX_SIZE) {
+	if (size > ctx->cache->index->optimization_set.cache.record_max_size) {
 		buffer_set_used_size(ctx->cache_data, ctx->last_rec_pos);
 		return;
 	}

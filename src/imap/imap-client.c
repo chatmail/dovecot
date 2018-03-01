@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ioloop.h"
@@ -73,12 +73,32 @@ static void client_init_urlauth(struct client *client)
 
 static bool user_has_special_use_mailboxes(struct mail_user *user)
 {
-	struct mail_namespace *ns;
+	struct mail_namespace_settings *const *ns_set;
 
-	for (ns = user->namespaces; ns != NULL; ns = ns->next) {
-		if (ns->special_use_mailboxes)
-			return TRUE;
+	/*
+	 * We have to iterate over namespace and mailbox *settings* since
+	 * the namespaces haven't been set up yet.  The namespaces haven't
+	 * been set up so that we don't hold up the OK response to LOGIN
+	 * when using slow lib-storage backends.
+	 */
+
+	/* no namespaces => no special use flags */
+	if (!array_is_created(&user->set->namespaces))
+		return FALSE;
+
+	array_foreach(&user->set->namespaces, ns_set) {
+		struct mailbox_settings *const *box_set;
+
+		/* no mailboxes => no special use flags */
+		if (!array_is_created(&(*ns_set)->mailboxes))
+			continue;
+
+		array_foreach(&(*ns_set)->mailboxes, box_set) {
+			if ((*box_set)->special_use != NULL)
+				return TRUE;
+		}
 	}
+
 	return FALSE;
 }
 
@@ -132,9 +152,6 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 		(void)iostream_rawlog_create(set->rawlog_dir, &client->input,
 					     &client->output);
 	}
-
-	mail_namespaces_set_storage_callbacks(user->namespaces,
-					      &mail_storage_callbacks, client);
 
 	client->capability_string =
 		str_new(client->pool, sizeof(CAPABILITY_STRING)+64);
@@ -196,6 +213,15 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 	return client;
 }
 
+int client_create_finish(struct client *client, const char **error_r)
+{
+	if (mail_namespaces_init(client->user, error_r) < 0)
+		return -1;
+	mail_namespaces_set_storage_callbacks(client->user->namespaces,
+					      &mail_storage_callbacks, client);
+	return 0;
+}
+
 void client_command_cancel(struct client_command_context **_cmd)
 {
 	struct client_command_context *cmd = *_cmd;
@@ -233,42 +259,31 @@ void client_command_cancel(struct client_command_context **_cmd)
 
 const char *client_stats(struct client *client)
 {
-	static struct var_expand_table static_tab[] = {
-		{ 'i', NULL, "input" },
-		{ 'o', NULL, "output" },
-		{ '\0', NULL, "session" },
-		{ '\0', NULL, "fetch_hdr_count" },
-		{ '\0', NULL, "fetch_hdr_bytes" },
-		{ '\0', NULL, "fetch_body_count" },
-		{ '\0', NULL, "fetch_body_bytes" },
-		{ '\0', NULL, "deleted" },
-		{ '\0', NULL, "expunged" },
-		{ '\0', NULL, "trashed" },
-		{ '\0', NULL, "autoexpunged" },
-		{ '\0', NULL, "appended" },
+	const struct var_expand_table logout_tab[] = {
+		{ 'i', dec2str(i_stream_get_absolute_offset(client->input)), "input" },
+		{ 'o', dec2str(client->output->offset), "output" },
+		{ '\0', client->session_id, "session" },
+		{ '\0', dec2str(client->fetch_hdr_count), "fetch_hdr_count" },
+		{ '\0', dec2str(client->fetch_hdr_bytes), "fetch_hdr_bytes" },
+		{ '\0', dec2str(client->fetch_body_count), "fetch_body_count" },
+		{ '\0', dec2str(client->fetch_body_bytes), "fetch_body_bytes" },
+		{ '\0', dec2str(client->deleted_count), "deleted" },
+		{ '\0', dec2str(client->expunged_count), "expunged" },
+		{ '\0', dec2str(client->trashed_count), "trashed" },
+		{ '\0', dec2str(client->autoexpunged_count), "autoexpunged" },
+		{ '\0', dec2str(client->append_count), "appended" },
 		{ '\0', NULL, NULL }
 	};
-	struct var_expand_table *tab;
+	const struct var_expand_table *user_tab =
+		mail_user_var_expand_table(client->user);
+	const struct var_expand_table *tab =
+		t_var_expand_merge_tables(logout_tab, user_tab);
 	string_t *str;
 
-	tab = t_malloc(sizeof(static_tab));
-	memcpy(tab, static_tab, sizeof(static_tab));
-
-	tab[0].value = dec2str(i_stream_get_absolute_offset(client->input));
-	tab[1].value = dec2str(client->output->offset);
-	tab[2].value = client->session_id;
-	tab[3].value = dec2str(client->fetch_hdr_count);
-	tab[4].value = dec2str(client->fetch_hdr_bytes);
-	tab[5].value = dec2str(client->fetch_body_count);
-	tab[6].value = dec2str(client->fetch_body_bytes);
-	tab[7].value = dec2str(client->deleted_count);
-	tab[8].value = dec2str(client->expunged_count);
-	tab[9].value = dec2str(client->trashed_count);
-	tab[10].value = dec2str(client->autoexpunged_count);
-	tab[11].value = dec2str(client->append_count);
-
 	str = t_str_new(128);
-	var_expand(str, client->set->imap_logout_format, tab);
+	var_expand_with_funcs(str, client->set->imap_logout_format,
+			      tab, mail_user_var_expand_func_table,
+			      client->user);
 	return str_c(str);
 }
 

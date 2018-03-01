@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 
@@ -36,6 +36,7 @@ int main(void)
 		test_istream_multiplex,
 		test_istream_seekable,
 		test_istream_tee,
+		test_istream_try,
 		test_istream_unix,
 		test_json_parser,
 		test_json_tree,

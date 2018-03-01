@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -28,6 +28,8 @@
 #define MAX_INBUF_SIZE (1024*1024)
 
 static void client_connection_input(struct client_connection *conn);
+static void
+client_connection_send_auth_handshake(struct client_connection *conn);
 
 static failure_callback_t *orig_error_callback, *orig_fatal_callback;
 static failure_callback_t *orig_info_callback, *orig_debug_callback = NULL;
@@ -41,9 +43,14 @@ doveadm_server_log_handler(const struct failure_context *ctx,
 {
 	if (!log_recursing && doveadm_client != NULL &&
 	    doveadm_client->log_out != NULL) T_BEGIN {
+		struct ioloop *prev_ioloop = current_ioloop;
 		/* prevent re-entering this code if
 		   any of the following code causes logging */
 		log_recursing = TRUE;
+		/* since we can get here from just about anywhere, make sure
+		   the log ostream uses the connection's ioloop. */
+		io_loop_set_current(doveadm_client->ioloop);
+
 		char c = doveadm_log_type_to_char(ctx->type);
 		const char *ptr,*start;
 		bool corked = o_stream_is_corked(doveadm_client->log_out);
@@ -68,6 +75,7 @@ doveadm_server_log_handler(const struct failure_context *ctx,
 		o_stream_uncork(doveadm_client->log_out);
 		if (corked)
 			o_stream_cork(doveadm_client->log_out);
+		io_loop_set_current(prev_ioloop);
 		log_recursing = FALSE;
 	} T_END;
 
@@ -291,7 +299,7 @@ static int doveadm_cmd_handle(struct client_connection *conn,
 			      int argc, const char *const argv[],
 			      struct doveadm_cmd_context *cctx)
 {
-	struct ioloop *ioloop, *prev_ioloop = current_ioloop;
+	struct ioloop *prev_ioloop = current_ioloop;
 	const struct doveadm_cmd *cmd = NULL;
 	const struct doveadm_mail_cmd *mail_cmd;
 	struct doveadm_mail_cmd_context *mctx;
@@ -318,7 +326,7 @@ static int doveadm_cmd_handle(struct client_connection *conn,
 	/* some commands will want to call io_loop_run(), but we're already
 	   running one and we can't call the original one recursively, so
 	   create a new ioloop. */
-	ioloop = io_loop_create();
+	conn->ioloop = io_loop_create();
 	lib_signals_reset_ioloop();
 
 	if (cmd_ver2 != NULL)
@@ -333,8 +341,8 @@ static int doveadm_cmd_handle(struct client_connection *conn,
 	o_stream_switch_ioloop(conn->output);
 	if (conn->log_out != NULL)
 		o_stream_switch_ioloop(conn->log_out);
-	io_loop_set_current(ioloop);
-	io_loop_destroy(&ioloop);
+	io_loop_set_current(conn->ioloop);
+	io_loop_destroy(&conn->ioloop);
 
 	/* clear all headers */
 	doveadm_print_deinit();
@@ -396,9 +404,13 @@ static bool client_handle_command(struct client_connection *conn, char **args)
 
 	client_connection_set_proctitle(conn, cmd_name);
 	o_stream_cork(conn->output);
+	/* Disable IO while running a command. This is required for commands
+	   that do IO themselves (e.g. dsync-server). */
+	io_remove(&conn->io);
 	if (doveadm_cmd_handle(conn, cmd_name, argc-2, (const char**)(args+2), &cctx) < 0)
 		o_stream_nsend(conn->output, "\n-\n", 3);
 	o_stream_uncork(conn->output);
+	conn->io = io_add_istream(conn->input, client_connection_input, conn);
 	client_connection_set_proctitle(conn, "");
 
 	/* flush the output and possibly run next command */
@@ -499,6 +511,7 @@ static void client_connection_input(struct client_connection *conn)
 					   DOVEADM_CLIENT_PROTOCOL_VERSION_LINE"\n");
 			conn->use_multiplex = TRUE;
 		}
+		client_connection_send_auth_handshake(conn);
 		conn->handshaked = TRUE;
 	}
 	if (!conn->authenticated) {
@@ -590,18 +603,23 @@ static int client_connection_init_ssl(struct client_connection *conn)
 	return 0;
 }
 
-static void
-client_connection_send_auth_handshake(struct client_connection *
-				      conn, int listen_fd)
+static bool
+client_connection_is_preauthenticated(int listen_fd)
 {
 	const char *listen_path;
 	struct stat st;
 
 	/* we'll have to do this with stat(), because at least in Linux
 	   fstat() always returns mode as 0777 */
-	if (net_getunixname(listen_fd, &listen_path) == 0 &&
-	    stat(listen_path, &st) == 0 && S_ISSOCK(st.st_mode) &&
-	    (st.st_mode & 0777) == 0600) {
+	return net_getunixname(listen_fd, &listen_path) == 0 &&
+		stat(listen_path, &st) == 0 && S_ISSOCK(st.st_mode) &&
+		(st.st_mode & 0777) == 0600;
+}
+
+static void
+client_connection_send_auth_handshake(struct client_connection *conn)
+{
+	if (conn->preauthenticated) {
 		/* no need for client to authenticate */
 		conn->authenticated = TRUE;
 		o_stream_nsend(conn->output, "+\n", 2);
@@ -646,7 +664,6 @@ client_connection_create(int fd, int listen_fd, bool ssl)
 
 	conn->name = conn->remote_ip.family == 0 ? "<local>" :
 		p_strdup(pool, net_ip2addr(&conn->remote_ip));
-	conn->io = io_add(fd, IO_READ, client_connection_input, conn);
 	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
 	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
 	i_stream_set_name(conn->input, conn->name);
@@ -659,7 +676,11 @@ client_connection_create(int fd, int listen_fd, bool ssl)
 			return NULL;
 		}
 	}
-	client_connection_send_auth_handshake(conn, listen_fd);
+	/* add IO after SSL istream is created */
+	conn->io = io_add_istream(conn->input, client_connection_input, conn);
+	conn->preauthenticated =
+		client_connection_is_preauthenticated(listen_fd);
+
 	client_connection_set_proctitle(conn, "");
 
 	return conn;
@@ -672,6 +693,9 @@ void client_connection_destroy(struct client_connection **_conn)
 	*_conn = NULL;
 
 	doveadm_print_deinit();
+
+	if (conn->http)
+		client_connection_destroy_http(conn);
 
 	if (conn->ssl_iostream != NULL)
 		ssl_iostream_destroy(&conn->ssl_iostream);

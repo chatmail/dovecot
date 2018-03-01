@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
 
 /* The idea is that we use 32bit integers for string sort IDs which specifiy
    the sort order for primary sort condition. The whole 32bit integer space is
@@ -496,6 +496,11 @@ static void index_sort_merge(struct sort_string_context *ctx)
 			ret = 1;
 		}
 
+		if (ret == 0) {
+			ret = index_sort_node_cmp_type(ctx->program,
+					ctx->program->sort_program + 1,
+					znodes[zpos].seq, nznodes[nzpos].seq);
+		}
 		if (ret <= 0) {
 			array_append(&ctx->sorted_nodes, &znodes[zpos], 1);
 			prev_str = zstr;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -728,6 +728,7 @@ imapc_list_iter_next(struct mailbox_list_iterate_context *_ctx)
 	} while ((node->flags & MAILBOX_MATCHED) == 0);
 
 	if (ctx->info.ns->prefix_len > 0 &&
+	    strcasecmp(vname, "INBOX") != 0 &&
 	    strncmp(vname, ctx->info.ns->prefix, ctx->info.ns->prefix_len-1) == 0 &&
 	    vname[ctx->info.ns->prefix_len] == '\0' &&
 	    list->set->imapc_list_prefix[0] == '\0') {

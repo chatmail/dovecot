@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "fs-api-private.h"
@@ -78,14 +78,14 @@ void fs_wrapper_write_stream(struct fs_file *file)
 
 int fs_wrapper_write_stream_finish(struct fs_file *file, bool success)
 {
+	if (file->output == NULL)
+		return fs_write_stream_finish_async(file->parent);
+
 	if (!success) {
 		fs_write_stream_abort_parent(file, &file->output);
 		return -1;
 	}
-
-	if (fs_write_stream_finish(file->parent, &file->output) < 0)
-		return -1;
-	return 1;
+	return fs_write_stream_finish(file->parent, &file->output);
 }
 
 int fs_wrapper_lock(struct fs_file *file, unsigned int secs,

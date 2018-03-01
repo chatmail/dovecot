@@ -10,6 +10,9 @@
 #include "mailbox-attribute-private.h"
 #include "mail-index-private.h"
 
+struct file_lock;
+struct file_create_settings;
+
 /* Default prefix for indexes */
 #define MAIL_INDEX_PREFIX "dovecot.index"
 
@@ -19,6 +22,21 @@
 #define MAIL_READ_FULL_BLOCK_SIZE IO_BLOCK_SIZE
 
 #define MAIL_SHARED_STORAGE_NAME "shared"
+
+enum mail_storage_list_index_rebuild_reason {
+	/* Mailbox list index was found to be corrupted. */
+	MAIL_STORAGE_LIST_INDEX_REBUILD_REASON_CORRUPTED,
+	/* Mailbox list index doesn't have INBOX in an inbox=yes namespace.
+	   Rebuild is done to verify whether the user really is an empty new
+	   user, or if an existing user's mailbox list index was lost. Because
+	   this is called in non-error conditions, the callback shouldn't log
+	   any errors or warnings if it didn't find any missing mailboxes. */
+	MAIL_STORAGE_LIST_INDEX_REBUILD_REASON_NO_INBOX,
+	/* MAILBOX_SYNC_FLAG_FORCE_RESYNC is run. This is called only once
+	   per list, so that doveadm force-resync '*' won't cause it to run for
+	   every mailbox. */
+	MAIL_STORAGE_LIST_INDEX_REBUILD_REASON_FORCE_RESYNC,
+};
 
 struct mail_storage_module_register {
 	unsigned int id;
@@ -48,10 +66,12 @@ struct mail_storage_vfuncs {
 					 const char *vname,
 					 enum mailbox_flags flags);
 	int (*purge)(struct mail_storage *storage);
-	/* Called when mailbox list index corruption has been detected.
+	/* Called when mailbox list index rebuild is requested. Additional
+	   parameter is in storage.list_index_rebuild_reason.
+
 	   The callback should add any missing mailboxes to the list index.
 	   Returns 0 on success, -1 on temporary failure that didn't properly
-	   fix the index. */
+	   rebuild the index. */
 	int (*list_index_corrupted)(struct mail_storage *storage);
 };
 
@@ -151,6 +171,10 @@ struct mail_storage {
 
 	struct mail_storage_callbacks callbacks;
 	void *callback_context;
+
+	/* FIXME: remove in v2.3 - should be a parameter to
+	   list_index_corrupted() */
+	enum mail_storage_list_index_rebuild_reason list_index_rebuild_reason;
 
 	struct mail_binary_cache binary_cache;
 	/* Filled lazily by mailbox_attribute_*() when accessing shared
@@ -757,6 +781,12 @@ bool mail_prefetch(struct mail *mail);
 void mail_set_aborted(struct mail *mail);
 void mail_set_expunged(struct mail *mail);
 void mail_set_seq_saving(struct mail *mail, uint32_t seq);
+/* Returns true IF and only IF the mail has EITHER one of the
+   attachment keywords set. If it has both, or none, it will return FALSE. */
+bool mail_has_attachment_keywords(struct mail *mail);
+/* Sets attachment keywords. */
+void mail_set_attachment_keywords(struct mail *mail);
+
 void mailbox_set_deleted(struct mailbox *box);
 int mailbox_mark_index_deleted(struct mailbox *box, bool del);
 /* Easy wrapper for getting mailbox's MAILBOX_LIST_PATH_TYPE_MAILBOX.
@@ -791,10 +821,16 @@ bool mailbox_is_autocreated(struct mailbox *box);
 /* Returns -1 if error, 0 if failed with EEXIST, 1 if ok */
 int mailbox_create_fd(struct mailbox *box, const char *path, int flags,
 		      int *fd_r);
-/* Create a lock file to the mailbox with the given filename. If it succeeds,
+/* Create a lock file with the given path and settings. If it succeeds,
    returns 1 and lock_r, which needs to be freed once finished with the lock.
-   If lock_secs is reached, returns 0 and error_r. Returns -1 and sets error_r
-   on other errors. */
+   If lock_set->lock_timeout_secs is reached, returns 0 and error_r. Returns
+   -1 and sets error_r on other errors. */
+int mail_storage_lock_create(const char *lock_path,
+			     const struct file_create_settings *lock_set,
+			     const struct mail_storage_settings *mail_set,
+			     struct file_lock **lock_r, const char **error_r);
+/* Create a lock file to the mailbox with the given filename. Returns the same
+   as mail_storage_lock_create(). */
 int mailbox_lock_file_create(struct mailbox *box, const char *lock_fname,
 			     unsigned int lock_secs, struct file_lock **lock_r,
 			     const char **error_r);
