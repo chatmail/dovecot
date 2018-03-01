@@ -2,4 +2,4 @@
 version=3
 # Site                                      Version Script
 opts="pgpsigurlmangle=s/$/.sig/" \
-	http://dovecot.org/releases/2.2/dovecot-(.*\.[0-9]+)\.tar\.gz debian uupdate
+	https://dovecot.org/releases/2.2/dovecot-(.*\.[0-9]+)\.tar\.gz debian uupdate
