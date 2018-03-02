@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -158,8 +158,19 @@ void auth_request_success(struct auth_request *request,
 {
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
 
-	/* perform second policy lookup here */
+	if (!request->set->policy_check_after_auth) {
+		buffer_t buf;
+		buffer_create_from_const_data(&buf, "", 0);
+		struct auth_policy_check_ctx ctx = {
+			.success_data = &buf,
+			.request = request,
+			.type = AUTH_POLICY_CHECK_TYPE_SUCCESS,
+		};
+		auth_request_policy_check_callback(0, &ctx);
+		return;
+	}
 
+	/* perform second policy lookup here */
 	struct auth_policy_check_ctx *ctx = p_new(request->pool, struct auth_policy_check_ctx, 1);
 	ctx->request = request;
 	ctx->success_data = buffer_create_dynamic(request->pool, data_size);
@@ -884,7 +895,7 @@ auth_request_handle_passdb_callback(enum passdb_result *result,
 	return TRUE;
 }
 
-static void
+void
 auth_request_verify_plain_callback_finish(enum passdb_result result,
 					  struct auth_request *request)
 {
@@ -928,6 +939,7 @@ void auth_request_verify_plain_callback(enum passdb_result result,
 					      &result, TRUE)) {
 			auth_request_log_info(request, AUTH_SUBSYS_DB,
 				"Falling back to expired data from cache");
+			return;
 		}
 	}
 
@@ -1023,7 +1035,7 @@ void auth_request_verify_plain(struct auth_request *request,
 		i_assert(request->mech_password == password);
 	request->user_changed_by_lookup = FALSE;
 
-	if (request->policy_processed) {
+	if (request->policy_processed || !request->set->policy_check_before_auth) {
 		auth_request_verify_plain_continue(request, callback);
 	} else {
 		ctx = p_new(request->pool, struct auth_policy_check_ctx, 1);
@@ -1077,7 +1089,6 @@ void auth_request_verify_plain_continue(struct auth_request *request,
 	cache_key = passdb_cache == NULL ? NULL : passdb->cache_key;
 	if (passdb_cache_verify_plain(request, cache_key, password,
 				      &result, FALSE)) {
-		auth_request_verify_plain_callback_finish(result, request);
 		return;
 	}
 
@@ -1202,7 +1213,7 @@ void auth_request_lookup_credentials(struct auth_request *request,
 		request->credentials_scheme = p_strdup(request->pool, scheme);
 	request->user_changed_by_lookup = FALSE;
 
-	if (request->policy_processed)
+	if (request->policy_processed || !request->set->policy_check_before_auth)
 		auth_request_lookup_credentials_policy_continue(request, callback);
 	else {
 		ctx = p_new(request->pool, struct auth_policy_check_ctx, 1);
@@ -1222,7 +1233,6 @@ void auth_request_lookup_credentials_policy_continue(struct auth_request *reques
 	enum passdb_result result;
 
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
-
 	if (auth_request_is_disabled_master_user(request)) {
 		callback(PASSDB_RESULT_USER_UNKNOWN, NULL, 0, request);
 		return;

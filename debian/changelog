@@ -1,8 +1,32 @@
-dovecot (1:2.2.33.2-1~bpo9+1) stretch-backports; urgency=medium
+dovecot (1:2.2.34-2) unstable; urgency=high
 
-  * Rebuild for stretch-backports.
+  * [868dc65] Update pigeonhole to 0.4.22
+  * Set urgency to high due to the security fixes in 2.2.34-1
 
- -- Apollon Oikonomopoulos <apoikos@debian.org>  Wed, 15 Nov 2017 17:34:48 +0200
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Fri, 02 Mar 2018 18:36:23 +0200
+
+dovecot (1:2.2.34-1) unstable; urgency=medium
+
+  * [f53dc9a] New upstream version 2.2.34
+    Fixes the following security issues:
+     + CVE-2017-15130: TLS SNI config lookups may lead to excessive memory
+       usage (Closes: #891820)
+     + CVE-2017-14461: rfc822_parse_domain information leak vulnerability
+       (Closes: #891819)
+     + CVE-2017-15132: auth client leaks memory if SASL authentication is
+       aborted (Closes: #888432)
+  * [0dc98c6] Do not patch all-settings.c; regenerate it at build time
+    instead. Thanks to Aki Tuomi!
+  * [e678e3b] Bump dh compat to 11
+     + B-D on debhelper (>= 11~)
+     + Use dh_installsystemd instead of dh_systemd_enable
+  * [271b290] Bump Standards-Version to 4.1.3; no changes needed
+  * [3cd6715] d/copyright: bump upstream and debian years
+  * [380d1ac] Drop the ENABLED flag from /etc/default/dovecot (but let the
+    initscript handle it if it exists)
+  * [97d6fae] d/watch: switch upstream URL to https://
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 01 Mar 2018 10:55:49 +0200
 
 dovecot (1:2.2.33.2-1) unstable; urgency=medium
 

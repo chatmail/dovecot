@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -480,4 +480,11 @@ auth_server_connection_add_request(struct auth_server_connection *conn,
 	i_assert(hash_table_lookup(conn->requests, POINTER_CAST(id)) == NULL);
 	hash_table_insert(conn->requests, POINTER_CAST(id), request);
 	return id;
+}
+
+void auth_server_connection_remove_request(struct auth_server_connection *conn,
+					   unsigned int id)
+{
+	i_assert(conn->handshake_received);
+	hash_table_remove(conn->requests, POINTER_CAST(id));
 }

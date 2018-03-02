@@ -23,17 +23,6 @@ Description: Set default protocols value as empty and enable each
  
  # A comma separated list of IPs or hosts where to listen in for connections. 
  # "*" listens in all IPv4 interfaces, "::" listens in all IPv6 interfaces.
---- a/src/config/all-settings.c
-+++ b/src/config/all-settings.c
-@@ -2819,7 +2819,7 @@
- 	.state_dir = PKG_STATEDIR,
- 	.libexec_dir = PKG_LIBEXECDIR,
- 	.instance_name = PACKAGE,
--	.protocols = "imap pop3 lmtp",
-+	.protocols = "",
- 	.listen = "*, ::",
- 	.ssl = "yes:no:required",
- 	.default_internal_user = "dovecot",
 --- a/src/master/master-settings.c
 +++ b/src/master/master-settings.c
 @@ -205,7 +205,7 @@

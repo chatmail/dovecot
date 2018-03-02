@@ -126,14 +126,14 @@ FreeBSD
 Pigeonhole can be installed from ports by running:
 
 ---%<-------------------------------------------------------------------------
-cd /usr/ports/mail/dovecot2-pigeonhole
+cd /usr/ports/mail/dovecot-pigeonhole
 make install clean
 ---%<-------------------------------------------------------------------------
 
 It can be also be installed from packages by running:
 
 ---%<-------------------------------------------------------------------------
-pkg install dovecot2-pigeonhole
+pkg install dovecot-pigeonhole
 ---%<-------------------------------------------------------------------------
 
 OpenBSD
@@ -145,4 +145,4 @@ Pigeonhole can be installed from packages by running:
 pkg_add dovecot-pigeonhole
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-10-10 04:42)
+(This file was created from the wiki on 2018-02-28 04:42)

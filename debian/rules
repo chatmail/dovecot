@@ -116,6 +116,9 @@ override_dh_auto_configure:
 		--disable-static)
 
 override_dh_auto_build:
+	# Remove all-settings.c and let it be re-generated from the (patched)
+	# component settings files.
+	rm -f src/config/all-settings.c
 	dh_auto_build --parallel
 	dh_auto_build --parallel -D $(PIGEONHOLE_DIR)
 
@@ -166,6 +169,10 @@ override_dh_installpam:
 override_dh_installinit:
 	dh_installinit -pdovecot-core --name=dovecot -u"defaults 20"
 
+override_dh_installsystemd:
+	dh_installsystemd -pdovecot-core dovecot.service
+	dh_installsystemd -pdovecot-core --no-enable dovecot.socket
+
 override_dh_gencontrol:
 	dh_gencontrol -- -Vdovecot:ABI-Version=$(shell cat $(CURDIR)/debian/dovecot-dev/usr/share/dovecot/dovecot-abi)
 
@@ -176,11 +183,6 @@ override_dh_makeshlibs:
 	# Do not add an ldconfig trigger; none of the dovecot shared libraries
 	# are public.
 	dh_makeshlibs -n
-
-
-override_dh_systemd_enable:
-	dh_systemd_enable -pdovecot-core dovecot.service
-	dh_systemd_enable -pdovecot-core --no-enable dovecot.socket
 
 override_dh_installdocs:
 	dh_installdocs

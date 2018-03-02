@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -309,8 +309,10 @@ void program_client_remote_disconnect(struct program_client *pclient, bool force
 	struct program_client_remote *prclient =
 		(struct program_client_remote *)pclient;
 
-	if (pclient->error == PROGRAM_CLIENT_ERROR_NONE && !prclient->noreply &&
-	    pclient->program_input != NULL && !force) {
+	if (pclient->program_input == NULL) {
+		/* nothing */
+	} else if (pclient->error == PROGRAM_CLIENT_ERROR_NONE &&
+		   !prclient->noreply && !force) {
 		const unsigned char *data;
 		size_t size;
 
@@ -320,8 +322,11 @@ void program_client_remote_disconnect(struct program_client *pclient, bool force
 			i_stream_skip(pclient->program_input, size);
 		}
 
-		/* Get exit code */
-		if (!pclient->program_input->eof)
+		/* Check for error and EOF. Since we're disconnected, always
+		   mark an internal error when not all input is read. This is
+		   generally unlikely to occur. */
+		if (pclient->program_input->stream_errno != 0 ||
+		    i_stream_have_bytes_left(pclient->program_input))
 			pclient->exit_code = -1;
 	} else {
 		pclient->exit_code = 1;

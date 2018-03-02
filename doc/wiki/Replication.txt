@@ -32,6 +32,11 @@ priority for Dovecot developers.
 Configuration
 -------------
 
+Since v2.3.1 you can disable replication for a user by providing 'noreplicate'
+<user database field> [UserDatabase.ExtraFields.txt]. Another way to disable
+replication for some users is to return mail_replica field from userdb for
+users you want to replicate.
+
 Make sure that user listing is configured for your userdb, this is required by
 replication to find the list of users that are periodically replicated:
 
@@ -373,4 +378,4 @@ Random things to remember:
     * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
       returns different values for the servers.
 
-(This file was created from the wiki on 2017-10-10 04:42)
+(This file was created from the wiki on 2018-02-28 04:42)

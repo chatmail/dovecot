@@ -36,6 +36,18 @@ struct mail_storage_settings {
 	const char *mail_server_comment;
 	const char *mail_server_admin;
 	unsigned int mail_cache_min_mail_count;
+	unsigned int mail_cache_unaccessed_field_drop;
+	uoff_t mail_cache_record_max_size;
+	uoff_t mail_cache_compress_min_size;
+	unsigned int mail_cache_compress_delete_percentage;
+	unsigned int mail_cache_compress_continued_percentage;
+	unsigned int mail_cache_compress_header_continue_count;
+	uoff_t mail_index_rewrite_min_log_bytes;
+	uoff_t mail_index_rewrite_max_log_bytes;
+	uoff_t mail_index_log_rotate_min_size;
+	uoff_t mail_index_log_rotate_max_size;
+	unsigned int mail_index_log_rotate_min_age;
+	unsigned int mail_index_log2_max_age;
 	unsigned int mailbox_idle_check_interval;
 	unsigned int mail_max_keyword_length;
 	unsigned int mail_max_lock_timeout;
@@ -61,9 +73,15 @@ struct mail_storage_settings {
 	const char *ssl_client_ca_dir;
 	const char *ssl_client_ca_file;
 	const char *ssl_crypto_device;
+	const char *mail_attachment_detection_options;
 
 	enum file_lock_method parsed_lock_method;
 	enum fsync_mode parsed_fsync_mode;
+
+	const char *const *parsed_mail_attachment_content_type_filter;
+	bool parsed_mail_attachment_exclude_inlined;
+	bool parsed_mail_attachment_detection_add_flags_on_save;
+	bool parsed_mail_attachment_detection_add_flags_on_fetch;
 };
 struct mail_namespace_settings {
 	const char *name;
@@ -175,6 +193,8 @@ enum imapc_features {
 	IMAPC_FEATURE_MODSEQ			= 0x400,
 	IMAPC_FEATURE_DELAY_LOGIN		= 0x800,
 	IMAPC_FEATURE_FETCH_BODYSTRUCTURE	= 0x1000,
+	IMAPC_FEATURE_FETCH_EMPTY_IS_EXPUNGED	= 0x4000,
+	IMAPC_FEATURE_NO_MSN_UPDATES		= 0x8000,
 };
 /* </settings checks> */
 struct imapc_settings {
@@ -368,7 +388,7 @@ struct dict_sql_settings {
 extern const struct setting_parser_info mailbox_setting_parser_info;
 extern const struct setting_parser_info mail_namespace_setting_parser_info;
 /* <settings checks> */
-static bool mail_storage_settings_check(void *_set, pool_t pool ATTR_UNUSED,
+static bool mail_storage_settings_check(void *_set, pool_t pool,
 					const char **error_r)
 {
 	struct mail_storage_settings *set = _set;
@@ -408,6 +428,11 @@ static bool mail_storage_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 				    &set->parsed_lock_method)) {
 		*error_r = t_strdup_printf("Unknown lock_method: %s",
 					   set->lock_method);
+		return FALSE;
+	}
+
+	if (set->mail_cache_compress_delete_percentage > 100) {
+		*error_r = "mail_cache_compress_delete_percentage can't be over 100";
 		return FALSE;
 	}
 
@@ -466,6 +491,34 @@ static bool mail_storage_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 #endif
 
 	// FIXME: check set->mail_server_admin syntax (RFC 5464, Section 6.2.2)
+
+	/* parse mail_attachment_indicator_options */
+	if (*set->mail_attachment_detection_options != '\0') {
+		ARRAY_TYPE(const_string) content_types;
+		p_array_init(&content_types, pool, 2);
+
+		const char *const *options =
+			t_strsplit_spaces(set->mail_attachment_detection_options, " ");
+
+		while(*options != NULL) {
+			const char *opt = *options;
+
+			if (strcmp(opt, "add-flags-on-save") == 0) {
+				set->parsed_mail_attachment_detection_add_flags_on_save = TRUE;
+			} else if (strcmp(opt, "add-flags-on-fetch") == 0) {
+				set->parsed_mail_attachment_detection_add_flags_on_fetch = TRUE;
+			} else if (strcmp(opt, "exclude-inlined") == 0) {
+				set->parsed_mail_attachment_exclude_inlined = TRUE;
+			} else if (strncmp(opt, "content-type=", 13) == 0) {
+				const char *value = p_strdup(pool, opt+13);
+				array_append(&content_types, &value, 1);
+			}
+			options++;
+		}
+
+		array_append_zero(&content_types);
+		set->parsed_mail_attachment_content_type_filter = array_idx(&content_types, 0);
+	}
 
 	return TRUE;
 }
@@ -613,6 +666,7 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_STR_VARS, mail_attachment_dir),
 	DEF(SET_STR, mail_attachment_hash),
 	DEF(SET_SIZE, mail_attachment_min_size),
+	DEF(SET_STR, mail_attachment_detection_options),
 	DEF(SET_STR_VARS, mail_attribute_dict),
 	DEF(SET_UINT, mail_prefetch_count),
 	DEF(SET_STR, mail_cache_fields),
@@ -621,6 +675,18 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_STR, mail_server_comment),
 	DEF(SET_STR, mail_server_admin),
 	DEF(SET_UINT, mail_cache_min_mail_count),
+	DEF(SET_TIME, mail_cache_unaccessed_field_drop),
+	DEF(SET_SIZE, mail_cache_record_max_size),
+	DEF(SET_SIZE, mail_cache_compress_min_size),
+	DEF(SET_UINT, mail_cache_compress_delete_percentage),
+	DEF(SET_UINT, mail_cache_compress_continued_percentage),
+	DEF(SET_UINT, mail_cache_compress_header_continue_count),
+	DEF(SET_SIZE, mail_index_rewrite_min_log_bytes),
+	DEF(SET_SIZE, mail_index_rewrite_max_log_bytes),
+	DEF(SET_SIZE, mail_index_log_rotate_min_size),
+	DEF(SET_SIZE, mail_index_log_rotate_max_size),
+	DEF(SET_TIME, mail_index_log_rotate_min_age),
+	DEF(SET_TIME, mail_index_log2_max_age),
 	DEF(SET_TIME, mailbox_idle_check_interval),
 	DEF(SET_UINT, mail_max_keyword_length),
 	DEF(SET_TIME, mail_max_lock_timeout),
@@ -655,6 +721,7 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mail_attachment_dir = "",
 	.mail_attachment_hash = "%{sha1}",
 	.mail_attachment_min_size = 1024*128,
+	.mail_attachment_detection_options = "",
 	.mail_attribute_dict = "",
 	.mail_prefetch_count = 0,
 	.mail_cache_fields = "flags",
@@ -663,6 +730,18 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mail_server_comment = "",
 	.mail_server_admin = "",
 	.mail_cache_min_mail_count = 0,
+	.mail_cache_unaccessed_field_drop = 60*60*24*30,
+	.mail_cache_record_max_size = 64 * 1024,
+	.mail_cache_compress_min_size = 32 * 1024,
+	.mail_cache_compress_delete_percentage = 20,
+	.mail_cache_compress_continued_percentage = 200,
+	.mail_cache_compress_header_continue_count = 4,
+	.mail_index_rewrite_min_log_bytes = 8 * 1024,
+	.mail_index_rewrite_max_log_bytes = 128 * 1024,
+	.mail_index_log_rotate_min_size = 32 * 1024,
+	.mail_index_log_rotate_max_size = 1024 * 1024,
+	.mail_index_log_rotate_min_age = 5 * 60,
+	.mail_index_log2_max_age = 3600 * 24 * 2,
 	.mailbox_idle_check_interval = 30,
 	.mail_max_keyword_length = 50,
 	.mail_max_lock_timeout = 0,
@@ -1059,6 +1138,8 @@ static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "modseq", IMAPC_FEATURE_MODSEQ },
 	{ "delay-login", IMAPC_FEATURE_DELAY_LOGIN },
 	{ "fetch-bodystructure", IMAPC_FEATURE_FETCH_BODYSTRUCTURE },
+	{ "fetch-empty-is-expunged", IMAPC_FEATURE_FETCH_EMPTY_IS_EXPUNGED },
+	{ "no-msn-updates", IMAPC_FEATURE_NO_MSN_UPDATES },
 	{ NULL, 0 }
 };
 
@@ -1405,6 +1486,7 @@ struct login_settings {
 	const char *login_greeting;
 	const char *login_log_format_elements, *login_log_format;
 	const char *login_access_sockets;
+	const char *login_proxy_notify_path;
 	const char *login_plugin_dir;
 	const char *login_plugins;
 	unsigned int login_proxy_max_disconnect_delay;
@@ -1563,10 +1645,15 @@ struct director_settings {
 	const char *director_username_hash;
 	const char *director_flush_socket;
 
+	unsigned int director_ping_idle_timeout;
+	unsigned int director_ping_max_timeout;
 	unsigned int director_user_expire;
 	unsigned int director_user_kick_delay;
 	in_port_t director_doveadm_port;
 	bool director_consistent_hashing;
+	unsigned int director_max_parallel_moves;
+	unsigned int director_max_parallel_kicks;
+	uoff_t director_output_buffer_size;
 };
 /* ../../src/dict/dict-settings.h */
 extern const struct setting_parser_info dict_setting_parser_info;
@@ -1617,6 +1704,7 @@ struct auth_settings {
 	uoff_t cache_size;
 	unsigned int cache_ttl;
 	unsigned int cache_negative_ttl;
+	bool cache_verify_password_with_worker;
 	const char *username_chars;
 	const char *username_translation;
 	const char *username_format;
@@ -1635,6 +1723,9 @@ struct auth_settings {
 	const char *policy_hash_nonce;
 	const char *policy_request_attributes;
 	bool policy_reject_on_fail;
+	bool policy_check_before_auth;
+	bool policy_check_after_auth;
+	bool policy_report_after_auth;
 	unsigned int policy_hash_truncate;
 
 	bool stats;
@@ -2882,6 +2973,7 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR, login_log_format_elements),
 	DEF(SET_STR, login_log_format),
 	DEF(SET_STR, login_access_sockets),
+	DEF(SET_STR_VARS, login_proxy_notify_path),
 	DEF(SET_STR, login_plugin_dir),
 	DEF(SET_STR, login_plugins),
 	DEF(SET_TIME, login_proxy_max_disconnect_delay),
@@ -2909,6 +3001,7 @@ static const struct login_settings login_default_settings = {
 	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
 	.login_log_format = "%$: %s",
 	.login_access_sockets = "",
+	.login_proxy_notify_path = "proxy-notify",
 	.login_plugin_dir = MODULEDIR"/login",
 	.login_plugins = "",
 	.login_proxy_max_disconnect_delay = 0,
@@ -3973,10 +4066,15 @@ static const struct setting_define director_setting_defines[] = {
 	DEF(SET_STR, director_mail_servers),
 	DEF(SET_STR, director_username_hash),
 	DEF(SET_STR, director_flush_socket),
+	DEF(SET_TIME, director_ping_idle_timeout),
+	DEF(SET_TIME, director_ping_max_timeout),
 	DEF(SET_TIME, director_user_expire),
 	DEF(SET_TIME, director_user_kick_delay),
 	DEF(SET_IN_PORT, director_doveadm_port),
 	DEF(SET_BOOL, director_consistent_hashing),
+	DEF(SET_UINT, director_max_parallel_moves),
+	DEF(SET_UINT, director_max_parallel_kicks),
+	DEF(SET_SIZE, director_output_buffer_size),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -3987,9 +4085,14 @@ const struct director_settings director_default_settings = {
 	.director_mail_servers = "",
 	.director_username_hash = "%Lu",
 	.director_flush_socket = "",
+	.director_ping_idle_timeout = 30,
+	.director_ping_max_timeout = 60,
 	.director_user_expire = 60*15,
 	.director_user_kick_delay = 2,
-	.director_doveadm_port = 0
+	.director_doveadm_port = 0,
+	.director_max_parallel_moves = 100,
+	.director_max_parallel_kicks = 100,
+	.director_output_buffer_size = 10 * 1024 * 1024,
 };
 const struct setting_parser_info director_setting_parser_info = {
 	.module_name = "director",
@@ -4508,6 +4611,7 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF(SET_SIZE, cache_size),
 	DEF(SET_TIME, cache_ttl),
 	DEF(SET_TIME, cache_negative_ttl),
+	DEF(SET_BOOL, cache_verify_password_with_worker),
 	DEF(SET_STR, username_chars),
 	DEF(SET_STR, username_translation),
 	DEF(SET_STR, username_format),
@@ -4526,6 +4630,9 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF(SET_STR, policy_hash_nonce),
 	DEF(SET_STR, policy_request_attributes),
 	DEF(SET_BOOL, policy_reject_on_fail),
+	DEF(SET_BOOL, policy_check_before_auth),
+	DEF(SET_BOOL, policy_check_after_auth),
+	DEF(SET_BOOL, policy_report_after_auth),
 	DEF(SET_UINT, policy_hash_truncate),
 
 	DEF(SET_BOOL, stats),
@@ -4559,6 +4666,7 @@ static const struct auth_settings auth_default_settings = {
 	.cache_size = 0,
 	.cache_ttl = 60*60,
 	.cache_negative_ttl = 60*60,
+	.cache_verify_password_with_worker = FALSE,
 	.username_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890.-_@",
 	.username_translation = "",
 	.username_format = "%Lu",
@@ -4575,8 +4683,11 @@ static const struct auth_settings auth_default_settings = {
 	.policy_server_timeout_msecs = 2000,
 	.policy_hash_mech = "sha256",
 	.policy_hash_nonce = "",
-	.policy_request_attributes = "login=%{orig_username} pwhash=%{hashed_password} remote=%{real_rip} device_id=%{client_id} protocol=%s",
+	.policy_request_attributes = "login=%{requested_username} pwhash=%{hashed_password} remote=%{rip} device_id=%{client_id} protocol=%s",
 	.policy_reject_on_fail = FALSE,
+	.policy_check_before_auth = TRUE,
+	.policy_check_after_auth = TRUE,
+	.policy_report_after_auth = TRUE,
 	.policy_hash_truncate = 12,
 
 	.stats = FALSE,
@@ -4691,34 +4802,34 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&aggregator_setting_parser_info, 
-	&imapc_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&imap_login_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
-	&director_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&dict_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&login_setting_parser_info, 
-	&mdbox_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&pop3c_setting_parser_info, 
 	&mail_storage_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&maildir_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&quota_status_setting_parser_info, 
-	&fs_crypt_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&master_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
 	&lmtp_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&fs_crypt_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&director_setting_parser_info, 
+	&maildir_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&quota_status_setting_parser_info, 
+	&login_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&imap_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&imapc_setting_parser_info, 
+	&mdbox_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&master_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -12,14 +12,21 @@ static void openssl_iostream_free(struct ssl_iostream *ssl_io);
 static void
 openssl_iostream_set_error(struct ssl_iostream *ssl_io, const char *str)
 {
+	char *new_str;
+
+	/* i_debug() may sometimes be overriden, making it write to this very
+	   same SSL stream, in which case the provided str may be invalidated
+	   before it is even used. Therefore, we duplicate it immediately. */
+	new_str = i_strdup(str);
+
 	if (ssl_io->verbose) {
 		/* This error should normally be logged by lib-ssl-iostream's
 		   caller. But if verbose=TRUE, log it here as well to make
 		   sure that the error is always logged. */
-		i_debug("%sSSL error: %s", ssl_io->log_prefix, str);
+		i_debug("%sSSL error: %s", ssl_io->log_prefix, new_str);
 	}
 	i_free(ssl_io->last_error);
-	ssl_io->last_error = i_strdup(str);
+	ssl_io->last_error = new_str;
 }
 
 static void openssl_info_callback(const SSL *ssl, int where, int ret)
@@ -166,8 +173,25 @@ openssl_iostream_set(struct ssl_iostream *ssl_io,
 #if defined(HAVE_SSL_CLEAR_OPTIONS)
 		SSL_clear_options(ssl_io->ssl, OPENSSL_ALL_PROTOCOL_OPTIONS);
 #endif
+#ifdef HAVE_SSL_CTX_SET_MIN_PROTO_VERSION
+		int min_protocol;
+		const char *error;
+		if (ssl_protocols_to_min_protocol(set->protocols,
+						  &min_protocol, &error) < 0) {
+			*error_r = t_strdup_printf(
+				"Unknown ssl_protocols setting: %s", error);
+			return -1;
+		} else if (SSL_set_min_proto_version(ssl_io->ssl,
+						     min_protocol) != 1) {
+			*error_r = t_strdup_printf(
+				"Failed to set SSL minimum protocol version to %d",
+				min_protocol);
+			return -1;
+		}
+#else
 		SSL_set_options(ssl_io->ssl,
 				openssl_get_protocol_options(set->protocols));
+#endif
 	}
 
 	if (set->cert != NULL && strcmp(ctx_set->cert, set->cert) != 0) {
@@ -242,7 +266,7 @@ openssl_iostream_create(struct ssl_iostream_context *ctx, const char *host,
 	ssl_io->bio_ext = bio_ext;
 	ssl_io->plain_input = *input;
 	ssl_io->plain_output = *output;
-	ssl_io->host = i_strdup(host);
+	ssl_io->connected_host = i_strdup(host);
 	ssl_io->log_prefix = host == NULL ? i_strdup("") :
 		i_strdup_printf("%s: ", host);
 	/* bio_int will be freed by SSL_free() */
@@ -283,7 +307,8 @@ static void openssl_iostream_free(struct ssl_iostream *ssl_io)
 	SSL_free(ssl_io->ssl);
 	i_free(ssl_io->plain_stream_errstr);
 	i_free(ssl_io->last_error);
-	i_free(ssl_io->host);
+	i_free(ssl_io->connected_host);
+	i_free(ssl_io->sni_host);
 	i_free(ssl_io->log_prefix);
 	i_free(ssl_io);
 }
@@ -597,13 +622,22 @@ static int openssl_iostream_handshake(struct ssl_iostream *ssl_io)
 	if (ssl_io->handshake_callback != NULL) {
 		if (ssl_io->handshake_callback(&error, ssl_io->handshake_context) < 0) {
 			i_assert(error != NULL);
-			i_stream_close(ssl_io->plain_input);
-			o_stream_close(ssl_io->plain_output);
 			openssl_iostream_set_error(ssl_io, error);
 			ssl_io->handshake_failed = TRUE;
-			errno = EINVAL;
-			return -1;
 		}
+	} else if (ssl_io->connected_host != NULL && !ssl_io->handshake_failed) {
+		if (ssl_iostream_cert_match_name(ssl_io, ssl_io->connected_host) < 0) {
+			openssl_iostream_set_error(ssl_io, t_strdup_printf(
+				"SSL certificate doesn't match expected host name %s",
+				ssl_io->connected_host));
+			ssl_io->handshake_failed = TRUE;
+		}
+	}
+	if (ssl_io->handshake_failed) {
+		i_stream_close(ssl_io->plain_input);
+		o_stream_close(ssl_io->plain_output);
+		errno = EINVAL;
+		return -1;
 	}
 	i_free_and_null(ssl_io->last_error);
 	ssl_io->handshaked = TRUE;
@@ -688,7 +722,7 @@ openssl_iostream_get_peer_name(struct ssl_iostream *ssl_io)
 
 static const char *openssl_iostream_get_server_name(struct ssl_iostream *ssl_io)
 {
-	return ssl_io->host;
+	return ssl_io->sni_host;
 }
 
 static const char *

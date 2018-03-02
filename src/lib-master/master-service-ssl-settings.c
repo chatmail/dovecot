@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "settings-parser.h"
@@ -6,6 +6,10 @@
 #include "master-service-ssl-settings.h"
 
 #include <stddef.h>
+
+#ifdef HAVE_OPENSSL
+#include <openssl/ssl.h>
+#endif
 
 #undef DEF
 #define DEF(type, name) \

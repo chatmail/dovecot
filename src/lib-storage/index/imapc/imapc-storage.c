@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -137,7 +137,8 @@ void imapc_mailbox_run_nofetch(struct imapc_mailbox *mbox)
 {
 	do {
 		imapc_client_run(mbox->storage->client->client);
-	} while (mbox->storage->reopen_count > 0);
+	} while (mbox->storage->reopen_count > 0 ||
+		 mbox->state_fetching_uid1);
 }
 
 void imapc_simple_callback(const struct imapc_command_reply *reply,
@@ -577,8 +578,10 @@ imapc_mailbox_reopen_callback(const struct imapc_command_reply *reply,
 	mbox->selecting = FALSE;
 	if (reply->state != IMAPC_COMMAND_STATE_OK)
 		errmsg = reply->text_full;
-	else if (imapc_mailbox_verify_select(mbox, &errmsg))
+	else if (imapc_mailbox_verify_select(mbox, &errmsg)) {
 		errmsg = NULL;
+		mbox->selected = TRUE;
+	}
 
 	if (errmsg != NULL) {
 		imapc_client_mailbox_reconnect(mbox->client_box,
@@ -609,6 +612,7 @@ static void imapc_mailbox_reopen(void *context)
 
 	mbox->initial_sync_done = FALSE;
 	mbox->selecting = TRUE;
+	mbox->selected = FALSE;
 	mbox->exists_received = FALSE;
 
 	cmd = imapc_client_mailbox_cmd(mbox->client_box,
@@ -622,9 +626,6 @@ static void imapc_mailbox_reopen(void *context)
 				    imapc_mailbox_get_remote_name(mbox));
 	}
 	mbox->storage->reopen_count++;
-
-	if (mbox->syncing)
-		imapc_sync_mailbox_reopened(mbox);
 }
 
 static void
@@ -635,7 +636,6 @@ imapc_mailbox_open_callback(const struct imapc_command_reply *reply,
 	const char *error;
 
 	ctx->mbox->selecting = FALSE;
-	ctx->mbox->selected = TRUE;
 	if (reply->state == IMAPC_COMMAND_STATE_OK) {
 		if (!imapc_mailbox_verify_select(ctx->mbox, &error)) {
 			mail_storage_set_critical(ctx->mbox->box.storage,
@@ -643,6 +643,7 @@ imapc_mailbox_open_callback(const struct imapc_command_reply *reply,
 				ctx->mbox->box.name, error);
 			ctx->ret = -1;
 		} else {
+			ctx->mbox->selected = TRUE;
 			ctx->ret = 0;
 		}
 	} else if (reply->state == IMAPC_COMMAND_STATE_NO) {
@@ -725,8 +726,10 @@ int imapc_mailbox_select(struct imapc_mailbox *mbox)
 			imapc_mailbox_get_remote_name(mbox));
 	}
 
-	while (ctx.ret == -2)
+	while (ctx.ret == -2 || mbox->state_fetching_uid1)
 		imapc_mailbox_run(mbox);
+	if (!mbox->state_fetched_success)
+		ctx.ret = -1;
 	return ctx.ret;
 }
 
