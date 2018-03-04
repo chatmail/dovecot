@@ -77,7 +77,7 @@ override_dh_autoreconf:
 	dh_autoreconf -- debian/autogen.sh
 
 override_dh_auto_configure:
-	KRB5CONFIG=krb5-config.mit ./configure \
+	KRB5CONFIG=krb5-config.mit dh_auto_configure -- \
 	            --with-ldap=plugin \
 	            --with-ssl=openssl \
 	            --with-sql=plugin \
@@ -90,12 +90,7 @@ override_dh_auto_configure:
 	            --with-libwrap \
 	            --with-lucene \
 		    --with-lz4 \
-	            --prefix=/usr \
-	            --sysconfdir=/etc \
 	            --libexecdir=\$${prefix}/lib \
-	            --localstatedir=/var \
-	            --mandir=\$${prefix}/share/man \
-	            --infodir=\$${prefix}/share/info \
 		    --docdir=\$${prefix}/share/doc/dovecot-core \
 	            --with-moduledir=\$${prefix}/lib/dovecot/modules \
 	            --disable-rpath \
@@ -104,16 +99,12 @@ override_dh_auto_configure:
 	$(MAKE) dovecot-config
 	
 	# Pigeonhole
-	(cd $(PIGEONHOLE_DIR)/ && \
-	    touch stamp.h.in && \
-	    sh configure \
+	touch $(PIGEONHOLE_DIR)/stamp.h.in
+	chmod +x $(PIGEONHOLE_DIR)/configure
+	dh_auto_configure -D $(PIGEONHOLE_DIR) -- \
 	        --with-dovecot=../ \
-		--prefix=/usr \
-		--sysconfdir=/etc \
 		--libexecdir=\$${prefix}/lib \
-		--mandir=\$${prefix}/share/man \
-		--infodir=\$${prefix}/share/info \
-		--disable-static)
+		--disable-static
 
 override_dh_auto_build:
 	# Remove all-settings.c and let it be re-generated from the (patched)
