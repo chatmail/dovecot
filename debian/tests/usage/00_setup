@@ -1,0 +1,50 @@
+#!/bin/sh
+
+set -e
+
+echo "Setting up dovecot for the test"
+# Move aside 10-auth.conf to disable passwd-based auth
+if [ -f /etc/dovecot/conf.d/10-auth.conf ]; then
+	mv /etc/dovecot/conf.d/10-auth.conf /etc/dovecot/conf.d/10-auth.conf.bak
+fi
+
+cat >/etc/dovecot/local.conf <<-EOF
+	auth_mechanisms = plain
+	mail_location = maildir:~/Maildir
+	
+	passdb {
+	  driver = static
+	  args = password=test
+	}
+	
+	userdb {
+	  driver = static
+	  args = uid=nobody gid=nogroup home=/srv/dovecot-dep8/%u
+	}
+EOF
+
+mkdir -p /srv/dovecot-dep8
+chown nobody:nogroup /srv/dovecot-dep8
+
+echo "Restarting the service"
+systemctl restart dovecot
+
+echo "Sending a test message via the LDA"
+/usr/lib/dovecot/dovecot-lda -f "test@example.com" -d dep8 <<EOF
+Return-Path: <test@example.com>
+Message-Id: <dep8-test-1@debian.org>
+From: Test User <test@example.com>
+To: dep8 <dep8@example.com>
+Subject: DEP-8 test
+
+This is just a test
+EOF
+
+echo "Verifying that the email was correctly delivered"
+if [ -z "$(doveadm search -u dep8 header message-id dep8-test-1@debian.org)" ]; then
+	echo "Message not found"
+	exit 1
+fi
+
+echo "Done"
+echo

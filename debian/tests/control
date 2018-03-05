@@ -4,3 +4,7 @@ Restrictions: needs-root
 
 Tests: systemd
 Depends: dovecot-core, systemd-sysv
+
+Test-Command: run-parts --report --exit-on-error debian/tests/usage
+Depends: dovecot-imapd, dovecot-pop3d, python3
+Restrictions: needs-root, breaks-testbed, allow-stderr
