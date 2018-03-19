@@ -13,4 +13,4 @@ Some of the extensions need to be explicitly enabled:
  * NOTIFY: Set mailbox_list_index=yes
  * URLAUTH: Set imap_urlauth_host and mail_attribute_dict
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2018-03-19 04:42)

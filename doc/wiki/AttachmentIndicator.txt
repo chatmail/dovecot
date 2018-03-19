@@ -1,0 +1,31 @@
+Attachment indicator
+====================
+
+Since 2.2.34/2.3.1 dovecot has a feature that indicates whether email has an
+attachment or not via keywords. These keywords could be used by IMAP clients.
+These keywords will likely become standardized - for now the latest information
+is in https://www.ietf.org/mail-archive/web/imapext/current/msg05858.html
+
+Configuration
+-------------
+
+To enable this feature, you can set *mail_attachment_detection_options*.
+
+It supports following options
+
+ * add-flags-on-save - Enables the feature, attachments are detected and marked
+   during save
+ * content-type=type|!type - Include or exclude given content type. Including
+   will only negate an exclusion (e.g. content-type=!foo/*
+   content-type=foo/bar).
+ * exclude-inlined - Do not consider any attachment with disposition inlined.
+
+Usage
+-----
+
+Once enabled, mails that are saved, are marked with $Has ''Attachment or $Has
+''No ''Attachment keyword. These keywords can be cleared, and are not
+protected. Re-detecting mails is not currently possible, and flags are
+currently only set during save.
+
+(This file was created from the wiki on 2018-03-19 04:42)
