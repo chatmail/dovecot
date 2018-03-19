@@ -1,0 +1,70 @@
+Submission Server
+=================
+
+As of version 2.3.0, Dovecot provides an SMTP submission service, also known as
+a Mail Submission Agent (MSA) [https://tools.ietf.org/html/rfc6409]. It is
+currently implemented as a proxy that acts as a front-end for any <MTA.txt>,
+adding the necessary functionality required for a submission service: it adds
+the required AUTH [https://tools.ietf.org/html/rfc4954] support, avoiding the
+need to configure the MTA for SASL authentication. More SMTP capabilities like
+CHUNKING [https://tools.ietf.org/html/rfc3030] and SIZE
+[https://tools.ietf.org/html/rfc1870] are supported, without requiring the
+backend MTA supporting these extensions. Other capabilities like 8BITMIME
+[https://tools.ietf.org/html/rfc6152] and DSN
+[https://tools.ietf.org/html/rfc3461] currently require support from the
+backend/relay MTA.
+
+The most notable feature that the proxy adds is the BURL capability
+[https://tools.ietf.org/html/rfc4468]. The main application of that
+capabilitytogether with <IMAP> [IMAPServer.txt] URLAUTH
+[https://tools.ietf.org/html/rfc4467]is avoiding a duplicate upload of
+submitted e-mail messages; normally the message is both sent through SMTP and
+uploaded to the "Sent" folder through IMAP. Using BURL, the client can first
+upload the message to IMAP and then use BURL to make the SMTP server fetch the
+message from IMAP for submission, thereby avoiding a second upload. Few clients
+currently support the BURL capability, but once it becomes available on the
+server side, client developers will at least have some incentive to provide
+support for this feature.
+
+*NOTE:* Currently, the submission proxy is still pretty basic. However, it will
+provide a basis for adding all kinds of functionality in the (not so distant)
+future. For the first time, it will be possible to act upon message submission,
+rather than only message retrieval; e.g. plugins can be devised that process
+outgoing messages somehow. Examples of the things that could be implemented are
+adding <Sieve> [Pigeonhole.txt] filtering support for outgoing messages, or
+implicitly storing submitted messages to the Sent folder. Once a plugin API is
+devised, you can create your own plugins.
+
+Features
+--------
+
+The following SMTP capabilities are supported by the Dovecot submission
+service:
+
+ * 8BITMIME [https://tools.ietf.org/html/rfc6152] - Only if relay MTA provides
+   support
+ * AUTH [https://tools.ietf.org/html/rfc4954]
+ * BURL [https://tools.ietf.org/html/rfc4468]
+ * CHUNKING [https://tools.ietf.org/html/rfc3030]
+ * DSN [https://tools.ietf.org/html/rfc3461] - Only if relay MTA provides
+   support
+ * ENHANCEDSTATUSCODES [https://tools.ietf.org/html/rfc2034]
+ * PIPELINING [https://tools.ietf.org/html/rfc2920]
+ * SIZE [https://tools.ietf.org/html/rfc1870]
+ * STARTTLS [https://tools.ietf.org/html/rfc3207]
+ * VRFY [https://tools.ietf.org/html/rfc5321]
+ * XCLIENT [http://www.postfix.org/XCLIENT_README.html]
+
+Configuration
+-------------
+
+Just add 'submission' to the protocols and configure the relay MTA server. The
+configuration is currently only documented in the example configuration in
+doc/example-config/conf.d/20-submission.conf. The submission service is a login
+service, just like IMAP, POP3 and <ManageSieve> [Pigeonhole.ManageSieve.txt],
+so clients are required to authenticate. The same authentication configuration
+will also apply to submission, unless you're doing protocol-specific things, in
+which case you may need to amend your configuration for the new protocol. BURL
+support requires a working IMAP URLAUTH implementation.
+
+(This file was created from the wiki on 2018-03-19 04:42)

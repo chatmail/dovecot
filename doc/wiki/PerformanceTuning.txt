@@ -34,6 +34,9 @@ CPU usage optimization
 
  * See <LoginProcess.txt> for optimizing CPU usage caused by logins
  * See 'auth_cache_size' setting for caching passdb and userdb lookups
+    * To distribute password hash calculations to multiple CPU cores (via
+      auth-worker processes), set 'auth_cache_verify_password_with_worker=yes'
+      (v2.2.34+)
  * Services having client_limit>1 and process_limit>1, set process_min_avail to
    the number of CPU cores
  * To reduce forks by reusing existing processes for new requests increase
@@ -63,4 +66,4 @@ Note that these settings do not directly affect the memory usage:
  * 'service { process_limit, client_limit } ': These are mostly to avoid DoS
    attacks using up all your memory.
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2018-03-19 04:42)
