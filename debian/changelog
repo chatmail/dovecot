@@ -1,3 +1,15 @@
+dovecot (1:2.2.35-1) unstable; urgency=medium
+
+  * [8108cba] New upstream version 2.2.35
+  * [6cbbaa1] Update pigeonhole to 0.4.23 (Closes: #892137)
+  * [9ace5f2] Switch Vcs-* URLs to salsa.d.o
+  * [ef40625] d/rules: call configure via dh_auto_configure.
+    Thanks to Helmut Grohne (Closes: #885854)
+  * [a459455] Drop B-D on libcurl4-gnutls-dev; removed upstream since 2.2
+  * [235af9d] Update upstream signing key
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 20 Mar 2018 11:15:42 +0200
+
 dovecot (1:2.2.34-2) unstable; urgency=high
 
   * [868dc65] Update pigeonhole to 0.4.22
