@@ -1,3 +1,13 @@
+dovecot (1:2.2.35-2) unstable; urgency=medium
+
+  * [7665652] Use git-subtree to generate pigeonhole patch from git; add
+    single-debian-patch to d/source/local-options
+  * [bfa0f10] d/rules: specify libdir manually; previous upload moved modules
+    under /usr/lib/<triplet>, which was bound to break existing setups
+  * [982e826] d/copyright: adjust pigeonhole path and bump years
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 22 Mar 2018 16:56:40 +0200
+
 dovecot (1:2.2.35-1) unstable; urgency=medium
 
   * [8108cba] New upstream version 2.2.35
