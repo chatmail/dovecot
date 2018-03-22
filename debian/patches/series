@@ -1,4 +1,3 @@
-pigeonhole.patch
 split-protocols.patch
 fix-mail_plugin_dir-default.patch
 ssl-cert-location.patch
