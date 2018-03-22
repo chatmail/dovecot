@@ -179,7 +179,6 @@ override_dh_makeshlibs:
 
 override_dh_installdocs:
 	dh_installdocs
-	cp pigeonhole/ChangeLog	$(CORE_DIR)/usr/share/doc/dovecot-core/pigeonhole.ChangeLog
 	cp pigeonhole/README	$(CORE_DIR)/usr/share/doc/dovecot-core/pigeonhole.README
 	cp pigeonhole/NEWS	$(CORE_DIR)/usr/share/doc/dovecot-core/pigeonhole.NEWS
 
