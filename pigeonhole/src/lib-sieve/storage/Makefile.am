@@ -1,0 +1,4 @@
+SUBDIRS = \
+	file \
+	dict \
+	ldap
