@@ -40,7 +40,7 @@ struct ext_environment_interpreter_context {
 		   const struct sieve_environment_item *) name_items;
 	ARRAY(const struct sieve_environment_item *) prefix_items;
 
-	unsigned int active:1;
+	bool active:1;
 };
 
 static void ext_environment_interpreter_extension_free

@@ -10,6 +10,8 @@
 #include "eacces-error.h"
 #include "home-expand.h"
 #include "hostpid.h"
+#include "message-address.h"
+#include "mail-user.h"
 
 #include "sieve-settings.h"
 #include "sieve-extensions.h"
@@ -541,6 +543,27 @@ int sieve_test
  * Script execution
  */
 
+int sieve_script_env_init(struct sieve_script_env *senv,
+	struct mail_user *user, const char **error_r)
+{
+	const struct mail_storage_settings *mail_set =
+		mail_user_set_get_storage_set(user);
+	const struct message_address *postmaster;
+	const char *error;
+
+	if ( !mail_storage_get_postmaster_address(mail_set,
+		&postmaster, &error) ) {
+		*error_r = t_strdup_printf(
+			"Invalid postmaster_address: %s", error);
+		return -1;
+	}
+
+	i_zero(senv);
+	senv->user = user;
+	senv->postmaster_address = postmaster;
+	return 0;
+}
+
 int sieve_execute
 (struct sieve_binary *sbin, const struct sieve_message_data *msgdata,
 	const struct sieve_script_env *senv,
@@ -899,7 +922,7 @@ int sieve_trace_log_create
 	*trace_log_r = NULL;
 
 	if ( path == NULL ) {
-		output = o_stream_create_fd(1, 0, FALSE);
+		output = o_stream_create_fd(1, 0);
 	} else {
 		fd = open(path, O_CREAT | O_APPEND | O_WRONLY, 0600);
 		if ( fd == -1 ) {
@@ -908,6 +931,7 @@ int sieve_trace_log_create
 			return -1;
 		}
 		output = o_stream_create_fd_autoclose(&fd, 0);
+		o_stream_set_name(output, path);
 	}
 
 	trace_log = i_new(struct sieve_trace_log, 1);
@@ -978,7 +1002,7 @@ void sieve_trace_log_write_line
 	struct const_iovec iov[2];
 
 	if (line == NULL) {
-		o_stream_send_str(trace_log->output, "\n");
+		o_stream_nsend_str(trace_log->output, "\n");
 		return;
 	}
 
@@ -987,7 +1011,7 @@ void sieve_trace_log_write_line
 	iov[0].iov_len = str_len(line);
 	iov[1].iov_base = "\n";
 	iov[1].iov_len = 1;
-	o_stream_sendv(trace_log->output, iov, 2);
+	o_stream_nsendv(trace_log->output, iov, 2);
 }
 
 void sieve_trace_log_free(struct sieve_trace_log **_trace_log)
@@ -996,6 +1020,11 @@ void sieve_trace_log_free(struct sieve_trace_log **_trace_log)
 
 	*_trace_log = NULL;
 
+	if (o_stream_finish(trace_log->output) < 0) {
+		i_error("write(%s) failed: %s",
+			o_stream_get_name(trace_log->output),
+			o_stream_get_error(trace_log->output));
+	}
 	o_stream_destroy(&trace_log->output);
 	i_free(trace_log);
 }
@@ -1045,23 +1074,50 @@ int sieve_trace_config_get(struct sieve_instance *svinst,
  * User e-mail address
  */
 
-const char *sieve_get_user_email
+const struct smtp_address *sieve_get_user_email
 (struct sieve_instance *svinst)
 {
+	struct smtp_address *address;
 	const char *username = svinst->username;
 
+	if (svinst->user_email_implicit != NULL)
+		return svinst->user_email_implicit;
 	if (svinst->user_email != NULL)
-		return sieve_address_to_string(svinst->user_email);
+		return svinst->user_email;
 
-	if ( strchr(username, '@') != 0 )
-		return username;
+	if (smtp_address_parse_mailbox(svinst->pool, username,
+		0, &address, NULL) >= 0) {
+		svinst->user_email_implicit = address;
+		return svinst->user_email_implicit;
+	}
+
 	if ( svinst->domainname != NULL ) {
-		struct sieve_address svaddr;
-
-		i_zero(&svaddr);
-		svaddr.local_part = username;
-		svaddr.domain = svinst->domainname;
-		return sieve_address_to_string(&svaddr);
+		svinst->user_email_implicit = smtp_address_create(svinst->pool,
+			username, svinst->domainname);
+		return svinst->user_email_implicit;
 	}
 	return NULL;
 }
+
+/*
+ * Postmaster address
+ */
+
+const struct message_address *
+sieve_get_postmaster(const struct sieve_script_env *senv)
+{
+	i_assert(senv->postmaster_address != NULL);
+	return senv->postmaster_address;
+}
+
+const char *
+sieve_get_postmaster_address(const struct sieve_script_env *senv)
+{
+	const struct message_address *postmaster =
+		sieve_get_postmaster(senv);
+	string_t *addr = t_str_new(256);
+
+	message_address_write(addr, postmaster);
+	return str_c(addr);
+}
+

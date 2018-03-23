@@ -7,7 +7,7 @@
 #include "env-util.h"
 #include "ostream.h"
 #include "hostpid.h"
-#include "abspath.h"
+#include "path-util.h"
 
 #include "sieve.h"
 #include "sieve-extensions.h"
@@ -39,7 +39,6 @@ const struct sieve_script_env *testsuite_scriptenv;
  */
 
 #define DEFAULT_SENDMAIL_PATH "/usr/lib/sendmail"
-#define DEFAULT_ENVELOPE_SENDER "MAILER-DAEMON"
 
 /*
  * Testsuite execution
@@ -86,7 +85,7 @@ int main(int argc, char **argv)
 	const char *scriptfile, *dumpfile, *tracefile;
 	struct sieve_trace_config trace_config;
 	struct sieve_binary *sbin;
-	const char *sieve_dir;
+	const char *sieve_dir, *cwd, *error;
 	bool log_stdout = FALSE;
 	int ret, c;
 
@@ -133,8 +132,14 @@ int main(int argc, char **argv)
 		i_fatal_status(EX_USAGE, "Unknown argument: %s", argv[optind]);
 	}
 
+	// FIXME: very very ugly
+	master_service_parse_option(master_service,
+		'o', "postmaster_address=postmaster@example.com");
+
+	if (t_get_working_dir(&cwd, &error) < 0)
+		i_fatal("Failed to get working directory: %s", error);
 	/* Initialize mail user */
-	sieve_tool_set_homedir(sieve_tool, t_abspath(""));
+	sieve_tool_set_homedir(sieve_tool, cwd);
 
 	/* Initialize settings environment */
 	testsuite_settings_init();
@@ -177,10 +182,11 @@ int main(int argc, char **argv)
 		testsuite_mailstore_init();
 		testsuite_message_init();
 
-		i_zero(&scriptenv);
-		scriptenv.user = testsuite_mailstore_get_user();
+		if (sieve_script_env_init(&scriptenv,
+			testsuite_mailstore_get_user(), &error) < 0)
+			i_fatal("Failed to initialize script execution: %s", error);
+
 		scriptenv.default_mailbox = "INBOX";
-		scriptenv.postmaster_address = "postmaster@example.com";
 		scriptenv.smtp_start = testsuite_smtp_start;
 		scriptenv.smtp_add_rcpt = testsuite_smtp_add_rcpt;
 		scriptenv.smtp_send = testsuite_smtp_send;

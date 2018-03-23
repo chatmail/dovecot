@@ -72,8 +72,8 @@ struct sieve_validator_extension_reg {
 	struct sieve_ast_argument *arg;
 	void *context;
 
-	unsigned int loaded:1;
-	unsigned int required:1;
+	bool loaded:1;
+	bool required:1;
 };
 
 /*
@@ -352,16 +352,8 @@ void sieve_validator_register_command
 static void sieve_validator_register_unknown_command
 (struct sieve_validator *valdtr, const char *command)
 {
-	struct sieve_command_registration *cmd_reg =
-		sieve_validator_find_command_registration(valdtr, command);
-
-	if (cmd_reg == NULL) {
-		(void)_sieve_validator_register_command
-			(valdtr, NULL, &unknown_command, command);
-	} else {
-		i_assert(cmd_reg->cmd_def == NULL);
-		cmd_reg->cmd_def = &unknown_command;
-	}
+	(void)_sieve_validator_register_command
+		(valdtr, NULL, &unknown_command, command);
 }
 
 /*const struct sieve_command *sieve_validator_find_command

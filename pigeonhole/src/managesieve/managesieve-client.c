@@ -139,8 +139,8 @@ struct client *client_create
 	client->fd_in = fd_in;
 	client->fd_out = fd_out;
 	client->input = i_stream_create_fd
-		(fd_in, set->managesieve_max_line_length, FALSE);
-	client->output = o_stream_create_fd(fd_out, (size_t)-1, FALSE);
+		(fd_in, set->managesieve_max_line_length);
+	client->output = o_stream_create_fd(fd_out, (size_t)-1);
 
 	o_stream_set_no_error_handling(client->output, TRUE);
 	i_stream_set_name(client->input, "<managesieve client>");
@@ -187,40 +187,34 @@ struct client *client_create
 
 static const char *client_stats(struct client *client)
 {
-	static struct var_expand_table static_tab[] = {
-		{ 't', NULL, "put_bytes" },
-		{ 'p', NULL, "put_count" },
-		{ 'b', NULL, "get_bytes" },
-		{ 'g', NULL, "get_count" },
-		{ 'v', NULL, "check_bytes" },
-		{ 'c', NULL, "check_count" },
-		{ 'd', NULL, "deleted_count" },
-		{ 'r', NULL, "renamed_count" },
-		{ 'i', NULL, "input" },
-		{ 'o', NULL, "output" },
-		{ '\0', NULL, "session" },
+	const struct var_expand_table logout_tab[] = {
+		{ 'i', dec2str(i_stream_get_absolute_offset(client->input)), "input" },
+		{ 'o', dec2str(client->output->offset), "output" },
+		{ '\0', dec2str(client->put_bytes), "put_bytes" },
+		{ '\0', dec2str(client->put_count), "put_count" },
+		{ '\0', dec2str(client->get_bytes), "get_bytes" },
+		{ '\0', dec2str(client->get_count), "get_count" },
+		{ '\0', dec2str(client->check_bytes), "check_bytes" },
+		{ '\0', dec2str(client->check_count), "check_count" },
+		{ '\0', dec2str(client->deleted_count), "deleted_count" },
+		{ '\0', dec2str(client->renamed_count), "renamed_count" },
+		{ '\0', client->session_id, "session" },
 		{ '\0', NULL, NULL }
 	};
-	struct var_expand_table *tab;
+	const struct var_expand_table *user_tab =
+		mail_user_var_expand_table(client->user);
+	const struct var_expand_table *tab =
+		t_var_expand_merge_tables(logout_tab, user_tab);
 	string_t *str;
-
-	tab = t_malloc(sizeof(static_tab));
-	memcpy(tab, static_tab, sizeof(static_tab));
-
-	tab[0].value = dec2str(client->put_bytes);
-	tab[1].value = dec2str(client->put_count);
-	tab[2].value = dec2str(client->get_bytes);
-	tab[3].value = dec2str(client->get_count);
-	tab[4].value = dec2str(client->check_bytes);
-	tab[5].value = dec2str(client->check_count);
-	tab[6].value = dec2str(client->deleted_count);
-	tab[7].value = dec2str(client->renamed_count);
-	tab[8].value = dec2str(i_stream_get_absolute_offset(client->input));
-	tab[9].value = dec2str(client->output->offset);
-	tab[10].value = client->session_id;
+	const char *error;
 
 	str = t_str_new(128);
-	var_expand(str, client->set->managesieve_logout_format, tab);
+	if (var_expand_with_funcs(str, client->set->managesieve_logout_format,
+				  tab, mail_user_var_expand_func_table,
+				  client->user, &error) < 0) {
+		i_error("Failed to expand managesieve_logout_format=%s: %s",
+			client->set->managesieve_logout_format, error);
+	}
 	return str_c(str);
 }
 
@@ -262,10 +256,8 @@ void client_destroy(struct client *client, const char *reason)
 	}
 
 	managesieve_parser_destroy(&client->parser);
-	if (client->io != NULL)
-		io_remove(&client->io);
-	if (client->to_idle_output != NULL)
-		timeout_remove(&client->to_idle_output);
+	io_remove(&client->io);
+	timeout_remove(&client->to_idle_output);
 	timeout_remove(&client->to_idle);
 
 	/* i/ostreams are already closed at this stage, so fd can be closed */
@@ -286,7 +278,7 @@ void client_destroy(struct client *client, const char *reason)
 	sieve_deinit(&client->svinst);
 
 	pool_unref(&client->cmd.pool);
-	mail_storage_service_user_free(&client->service_user);
+	mail_storage_service_user_unref(&client->service_user);
 
 	managesieve_client_count--;
 	DLLIST_REMOVE(&managesieve_clients, client);
@@ -316,8 +308,7 @@ void client_disconnect(struct client *client, const char *reason)
 	i_stream_close(client->input);
 	o_stream_close(client->output);
 
-	if (client->to_idle != NULL)
-		timeout_remove(&client->to_idle);
+	timeout_remove(&client->to_idle);
 	client->to_idle = timeout_add(0, client_destroy_timeout, client);
 }
 

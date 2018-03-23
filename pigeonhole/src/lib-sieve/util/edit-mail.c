@@ -195,12 +195,12 @@ struct edit_mail {
 	struct _header_field_index *header_fields_appended;
 	struct message_size appended_hdr_size;
 
-	unsigned int modified:1;
-	unsigned int snapshot_modified:1;
-	unsigned int crlf:1;
-	unsigned int eoh_crlf:1;
-	unsigned int headers_parsed:1;
-	unsigned int destroying_stream:1;
+	bool modified:1;
+	bool snapshot_modified:1;
+	bool crlf:1;
+	bool eoh_crlf:1;
+	bool headers_parsed:1;
+	bool destroying_stream:1;
 };
 
 struct edit_mail *edit_mail_wrap(struct mail *mail)
@@ -232,7 +232,7 @@ struct edit_mail *edit_mail_wrap(struct mail *mail)
 		return NULL;
 	}
 
-	raw_trans = mailbox_transaction_begin(raw_box, 0);
+	raw_trans = mailbox_transaction_begin(raw_box, 0, __func__);
 
 	/* Create the wrapper mail */
 
@@ -350,10 +350,7 @@ void edit_mail_reset(struct edit_mail *edmail)
 	struct _header_index *header_idx;
 	struct _header_field_index *field_idx;
 
-	if ( edmail->stream != NULL ) {
-		i_stream_unref(&edmail->stream);
-		edmail->stream = NULL;
-	}
+	i_stream_unref(&edmail->stream);
 
 	field_idx = edmail->header_fields_head;
 	while ( field_idx != NULL ) {
@@ -387,11 +384,7 @@ void edit_mail_unwrap(struct edit_mail **edmail)
 		return;
 
 	edit_mail_reset(*edmail);
-
-	if ( (*edmail)->wrapped_stream != NULL ) {
-		i_stream_unref(&(*edmail)->wrapped_stream);
-		(*edmail)->wrapped_stream = NULL;
-	}
+	i_stream_unref(&(*edmail)->wrapped_stream);
 
 	parent = (*edmail)->parent;
 
@@ -1109,7 +1102,7 @@ struct edit_mail_header_iter
 	struct _header_index *header;
 	struct _header_field_index *current;
 
-	unsigned int reverse:1;
+	bool reverse:1;
 };
 
 int edit_mail_headers_iterate_init
@@ -1601,12 +1594,13 @@ static int edit_mail_get_special
 	return edmail->wrapped->v.get_special(&edmail->wrapped->mail, field, value_r);
 }
 
-static struct mail *
-edit_mail_get_real_mail(struct mail *mail)
+static int
+edit_mail_get_backend_mail(struct mail *mail, struct mail **real_mail_r)
 {
 	struct edit_mail *edmail = (struct edit_mail *)mail;
 
-	return edit_mail_get_mail(edmail);
+	*real_mail_r = edit_mail_get_mail(edmail);
+	return 0;
 }
 
 static void edit_mail_update_flags
@@ -1655,20 +1649,12 @@ static void edit_mail_expunge(struct mail *mail ATTR_UNUSED)
 }
 
 static void edit_mail_set_cache_corrupted
-(struct mail *mail, enum mail_fetch_field field)
-{
-	struct edit_mail *edmail = (struct edit_mail *)mail;
-
-	edmail->wrapped->v.set_cache_corrupted(&edmail->wrapped->mail, field);
-}
-
-static void edit_mail_set_cache_corrupted_reason
 (struct mail *mail, enum mail_fetch_field field,
 	const char *reason)
 {
 	struct edit_mail *edmail = (struct edit_mail *)mail;
 
-	edmail->wrapped->v.set_cache_corrupted_reason
+	edmail->wrapped->v.set_cache_corrupted
 		(&edmail->wrapped->mail, field, reason);
 }
 
@@ -1698,7 +1684,7 @@ static struct mail_vfuncs edit_mail_vfuncs = {
 	edit_mail_get_stream,
 	index_mail_get_binary_stream,
 	edit_mail_get_special,
-	edit_mail_get_real_mail,
+	edit_mail_get_backend_mail,
 	edit_mail_update_flags,
 	edit_mail_update_keywords,
 	edit_mail_update_modseq,
@@ -1707,7 +1693,6 @@ static struct mail_vfuncs edit_mail_vfuncs = {
 	edit_mail_expunge,
 	edit_mail_set_cache_corrupted,
 	NULL,
-	edit_mail_set_cache_corrupted_reason
 };
 
 /*
@@ -1723,9 +1708,9 @@ struct edit_mail_istream {
 	struct _header_field_index *cur_header;
 	uoff_t cur_header_v_offset;
 
-	unsigned int parent_buffer:1;
-	unsigned int header_read:1;
-	unsigned int eof:1;
+	bool parent_buffer:1;
+	bool header_read:1;
+	bool eof:1;
 };
 
 static void edit_mail_istream_destroy(struct iostream_private *stream)
@@ -1734,7 +1719,7 @@ static void edit_mail_istream_destroy(struct iostream_private *stream)
 		(struct edit_mail_istream *)stream;
 
 	i_stream_unref(&edstream->istream.parent);
-	i_free(edstream->istream.w_buffer);
+	i_stream_free_buffer(&edstream->istream);
 	pool_unref(&edstream->pool);
 }
 
@@ -1764,14 +1749,18 @@ static ssize_t merge_from_parent
 	/* Determine where we are appending more data to the stream */
 	append_v_offset = v_offset + (stream->pos - stream->skip);
 
-	if (v_offset >= copy_v_offset) {
+	if (parent_buffer) {
 		/* Parent buffer used */
-		cur_pos = (stream->pos - stream->skip);
-		parent_v_offset += (v_offset - copy_v_offset);
+		stream->pos -= stream->skip;
+		stream->skip = 0;
+		cur_pos = stream->pos;
+		if (v_offset > copy_v_offset)
+			parent_v_offset += (v_offset - copy_v_offset);
 	} else {
 		cur_pos = 0;
 		i_assert(append_v_offset >= copy_v_offset);
-		parent_v_offset += (append_v_offset - copy_v_offset);
+		if (append_v_offset > copy_v_offset)
+			parent_v_offset += (append_v_offset - copy_v_offset);
 	}
 
 	/* Seek parent to required position */
@@ -1830,8 +1819,12 @@ static ssize_t merge_from_parent
 		}
 	} else {
 		/* Just passing buffers from parent; no copying */
-		ret = (pos > cur_pos ? (ssize_t)(pos - cur_pos) :
-			(ret == 0 ? 0 : -1));
+		if (parent_buffer) {
+			ret = (pos > stream->pos ? (ssize_t)(pos - stream->pos) :
+				(ret == 0 ? 0 : -1));
+		} else {
+			ret = (pos > 0 ? (ssize_t)pos : (ret == 0 ? 0 : -1));
+		}
 		stream->buffer = data;
 		stream->pos = pos;
 		stream->skip = 0;
@@ -1873,7 +1866,7 @@ static ssize_t merge_modified_headers(struct edit_mail_istream *edstream)
 		i_assert(appended < edstream->cur_header->field->size);
 
 		/* Determine how much we can write */
-		size = edstream->cur_header->field->size - appended;
+		wsize = size = edstream->cur_header->field->size - appended;
 		if (!i_stream_try_alloc(stream, size, &avail))
 			return -2;
 		wsize = (size >= avail ? avail : size);
@@ -2188,6 +2181,6 @@ struct istream *edit_mail_istream_create
 
 	i_stream_seek(wrapped, 0);
 
-	return i_stream_create(&edstream->istream, wrapped, -1);
+	return i_stream_create(&edstream->istream, wrapped, -1, 0);
 }
 

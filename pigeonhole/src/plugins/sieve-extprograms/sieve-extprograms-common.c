@@ -9,6 +9,7 @@
 #include "unichar.h"
 #include "array.h"
 #include "eacces-error.h"
+#include "smtp-params.h"
 #include "istream.h"
 #include "istream-crlf.h"
 #include "istream-header-filter.h"
@@ -414,6 +415,7 @@ struct sieve_extprogram *sieve_extprogram_create
 	struct sieve_instance *svinst = ext->svinst;
 	struct sieve_extprograms_config *ext_config =
 		(struct sieve_extprograms_config *) ext->context;
+	const struct smtp_address *sender, *recipient, *orig_recipient;
 	struct sieve_extprogram *sprog;
 	const char *path = NULL;
 	struct stat st;
@@ -539,7 +541,7 @@ struct sieve_extprogram *sieve_extprogram_create
 			program_client_local_create(path, args, &sprog->set);
 	} else {
 		sprog->program_client =
-			program_client_remote_create(path, args, &sprog->set, FALSE);
+			program_client_unix_create(path, args, &sprog->set, FALSE);
 	}
 
 	if ( svinst->username != NULL )
@@ -548,17 +550,24 @@ struct sieve_extprogram *sieve_extprogram_create
 		program_client_set_env(sprog->program_client, "HOME", svinst->home_dir);
 	if ( svinst->hostname != NULL )
 		program_client_set_env(sprog->program_client, "HOST", svinst->hostname);
-	if ( msgdata->return_path != NULL ) {
-		program_client_set_env
-			(sprog->program_client, "SENDER", msgdata->return_path);
+
+	sender = msgdata->envelope.mail_from;
+	recipient = msgdata->envelope.rcpt_to;
+	orig_recipient = NULL;
+	if ( msgdata->envelope.rcpt_params != NULL )
+		orig_recipient = msgdata->envelope.rcpt_params->orcpt.addr;
+
+	if ( !smtp_address_isnull(sender) ) {
+		program_client_set_env(sprog->program_client, "SENDER",
+				       smtp_address_encode(sender));
 	}
-	if ( msgdata->final_envelope_to != NULL ) {
-		program_client_set_env
-			(sprog->program_client, "RECIPIENT", msgdata->final_envelope_to);
+	if ( !smtp_address_isnull(recipient) ) {
+		program_client_set_env(sprog->program_client, "RECIPIENT",
+				       smtp_address_encode(recipient));
 	}
-	if ( msgdata->orig_envelope_to != NULL ) {
-		program_client_set_env
-			(sprog->program_client, "ORIG_RECIPIENT", msgdata->orig_envelope_to);
+	if ( !smtp_address_isnull(orig_recipient) ) {
+		program_client_set_env(sprog->program_client, "ORIG_RECIPIENT",
+				       smtp_address_encode(orig_recipient));
 	}
 
 	return sprog;
