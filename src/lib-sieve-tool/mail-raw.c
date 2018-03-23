@@ -4,12 +4,11 @@
 #include "lib.h"
 #include "istream.h"
 #include "istream-seekable.h"
-#include "fd-set-nonblock.h"
 #include "str.h"
 #include "str-sanitize.h"
 #include "strescape.h"
 #include "safe-mkstemp.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "message-address.h"
 #include "mbox-from.h"
 #include "raw-storage.h"
@@ -90,14 +89,14 @@ static struct istream *mail_raw_create_stream
 	*mtime_r = (time_t)-1;
 	fd_set_nonblock(fd, FALSE);
 
-	input = i_stream_create_fd(fd, 4096, FALSE);
+	input = i_stream_create_fd(fd, 4096);
 	input->blocking = TRUE;
 	/* If input begins with a From-line, drop it */
-	ret = i_stream_read_data(input, &data, &size, 5);
-	if (ret > 0 && size >= 5 && memcmp(data, "From ", 5) == 0) {
+	ret = i_stream_read_bytes(input, &data, &size, 5);
+	if (ret > 0 && memcmp(data, "From ", 5) == 0) {
 		/* skip until the first LF */
 		i_stream_skip(input, 5);
-		while ( i_stream_read_data(input, &data, &size, 0) > 0 ) {
+		while ( i_stream_read_more(input, &data, &size) > 0 ) {
 			for (i = 0; i < size; i++) {
 				if (data[i] == '\n')
 					break;
@@ -153,11 +152,13 @@ static struct mail_raw *mail_raw_create
 {
 	struct mail_raw *mailr;
 	struct mailbox_header_lookup_ctx *headers_ctx;
-	const char *envelope_sender;
+	const char *envelope_sender, *error;
 	int ret;
 
 	if ( mailfile != NULL && *mailfile != '/' )
-		mailfile = t_abspath(mailfile);
+		if (t_abspath(mailfile, &mailfile, &error) < 0)
+			i_fatal("t_abspath(%s) failed: %s",
+				mailfile, error);
 
 	mailr = i_new(struct mail_raw, 1);
 
@@ -180,23 +181,11 @@ static struct mail_raw *mail_raw_create
 		}
 	}
 
-	mailr->trans = mailbox_transaction_begin(mailr->box, 0);
+	mailr->trans = mailbox_transaction_begin(mailr->box, 0, __func__);
 	headers_ctx = mailbox_header_lookup_init(mailr->box, wanted_headers);
 	mailr->mail = mail_alloc(mailr->trans, 0, headers_ctx);
 	mailbox_header_lookup_unref(&headers_ctx);
 	mail_set_seq(mailr->mail, 1);
-
-	return mailr;
-}
-
-struct mail_raw *mail_raw_open_stream
-(struct mail_user *ruser, struct istream *input)
-{
-	struct mail_raw *mailr;
-
-	i_assert(input->seekable);
-	i_stream_set_name(input, "data");
-	mailr = mail_raw_create(ruser, input, NULL, NULL, (time_t)-1);
 
 	return mailr;
 }
@@ -208,10 +197,12 @@ struct mail_raw *mail_raw_open_data
 	struct istream *input;
 
 	input = i_stream_create_from_data(str_data(mail_data), str_len(mail_data));
+	i_stream_set_name(input, "data");
 
-	mailr = mail_raw_open_stream(ruser, input);
+	mailr = mail_raw_create(ruser, input, NULL, NULL, (time_t)-1);
 
 	i_stream_unref(&input);
+
 	return mailr;
 }
 
@@ -229,9 +220,7 @@ struct mail_raw *mail_raw_open_file
 	}
 
 	mailr = mail_raw_create(ruser, input, path, sender, mtime);
-
-	if ( input != NULL )
-		i_stream_unref(&input);
+	i_stream_unref(&input);
 
 	return mailr;
 }

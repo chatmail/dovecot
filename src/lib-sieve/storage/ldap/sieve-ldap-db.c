@@ -322,8 +322,7 @@ static int db_ldap_connect_finish(struct ldap_connection *conn, int ret)
 		return -1;
 	}
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 	conn->conn_state = LDAP_CONN_STATE_BOUND;
 	sieve_storage_sys_debug(storage, "db: "
 		"Successfully bound (dn %s)",
@@ -653,8 +652,7 @@ static int db_ldap_bind(struct ldap_connection *conn)
 	conn->conn_state = LDAP_CONN_STATE_BINDING;
 	conn->default_bind_msgid = msgid;
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 	conn->to = timeout_add(DB_LDAP_REQUEST_LOST_TIMEOUT_SECS*1000,
 			       ldap_connection_timeout, conn);
 	return 0;
@@ -905,8 +903,7 @@ int sieve_ldap_db_connect(struct ldap_connection *conn)
 void db_ldap_enable_input(struct ldap_connection *conn, bool enable)
 {
 	if (!enable) {
-		if (conn->io != NULL)
-			io_remove(&conn->io);
+		io_remove(&conn->io);
 	} else {
 		if (conn->io == NULL && conn->fd != -1) {
 			conn->io = io_add(conn->fd, IO_READ, ldap_input, conn);
@@ -935,8 +932,7 @@ static void db_ldap_conn_close(struct ldap_connection *conn)
 	conn->conn_state = LDAP_CONN_STATE_DISCONNECTED;
 	conn->default_bind_msgid = -1;
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 
 	if (conn->pending_count != 0) {
 		requests = array_idx(&conn->request_array, 0);
@@ -955,11 +951,9 @@ static void db_ldap_conn_close(struct ldap_connection *conn)
 	}
 	conn->fd = -1;
 
-	if (conn->io != NULL) {
-		/* the fd may have already been closed before ldap_unbind(),
-		   so we'll have to use io_remove_closed(). */
-		io_remove_closed(&conn->io);
-	}
+	/* the fd may have already been closed before ldap_unbind(),
+	   so we'll have to use io_remove_closed(). */
+	io_remove_closed(&conn->io);
 
 	if (aqueue_count(conn->request_queue) > 0) {
 		conn->to = timeout_add(DB_LDAP_REQUEST_DISCONNECT_TIMEOUT_SECS *
@@ -1206,7 +1200,7 @@ db_ldap_get_var_expand_table(struct ldap_connection *conn,
 
 	/* keep the extra fields at the beginning. the last static_tab field
 	   contains the ending NULL-fields. */
-	tab = t_malloc((auth_count) * sizeof(*tab));
+	tab = t_malloc_no0((auth_count) * sizeof(*tab));
 
 	memcpy(tab, auth_request_var_expand_static_tab,
 	       auth_count * sizeof(*tab));
@@ -1266,8 +1260,9 @@ int sieve_ldap_db_lookup_script(struct ldap_connection *conn,
 	struct sieve_storage *storage = &lstorage->storage;
 	const struct sieve_ldap_storage_settings *set = &lstorage->set;
 	struct sieve_ldap_script_lookup_request *request;
-	const struct var_expand_table *vars;
+	const struct var_expand_table *tab;
 	char **attr_names;
+	const char *error;
 	string_t *str;
 
 	pool_t pool = pool_alloconly_create
@@ -1275,17 +1270,28 @@ int sieve_ldap_db_lookup_script(struct ldap_connection *conn,
 	request = p_new(pool, struct sieve_ldap_script_lookup_request, 1);
 	request->request.pool = pool;
 
-	vars = db_ldap_get_var_expand_table(conn, name);
+	tab = db_ldap_get_var_expand_table(conn, name);
 
 	str = t_str_new(512);
-	var_expand(str, set->base, vars);
+	if (var_expand(str, set->base, tab, &error) <= 0) {
+		sieve_storage_sys_error(storage, "db: "
+			"Failed to expand base=%s: %s",
+			set->base, error);
+		return -1;
+	}
 	request->request.base = p_strdup(pool, str_c(str));
 
 	attr_names = p_new(pool, char *, 3);
 	attr_names[0] = p_strdup(pool, set->sieve_ldap_mod_attr);
 
 	str_truncate(str, 0);
-	var_expand(str, set->sieve_ldap_filter, vars);
+	if (var_expand(str, set->sieve_ldap_filter, tab, &error) <= 0) {
+		sieve_storage_sys_error(storage, "db: "
+			"Failed to expand sieve_ldap_filter=%s: %s",
+			set->sieve_ldap_filter, error);
+		return -1;
+	}
+
 	request->request.scope = lstorage->set.ldap_scope;
 	request->request.filter = p_strdup(pool, str_c(str));
 	request->request.attributes = attr_names;
@@ -1333,8 +1339,7 @@ sieve_ldap_read_script_callback(struct ldap_connection *conn,
 		} else {
 			sieve_storage_sys_error(storage, "db: "
 				"Search returned more than one entry for Sieve script DN");
-			if (srequest->result != NULL)
-				i_stream_unref(&srequest->result);
+			i_stream_unref(&srequest->result);
 		}
 
 	} else {

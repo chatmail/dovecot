@@ -6,6 +6,7 @@
 #include "ioloop.h"
 #include "array.h"
 #include "buffer.h"
+#include "istream.h"
 #include "ostream.h"
 #include "str.h"
 #include "eacces-error.h"
@@ -29,8 +30,8 @@ struct sieve_file_save_context {
 
 	time_t mtime;
 
-	unsigned int failed:1;
-	unsigned int finished:1;
+	bool failed:1;
+	bool finished:1;
 };
 
 static const char *sieve_generate_tmp_filename(const char *scriptname)
@@ -230,7 +231,7 @@ sieve_file_storage_save_init(struct sieve_storage *storage,
 			fsctx->context.input = input;
 			fsctx->context.pool = pool;
 			fsctx->fd = fd;
-			fsctx->output = o_stream_create_fd(fsctx->fd, 0, FALSE);
+			fsctx->output = o_stream_create_fd(fsctx->fd, 0);
 			fsctx->tmp_path = p_strdup(pool, path);
 		}
 	} T_END;
@@ -244,9 +245,22 @@ int sieve_file_storage_save_continue
 	struct sieve_file_save_context *fsctx =
 		(struct sieve_file_save_context *)sctx;
 
-	if (o_stream_send_istream(fsctx->output, sctx->input) < 0) {
-		sieve_storage_set_critical(sctx->storage, "save: "
-			"o_stream_send_istream(%s) failed: %m", fsctx->tmp_path);
+	switch (o_stream_send_istream(fsctx->output, sctx->input)) {
+	case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
+		return 0;
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
+		i_unreached();
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
+		sieve_storage_set_critical(sctx->storage,
+			"save: read(%s) failed: %s",
+			i_stream_get_name(sctx->input),
+			i_stream_get_error(sctx->input));
+		return -1;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+		sieve_storage_set_critical(sctx->storage,
+			"save: write(%s) failed: %s", fsctx->tmp_path,
+			o_stream_get_error(fsctx->output));
 		return -1;
 	}
 	return 0;
@@ -433,10 +447,24 @@ sieve_file_storage_save_to(struct sieve_file_storage *fstorage,
 		return -1;
 	}
 
-	output = o_stream_create_fd(fd, 0, FALSE);
-	if ( o_stream_send_istream(output, input) < 0 ) {
+	output = o_stream_create_fd(fd, 0);
+	switch ( o_stream_send_istream(output, input) ) {
+	case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
+		break;
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
+		i_unreached();
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
 		sieve_storage_set_critical(storage,
-			"o_stream_send_istream(%s) failed: %m", str_c(temp_path));
+			"read(%s) failed: %s", i_stream_get_name(input),
+			i_stream_get_error(input));
+		o_stream_destroy(&output);
+		i_unlink(str_c(temp_path));
+		return -1;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+		sieve_storage_set_critical(storage,
+			"write(%s) failed: %s", str_c(temp_path),
+			o_stream_get_error(output));
 		o_stream_destroy(&output);
 		i_unlink(str_c(temp_path));
 		return -1;
