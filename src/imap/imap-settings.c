@@ -1,11 +1,12 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
+#include "hostpid.h"
 #include "settings-parser.h"
 #include "service-settings.h"
 #include "mail-storage-settings.h"
-#include "lda-settings.h"
+#include "smtp-submit-settings.h"
 #include "imap-settings.h"
 
 #include <stddef.h>
@@ -74,6 +75,7 @@ static const struct setting_define imap_setting_defines[] = {
 	DEF(SET_STR, imap_id_log),
 	DEF(SET_ENUM, imap_fetch_failure),
 	DEF(SET_BOOL, imap_metadata),
+	DEF(SET_BOOL, imap_literal_minus),
 	DEF(SET_TIME, imap_hibernate_timeout),
 
 	DEF(SET_STR, imap_urlauth_host),
@@ -93,11 +95,15 @@ static const struct imap_settings imap_default_settings = {
 	.imap_idle_notify_interval = 2*60,
 	.imap_capability = "",
 	.imap_client_workarounds = "",
-	.imap_logout_format = "in=%i out=%o",
+	.imap_logout_format = "in=%i out=%o deleted=%{deleted} "
+		"expunged=%{expunged} trashed=%{trashed} "
+		"hdr_count=%{fetch_hdr_count} hdr_bytes=%{fetch_hdr_bytes} "
+		"body_count=%{fetch_body_count} body_bytes=%{fetch_body_bytes}",
 	.imap_id_send = "name *",
 	.imap_id_log = "",
 	.imap_fetch_failure = "disconnect-immediately:disconnect-after:no-after",
 	.imap_metadata = FALSE,
+	.imap_literal_minus = FALSE,
 	.imap_hibernate_timeout = 0,
 
 	.imap_urlauth_host = "",
@@ -106,7 +112,7 @@ static const struct imap_settings imap_default_settings = {
 
 static const struct setting_parser_info *imap_setting_dependencies[] = {
 	&mail_user_setting_parser_info,
-	&lda_setting_parser_info,
+	&smtp_submit_setting_parser_info,
 	NULL
 };
 

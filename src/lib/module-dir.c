@@ -1,8 +1,9 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "str.h"
+#include "sort.h"
 #include "module-dir.h"
 
 #ifdef HAVE_MODULES

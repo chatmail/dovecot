@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -112,16 +112,14 @@ static void test_client_slow_request(unsigned int index)
 struct _slow_request {
 	struct http_server_request *req;
 	struct timeout *to_delay;
-	unsigned int serviced:1;
+	bool serviced:1;
 };
 
 static void
-test_server_slow_request_destroyed(void *context)
+test_server_slow_request_destroyed(struct _slow_request *ctx)
 {
-	struct _slow_request *ctx = (struct _slow_request *)context;
 	test_assert(ctx->serviced);
-	if (ctx->to_delay != NULL)
-		timeout_remove(&ctx->to_delay);
+	timeout_remove(&ctx->to_delay);
 	i_free(ctx);
 	io_loop_stop(ioloop);
 }
@@ -216,17 +214,14 @@ struct _hanging_request_payload {
 	struct http_server_request *req;
 	struct istream *payload_input;
 	struct io *io;
-	unsigned int serviced:1;
+	bool serviced:1;
 };
 
 static void
-test_server_hanging_request_payload_destroyed(void *context)
+test_server_hanging_request_payload_destroyed(struct _hanging_request_payload *ctx)
 {
-	struct _hanging_request_payload *ctx =
-		(struct _hanging_request_payload *)context;
 	test_assert(!ctx->serviced);
-	if (ctx->io != NULL)
-		io_remove(&ctx->io);
+	io_remove(&ctx->io);
 	i_free(ctx);
 	io_loop_stop(ioloop);
 }
@@ -263,7 +258,7 @@ test_server_hanging_request_payload_input(struct _hanging_request_payload *ctx)
 		return;
 	}
 
-	i_assert(i_stream_is_eof(ctx->payload_input));
+	i_assert(ctx->payload_input->eof);
 		
 	resp = http_server_response_create(req, 200, "OK");
 	http_server_response_submit(resp);
@@ -354,17 +349,14 @@ struct _hanging_response_payload {
 	struct http_server_request *req;
 	struct istream *payload_input;
 	struct io *io;
-	unsigned int serviced:1;
+	bool serviced:1;
 };
 
 static void
-test_server_hanging_response_payload_destroyed(void *context)
+test_server_hanging_response_payload_destroyed(struct _hanging_response_payload *ctx)
 {
-	struct _hanging_response_payload *ctx =
-		(struct _hanging_response_payload *)context;
 	test_assert(!ctx->serviced);
-	if (ctx->io != NULL)
-		io_remove(&ctx->io);
+	io_remove(&ctx->io);
 	i_free(ctx);
 	io_loop_stop(ioloop);
 }
@@ -432,13 +424,162 @@ static void test_hanging_response_payload(void)
 }
 
 /*
+ * Excessive payload length
+ */
+
+/* client */
+
+static void
+test_excessive_payload_length_connected1(struct client_connection *conn)
+{
+	(void)o_stream_send_str(conn->conn.output,
+		"GET / HTTP/1.1\r\n"
+		"Host: example.com\r\n"
+		"Content-Length: 150\r\n"
+		"\r\n"
+		"Too long\r\nToo long\r\nToo long\r\nToo long\r\nToo long\r\n"
+		"Too long\r\nToo long\r\nToo long\r\nToo long\r\nToo long\r\n"
+		"Too long\r\nToo long\r\nToo long\r\nToo long\r\nToo long\r\n");
+}
+
+static void
+test_client_excessive_payload_length1(unsigned int index)
+{
+	test_client_connected = test_excessive_payload_length_connected1;
+	test_client_run(index);
+}
+
+static void
+test_excessive_payload_length_connected2(struct client_connection *conn)
+{
+	(void)o_stream_send_str(conn->conn.output,
+		"GET / HTTP/1.1\r\n"
+		"Host: example.com\r\n"
+		"Transfer-Encoding: chunked\r\n"
+		"\r\n"
+		"32\r\n"
+		"Too long\r\nToo long\r\nToo long\r\nToo long\r\nToo long\r\n"
+		"\r\n"
+		"32\r\n"
+		"Too long\r\nToo long\r\nToo long\r\nToo long\r\nToo long\r\n"
+		"\r\n"
+		"32\r\n"
+		"Too long\r\nToo long\r\nToo long\r\nToo long\r\nToo long\r\n"
+		"\r\n"
+		"0\r\n"
+		"\r\n");
+}
+
+static void
+test_client_excessive_payload_length2(unsigned int index)
+{
+	test_client_connected = test_excessive_payload_length_connected2;
+	test_client_run(index);
+}
+
+
+/* server */
+
+struct _excessive_payload_length {
+	struct http_server_request *req;
+	buffer_t *buffer;
+	bool serviced:1;
+};
+
+static void
+test_server_excessive_payload_length_destroyed(
+	struct _excessive_payload_length *ctx)
+{
+	struct http_server_response *resp;
+	const char *reason;
+	int status;
+
+	resp = http_server_request_get_response(ctx->req);
+	test_assert(resp != NULL);
+	if (resp != NULL) {
+		http_server_response_get_status(resp, &status, &reason);
+		test_assert(status == 413);
+	}
+
+	test_assert(!ctx->serviced);
+	buffer_free(&ctx->buffer);
+	i_free(ctx);
+	io_loop_stop(ioloop);
+}
+
+static void
+test_server_excessive_payload_length_finished(
+	struct _excessive_payload_length *ctx)
+{
+	struct http_server_response *resp;
+
+	resp = http_server_response_create(ctx->req, 200, "OK");
+	http_server_response_submit(resp);
+	ctx->serviced = TRUE;
+}
+
+static void
+test_server_excessive_payload_length_request(
+	struct http_server_request *req)
+{
+	const struct http_request *hreq =
+		http_server_request_get(req);
+	struct _excessive_payload_length *ctx;
+
+	if (debug) {
+		i_debug("REQUEST: %s %s HTTP/%u.%u",
+			hreq->method, hreq->target_raw,
+			hreq->version_major, hreq->version_minor);
+	}
+
+	ctx = i_new(struct _excessive_payload_length, 1);
+	ctx->req = req;
+	ctx->buffer = buffer_create_dynamic(default_pool, 128);
+
+	http_server_request_set_destroy_callback(req,
+		test_server_excessive_payload_length_destroyed, ctx);
+	http_server_request_buffer_payload(req,	ctx->buffer, 128,
+		test_server_excessive_payload_length_finished, ctx);
+}
+
+static void test_server_excessive_payload_length
+(const struct http_server_settings *server_set)
+{
+	test_server_request = test_server_excessive_payload_length_request;
+	test_server_run(server_set);
+}
+
+/* test */
+
+static void test_excessive_payload_length(void)
+{
+	struct http_server_settings http_server_set;
+
+	test_server_defaults(&http_server_set);
+	http_server_set.max_client_idle_time_msecs = 1000;
+
+	test_begin("excessive payload length (length)");
+	test_run_client_server(&http_server_set,
+		test_server_excessive_payload_length,
+		test_client_excessive_payload_length1, 1);
+	test_end();
+
+	test_begin("excessive payload length (chunked)");
+	test_run_client_server(&http_server_set,
+		test_server_excessive_payload_length,
+		test_client_excessive_payload_length2, 1);
+	test_end();
+}
+
+/*
  * All tests
  */
 
-static void (*test_functions[])(void) = {
+static void (*const test_functions[])(void) = {
 	test_slow_request,
 	test_hanging_request_payload,
 	test_hanging_response_payload,
+	test_excessive_payload_length,
 	NULL
 };
 
@@ -585,7 +726,6 @@ static void
 test_server_timeout(void *context ATTR_UNUSED)
 {
 	i_fatal("Server timed out");
-	io_loop_stop(ioloop);
 }
 
 static void

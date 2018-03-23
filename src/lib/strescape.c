@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -259,7 +259,7 @@ const char *const *t_strsplit_tabescaped_inplace(char *data)
 		return t_new(const char *, 1);
 
 	alloc_count = 32;
-	array = t_malloc(sizeof(char *) * alloc_count);
+	array = t_malloc_no0(sizeof(char *) * alloc_count);
 
 	array[0] = data; count = 1;
 	bool need_unescape = FALSE;

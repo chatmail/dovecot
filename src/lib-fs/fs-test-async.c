@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -40,7 +40,7 @@ static void test_fs_async_write(const char *test_name, struct fs *fs)
 			test_assert(test_file->contents->used == 0);
 			break;
 		case 2:
-			fs_write_stream_abort(file, &output);
+			fs_write_stream_abort_error(file, &output, "test");
 			test_assert(test_file->contents->used == 0);
 			break;
 		}

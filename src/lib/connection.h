@@ -98,9 +98,8 @@ struct connection {
 
 	enum connection_disconnect_reason disconnect_reason;
 
-	unsigned int version_received:1;
-	unsigned int unix_socket:1;
-	unsigned int from_streams:1;
+	bool version_received:1;
+	bool unix_socket:1;
 };
 
 struct connection_list {
@@ -111,6 +110,8 @@ struct connection_list {
 	struct connection_vfuncs v;
 };
 
+void connection_init(struct connection_list *list,
+		     struct connection *conn);
 void connection_init_server(struct connection_list *list,
 			    struct connection *conn, const char *name,
 			    int fd_in, int fd_out);
@@ -127,10 +128,6 @@ int connection_client_connect(struct connection *conn);
 
 void connection_disconnect(struct connection *conn);
 void connection_deinit(struct connection *conn);
-
-void connection_input_halt(struct connection *conn);
-void connection_input_resume(struct connection *conn);
-void connection_streams_changed(struct connection *conn);
 
 /* Returns -1 = disconnected, 0 = nothing new, 1 = something new.
    If input_full_behavior is ALLOW, may return also -2 = buffer full. */

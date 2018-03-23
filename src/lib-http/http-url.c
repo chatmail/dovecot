@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -23,8 +23,8 @@ struct http_url_parser {
 
 	enum http_request_target_format req_format;
 
- 	unsigned int relative:1;
-	unsigned int request_target:1;
+ 	bool relative:1;
+	bool request_target:1;
 };
 
 static bool http_url_parse_authority(struct http_url_parser *url_parser)
@@ -35,9 +35,9 @@ static bool http_url_parse_authority(struct http_url_parser *url_parser)
 	const char *user = NULL, *password = NULL;
 	int ret;
 
-	if ((ret = uri_parse_authority(parser, &auth)) < 0)
+	if ((ret = uri_parse_host_authority(parser, &auth)) < 0)
 		return FALSE;
-	if (auth.host_literal == NULL || *auth.host_literal == '\0') {
+	if (auth.host.name == NULL || *auth.host.name == '\0') {
 		/* RFC 7230, Section 2.7.1: http URI Scheme
 
 		   A sender MUST NOT generate an "http" URI with an empty host
@@ -79,11 +79,8 @@ static bool http_url_parse_authority(struct http_url_parser *url_parser)
 		}
 	}
 	if (url != NULL) {
-		url->host_name = p_strdup(parser->pool, auth.host_literal);
-		url->host_ip = auth.host_ip;
-		url->have_host_ip = auth.have_host_ip;
+		uri_host_copy(parser->pool, &url->host, &auth.host);
 		url->port = auth.port;
-		url->have_port = auth.have_port;
 		url->user = p_strdup(parser->pool, user);
 		url->password = p_strdup(parser->pool, password);
 	}
@@ -167,9 +164,9 @@ static bool http_url_do_parse(struct http_url_parser *url_parser)
 	if ((url_parser->flags & HTTP_URL_PARSE_SCHEME_EXTERNAL) == 0) {
 		const char *scheme;
 
-		if ((ret = uri_parse_scheme(parser, &scheme)) < 0)
-			return FALSE;
-		else if (ret > 0) {
+		if ((ret = uri_parse_scheme(parser, &scheme)) <= 0) {
+			parser->cur = parser->begin;
+		} else {
 			if (strcasecmp(scheme, "https") == 0) {
 				if (url != NULL)
 					url->have_ssl = TRUE;
@@ -234,11 +231,8 @@ static bool http_url_do_parse(struct http_url_parser *url_parser)
 			parser->error = "Relative HTTP URL not allowed";
 			return FALSE;
 		} else if (!have_authority && url != NULL) {
-			url->host_name = p_strdup_empty(parser->pool, base->host_name); 
-			url->host_ip = base->host_ip;
-			url->have_host_ip = base->have_host_ip;
+			uri_host_copy(parser->pool, &url->host, &base->host);
 			url->port = base->port;
-			url->have_port = base->have_port;
 			url->have_ssl = base->have_ssl;
 			url->user = p_strdup_empty(parser->pool, base->user);
 			url->password = p_strdup_empty(parser->pool, base->password);
@@ -341,7 +335,7 @@ int http_url_parse(const char *url, struct http_url *base,
 	   flags may also dictate whether relative URLs are allowed/required. */
 	i_assert((flags & HTTP_URL_PARSE_SCHEME_EXTERNAL) == 0 || base == NULL);
 
-	memset(&url_parser, '\0', sizeof(url_parser));
+	i_zero(&url_parser);
 	uri_parser_init(&url_parser.parser, pool, url);
 	url_parser.parser.allow_pct_nul = (flags & HTTP_URL_ALLOW_PCT_NUL) != 0;
 
@@ -363,43 +357,37 @@ int http_url_request_target_parse(const char *request_target,
 {
 	struct http_url_parser url_parser;
 	struct uri_parser *parser;
-	struct uri_authority host;
+	struct uri_authority auth;
 	struct http_url base;
 
-	memset(&url_parser, '\0', sizeof(url_parser));
+	i_zero(&url_parser);
 	parser = &url_parser.parser;
 	uri_parser_init(parser, pool, host_header);
 
-	if (uri_parse_authority(parser, &host) <= 0) {
+	if (uri_parse_host_authority(parser, &auth) <= 0) {
 		*error_r = t_strdup_printf("Invalid Host header: %s", parser->error);
 		return -1;
 	}
 
-	if (parser->cur != parser->end || host.enc_userinfo != NULL) {
+	if (parser->cur != parser->end || auth.enc_userinfo != NULL) {
 		*error_r = "Invalid Host header: Contains invalid character";
 		return -1;
 	}
 
 	if (request_target[0] == '*' && request_target[1] == '\0') {
 		struct http_url *url = p_new(pool, struct http_url, 1);
-		url->host_name = p_strdup(pool, host.host_literal);
-		url->host_ip = host.host_ip;
-		url->port = host.port;
-		url->have_host_ip = host.have_host_ip;
-		url->have_port = host.have_port;
+		uri_host_copy(pool, &url->host, &auth.host);
+		url->port = auth.port;
 		target->url = url;
 		target->format = HTTP_REQUEST_TARGET_FORMAT_ASTERISK;
 		return 0;
 	}
 
 	i_zero(&base);
-	base.host_name = host.host_literal;
-	base.host_ip = host.host_ip;
-	base.port = host.port;
-	base.have_host_ip = host.have_host_ip;
-	base.have_port = host.have_port;
+	base.host = auth.host;
+	base.port = auth.port;
 
-	memset(parser, '\0', sizeof(*parser));
+	i_zero(parser);
 	uri_parser_init(parser, pool, request_target);
 
 	url_parser.url = p_new(pool, struct http_url, 1);
@@ -426,15 +414,8 @@ void http_url_copy_authority(pool_t pool, struct http_url *dest,
 	const struct http_url *src)
 {
 	i_zero(dest);
-	dest->host_name = p_strdup(pool, src->host_name);
-	if (src->have_host_ip) {
-		dest->host_ip = src->host_ip;
-		dest->have_host_ip = TRUE;
-	}
-	if (src->have_port) {
-		dest->port = src->port;
-		dest->have_port = TRUE;
-	}
+	uri_host_copy(pool, &dest->host, &src->host);
+	dest->port = src->port;
 	dest->have_ssl = src->have_ssl;
 }
 
@@ -506,19 +487,10 @@ http_url_add_scheme(string_t *urlstr, const struct http_url *url)
 static void
 http_url_add_authority(string_t *urlstr, const struct http_url *url)
 {
-	/* host:port */
-	if (url->host_name != NULL) {
-		/* assume IPv6 literal if starts with '['; avoid encoding */
-		if (*url->host_name == '[')
-			str_append(urlstr, url->host_name);
-		else
-			uri_append_host_name(urlstr, url->host_name);
-	} else if (url->have_host_ip) {
-		uri_append_host_ip(urlstr, &url->host_ip);
-	} else
-		i_unreached();
-	if (url->have_port)
-		uri_append_port(urlstr, url->port);
+	/* host */
+	uri_append_host(urlstr, &url->host);
+	/* port */
+	uri_append_port(urlstr, url->port);
 }
 
 static void

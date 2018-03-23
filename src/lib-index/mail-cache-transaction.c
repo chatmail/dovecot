@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -45,8 +45,8 @@ struct mail_cache_transaction_ctx {
 
 	unsigned int records_written;
 
-	unsigned int tried_compression:1;
-	unsigned int changes:1;
+	bool tried_compression:1;
+	bool changes:1;
 };
 
 static MODULE_CONTEXT_DEFINE_INIT(cache_mail_index_transaction_module,
@@ -156,8 +156,7 @@ void mail_cache_transaction_rollback(struct mail_cache_transaction_ctx **_ctx)
 	ctx->view->trans_seq1 = ctx->view->trans_seq2 = 0;
 
 	mail_index_view_close(&ctx->view->trans_view);
-	if (ctx->cache_data != NULL)
-		buffer_free(&ctx->cache_data);
+	buffer_free(&ctx->cache_data);
 	if (array_is_created(&ctx->cache_data_seq))
 		array_free(&ctx->cache_data_seq);
 	if (array_is_created(&ctx->cache_data_wanted_seqs))
@@ -573,7 +572,7 @@ int mail_cache_transaction_commit(struct mail_cache_transaction_ctx **_ctx)
 		}
 		/* Here would be a good place to do fdatasync() to make sure
 		   everything is written before offsets are updated to index.
-		   However it slows down I/O unneededly and we're pretty good
+		   However it slows down I/O needlessly and we're pretty good
 		   at catching and fixing cache corruption, so we no longer do
 		   it. */
 	}
@@ -684,7 +683,7 @@ static int mail_cache_header_add_field(struct mail_cache_transaction_ctx *ctx,
 	T_BEGIN {
 		buffer_t *buffer;
 
-		buffer = buffer_create_dynamic(pool_datastack_create(), 256);
+		buffer = t_buffer_create(256);
 		mail_cache_header_fields_get(cache, buffer);
 		ret = mail_cache_header_fields_write(ctx, buffer);
 	} T_END;

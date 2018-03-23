@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -28,8 +28,8 @@ struct config_connection {
 	struct ostream *output;
 	struct io *io;
 
-	unsigned int version_received:1;
-	unsigned int handshaked:1;
+	bool version_received:1;
+	bool handshaked:1;
 };
 
 static struct config_connection *config_connections = NULL;
@@ -159,10 +159,10 @@ static int config_filters_request(struct config_connection *conn)
 		o_stream_nsend_str(conn->output, "FILTER");
 		if (filter->service != NULL)
 			o_stream_nsend_str(conn->output, t_strdup_printf("\tservice=%s",
-					   str_tabescape(filter->service)));
+					   filter->service));
 		if (filter->local_name != NULL)
 			o_stream_nsend_str(conn->output, t_strdup_printf("\tlocal-name=%s",
-					   str_tabescape(filter->local_name)));
+					   filter->local_name));
 		if (filter->local_bits > 0)
 			o_stream_nsend_str(conn->output, t_strdup_printf("\tlocal-net=%s/%u",
 					   net_ip2addr(&filter->local_net),
@@ -229,8 +229,8 @@ struct config_connection *config_connection_create(int fd)
 
 	conn = i_new(struct config_connection, 1);
 	conn->fd = fd;
-	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
-	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE);
+	conn->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	conn->io = io_add(fd, IO_READ, config_connection_input, conn);
 	DLLIST_PREPEND(&config_connections, conn);

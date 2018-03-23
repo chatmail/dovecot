@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -78,8 +78,7 @@ void service_process_notify_deinit(struct service_process_notify **_notify)
 	*_notify = NULL;
 
 	service_process_notify_reset(notify);
-	if (notify->io_write != NULL)
-		io_remove(&notify->io_write);
+	io_remove(&notify->io_write);
 	aqueue_deinit(&notify->process_queue);
 	array_free(&notify->processes);
 	i_free(notify);

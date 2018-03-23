@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "hash.h"
 #include "str.h"
+#include "sort.h"
 #include "mailbox-list-private.h"
 #include "dsync-mailbox-tree-private.h"
 
@@ -521,5 +522,5 @@ dsync_mailbox_delete_type_to_string(enum dsync_mailbox_delete_type type)
 	case DSYNC_MAILBOX_DELETE_TYPE_UNSUBSCRIBE:
 		return "unsubscribe";
 	}
-	return t_strdup_printf("unknown #%u", type);
+	i_unreached();
 }

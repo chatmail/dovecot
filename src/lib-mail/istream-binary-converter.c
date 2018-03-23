@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -24,7 +24,7 @@ struct binary_converter_istream {
 
 	buffer_t *hdr_buf;
 	size_t cte_header_len;
-	unsigned int content_type_seen:1;
+	bool content_type_seen:1;
 };
 
 static void stream_add_data(struct binary_converter_istream *bstream,
@@ -275,11 +275,9 @@ static void i_stream_binary_converter_close(struct iostream_private *stream,
 	struct message_part *parts;
 
 	if (bstream->parser != NULL) {
-		if (message_parser_deinit(&bstream->parser, &parts) < 0)
-			i_unreached(); /* we didn't use preparsed message_parts */
+		message_parser_deinit(&bstream->parser, &parts);
 	}
-	if (bstream->pool != NULL)
-		pool_unref(&bstream->pool);
+	pool_unref(&bstream->pool);
 	if (close_parent)
 		i_stream_close(bstream->istream.parent);
 }
@@ -303,5 +301,5 @@ struct istream *i_stream_create_binary_converter(struct istream *input)
 				MESSAGE_PARSER_FLAG_INCLUDE_MULTIPART_BLOCKS |
 				MESSAGE_PARSER_FLAG_INCLUDE_BOUNDARIES);
 	return i_stream_create(&bstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }

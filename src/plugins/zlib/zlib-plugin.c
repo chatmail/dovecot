@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -68,10 +68,8 @@ static void zlib_mail_cache_close(struct zlib_user *zuser)
 {
 	struct zlib_mail_cache *cache = &zuser->cache;
 
-	if (cache->to != NULL)
-		timeout_remove(&cache->to);
-	if (cache->input != NULL)
-		i_stream_unref(&cache->input);
+	timeout_remove(&cache->to);
+	i_stream_unref(&cache->input);
 	i_zero(cache);
 }
 
@@ -145,7 +143,7 @@ static int zlib_istream_opened(struct mail *_mail, struct istream **stream)
 	handler = compression_detect_handler(*stream);
 	if (handler != NULL) {
 		if (handler->create_istream == NULL) {
-			mail_storage_set_critical(_mail->box->storage,
+			mail_set_critical(_mail,
 				"zlib plugin: Detected %s compression "
 				"but support not compiled in", handler->ext);
 			return -1;
@@ -255,7 +253,7 @@ zlib_permail_alloc_init(struct mailbox *box, struct mailbox_vfuncs *v)
 	}
 }
 
-static int zlib_mailbox_open_input(struct mailbox *box)
+static void zlib_mailbox_open_input(struct mailbox *box)
 {
 	const struct compression_handler *handler;
 	struct istream *input;
@@ -264,7 +262,7 @@ static int zlib_mailbox_open_input(struct mailbox *box)
 
 	handler = compression_lookup_handler_from_ext(box->name);
 	if (handler == NULL || handler->create_istream == NULL)
-		return 0;
+		return;
 
 	if (mail_storage_is_mailbox_file(box->storage)) {
 		/* looks like a compressed single file mailbox. we should be
@@ -275,11 +273,11 @@ static int zlib_mailbox_open_input(struct mailbox *box)
 		if (fd == -1) {
 			/* let the standard handler figure out what to do
 			   with the failure */
-			return 0;
+			return;
 		}
 		if (fstat(fd, &st) == 0 && S_ISDIR(st.st_mode)) {
 			i_close_fd(&fd);
-			return 0;
+			return;
 		}
 		input = i_stream_create_fd_autoclose(&fd, MAX_INBUF_SIZE);
 		i_stream_set_name(input, box_path);
@@ -287,7 +285,6 @@ static int zlib_mailbox_open_input(struct mailbox *box)
 		i_stream_unref(&input);
 		box->flags |= MAILBOX_FLAG_READONLY;
 	}
-	return 0;
 }
 
 static int zlib_mailbox_open(struct mailbox *box)
@@ -296,10 +293,8 @@ static int zlib_mailbox_open(struct mailbox *box)
 
 	if (box->input == NULL &&
 	    (box->storage->class_flags &
-	     MAIL_STORAGE_CLASS_FLAG_OPEN_STREAMS) != 0) {
-		if (zlib_mailbox_open_input(box) < 0)
-			return -1;
-	}
+	     MAIL_STORAGE_CLASS_FLAG_OPEN_STREAMS) != 0)
+		zlib_mailbox_open_input(box);
 
 	return zbox->super.open(box);
 }

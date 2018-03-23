@@ -1,12 +1,17 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "env-util.h"
 #include "process-title.h"
 
+#ifdef HAVE_LIBBSD
+#include <bsd/unistd.h>
+#else
 #include <unistd.h> /* FreeBSD */
+#endif
 
 static char *process_name = NULL;
+static char *current_process_title;
 
 #ifdef HAVE_SETPROCTITLE
 #  undef PROCTITLE_HACK
@@ -114,7 +119,7 @@ static void proctitle_hack_set(const char *title)
 
 #endif
 
-void process_title_init(char **argv[])
+void process_title_init(int argc ATTR_UNUSED, char **argv[])
 {
 #ifdef PROCTITLE_HACK
 	char ***environ_p = env_get_environ_p();
@@ -125,13 +130,18 @@ void process_title_init(char **argv[])
 	*environ_p = argv_dup(orig_environ, &environ_memblock);
 	proctitle_hack_init(orig_argv, orig_environ);
 #endif
+#ifdef HAVE_LIBBSD
+	setproctitle_init(argc, *argv, *env_get_environ_p());
+#endif
 	process_name = (*argv)[0];
 }
 
-void process_title_set(const char *title ATTR_UNUSED)
+void process_title_set(const char *title)
 {
 	i_assert(process_name != NULL);
 
+	i_free(current_process_title);
+	current_process_title = i_strdup(title);
 #ifdef HAVE_SETPROCTITLE
 	if (title == NULL)
 		setproctitle(NULL);
@@ -142,6 +152,11 @@ void process_title_set(const char *title ATTR_UNUSED)
 		proctitle_hack_set(t_strconcat(process_name, " ", title, NULL));
 	} T_END;
 #endif
+}
+
+const char *process_title_get(void)
+{
+	return current_process_title;
 }
 
 void process_title_deinit(void)
@@ -162,4 +177,5 @@ void process_title_deinit(void)
 	   the environ_p to its original state, but that's a bit complicated. */
 	*environ_p = NULL;
 #endif
+	i_free(current_process_title);
 }

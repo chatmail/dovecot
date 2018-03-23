@@ -30,6 +30,9 @@
 /* LDAP support is built in */
 #undef BUILTIN_LDAP
 
+/* Lua support is builtin */
+#undef BUILTIN_LUA
+
 /* IMAP capabilities advertised in banner */
 #undef CAPABILITY_BANNER_STRING
 
@@ -45,7 +48,7 @@
 /* Define if your dev_t is a structure instead of integer type */
 #undef DEV_T_STRUCT
 
-/* Path to /dev/urandom */
+/* Path to random source */
 #undef DEV_URANDOM_PATH
 
 /* Disable asserts */
@@ -72,6 +75,9 @@
 /* How to define flexible array members in structs */
 #undef FLEXIBLE_ARRAY_MEMBER
 
+/* Define this if you arc4random() */
+#undef HAVE_ARC4RANDOM
+
 /* Build with ASN1_STRING_get0_data() support */
 #undef HAVE_ASN1_STRING_GET0_DATA
 
@@ -92,6 +98,10 @@
 
 /* Define if you have the clock_gettime function */
 #undef HAVE_CLOCK_GETTIME
+
+/* Define to 1 if you have the declaration of `getrandom', and to 0 if you
+   don't. */
+#undef HAVE_DECL_GETRANDOM
 
 /* Define if you have struct dirent->d_type */
 #undef HAVE_DIRENT_D_TYPE
@@ -138,12 +148,6 @@
 /* Define if you want textcat support for FTS */
 #undef HAVE_FTS_TEXTCAT
 
-/* Define to 1 if you have the <gc/gc.h> header file. */
-#undef HAVE_GC_GC_H
-
-/* Define to 1 if you have the <gc.h> header file. */
-#undef HAVE_GC_H
-
 /* Define to 1 if you have the `getmntent' function. */
 #undef HAVE_GETMNTENT
 
@@ -158,6 +162,9 @@
 
 /* Define to 1 if you have the `getpeerucred' function. */
 #undef HAVE_GETPEERUCRED
+
+/* Define to 1 if you have the `getrandom' function. */
+#undef HAVE_GETRANDOM
 
 /* Define to 1 if you have the `glob' function. */
 #undef HAVE_GLOB
@@ -224,6 +231,9 @@
    */
 #undef HAVE_KRB5_GSS_REGISTER_ACCEPTOR_IDENTITY
 
+/* Define this if you have libbsd */
+#undef HAVE_LIBBSD
+
 /* libcap is installed for cap_init() */
 #undef HAVE_LIBCAP
 
@@ -235,6 +245,9 @@
 
 /* Define if you want ICU normalization support for FTS */
 #undef HAVE_LIBICU
+
+/* Define if you have libsodium */
+#undef HAVE_LIBSODIUM
 
 /* Define to 1 if you have the <libtextcat/textcat.h> header file. */
 #undef HAVE_LIBTEXTCAT_TEXTCAT_H
@@ -256,6 +269,9 @@
 
 /* Define to 1 if you have the `lockf' function. */
 #undef HAVE_LOCKF
+
+/* Define to 1 if you have lua */
+#undef HAVE_LUA
 
 /* Define if you have lz4 library */
 #undef HAVE_LZ4
@@ -296,7 +312,7 @@
 /* Define if your MySQL library supports setting cipher */
 #undef HAVE_MYSQL_SSL_CIPHER
 
-/* Define if your MySQL library supports verifying the name in the SSL
+/* Defineif your MySQL library supports verifying the name in the SSL
    certificate */
 #undef HAVE_MYSQL_SSL_VERIFY_SERVER_CERT
 
@@ -431,6 +447,9 @@
 
 /* Build with SSL_COMP_free_compression_methods() support */
 #undef HAVE_SSL_COMP_FREE_COMPRESSION_METHODS
+
+/* Define if you have SSL_CTX_set1_curves_list */
+#undef HAVE_SSL_CTX_SET1_CURVES_LIST
 
 /* Define if you have SSL_CTX_set_min_proto_version */
 #undef HAVE_SSL_CTX_SET_MIN_PROTO_VERSION
@@ -603,7 +622,7 @@
 /* Use Linux inotify */
 #undef IOLOOP_NOTIFY_INOTIFY
 
-/* Use BSD kqueue directory changes notificaton */
+/* Use BSD kqueue directory changes notification */
 #undef IOLOOP_NOTIFY_KQUEUE
 
 /* No special notify support */
@@ -624,9 +643,6 @@
 /* Define to the sub-directory in which libtool stores uninstalled libraries.
    */
 #undef LT_OBJDIR
-
-/* List of compiled in mail storages */
-#undef MAIL_STORAGES
 
 /* Required memory alignment */
 #undef MEM_ALIGN_SIZE
@@ -700,11 +716,17 @@
 /* Define if pread/pwrite needs _XOPEN_SOURCE 500 */
 #undef PREAD_WRAPPERS
 
+/* printf() fmt for dec time_t */
+#undef PRIdTIME_T
+
 /* printf() format for size_t */
 #undef PRIuSIZE_T
 
 /* printf() format for uoff_t */
 #undef PRIuUOFF_T
+
+/* printf() fmt for hex time_t */
+#undef PRIxTIME_T
 
 /* Define if process title can be changed by modifying argv */
 #undef PROCTITLE_HACK
@@ -729,6 +751,9 @@
 
 /* C99 static array */
 #undef STATIC_ARRAY
+
+/* Building with static code analyzer */
+#undef STATIC_CHECKER
 
 /* reasonable mntctl buffer size */
 #undef STATIC_MTAB_SIZE
@@ -763,9 +788,6 @@
 /* Build with LDAP support */
 #undef USERDB_LDAP
 
-/* Build with NSS module support */
-#undef USERDB_NSS
-
 /* Build with passwd support */
 #undef USERDB_PASSWD
 
@@ -780,9 +802,6 @@
 
 /* Build with vpopmail support */
 #undef USERDB_VPOPMAIL
-
-/* Define if you want to use Boehm GC */
-#undef USE_GC
 
 /* A 'va_copy' style function */
 #undef VA_COPY

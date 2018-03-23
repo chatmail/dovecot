@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -157,7 +157,7 @@ int doveadm_connect(const char *path)
 
 int i_strccdascmp(const char *a, const char *b)
 {
-	while(*a && *b) {
+	while(*a != '\0' && *b != '\0') {
 		if ((*a == ' ' || *a == '-') && *a != *b && *b != ' ' && *b != '-') {
 			if (i_toupper(*(a+1)) == *(b)) a++;
 			else break;

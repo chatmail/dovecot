@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 
@@ -176,7 +176,7 @@ static const char *parse_setting(const char *key, const char *value,
 		field->value = p_strdup(ctx->conn->pool, value);
 		return NULL;
 	}
-	return t_strconcat("Unknown setting: ", key, NULL);
+	i_unreached();
 }
 
 static bool parse_section(const char *type, const char *name,
@@ -269,6 +269,7 @@ db_dict_settings_parse(struct db_dict_settings *set)
 
 struct dict_connection *db_dict_init(const char *config_path)
 {
+	struct dict_settings dict_set;
 	struct dict_settings_parser_ctx ctx;
 	struct dict_connection *conn;
 	const char *error;
@@ -306,8 +307,11 @@ struct dict_connection *db_dict_init(const char *config_path)
 
 	if (conn->set.uri == NULL)
 		i_fatal("dict %s: Empty uri setting", config_path);
-	if (dict_init(conn->set.uri, DICT_DATA_TYPE_STRING, "",
-		      global_auth_settings->base_dir, &conn->dict, &error) < 0)
+
+	i_zero(&dict_set);
+	dict_set.username = "";
+	dict_set.base_dir = global_auth_settings->base_dir;
+	if (dict_init(conn->set.uri, &dict_set, &conn->dict, &error) < 0)
 		i_fatal("dict %s: Failed to init dict: %s", config_path, error);
 
 	conn->next = connections;
@@ -394,6 +398,7 @@ static int db_dict_iter_lookup_key_values(struct db_dict_value_iter *iter)
 {
 	struct db_dict_iter_key *key;
 	string_t *path;
+	const char *error;
 	int ret;
 
 	/* sort the keys so that we'll first lookup the keys without
@@ -410,14 +415,14 @@ static int db_dict_iter_lookup_key_values(struct db_dict_value_iter *iter)
 		str_truncate(path, strlen(DICT_PATH_SHARED));
 		str_append(path, key->key->key);
 		ret = dict_lookup(iter->conn->dict, iter->pool,
-				  str_c(path), &key->value);
+				  str_c(path), &key->value, &error);
 		if (ret > 0) {
 			auth_request_log_debug(iter->auth_request, AUTH_SUBSYS_DB,
 					       "Lookup: %s = %s", str_c(path),
 					       key->value);
 		} else if (ret < 0) {
 			auth_request_log_error(iter->auth_request, AUTH_SUBSYS_DB,
-				"Failed to lookup key %s", str_c(path));
+				"Failed to lookup key %s: %s", str_c(path), error);
 			return -1;
 		} else if (key->key->default_value != NULL) {
 			auth_request_log_debug(iter->auth_request, AUTH_SUBSYS_DB,
@@ -460,9 +465,15 @@ int db_dict_value_iter_init(struct dict_connection *conn,
 		struct db_dict_key *new_key = p_new(iter->pool, struct db_dict_key, 1);
 		memcpy(new_key, key, sizeof(struct db_dict_key));
 		string_t *expanded_key = str_new(iter->pool, strlen(key->key));
-		auth_request_var_expand_with_table(expanded_key, key->key, auth_request,
-						   iter->var_expand_table,
-						   NULL);
+		const char *error;
+		if (auth_request_var_expand_with_table(expanded_key, key->key, auth_request,
+						       iter->var_expand_table,
+						       NULL, &error) <= 0) {
+			auth_request_log_error(iter->auth_request, AUTH_SUBSYS_DB,
+				"Failed to expand key %s: %s", key->key, error);
+			pool_unref(&pool);
+			return -1;
+		}
 		new_key->key = str_c(expanded_key);
 		iterkey->key = new_key;
 	}
@@ -551,38 +562,43 @@ db_dict_value_iter_object_next(struct db_dict_value_iter *iter,
 	i_unreached();
 }
 
-static const char *
-db_dict_field_find(const char *data, void *context)
+static int
+db_dict_field_find(const char *data, void *context,
+		   const char **value_r,
+		   const char **error_r ATTR_UNUSED)
 {
 	struct db_dict_value_iter *iter = context;
 	struct db_dict_iter_key *key;
-	const char *name, *value, *ret, *dotname = strchr(data, '.');
+	const char *name, *value, *dotname = strchr(data, '.');
 	string_t *tmpstr;
+
+	*value_r = NULL;
 
 	if (dotname != NULL)
 		data = t_strdup_until(data, dotname++);
 	key = db_dict_iter_find_key(iter, data);
 	if (key == NULL)
-		return NULL;
+		return 1;
 
 	switch (key->key->parsed_format) {
 	case DB_DICT_VALUE_FORMAT_VALUE:
-		return dotname != NULL ? NULL :
+		*value_r = dotname != NULL ? NULL :
 			(key->value == NULL ? "" : key->value);
+		return 1;
 	case DB_DICT_VALUE_FORMAT_JSON:
 		if (dotname == NULL)
-			return NULL;
+			return 1;
 		db_dict_value_iter_json_init(iter, key->value);
-		ret = "";
+		*value_r = "";
 		tmpstr = t_str_new(64);
 		while (db_dict_value_iter_json_next(iter, tmpstr, &name, &value)) {
 			if (strcmp(name, dotname) == 0) {
-				ret = t_strdup(value);
+				*value_r = t_strdup(value);
 				break;
 			}
 		}
 		(void)json_parser_deinit(&iter->json_parser, &iter->error);
-		return ret;
+		return 1;
 	}
 	i_unreached();
 }
@@ -595,14 +611,21 @@ bool db_dict_value_iter_next(struct db_dict_value_iter *iter,
 		{ NULL, NULL }
 	};
 	const struct db_dict_field *field;
+	const char *error;
 
 	if (iter->field_idx == array_count(iter->fields))
 		return db_dict_value_iter_object_next(iter, key_r, value_r);
 	field = array_idx(iter->fields, iter->field_idx++);
 
 	str_truncate(iter->tmpstr, 0);
-	var_expand_with_funcs(iter->tmpstr, field->value,
-			      iter->var_expand_table, var_funcs_table, iter);
+	if (var_expand_with_funcs(iter->tmpstr, field->value,
+				  iter->var_expand_table, var_funcs_table,
+				  iter, &error) <= 0) {
+		iter->error = p_strdup_printf(iter->pool,
+			"Failed to expand %s=%s: %s",
+			field->name, field->value, error);
+		return FALSE;
+	}
 	*key_r = field->name;
 	*value_r = str_c(iter->tmpstr);
 	return TRUE;

@@ -1,9 +1,9 @@
-/* Copyright (c) 2014-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "wildcard-match.h"
 
-static struct {
+static const struct {
 	const char *data;
 	const char *mask;
 	bool result;

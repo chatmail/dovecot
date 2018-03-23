@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -313,7 +313,7 @@ static int mail_cache_seq(struct mail_cache_view *view, uint32_t seq)
 
 	if (++view->cached_exists_value == 0) {
 		/* wrapped, we'll have to clear the buffer */
-		buffer_reset(view->cached_exists_buf);
+		buffer_set_used_size(view->cached_exists_buf, 0);
 		view->cached_exists_value++;
 	}
 	view->cached_exists_seq = seq;
@@ -528,7 +528,7 @@ mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 		mail_cache_decision_state_update(view, seq, field_idxs[i]);
 
 	/* mark all the fields we want to find. */
-	buf = buffer_create_dynamic(pool_datastack_create(), 32);
+	buf = t_buffer_create(32);
 	for (i = 0; i < fields_count; i++) {
 		if (!mail_cache_file_has_field(cache, field_idxs[i]))
 			return 0;

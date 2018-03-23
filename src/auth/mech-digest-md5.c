@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 /* Digest-MD5 SASL authentication, see RFC-2831 */
 
@@ -47,7 +47,7 @@ struct digest_auth_request {
 	char *authzid; /* may be NULL, authorization ID */
 	unsigned char response[32];
 	unsigned long maxbuf;
-	unsigned int nonce_found:1;
+	bool nonce_found:1;
 
 	/* final reply: */
 	char *rspauth;
@@ -96,7 +96,7 @@ static string_t *get_digest_challenge(struct digest_auth_request *request)
 
 	str_append(str, "qop=\""); first_qop = TRUE;
 	for (i = 0; i < QOP_COUNT; i++) {
-		if (request->qop & (1 << i)) {
+		if ((request->qop & (1 << i)) != 0) {
 			if (first_qop)
 				first_qop = FALSE;
 			else
@@ -211,7 +211,7 @@ static bool verify_credentials(struct digest_auth_request *request,
 			if (!mem_equals_timing_safe(response_hex, request->response, 32)) {
 				auth_request_log_info(&request->auth_request,
 						      AUTH_SUBSYS_MECH,
-						      "password mismatch");
+						      AUTH_LOG_MSG_PASSWORD_MISMATCH);
 				return FALSE;
 			}
 		} else {

@@ -1,5 +1,4 @@
-noinst_LIBRARIES = libpassword.a
-noinst_LTLIBRARIES = libauth.la
+noinst_LTLIBRARIES = libpassword.la libauth.la
 auth_moduledir = $(moduledir)/auth
 
 # automake seems to force making this unconditional..
@@ -16,6 +15,7 @@ endif
 auth_module_LTLIBRARIES = \
 	$(GSSAPI_LIB) \
 	$(LDAP_LIB) \
+	$(LUA_LIB) \
 	libauthdb_imap.la
 
 pkglibexecdir = $(libexecdir)/dovecot
@@ -31,20 +31,23 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-http \
 	-I$(top_srcdir)/src/lib-sql \
 	-I$(top_srcdir)/src/lib-settings \
-	-I$(top_srcdir)/src/lib-stats \
+	-I$(top_srcdir)/src/lib-old-stats \
 	-I$(top_srcdir)/src/lib-ntlm \
 	-I$(top_srcdir)/src/lib-otp \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-oauth2 \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
+	-I$(top_srcdir)/src/lib-lua \
 	-DAUTH_MODULE_DIR=\""$(auth_moduledir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
+	$(LUA_CFLAGS) \
 	$(AUTH_CFLAGS)
 
 auth_LDFLAGS = -export-dynamic
 
-libpassword_a_SOURCES = \
+libpassword_la_SOURCES = \
+	crypt-blowfish.c \
 	mycrypt.c \
 	password-scheme.c \
 	password-scheme-crypt.c \
@@ -52,23 +55,34 @@ libpassword_a_SOURCES = \
 	password-scheme-scram.c \
 	password-scheme-otp.c \
 	password-scheme-rpa.c \
-	password-scheme-pbkdf2.c
+	password-scheme-pbkdf2.c \
+	password-scheme-sodium.c
+libpassword_la_CFLAGS = $(AM_CPPFLAGS) $(LIBSODIUM_CFLAGS)
+
+if HAVE_LUA
+if AUTH_LUA_PLUGIN
+LUA_LIB = libauthdb_lua.la
+else !AUTH_LUA_PLUGIN
+LIBDOVECOT_LUA = ../lib-lua/libdovecot-lua.la
+endif !AUTH_LUA_PLUGIN
+endif
 
 auth_libs = \
 	libauth.la \
 	libstats_auth.la \
-	libpassword.a \
-	../lib-ntlm/libntlm.a \
-	../lib-otp/libotp.a \
+	libpassword.la \
+	../lib-ntlm/libntlm.la \
+	../lib-otp/libotp.la \
+	$(LIBDOVECOT_LUA) \
 	$(LIBDOVECOT_SQL)
 
-auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS)
-auth_CPPFLAGS = $(AM_CPPFLAGS) \
-	-I$(top_srcdir)/src/lib-ssl-iostream
+auth_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS) $(BINARY_LDFLAGS)
 auth_DEPENDENCIES = $(auth_libs) $(LIBDOVECOT_DEPS)
 auth_SOURCES = main.c
 
 ldap_sources = db-ldap.c passdb-ldap.c userdb-ldap.c
+lua_sources = db-lua.c passdb-lua.c userdb-lua.c
 
 libauth_la_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 libauth_la_SOURCES = \
@@ -133,7 +147,6 @@ libauth_la_SOURCES = \
 	userdb-blocking.c \
 	userdb-checkpassword.c \
 	userdb-dict.c \
-	userdb-nss.c \
 	userdb-passwd.c \
 	userdb-passwd-file.c \
 	userdb-prefetch.c \
@@ -141,7 +154,8 @@ libauth_la_SOURCES = \
 	userdb-vpopmail.c \
 	userdb-sql.c \
 	userdb-template.c \
-	$(ldap_sources)
+	$(ldap_sources) \
+	$(lua_sources)
 
 headers = \
 	auth.h \
@@ -196,6 +210,13 @@ libauthdb_ldap_la_CPPFLAGS = $(AM_CPPFLAGS) -DPLUGIN_BUILD
 libauthdb_ldap_la_SOURCES = $(ldap_sources)
 endif
 
+if AUTH_LUA_PLUGIN
+libauthdb_lua_la_LDFLAGS = -module -avoid-version
+libauthdb_lua_la_LIBADD = ../lib-lua/libdovecot-lua.la $(LUA_LIBS)
+libauthdb_lua_la_CPPFLAGS = $(AM_CPPFLAGS) -DPLUGIN_BUILD
+libauthdb_lua_la_SOURCES = $(lua_sources)
+endif
+
 libauthdb_imap_la_LDFLAGS = -module -avoid-version
 libauthdb_imap_la_LIBADD = \
 	../lib-imap-client/libimap_client.la \
@@ -209,13 +230,14 @@ libauthdb_imap_la_SOURCES = passdb-imap.c
 pkginc_libdir=$(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 
-checkpassword_reply_LDADD = $(LIBDOVECOT)
+checkpassword_reply_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+checkpassword_reply_LDADD = $(LIBDOVECOT) $(BINARY_LDFLAGS)
 checkpassword_reply_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 
 checkpassword_reply_sources = \
 	checkpassword-reply.c
 
-stats_moduledir = $(moduledir)/stats
+stats_moduledir = $(moduledir)/old-stats
 stats_module_LTLIBRARIES = libstats_auth.la
 
 libstats_auth_la_LDFLAGS = -module -avoid-version
@@ -224,16 +246,30 @@ libstats_auth_la_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 libstats_auth_la_SOURCES = auth-stats.c
 
 test_programs = \
+	test-libpassword \
 	test-auth-cache \
-	test-auth-request-var-expand \
-	test-username-filter \
-	test-db-dict
+	test-auth
 
 noinst_PROGRAMS = $(test_programs)
 
+noinst_HEADERS = test-auth.h crypt-blowfish.h db-lua.h
+
 test_libs = \
-	../lib-test/libtest.la \
-	../lib/liblib.la
+	../lib-dovecot/libdovecot.la
+
+test_libpassword_SOURCES = test-libpassword.c
+test_libpassword_LDADD = \
+	libpassword.la \
+	../lib-ntlm/libntlm.la \
+        ../lib-otp/libotp.la \
+	$(CRYPT_LIBS) \
+	$(LIBDOVECOT_SQL) \
+	$(LIBSODIUM_LIBS) \
+	$(test_libs) \
+	$(BINARY_LDFLAGS)
+
+test_libpassword_DEPENDENCIES = libpassword.la
+test_libpassword_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
 
 test_auth_cache_SOURCES = auth-cache.c test-auth-cache.c
 test_auth_cache_LDADD = $(test_libs)
@@ -241,20 +277,18 @@ test_auth_cache_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 # this is needed to force auth-cache.c recompilation
 test_auth_cache_CPPFLAGS = $(AM_CPPFLAGS)
 
-test_auth_request_var_expand_SOURCES = test-auth-request-var-expand.c
-test_auth_request_var_expand_LDADD = $(test_libs) libauth.la
-test_auth_request_var_expand_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
+test_auth_SOURCES = \
+	test-auth-request-var-expand.c \
+	test-username-filter.c \
+	test-db-dict.c \
+	test-lua.c \
+	test-mock.c \
+	test-main.c
 
-test_username_filter_SOURCES = test-username-filter.c
-test_username_filter_LDADD = $(auth_libs) $(AUTH_LIBS) $(LIBDOVECOT)
-test_username_filter_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs) $(LIBDOVECOT_DEPS)
+test_auth_LDADD = $(test_libs) $(auth_libs) $(AUTH_LIBS)
+test_auth_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 
-test_db_dict_SOURCES = test-db-dict.c
-test_db_dict_LDADD = $(test_libs) libauth.la
-test_db_dict_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
-
-check: check-am check-test
-check-test: all-am
+check-local:
 	for bin in $(test_programs); do \
 	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
 	done

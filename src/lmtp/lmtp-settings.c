@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -63,7 +63,6 @@ static const struct setting_define lmtp_setting_defines[] = {
 	DEF(SET_BOOL, lmtp_save_to_detail_mailbox),
 	DEF(SET_BOOL, lmtp_rcpt_check_quota),
 	DEF(SET_UINT, lmtp_user_concurrency_limit),
-	DEF(SET_STR, lmtp_address_translate),
 	DEF(SET_ENUM, lmtp_hdr_delivery_address),
 	DEF(SET_STR_VARS, login_greeting),
 	DEF(SET_STR, login_trusted_networks),
@@ -76,7 +75,6 @@ static const struct lmtp_settings lmtp_default_settings = {
 	.lmtp_save_to_detail_mailbox = FALSE,
 	.lmtp_rcpt_check_quota = FALSE,
 	.lmtp_user_concurrency_limit = 0,
-	.lmtp_address_translate = "",
 	.lmtp_hdr_delivery_address = "final:none:original",
 	.login_greeting = PACKAGE_NAME" ready.",
 	.login_trusted_networks = ""
@@ -134,6 +132,6 @@ void lmtp_settings_dup(const struct setting_parser_context *set_parser,
 
 	sets = master_service_settings_parser_get_others(master_service,
 							 set_parser);
-	*lda_set_r = settings_dup(&lda_setting_parser_info, sets[1], pool);
-	*lmtp_set_r = settings_dup(&lmtp_setting_parser_info, sets[2], pool);
+	*lda_set_r = settings_dup(&lda_setting_parser_info, sets[2], pool);
+	*lmtp_set_r = settings_dup(&lmtp_setting_parser_info, sets[3], pool);
 }

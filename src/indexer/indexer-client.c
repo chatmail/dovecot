@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "llist.h"
@@ -27,9 +27,9 @@ struct indexer_client {
 	struct ostream *output;
 	struct io *io;
 
-	unsigned int version_received:1;
-	unsigned int handshaked:1;
-	unsigned int destroyed:1;
+	bool version_received:1;
+	bool handshaked:1;
+	bool destroyed:1;
 };
 
 struct indexer_client_request {
@@ -48,17 +48,12 @@ static const char *const*
 indexer_client_next_line(struct indexer_client *client)
 {
 	const char *line;
-	char **args;
-	unsigned int i;
 
 	line = i_stream_next_line(client->input);
 	if (line == NULL)
 		return NULL;
 
-	args = p_strsplit(pool_datastack_create(), line, "\t");
-	for (i = 0; args[i] != NULL; i++)
-		args[i] = str_tabunescape(args[i]);
-	return (void *)args;
+	return t_strsplit_tabescaped(line);
 }
 
 static int
@@ -211,8 +206,8 @@ indexer_client_create(int fd, struct indexer_queue *queue)
 	client->refcount = 1;
 	client->queue = queue;
 	client->fd = fd;
-	client->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
-	client->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	client->input = i_stream_create_fd(fd, MAX_INBUF_SIZE);
+	client->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(client->output, TRUE);
 	client->io = io_add(fd, IO_READ, indexer_client_input, client);
 

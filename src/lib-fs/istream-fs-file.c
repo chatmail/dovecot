@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -15,8 +15,7 @@ static void i_stream_fs_file_close(struct iostream_private *stream,
 {
 	struct fs_file_istream *fstream = (struct fs_file_istream *)stream;
 
-	if (fstream->istream.parent != NULL)
-		i_stream_destroy(&fstream->istream.parent);
+	i_stream_destroy(&fstream->istream.parent);
 	fs_file_deinit(&fstream->file);
 }
 
@@ -55,7 +54,7 @@ i_stream_create_fs_file(struct fs_file **file, size_t max_buffer_size)
 	fstream->istream.istream.seekable =
 		((*file)->flags & FS_OPEN_FLAG_SEEKABLE) != 0;
 
-	input = i_stream_create(&fstream->istream, NULL, -1);
+	input = i_stream_create(&fstream->istream, NULL, -1, 0);
 	i_stream_set_name(input, fs_file_path(*file));
 	*file = NULL;
 	return input;

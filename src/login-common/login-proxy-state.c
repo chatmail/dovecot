@@ -1,11 +1,10 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
 #include "ioloop.h"
 #include "hash.h"
 #include "strescape.h"
-#include "fd-set-nonblock.h"
 #include "login-proxy-state.h"
 
 #include <unistd.h>
@@ -56,11 +55,7 @@ struct login_proxy_state *login_proxy_state_init(const char *notify_path)
 
 static void login_proxy_state_close(struct login_proxy_state *state)
 {
-	if (state->notify_fd != -1) {
-		if (close(state->notify_fd) < 0)
-			i_error("close(%s) failed: %m", state->notify_path);
-		state->notify_fd = -1;
-	}
+	i_close_fd_path(&state->notify_fd, state->notify_path);
 }
 
 void login_proxy_state_deinit(struct login_proxy_state **_state)
@@ -77,8 +72,7 @@ void login_proxy_state_deinit(struct login_proxy_state **_state)
 		i_assert(rec->num_waiting_connections == 0);
 	hash_table_iterate_deinit(&iter);
 
-	if (state->to_reopen != NULL)
-		timeout_remove(&state->to_reopen);
+	timeout_remove(&state->to_reopen);
 	login_proxy_state_close(state);
 	hash_table_destroy(&state->hash);
 	pool_unref(&state->pool);

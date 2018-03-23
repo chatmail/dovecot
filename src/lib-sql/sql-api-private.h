@@ -78,9 +78,6 @@ struct sql_db_vfuncs {
 		       unsigned int *affected_rows);
 	const char *(*escape_blob)(struct sql_db *db,
 				   const unsigned char *data, size_t size);
-	void (*transaction_commit2)(struct sql_transaction_context *ctx,
-				    sql_commit2_callback_t *callback,
-				    void *context);
 
 	struct sql_prepared_statement *
 		(*prepared_statement_init)(struct sql_db *db,
@@ -130,7 +127,7 @@ struct sql_db {
 	unsigned int connect_failure_count;
 	struct timeout *to_reconnect;
 
-	unsigned int no_reconnect:1;
+	bool no_reconnect:1;
 };
 
 struct sql_result_vfuncs {
@@ -187,9 +184,9 @@ struct sql_result {
 	size_t fetch_dest_size;
 	enum sql_result_error_type error_type;
 
-	unsigned int failed:1;
-	unsigned int failed_try_retry:1;
-	unsigned int callback:1;
+	bool failed:1;
+	bool failed_try_retry:1;
+	bool callback:1;
 };
 
 struct sql_transaction_context {

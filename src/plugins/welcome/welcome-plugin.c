@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -103,8 +103,8 @@ static int welcome_open_box(struct mailbox *box)
 	cmd = !wbox->created ? NULL :
 		mail_user_plugin_getenv(box->storage->user, "welcome_script");
 	if (cmd != NULL) {
-		bool wait = mail_user_plugin_getenv(box->storage->user,
-						    "welcome_wait") != NULL;
+		bool wait = mail_user_plugin_getenv_bool(box->storage->user,
+							 "welcome_wait");
 		script_execute(box->storage->user, cmd, wait);
 	}
 	return wbox->module_ctx.super.open(box);

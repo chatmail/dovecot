@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "test-common.h"
@@ -265,7 +265,7 @@ static void test_http_auth_credentials_valid(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_http_auth_challenges_valid,
 		test_http_auth_credentials_valid,
 		NULL

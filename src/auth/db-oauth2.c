@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -160,6 +160,7 @@ struct db_oauth2 *db_oauth2_init(const char *config_path)
 {
 	struct db_oauth2 *db;
 	const char *error;
+	struct ssl_iostream_settings ssl_set;
 	struct http_client_settings http_set;
 
 	for(db = db_oauth2_head; db != NULL; db = db->next) {
@@ -181,15 +182,21 @@ struct db_oauth2 *db_oauth2_init(const char *config_path)
 
 	db->tmpl = passdb_template_build(pool, db->set.pass_attrs);
 
+	i_zero(&ssl_set);
 	i_zero(&http_set);
 
-	http_set.ssl_ca_file = db->set.tls_ca_cert_file;
-	http_set.ssl_ca_dir = db->set.tls_ca_cert_dir;
+	ssl_set.cipher_list = db->set.tls_cipher_suite;
+	ssl_set.ca_file = db->set.tls_ca_cert_file;
+	ssl_set.ca_dir = db->set.tls_ca_cert_dir;
 	if (db->set.tls_cert_file != NULL && *db->set.tls_cert_file != '\0') {
-		http_set.ssl_cert = db->set.tls_cert_file;
-		http_set.ssl_key = db->set.tls_key_file;
+		ssl_set.cert.cert = db->set.tls_cert_file;
+		ssl_set.cert.key = db->set.tls_key_file;
 	}
-	http_set.ssl_allow_invalid_cert = db->set.tls_allow_invalid_cert;
+	ssl_set.prefer_server_ciphers = TRUE;
+	ssl_set.allow_invalid_cert = db->set.tls_allow_invalid_cert;
+	ssl_set.verbose = db->set.debug;
+	ssl_set.verbose_invalid_cert = db->set.debug;
+	http_set.ssl = &ssl_set;
 
 	http_set.dns_client_socket_path = "dns-client";
 	http_set.user_agent = "dovecot-oauth2-passdb/" DOVECOT_VERSION;
@@ -313,8 +320,9 @@ static const char *field_get_default(const char *data)
 	}
 }
 
-static const char *
-db_oauth2_var_expand_func_oauth2(const char *data, void *context)
+static int db_oauth2_var_expand_func_oauth2(const char *data, void *context,
+					    const char **value_r,
+					    const char **error_r ATTR_UNUSED)
 {
 	struct db_oauth2_request *ctx = context;
 	const char *field_name = t_strcut(data, ':');
@@ -322,7 +330,9 @@ db_oauth2_var_expand_func_oauth2(const char *data, void *context)
 
 	if (ctx->fields != NULL)
 		value = auth_fields_find(ctx->fields, field_name);
-	return value != NULL ? value : field_get_default(data);
+	*value_r = value != NULL ? value : field_get_default(data);
+
+	return 1;
 }
 
 static const char *escape_none(const char *value, const struct auth_request *req ATTR_UNUSED)
@@ -346,8 +356,7 @@ db_oauth2_value_get_var_expand_table(struct auth_request *auth_request,
 
 static bool
 db_oauth2_template_export(struct db_oauth2_request *req,
-			  enum passdb_result *result_r ATTR_UNUSED,
-			  const char **error_r ATTR_UNUSED)
+			  enum passdb_result *result_r, const char **error_r)
 {
 	/* var=$ expands into var=${oauth2:var} */
 	const struct var_expand_func_table funcs_table[] = {
@@ -373,8 +382,11 @@ db_oauth2_template_export(struct db_oauth2_request *req,
 			const struct var_expand_table *
 				table = db_oauth2_value_get_var_expand_table(req->auth_request,
 									     auth_fields_find(req->fields, args[i]));
-			var_expand_with_funcs(dest, args[i+1], table, funcs_table,
-						  req);
+			if (var_expand_with_funcs(dest, args[i+1], table, funcs_table,
+						  req, error_r) < 0) {
+				*result_r = PASSDB_RESULT_INTERNAL_FAILURE;
+				return FALSE;
+			}
 			value = str_c(dest);
 		}
 
@@ -393,6 +405,10 @@ static void db_oauth2_fields_merge(struct db_oauth2_request *req,
 		req->fields = auth_fields_init(req->pool);
 
 	array_foreach(fields, field) {
+		if (req->auth_request->debug)
+			auth_request_log_debug(req->auth_request, AUTH_SUBSYS_DB,
+					       "oauth2: Processing field %s",
+					       field->name);
 		auth_fields_add(req->fields, field->name, field->value, 0);
 	}
 }
@@ -406,6 +422,11 @@ static void db_oauth2_callback(struct db_oauth2_request *req,
 
 	i_assert(result == PASSDB_RESULT_OK || error != NULL);
 
+	if (req->auth_request->debug)
+		auth_request_log_debug(req->auth_request, AUTH_SUBSYS_DB,
+				       "oauth2: callback(%d, %s)",
+				       result, error);
+
 	if (callback != NULL) {
 		DLLIST_REMOVE(&req->db->head, req);
 		callback(req, result, error, req->context);
@@ -416,6 +437,7 @@ static bool
 db_oauth2_validate_username(struct db_oauth2_request *req,
 			    enum passdb_result *result_r, const char **error_r)
 {
+	const char *error;
 	struct var_expand_table table[] = {
 		{ 'u', NULL, "user" },
 		{ 'n', NULL, "username" },
@@ -433,17 +455,18 @@ db_oauth2_validate_username(struct db_oauth2_request *req,
 
 	table[0].value = username_value;
 	table[1].value = t_strcut(username_value, '@');
-	table[2].value = strchr(username_value, '@');
-	if (table[2].value != NULL)
-		table[2].value++;
+	table[2].value = i_strchr_to_next(username_value, '@');
 
 	string_t *username_req = t_str_new(32);
 	string_t *username_val = t_str_new(strlen(username_value));
 
-	auth_request_var_expand(username_req, req->db->set.username_format, req->auth_request, escape_none);
-	var_expand(username_val, req->db->set.username_format, table);
-
-	if (!str_equals(username_req, username_val)) {
+	if (auth_request_var_expand(username_req, req->db->set.username_format, req->auth_request, escape_none, &error) < 0 ||
+	    var_expand(username_val, req->db->set.username_format, table, &error) < 0) {
+		*error_r = t_strdup_printf("var_expand(%s) failed: %s",
+					req->db->set.username_format, error);
+		*result_r = PASSDB_RESULT_INTERNAL_FAILURE;
+		return FALSE;
+	} else if (!str_equals(username_req, username_val)) {
 		*error_r = t_strdup_printf("Username '%s' did not match '%s'",
 					str_c(username_req), str_c(username_val));
 		*result_r = PASSDB_RESULT_USER_UNKNOWN;
@@ -477,6 +500,10 @@ db_oauth2_token_in_scope(struct db_oauth2_request *req,
 	if (*req->db->set.scope != '\0') {
 		bool found = FALSE;
 		const char *value = auth_fields_find(req->fields, "scope");
+		if (req->auth_request->debug)
+			auth_request_log_debug(req->auth_request, AUTH_SUBSYS_DB,
+					       "oauth2: Token scope(s): %s",
+						value);
 		if (value != NULL) {
 			const char **scopes = t_strsplit_spaces(value, " ");
 			found = str_array_find(scopes, req->db->set.scope);
@@ -516,6 +543,11 @@ db_oauth2_introspect_continue(struct oauth2_introspection_result *result,
 
 	req->req = NULL;
 
+	if (req->auth_request->debug)
+		auth_request_log_debug(req->auth_request, AUTH_SUBSYS_DB,
+				      "oauth2: Introspection result: %s",
+				      result->success ? "success" : "failed");
+
 	if (!result->success) {
 		/* fail here */
 		passdb_result = PASSDB_RESULT_INTERNAL_FAILURE;
@@ -532,6 +564,10 @@ static void db_oauth2_lookup_introspect(struct db_oauth2_request *req)
 	struct oauth2_request_input input;
 	i_zero(&input);
 
+	if (req->auth_request->debug)
+		auth_request_log_debug(req->auth_request, AUTH_SUBSYS_DB,
+				       "oauth2: Making introspection request to %s",
+					req->db->set.introspection_url);
 	input.token = req->token;
 	input.local_ip = req->auth_request->local_ip;
 	input.local_port = req->auth_request->local_port;
@@ -567,6 +603,9 @@ db_oauth2_lookup_continue(struct oauth2_token_validation_result *result,
 		if (*req->db->set.introspection_url != '\0' &&
 		    (req->db->set.force_introspection ||
 		     !db_oauth2_have_all_fields(req))) {
+			if (req->auth_request->debug)
+				auth_request_log_debug(req->auth_request, AUTH_SUBSYS_DB,
+						       "oauth2: Introspection needed after token validation");
 			db_oauth2_lookup_introspect(req);
 			return;
 		}
@@ -601,9 +640,17 @@ void db_oauth2_lookup(struct db_oauth2 *db, struct db_oauth2_request *req,
 	input.service = req->auth_request->service;
 
 	if (*db->oauth2_set.tokeninfo_url == '\0') {
+		if (req->auth_request->debug)
+			auth_request_log_debug(req->auth_request, AUTH_SUBSYS_DB,
+					       "oauth2: Making introspection request to %s",
+						db->set.introspection_url);
 		req->req = oauth2_introspection_start(&req->db->oauth2_set, &input,
 						      db_oauth2_introspect_continue, req);
 	} else {
+		if (req->auth_request->debug)
+			auth_request_log_debug(req->auth_request, AUTH_SUBSYS_DB,
+					       "oauth2: Making token validation lookup to %s",
+					       db->oauth2_set.tokeninfo_url);
 		req->req = oauth2_token_validation_start(&db->oauth2_set, &input,
 							 db_oauth2_lookup_continue, req);
 	}

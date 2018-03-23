@@ -1,8 +1,7 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
-#include "fd-close-on-exec.h"
 #include "dup2-array.h"
 
 #include <unistd.h>

@@ -96,13 +96,13 @@ struct client {
 	/* Module-specific contexts. */
 	ARRAY(union pop3_module_context *) module_contexts;
 
-	unsigned int destroyed:1;
-	unsigned int disconnected:1;
-	unsigned int deleted:1;
-	unsigned int waiting_input:1;
-	unsigned int anvil_sent:1;
-	unsigned int message_uidls_save:1;
-	unsigned int delete_success:1;
+	bool destroyed:1;
+	bool disconnected:1;
+	bool deleted:1;
+	bool waiting_input:1;
+	bool anvil_sent:1;
+	bool message_uidls_save:1;
+	bool delete_success:1;
 };
 
 struct pop3_module_register {
@@ -138,7 +138,7 @@ void client_send_storage_error(struct client *client);
 bool client_handle_input(struct client *client);
 bool client_update_mails(struct client *client);
 
-void clients_destroy_all(struct mail_storage_service_ctx *storage_service);
+void clients_destroy_all(void);
 
 int pop3_lock_session(struct client *client);
 

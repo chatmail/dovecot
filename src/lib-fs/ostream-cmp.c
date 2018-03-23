@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -21,7 +21,6 @@ static void o_stream_cmp_close(struct iostream_private *stream,
 		return;
 
 	i_stream_unref(&cstream->input);
-	(void)o_stream_flush(&cstream->ostream.ostream);
 	if (close_parent)
 		o_stream_close(cstream->ostream.parent);
 }
@@ -33,7 +32,7 @@ bool stream_cmp_block(struct istream *input,
 	size_t insize, max;
 
 	while (size > 0) {
-		(void)i_stream_read_data(input, &indata, &insize, size-1);
+		(void)i_stream_read_bytes(input, &indata, &insize, size);
 		max = I_MIN(insize, size);
 		if (insize == 0 || memcmp(data, indata, max) != 0)
 			return FALSE;

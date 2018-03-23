@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "base64.h"
@@ -34,9 +34,9 @@ struct auth_worker_client {
 	struct timeout *to_idle;
 	time_t cmd_start;
 
-	unsigned int version_received:1;
-	unsigned int dbhash_received:1;
-	unsigned int error_sent:1;
+	bool version_received:1;
+	bool dbhash_received:1;
+	bool error_sent:1;
 };
 
 struct auth_worker_list_context {
@@ -71,13 +71,13 @@ auth_worker_client_check_throttle(struct auth_worker_client *client)
 	    OUTBUF_THROTTLE_SIZE) {
 		/* stop reading new requests until client has read the pending
 		   replies. */
-		if (client->io != NULL)
-			io_remove(&client->io);
+		io_remove(&client->io);
 	}
 }
 
-bool auth_worker_auth_request_new(struct auth_worker_client *client, unsigned int id,
-				  const char *const *args, struct auth_request **request_r)
+static struct auth_request *
+worker_auth_request_new(struct auth_worker_client *client, unsigned int id,
+			const char *const *args)
 {
 	struct auth_request *auth_request;
 	const char *key, *value;
@@ -91,17 +91,12 @@ bool auth_worker_auth_request_new(struct auth_worker_client *client, unsigned in
 	for (; *args != NULL; args++) {
 		value = strchr(*args, '=');
 		if (value == NULL)
-			(void)auth_request_import(auth_request, *args, NULL);
+			(void)auth_request_import(auth_request, *args, "");
 		else {
 			key = t_strdup_until(*args, value++);
 			(void)auth_request_import(auth_request, key, value);
 		}
 	}
-	if (auth_request->user == NULL || auth_request->service == NULL) {
-		auth_request_unref(&auth_request);
-		return FALSE;
-	}
-
 	/* reset changed-fields, so we'll export only the ones that were
 	   changed by this lookup. */
 	auth_fields_snapshot(auth_request->extra_fields);
@@ -109,9 +104,7 @@ bool auth_worker_auth_request_new(struct auth_worker_client *client, unsigned in
 		auth_fields_snapshot(auth_request->userdb_reply);
 
 	auth_request_init(auth_request);
-	*request_r = auth_request;
-
-	return TRUE;
+	return auth_request;
 }
 
 static void auth_worker_send_reply(struct auth_worker_client *client,
@@ -124,10 +117,10 @@ static void auth_worker_send_reply(struct auth_worker_client *client,
 	if (worker_restart_request)
 		o_stream_nsend_str(client->output, "RESTART\n");
 	o_stream_nsend(client->output, str_data(str), str_len(str));
-	if (o_stream_nfinish(client->output) < 0 && request != NULL &&
+	if (o_stream_flush(client->output) < 0 && request != NULL &&
 	    cmd_duration > AUTH_WORKER_WARN_DISCONNECTED_LONG_CMD_SECS) {
-		p = strchr(str_c(str), '\t');
-		p = p == NULL ? "BUG" : t_strcut(p+1, '\t');
+		p = i_strchr_to_next(str_c(str), '\t');
+		p = p == NULL ? "BUG" : t_strcut(p, '\t');
 
 		i_warning("Auth master disconnected us while handling "
 			  "request for %s for %ld secs (result=%s)",
@@ -208,12 +201,15 @@ auth_worker_handle_passv(struct auth_worker_client *client,
 	}
 	password = args[1];
 
-	if (!auth_worker_auth_request_new(client, id, args + 2, &auth_request)) {
-		i_error("BUG: Auth worker server sent us invalid PASSV");
-		return FALSE;
-	}
+	auth_request = worker_auth_request_new(client, id, args + 2);
 	auth_request->mech_password =
 		p_strdup(auth_request->pool, password);
+
+	if (auth_request->user == NULL || auth_request->service == NULL) {
+		i_error("BUG: PASSV had missing parameters");
+		auth_request_unref(&auth_request);
+		return FALSE;
+	}
 
 	passdb = auth_request->passdb;
 	while (passdb != NULL && passdb->passdb->id != passdb_id)
@@ -235,58 +231,6 @@ auth_worker_handle_passv(struct auth_worker_client *client,
 	auth_request->passdb = passdb;
 	passdb->passdb->iface.
 		verify_plain(auth_request, password, verify_plain_callback);
-	return TRUE;
-}
-
-static bool
-auth_worker_handle_passw(struct auth_worker_client *client,
-			 unsigned int id, const char *const *args)
-{
-	struct auth_request *request;
-	string_t *str;
-	const char *password;
-	const char *crypted, *scheme;
-	unsigned int passdb_id;
-	int ret;
-
-	if (str_to_uint(args[0], &passdb_id) < 0 || args[1] == NULL ||
-	    args[2] == NULL) {
-		i_error("BUG: Auth worker server sent us invalid PASSW");
-		return FALSE;
-	}
-	password = args[1];
-	crypted = args[2];
-	scheme = password_get_scheme(&crypted);
-	if (scheme == NULL) {
-		i_error("BUG: Auth worker server sent us invalid PASSW (scheme is NULL)");
-		return FALSE;
-	}
-
-	if (!auth_worker_auth_request_new(client, id, args + 3, &request)) {
-		i_error("BUG: PASSW had missing parameters");
-		return FALSE;
-	}
-	request->mech_password =
-		p_strdup(request->pool, password);
-
-	ret = auth_request_password_verify(request, password,
-					   crypted, scheme, "cache");
-	str = t_str_new(128);
-	str_printfa(str, "%u\t", request->id);
-
-	if (ret == 1)
-		str_printfa(str, "OK\t\t");
-	else if (ret == 0)
-		str_printfa(str, "FAIL\t%d", PASSDB_RESULT_PASSWORD_MISMATCH);
-	else
-		str_printfa(str, "FAIL\t%d", PASSDB_RESULT_INTERNAL_FAILURE);
-
-	str_append_c(str, '\n');
-	auth_worker_send_reply(client, request, str);
-
-	auth_request_unref(&request);
-	auth_worker_client_check_throttle(client);
-	auth_worker_client_unref(&client);
 	return TRUE;
 }
 
@@ -346,11 +290,14 @@ auth_worker_handle_passl(struct auth_worker_client *client,
 	}
 	scheme = args[1];
 
-	if (!auth_worker_auth_request_new(client, id, args + 2, &auth_request)) {
+	auth_request = worker_auth_request_new(client, id, args + 2);
+	auth_request->credentials_scheme = p_strdup(auth_request->pool, scheme);
+
+	if (auth_request->user == NULL || auth_request->service == NULL) {
 		i_error("BUG: PASSL had missing parameters");
+		auth_request_unref(&auth_request);
 		return FALSE;
 	}
-	auth_request->credentials_scheme = p_strdup(auth_request->pool, scheme);
 
 	while (auth_request->passdb->passdb->id != passdb_id) {
 		auth_request->passdb = auth_request->passdb->next;
@@ -404,8 +351,10 @@ auth_worker_handle_setcred(struct auth_worker_client *client,
 	}
 	creds = args[1];
 
-	if (!auth_worker_auth_request_new(client, id, args + 2, &auth_request)) {
+	auth_request = worker_auth_request_new(client, id, args + 2);
+	if (auth_request->user == NULL || auth_request->service == NULL) {
 		i_error("BUG: SETCRED had missing parameters");
+		auth_request_unref(&auth_request);
 		return FALSE;
 	}
 
@@ -487,8 +436,10 @@ auth_worker_handle_user(struct auth_worker_client *client,
 		return FALSE;
 	}
 
-	if (!auth_worker_auth_request_new(client, id, args + 1, &auth_request)) {
+	auth_request = worker_auth_request_new(client, id, args + 1);
+	if (auth_request->user == NULL || auth_request->service == NULL) {
 		i_error("BUG: USER had missing parameters");
+		auth_request_unref(&auth_request);
 		return FALSE;
 	}
 
@@ -641,16 +592,18 @@ auth_worker_handle_list(struct auth_worker_client *client,
 
 	ctx = i_new(struct auth_worker_list_context, 1);
 	ctx->client = client;
-	if (!auth_worker_auth_request_new(client, id, args + 1, &ctx->auth_request)) {
+	ctx->auth_request = worker_auth_request_new(client, id, args + 1);
+	ctx->auth_request->userdb = userdb;
+	if (ctx->auth_request->user == NULL ||
+	    ctx->auth_request->service == NULL) {
 		i_error("BUG: LIST had missing parameters");
+		auth_request_unref(&ctx->auth_request);
 		i_free(ctx);
 		return FALSE;
 	}
-	ctx->auth_request->userdb = userdb;
 
 	io_remove(&ctx->client->io);
-	if (ctx->client->to_idle != NULL)
-		timeout_remove(&ctx->client->to_idle);
+	timeout_remove(&ctx->client->to_idle);
 
 	o_stream_set_flush_callback(ctx->client->output,
 				    auth_worker_list_output, ctx);
@@ -682,8 +635,6 @@ auth_worker_handle_line(struct auth_worker_client *client, const char *line)
 		ret = auth_worker_handle_passv(client, id, args + 2);
 	else if (strcmp(args[1], "PASSL") == 0)
 		ret = auth_worker_handle_passl(client, id, args + 2);
-	else if (strcmp(args[1], "PASSW") == 0)
-		ret = auth_worker_handle_passw(client, id, args + 2);
 	else if (strcmp(args[1], "SETCRED") == 0)
 		ret = auth_worker_handle_setcred(client, id, args + 2);
 	else if (strcmp(args[1], "USER") == 0)
@@ -810,9 +761,8 @@ auth_worker_client_create(struct auth *auth, int fd)
 
 	client->auth = auth;
 	client->fd = fd;
-	client->input = i_stream_create_fd(fd, AUTH_WORKER_MAX_LINE_LENGTH,
-					   FALSE);
-	client->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	client->input = i_stream_create_fd(fd, AUTH_WORKER_MAX_LINE_LENGTH);
+	client->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(client->output, TRUE);
 	o_stream_set_flush_callback(client->output, auth_worker_output, client);
 	client->io = io_add(fd, IO_READ, auth_worker_input, client);
@@ -836,10 +786,8 @@ void auth_worker_client_destroy(struct auth_worker_client **_client)
 	i_stream_close(client->input);
 	o_stream_close(client->output);
 
-	if (client->to_idle != NULL)
-		timeout_remove(&client->to_idle);
-	if (client->io != NULL)
-		io_remove(&client->io);
+	timeout_remove(&client->to_idle);
+	io_remove(&client->io);
 
 	net_disconnect(client->fd);
 	client->fd = -1;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -344,12 +344,12 @@ static void test_mail_index_flag_update_random(void)
 
 	flags = t_new(enum mail_flags, hdr.messages_count + 1);
 	for (r = 0; r < 1000; r++) {
-		change = rand() % (MAIL_FLAGS_NONRECENT+1);
-		seq1 = (rand() % hdr.messages_count) + 1;
+		change = i_rand_limit(MAIL_FLAGS_NONRECENT + 1);
+		seq1 = i_rand_minmax(1, hdr.messages_count);
 		seq2 = seq1 == hdr.messages_count ? seq1 :
-			(rand() % (hdr.messages_count - seq1)) + seq1;
+			i_rand_minmax(seq1, hdr.messages_count);
 
-		switch (rand() % 3) {
+		switch (i_rand_limit(3)) {
 		case 0:
 			modify_type = MODIFY_ADD;
 			for (seq = seq1; seq <= seq2; seq++)
@@ -661,7 +661,7 @@ static void test_mail_index_update_day_first_uid(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_mail_index_append,
 		test_mail_index_flag_update_fastpath,
 		test_mail_index_flag_update_simple_merges,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -243,7 +243,7 @@ static void test_mail_transaction_update_modseq(void)
 
 static struct mail_index *test_mail_index_open(void)
 {
-	struct mail_index *index = mail_index_alloc(NULL, "test.dovecot.index");
+	struct mail_index *index = mail_index_alloc(NULL, NULL, "test.dovecot.index");
 	test_assert(mail_index_open_or_create(index, MAIL_INDEX_OPEN_FLAG_CREATE) == 0);
 	struct mail_index_view *view = mail_index_view_open(index);
 
@@ -329,7 +329,7 @@ static void test_mail_transaction_log_file_modseq_offsets(void)
 	test_assert(MODSEQ_MATCH(2, next_offset));
 	/* do some random testing with cache */
 	for (unsigned int i = 0; i < LOG_FILE_MODSEQ_CACHE_SIZE*10; i++) {
-		modseq = (rand() % max_modseq) + 1;
+		modseq = i_rand_minmax(1, max_modseq);
 		test_assert(mail_transaction_log_file_get_modseq_next_offset(file, modseq, &next_offset) == 0);
 		test_assert(MODSEQ_MATCH(modseq, next_offset));
 	}
@@ -351,7 +351,7 @@ static void test_mail_transaction_log_file_modseq_offsets(void)
 	test_assert(modseq == max_modseq);
 	/* do some random testing with cache */
 	for (unsigned int i = 0; i < LOG_FILE_MODSEQ_CACHE_SIZE*10; i++) {
-		modseq = (rand() % max_modseq) + 1;
+		modseq = i_rand_minmax(1, max_modseq);
 		test_assert(mail_transaction_log_file_get_highest_modseq_at(file, modseq_next_offset[modseq], &modseq_at, &error) == 0);
 		test_assert(modseq_at == modseq);
 		test_assert(mail_transaction_log_file_get_highest_modseq_at(file, modseq_alt_next_offset[modseq], &modseq_at, &error) == 0);
@@ -402,7 +402,7 @@ test_mail_transaction_log_file_get_modseq_next_offset_inconsistency(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_mail_transaction_update_modseq,
 		test_mail_transaction_log_file_modseq_offsets,
 		test_mail_transaction_log_file_get_modseq_next_offset_inconsistency,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -17,7 +17,7 @@ static void askpass_str(const char *prompt, buffer_t *pass)
 	char ch;
 	int fd;
 
-	tty = isatty(STDIN_FILENO);
+	tty = isatty(STDIN_FILENO) != 0;
 	if (tty) {
 		fputs(prompt, stderr);
 		fflush(stderr);

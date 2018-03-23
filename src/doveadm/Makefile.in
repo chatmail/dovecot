@@ -85,10 +85,59 @@ subdir = src/doveadm
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/depcomp $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/want_apparmor.m4 \
-	$(top_srcdir)/dovecot.m4 $(top_srcdir)/libtool.m4 \
-	$(top_srcdir)/ltoptions.m4 $(top_srcdir)/ltsugar.m4 \
-	$(top_srcdir)/ltversion.m4 $(top_srcdir)/lt~obsolete.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
+	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
+	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
+	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
+	$(top_srcdir)/m4/cc_pie.m4 \
+	$(top_srcdir)/m4/cc_stack_protector.m4 \
+	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
+	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
+	$(top_srcdir)/m4/dbqlk.m4 $(top_srcdir)/m4/dirent_dtype.m4 \
+	$(top_srcdir)/m4/dovecot.m4 $(top_srcdir)/m4/fd_passing.m4 \
+	$(top_srcdir)/m4/fdatasync.m4 \
+	$(top_srcdir)/m4/flexible_array_member.m4 \
+	$(top_srcdir)/m4/glibc.m4 $(top_srcdir)/m4/gmtime_max.m4 \
+	$(top_srcdir)/m4/gmtime_tm_gmtoff.m4 \
+	$(top_srcdir)/m4/ioloop.m4 $(top_srcdir)/m4/iovec.m4 \
+	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/ld_relro.m4 \
+	$(top_srcdir)/m4/ld_whole_archive.m4 \
+	$(top_srcdir)/m4/libcap.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/libwrap.m4 $(top_srcdir)/m4/linux_mremap.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/m4/mmap_write.m4 $(top_srcdir)/m4/mntctl.m4 \
+	$(top_srcdir)/m4/modules.m4 $(top_srcdir)/m4/notify.m4 \
+	$(top_srcdir)/m4/nsl.m4 $(top_srcdir)/m4/off_t_max.m4 \
+	$(top_srcdir)/m4/pr_set_dumpable.m4 \
+	$(top_srcdir)/m4/q_quotactl.m4 $(top_srcdir)/m4/quota.m4 \
+	$(top_srcdir)/m4/random.m4 $(top_srcdir)/m4/rlimit.m4 \
+	$(top_srcdir)/m4/sendfile.m4 $(top_srcdir)/m4/size_t_signed.m4 \
+	$(top_srcdir)/m4/sockpeercred.m4 $(top_srcdir)/m4/sql.m4 \
+	$(top_srcdir)/m4/ssl.m4 $(top_srcdir)/m4/st_tim.m4 \
+	$(top_srcdir)/m4/static_array.m4 $(top_srcdir)/m4/test_with.m4 \
+	$(top_srcdir)/m4/time_t.m4 $(top_srcdir)/m4/typeof.m4 \
+	$(top_srcdir)/m4/typeof_dev_t.m4 $(top_srcdir)/m4/unsetenv.m4 \
+	$(top_srcdir)/m4/vararg.m4 $(top_srcdir)/m4/want_apparmor.m4 \
+	$(top_srcdir)/m4/want_bsdauth.m4 \
+	$(top_srcdir)/m4/want_bzlib.m4 \
+	$(top_srcdir)/m4/want_cassandra.m4 \
+	$(top_srcdir)/m4/want_cdb.m4 \
+	$(top_srcdir)/m4/want_checkpassword.m4 \
+	$(top_srcdir)/m4/want_clucene.m4 $(top_srcdir)/m4/want_db.m4 \
+	$(top_srcdir)/m4/want_gssapi.m4 $(top_srcdir)/m4/want_icu.m4 \
+	$(top_srcdir)/m4/want_ldap.m4 $(top_srcdir)/m4/want_lua.m4 \
+	$(top_srcdir)/m4/want_lz4.m4 $(top_srcdir)/m4/want_lzma.m4 \
+	$(top_srcdir)/m4/want_mysql.m4 $(top_srcdir)/m4/want_pam.m4 \
+	$(top_srcdir)/m4/want_passwd.m4 $(top_srcdir)/m4/want_pgsql.m4 \
+	$(top_srcdir)/m4/want_prefetch.m4 \
+	$(top_srcdir)/m4/want_shadow.m4 $(top_srcdir)/m4/want_sia.m4 \
+	$(top_srcdir)/m4/want_sodium.m4 $(top_srcdir)/m4/want_solr.m4 \
+	$(top_srcdir)/m4/want_sqlite.m4 \
+	$(top_srcdir)/m4/want_stemmer.m4 \
+	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_vpopmail.m4 \
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/warnings.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -104,10 +153,10 @@ am__objects_1 = doveadm-auth.$(OBJEXT) doveadm-dict.$(OBJEXT) \
 	doveadm-director.$(OBJEXT) doveadm-fs.$(OBJEXT) \
 	doveadm-instance.$(OBJEXT) doveadm-kick.$(OBJEXT) \
 	doveadm-log.$(OBJEXT) doveadm-master.$(OBJEXT) \
-	doveadm-mount.$(OBJEXT) doveadm-mutf7.$(OBJEXT) \
-	doveadm-penalty.$(OBJEXT) doveadm-proxy.$(OBJEXT) \
-	doveadm-replicator.$(OBJEXT) doveadm-sis.$(OBJEXT) \
-	doveadm-stats.$(OBJEXT) doveadm-who.$(OBJEXT)
+	doveadm-mutf7.$(OBJEXT) doveadm-penalty.$(OBJEXT) \
+	doveadm-proxy.$(OBJEXT) doveadm-replicator.$(OBJEXT) \
+	doveadm-sis.$(OBJEXT) doveadm-stats.$(OBJEXT) \
+	doveadm-oldstats.$(OBJEXT) doveadm-who.$(OBJEXT)
 am__objects_2 = doveadm-dsync.$(OBJEXT) doveadm-mail.$(OBJEXT) \
 	doveadm-mail-altmove.$(OBJEXT) doveadm-mail-batch.$(OBJEXT) \
 	doveadm-mail-deduplicate.$(OBJEXT) \
@@ -143,11 +192,13 @@ am__v_lt_0 = --silent
 am__v_lt_1 = 
 am_doveadm_server_OBJECTS = $(am__objects_4) \
 	doveadm-auth-server.$(OBJEXT) client-connection.$(OBJEXT) \
+	client-connection-tcp.$(OBJEXT) \
 	client-connection-http.$(OBJEXT) \
 	doveadm-print-server.$(OBJEXT) doveadm-print-json.$(OBJEXT) \
 	main.$(OBJEXT)
 doveadm_server_OBJECTS = $(am_doveadm_server_OBJECTS)
-am_test_doveadm_util_OBJECTS = test-doveadm-util.$(OBJEXT)
+am_test_doveadm_util_OBJECTS = doveadm-util.$(OBJEXT) \
+	test-doveadm-util.$(OBJEXT)
 test_doveadm_util_OBJECTS = $(am_test_doveadm_util_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -295,6 +346,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BINARY_CFLAGS = @BINARY_CFLAGS@
+BINARY_LDFLAGS = @BINARY_LDFLAGS@
 CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
 CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
@@ -336,6 +389,8 @@ KRB5_LIBS = @KRB5_LIBS@
 LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
+LD_NO_WHOLE_ARCHIVE = @LD_NO_WHOLE_ARCHIVE@
+LD_WHOLE_ARCHIVE = @LD_WHOLE_ARCHIVE@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
 LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
@@ -357,14 +412,17 @@ LIBICU_CFLAGS = @LIBICU_CFLAGS@
 LIBICU_LIBS = @LIBICU_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSODIUM_CFLAGS = @LIBSODIUM_CFLAGS@
+LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
-LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
+LUA_CFLAGS = @LUA_CFLAGS@
+LUA_LIBS = @LUA_LIBS@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -388,15 +446,19 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
+PANDOC = @PANDOC@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PGSQL_CFLAGS = @PGSQL_CFLAGS@
 PGSQL_LIBS = @PGSQL_LIBS@
 PG_CONFIG = @PG_CONFIG@
+PIE_CFLAGS = @PIE_CFLAGS@
+PIE_LDFLAGS = @PIE_LDFLAGS@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
+RELRO_LDFLAGS = @RELRO_LDFLAGS@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
 SED = @SED@
@@ -451,8 +513,6 @@ libdir = @libdir@
 libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
-mail_storages = @mail_storages@
-mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -501,12 +561,13 @@ AM_CPPFLAGS = \
 	-DPKG_STATEDIR=\""$(statedir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	-DBINDIR=\""$(bindir)"\" \
-	-DMANDIR=\""$(mandir)"\"
+	-DMANDIR=\""$(mandir)"\" \
+	$(BINARY_CFLAGS)
 
 cmd_pw_libs = \
-	../auth/libpassword.a \
-	../lib-ntlm/libntlm.a \
-	../lib-otp/libotp.a
+	../auth/libpassword.la \
+	../lib-ntlm/libntlm.la \
+	../lib-otp/libotp.la
 
 libs = \
 	dsync/libdsync.la \
@@ -517,7 +578,9 @@ doveadm_LDADD = \
 	$(cmd_pw_libs) \
 	$(CRYPT_LIBS) \
 	$(LIBDOVECOT_STORAGE) \
-	$(LIBDOVECOT)
+	$(LIBDOVECOT) \
+	$(LIBSODIUM_LIBS) \
+	$(BINARY_LDFLAGS)
 
 doveadm_DEPENDENCIES = \
 	$(libs) \
@@ -528,7 +591,8 @@ doveadm_DEPENDENCIES = \
 doveadm_server_LDADD = \
 	$(libs) \
 	$(LIBDOVECOT_STORAGE) \
-	$(LIBDOVECOT)
+	$(LIBDOVECOT) \
+	$(BINARY_LDFLAGS)
 
 doveadm_server_DEPENDENCIES = \
 	$(libs) \
@@ -544,13 +608,13 @@ doveadm_common_cmds = \
 	doveadm-kick.c \
 	doveadm-log.c \
 	doveadm-master.c \
-	doveadm-mount.c \
 	doveadm-mutf7.c \
 	doveadm-penalty.c \
 	doveadm-proxy.c \
 	doveadm-replicator.c \
 	doveadm-sis.c \
 	doveadm-stats.c \
+	doveadm-oldstats.c \
 	doveadm-who.c
 
 doveadm_common_mail_cmds = \
@@ -614,6 +678,7 @@ doveadm_server_SOURCES = \
 	$(common) \
 	doveadm-auth-server.c \
 	client-connection.c \
+	client-connection-tcp.c \
 	client-connection-http.c \
 	doveadm-print-server.c \
 	doveadm-print-json.c \
@@ -648,8 +713,8 @@ test_libs = \
 	../lib/liblib.la
 
 test_deps = $(noinst_LTLIBRARIES) $(test_libs)
-test_doveadm_util_SOURCES = test-doveadm-util.c
-test_doveadm_util_LDADD = doveadm-util.o $(test_libs) $(MODULE_LIBS)
+test_doveadm_util_SOURCES = doveadm-util.c test-doveadm-util.c
+test_doveadm_util_LDADD = $(test_libs) $(MODULE_LIBS)
 test_doveadm_util_DEPENDENCIES = $(test_deps)
 all: all-recursive
 
@@ -812,6 +877,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-connection-http.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-connection-tcp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-auth-server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-auth.Po@am__quote@
@@ -850,8 +916,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mail.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mailbox-list-iter.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-master.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mount.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-mutf7.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-oldstats.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-penalty.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-print-flow.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-print-formatted.Po@am__quote@
@@ -1078,6 +1144,7 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-recursive
 all-am: Makefile $(PROGRAMS) $(HEADERS)
 installdirs: installdirs-recursive
@@ -1188,33 +1255,32 @@ ps-am:
 uninstall-am: uninstall-binPROGRAMS uninstall-pkginc_libHEADERS \
 	uninstall-pkglibexecPROGRAMS
 
-.MAKE: $(am__recursive_targets) install-am install-strip
+.MAKE: $(am__recursive_targets) check-am install-am install-strip
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am check \
-	check-am clean clean-binPROGRAMS clean-generic clean-libtool \
-	clean-noinstPROGRAMS clean-pkglibexecPROGRAMS cscopelist-am \
-	ctags ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-binPROGRAMS \
-	install-data install-data-am install-dvi install-dvi-am \
-	install-exec install-exec-am install-exec-local install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-pkginc_libHEADERS \
-	install-pkglibexecPROGRAMS install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-binPROGRAMS uninstall-pkginc_libHEADERS \
-	uninstall-pkglibexecPROGRAMS
+	check-am check-local clean clean-binPROGRAMS clean-generic \
+	clean-libtool clean-noinstPROGRAMS clean-pkglibexecPROGRAMS \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-binPROGRAMS install-data install-data-am install-dvi \
+	install-dvi-am install-exec install-exec-am install-exec-local \
+	install-html install-html-am install-info install-info-am \
+	install-man install-pdf install-pdf-am \
+	install-pkginc_libHEADERS install-pkglibexecPROGRAMS \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs installdirs-am maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-am uninstall-binPROGRAMS \
+	uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
 
 
 install-exec-local:
 	rm -f $(DESTDIR)$(bindir)/dsync
 	$(LN_S) doveadm $(DESTDIR)$(bindir)/dsync
 
-check: check-am check-test
-check-test: all-am
+check-local:
 	for bin in $(test_programs); do \
 	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
 	done

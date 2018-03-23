@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -122,8 +122,8 @@ static void test_mailbox_get_expunges(void)
 
 	t_array_init(&expunges, 32);
 	modseq = 98ULL << 32;
-	test_assert(mailbox_get_expunges(box, modseq, &uids_filter,
-					 &expunges) == 0);
+	test_assert(!mailbox_get_expunges(box, modseq, &uids_filter,
+					  &expunges));
 
 	exp = array_get(&expunges, &count);
 	test_assert(count == 5);
@@ -143,7 +143,7 @@ static void test_mailbox_get_expunges(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_mailbox_get_expunges,
 		NULL
 	};

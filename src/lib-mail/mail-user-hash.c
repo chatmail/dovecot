@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "md5.h"
@@ -6,17 +6,13 @@
 #include "var-expand.h"
 #include "mail-user-hash.h"
 
-unsigned int mail_user_hash(const char *username, const char *format)
+bool mail_user_hash(const char *username, const char *format,
+		    unsigned int *hash_r, const char **error_r)
 {
-	static struct var_expand_table static_tab[] = {
-		{ 'u', NULL, "user" },
-		{ 'n', NULL, "username" },
-		{ 'd', NULL, "domain" },
-		{ '\0', NULL, NULL }
-	};
-	struct var_expand_table *tab;
 	unsigned char md5[MD5_RESULTLEN];
 	unsigned int i, hash = 0;
+	char *error_dup = NULL;
+	int ret = 1;
 
 	if (strcmp(format, "%u") == 0) {
 		/* fast path */
@@ -28,16 +24,19 @@ unsigned int mail_user_hash(const char *username, const char *format)
 				       strlen(username), md5);
 		} T_END;
 	} else T_BEGIN {
+		const struct var_expand_table tab[] = {
+			{ 'u', username, "user" },
+			{ 'n', t_strcut(username, '@'), "username" },
+			{ 'd', i_strchr_to_next(username, '@'), "domain" },
+			{ '\0', NULL, NULL }
+		};
 		string_t *str = t_str_new(128);
+		const char *error;
 
-		tab = t_malloc(sizeof(static_tab));
-		memcpy(tab, static_tab, sizeof(static_tab));
-		tab[0].value = username;
-		tab[1].value = t_strcut(username, '@');
-		tab[2].value = strchr(username, '@');
-		if (tab[2].value != NULL) tab[2].value++;
-
-		var_expand(str, format, tab);
+		ret = var_expand(str, format, tab, &error);
+		i_assert(ret >= 0);
+		if (ret == 0)
+			error_dup = i_strdup(error);
 		md5_get_digest(str_data(str), str_len(str), md5);
 	} T_END;
 	for (i = 0; i < sizeof(hash); i++)
@@ -48,6 +47,8 @@ unsigned int mail_user_hash(const char *username, const char *format)
 		   trying to insert it into a hash table will assert-crash. */
 		hash = 1;
 	}
-	return hash;
+	*hash_r = hash;
+	*error_r = t_strdup(error_dup);
+	i_free(error_dup);
+	return ret > 0;
 }
-

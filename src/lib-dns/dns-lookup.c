@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -59,17 +59,10 @@ static void dns_client_disconnect(struct dns_client *client, const char *error)
 	struct dns_lookup *lookup, *next;
 	struct dns_lookup_result result;
 
-	if (client->to_idle != NULL)
-		timeout_remove(&client->to_idle);
-	if (client->io != NULL)
-		io_remove(&client->io);
-	if (client->input != NULL)
-		i_stream_destroy(&client->input);
-	if (client->fd != -1) {
-		if (close(client->fd) < 0)
-			i_error("close(%s) failed: %m", client->path);
-		client->fd = -1;
-	}
+	timeout_remove(&client->to_idle);
+	io_remove(&client->io);
+	i_stream_destroy(&client->input);
+	i_close_fd_path(&client->fd, client->path);
 
 	i_zero(&result);
 	result.ret = EAI_FAIL;
@@ -240,8 +233,7 @@ static void dns_lookup_free(struct dns_lookup **_lookup)
 	*_lookup = NULL;
 
 	DLLIST2_REMOVE(&client->head, &client->tail, lookup);
-	if (lookup->to != NULL)
-		timeout_remove(&lookup->to);
+	timeout_remove(&lookup->to);
 	i_free(lookup->name);
 	i_free(lookup->ips);
 	if (client->deinit_client_at_free)
@@ -302,7 +294,7 @@ int dns_client_connect(struct dns_client *client, const char **error_r)
 					   client->path);
 		return -1;
 	}
-	client->input = i_stream_create_fd(client->fd, MAX_INBUF_SIZE, FALSE);
+	client->input = i_stream_create_fd(client->fd, MAX_INBUF_SIZE);
 	client->io = io_add(client->fd, IO_READ, dns_client_input, client);
 	return 0;
 }
@@ -366,8 +358,7 @@ dns_client_lookup_common(struct dns_client *client,
 	if (gettimeofday(&lookup->start_time, NULL) < 0)
 		i_fatal("gettimeofday() failed: %m");
 
-	if (client->to_idle != NULL)
-		timeout_remove(&client->to_idle);
+	timeout_remove(&client->to_idle);
 	DLLIST2_APPEND(&client->head, &client->tail, lookup);
 	*lookup_r = lookup;
 	return 0;

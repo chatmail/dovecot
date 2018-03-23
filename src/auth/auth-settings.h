@@ -44,7 +44,6 @@ struct auth_settings {
 	uoff_t cache_size;
 	unsigned int cache_ttl;
 	unsigned int cache_negative_ttl;
-	bool cache_verify_password_with_worker;
 	const char *username_chars;
 	const char *username_translation;
 	const char *username_format;
@@ -63,9 +62,6 @@ struct auth_settings {
 	const char *policy_hash_nonce;
 	const char *policy_request_attributes;
 	bool policy_reject_on_fail;
-	bool policy_check_before_auth;
-	bool policy_check_after_auth;
-	bool policy_report_after_auth;
 	unsigned int policy_hash_truncate;
 
 	bool stats;
@@ -88,6 +84,8 @@ struct auth_settings {
 	bool verbose_proctitle;
 	unsigned int first_valid_uid;
 	unsigned int last_valid_uid;
+	unsigned int first_valid_gid;
+	unsigned int last_valid_gid;
 
 	/* generated: */
 	char username_chars_map[256];

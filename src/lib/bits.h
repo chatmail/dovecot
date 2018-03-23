@@ -6,6 +6,7 @@
 
 #define BIT(n) (1u << (n))
 
+/* Returns x, such that x is the smallest power of 2 >= num. */
 size_t nearest_power(size_t num) ATTR_CONST;
 
 /* Returns TRUE if 2^x=num, i.e. if num has only a single bit set to 1. */
@@ -54,6 +55,38 @@ unsigned int bits_required64(uint64_t num)
 		: 32 + bits_required32(num >> 32);
 }
 #endif
+
+static inline uint64_t
+bits_rotl64(uint64_t num, unsigned int count)
+{
+	const unsigned int mask = CHAR_BIT*sizeof(num) - 1;
+	count &= mask;
+	return (num << count) | (num >> (-count & mask));
+}
+
+static inline uint32_t
+bits_rotl32(uint32_t num, unsigned int count)
+{
+        const unsigned int mask = CHAR_BIT*sizeof(num) - 1;
+        count &= mask;
+        return (num << count) | (num >> (-count & mask));
+}
+
+static inline uint64_t
+bits_rotr64(uint64_t num, unsigned int count)
+{
+	const unsigned int mask = CHAR_BIT*sizeof(num) - 1;
+	count &= mask;
+	return (num >> count) | (num << (-count & mask));
+}
+
+static inline uint32_t
+bits_rotr32(uint32_t num, unsigned int count)
+{
+	const unsigned int mask = CHAR_BIT*sizeof(num) - 1;
+	count &= mask;
+	return (num >> count) | (num << (-count & mask));
+}
 
 /* These functions look too big to be inline, but in almost all expected
    uses, 'fracbits' will be a compile-time constant, and most of the

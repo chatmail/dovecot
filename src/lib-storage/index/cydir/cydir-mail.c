@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -33,8 +33,7 @@ static int cydir_mail_stat(struct mail *mail, struct stat *st_r)
 		if (errno == ENOENT)
 			mail_set_expunged(mail);
 		else {
-			mail_storage_set_critical(mail->box->storage,
-						  "stat(%s) failed: %m", path);
+			mail_set_critical(mail, "stat(%s) failed: %m", path);
 		}
 		return -1;
 	}
@@ -43,7 +42,7 @@ static int cydir_mail_stat(struct mail *mail, struct stat *st_r)
 
 static int cydir_mail_get_received_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct stat st;
 
@@ -60,7 +59,7 @@ static int cydir_mail_get_received_date(struct mail *_mail, time_t *date_r)
 
 static int cydir_mail_get_save_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct stat st;
 
@@ -77,7 +76,7 @@ static int cydir_mail_get_save_date(struct mail *_mail, time_t *date_r)
 
 static int cydir_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct stat st;
 
@@ -98,7 +97,7 @@ cydir_mail_get_stream(struct mail *_mail, bool get_body ATTR_UNUSED,
 		      struct message_size *body_size,
 		      struct istream **stream_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct istream *input;
 	const char *path;
 	int fd;
@@ -111,8 +110,8 @@ cydir_mail_get_stream(struct mail *_mail, bool get_body ATTR_UNUSED,
 			if (errno == ENOENT)
 				mail_set_expunged(_mail);
 			else {
-				mail_storage_set_critical(_mail->box->storage,
-					"open(%s) failed: %m", path);
+				mail_set_critical(_mail, "open(%s) failed: %m",
+						  path);
 			}
 			return -1;
 		}
@@ -158,7 +157,7 @@ struct mail_vfuncs cydir_mail_vfuncs = {
 	cydir_mail_get_stream,
 	index_mail_get_binary_stream,
 	index_mail_get_special,
-	index_mail_get_real_mail,
+	index_mail_get_backend_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
 	index_mail_update_modseq,
@@ -167,5 +166,4 @@ struct mail_vfuncs cydir_mail_vfuncs = {
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,
 	index_mail_opened,
-	index_mail_set_cache_corrupted_reason
 };

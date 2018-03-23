@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -145,7 +145,7 @@ void *array_bsearch_i(struct array *array, const void *key,
 const void *array_lsearch_i(const struct array *array, const void *key,
 			    int (*cmp)(const void *, const void *))
 {
-	const void * const data = buffer_get_data(array->buffer, NULL);
+	const void * const data = array->buffer->data;
 	const size_t s = array->element_size;
 	unsigned int idx;
 

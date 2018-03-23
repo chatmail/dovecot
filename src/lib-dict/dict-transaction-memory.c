@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -43,19 +43,6 @@ void dict_transaction_memory_unset(struct dict_transaction_context *_ctx,
 	change = array_append_space(&ctx->changes);
 	change->type = DICT_CHANGE_TYPE_UNSET;
 	change->key = p_strdup(ctx->pool, key);
-}
-
-void dict_transaction_memory_append(struct dict_transaction_context *_ctx,
-				    const char *key, const char *value)
-{
-	struct dict_transaction_memory_context *ctx =
-		(struct dict_transaction_memory_context *)_ctx;
-	struct dict_transaction_memory_change *change;
-
-	change = array_append_space(&ctx->changes);
-	change->type = DICT_CHANGE_TYPE_APPEND;
-	change->key = p_strdup(ctx->pool, key);
-	change->value.str = p_strdup(ctx->pool, value);
 }
 
 void dict_transaction_memory_atomic_inc(struct dict_transaction_context *_ctx,

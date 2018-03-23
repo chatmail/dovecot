@@ -1,7 +1,8 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
+#include "sort.h"
 #include "message-parser.h"
 #include "istream-private.h"
 #include "istream-header-filter.h"
@@ -27,22 +28,22 @@ struct header_filter_istream {
 	unsigned int cur_line, parsed_lines;
 	ARRAY(unsigned int) match_change_lines;
 
-	unsigned int header_read:1;
-	unsigned int seen_eoh:1;
-	unsigned int header_parsed:1;
-	unsigned int headers_edited:1;
-	unsigned int exclude:1;
-	unsigned int crlf:1;
-	unsigned int crlf_preserve:1;
-	unsigned int hide_body:1;
-	unsigned int add_missing_eoh:1;
-	unsigned int end_body_with_lf:1;
-	unsigned int last_lf_added:1;
-	unsigned int last_orig_crlf:1;
-	unsigned int last_added_newline:1;
-	unsigned int eoh_not_matched:1;
-	unsigned int callbacks_called:1;
-	unsigned int prev_matched:1;
+	bool header_read:1;
+	bool seen_eoh:1;
+	bool header_parsed:1;
+	bool headers_edited:1;
+	bool exclude:1;
+	bool crlf:1;
+	bool crlf_preserve:1;
+	bool hide_body:1;
+	bool add_missing_eoh:1;
+	bool end_body_with_lf:1;
+	bool last_lf_added:1;
+	bool last_orig_crlf:1;
+	bool last_added_newline:1;
+	bool eoh_not_matched:1;
+	bool callbacks_called:1;
+	bool prev_matched:1;
 };
 
 header_filter_callback *null_header_filter_callback = NULL;
@@ -56,7 +57,6 @@ static void i_stream_header_filter_destroy(struct iostream_private *stream)
 
 	if (mstream->hdr_ctx != NULL)
 		message_parse_header_deinit(&mstream->hdr_ctx);
-	i_stream_unref(&mstream->istream.parent);
 	if (array_is_created(&mstream->match_change_lines))
 		array_free(&mstream->match_change_lines);
 	pool_unref(&mstream->pool);
@@ -80,7 +80,7 @@ read_mixed(struct header_filter_istream *mstream, size_t body_highwater_size)
 			 (mstream->end_body_with_lf &&
 			  pos+1 == body_highwater_size));
 
-		ret = i_stream_read(mstream->istream.parent);
+		ret = i_stream_read_memarea(mstream->istream.parent);
 		mstream->istream.istream.stream_errno =
 			mstream->istream.parent->stream_errno;
 		mstream->istream.istream.eof = mstream->istream.parent->eof;
@@ -96,9 +96,8 @@ read_mixed(struct header_filter_istream *mstream, size_t body_highwater_size)
 				if (mstream->crlf)
 					buffer_append_c(mstream->hdr_buf, '\r');
 				buffer_append_c(mstream->hdr_buf, '\n');
-				mstream->istream.buffer =
-					buffer_get_data(mstream->hdr_buf,
-							&mstream->istream.pos);
+				mstream->istream.buffer = mstream->hdr_buf->data;
+				mstream->istream.pos = mstream->hdr_buf->used;
 				return mstream->hdr_buf->used - pos;
 			}
 			return ret;
@@ -188,8 +187,10 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 	}
 
 	max_buffer_size = i_stream_get_max_buffer_size(&mstream->istream.istream);
-	if (mstream->hdr_buf->used >= max_buffer_size)
+	if (mstream->hdr_buf->used >= max_buffer_size) {
+		i_assert(max_buffer_size > 0);
 		return -2;
+	}
 
 	while ((hdr_ret = message_parse_header_next(mstream->hdr_ctx,
 						    &hdr)) > 0) {
@@ -199,7 +200,7 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 			mstream->cur_line++;
 		if (hdr->eoh) {
 			mstream->seen_eoh = TRUE;
-			matched = TRUE;
+			matched = FALSE;
 			if (mstream->header_parsed && !mstream->headers_edited) {
 				if (mstream->eoh_not_matched)
 					matched = !matched;
@@ -209,7 +210,7 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 				mstream->callbacks_called = TRUE;
 			}
 
-			if (!matched) {
+			if (matched) {
 				mstream->seen_eoh = FALSE;
 				mstream->eoh_not_matched = TRUE;
 				continue;
@@ -306,7 +307,7 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 			return -1;
 		}
 		if (!mstream->seen_eoh && mstream->add_missing_eoh) {
-			bool matched = TRUE;
+			bool matched = FALSE;
 
 			mstream->seen_eoh = TRUE;
 
@@ -326,7 +327,7 @@ static ssize_t read_header(struct header_filter_istream *mstream)
 				mstream->callbacks_called = TRUE;
 			}
 
-			if (!matched) {
+			if (matched) {
 				mstream->seen_eoh = FALSE;
 			} else {
 				add_eol(mstream, mstream->last_orig_crlf);
@@ -411,7 +412,7 @@ handle_end_body_with_lf(struct header_filter_istream *mstream, ssize_t ret)
 		i_assert(!mstream->last_lf_added);
 		i_assert(size == 0 || data[size-1] != '\n');
 
-		buffer_reset(mstream->hdr_buf);
+		buffer_set_used_size(mstream->hdr_buf, 0);
 		buffer_append(mstream->hdr_buf, data, size);
 		if (mstream->crlf)
 			buffer_append_c(mstream->hdr_buf, '\r');
@@ -442,11 +443,8 @@ static ssize_t i_stream_header_filter_read(struct istream_private *stream)
 	}
 
 	if (!mstream->header_read ||
-	    stream->istream.v_offset < mstream->header_size.virtual_size) {
-		ret = read_header(mstream);
-		if (ret != -2 || stream->pos != stream->skip)
-			return ret;
-	}
+	    stream->istream.v_offset < mstream->header_size.virtual_size)
+		return read_header(mstream);
 
 	if (mstream->hide_body) {
 		stream->istream.eof = TRUE;
@@ -498,7 +496,7 @@ static int skip_header(struct header_filter_istream *mstream)
 	}
 
 	while (!mstream->header_read &&
-	       i_stream_read(&mstream->istream.istream) != -1) {
+	       i_stream_read_memarea(&mstream->istream.istream) != -1) {
 		pos = i_stream_get_data_size(&mstream->istream.istream);
 		i_stream_skip(&mstream->istream.istream, pos);
 	}
@@ -598,7 +596,7 @@ i_stream_header_filter_stat(struct istream_private *stream, bool exact)
 	} else {
 		/* check if we need to add LF */
 		i_stream_seek(stream->parent, st->st_size - 1);
-		(void)i_stream_read(stream->parent);
+		(void)i_stream_read_memarea(stream->parent);
 		if (stream->parent->stream_errno != 0) {
 			stream->istream.stream_errno =
 				stream->parent->stream_errno;
@@ -677,7 +675,7 @@ i_stream_create_header_filter(struct istream *input,
 	mstream->istream.istream.blocking = input->blocking;
 	mstream->istream.istream.seekable = input->seekable;
 
-	return i_stream_create(&mstream->istream, input, -1);
+	return i_stream_create(&mstream->istream, input, -1, 0);
 }
 
 void i_stream_header_filter_add(struct header_filter_istream *input,

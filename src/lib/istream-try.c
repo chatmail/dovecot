@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -140,5 +140,5 @@ struct istream *istream_try_create(struct istream *const input[])
 	tstream->istream.istream.readable_fd = FALSE;
 	tstream->istream.istream.blocking = blocking;
 	tstream->istream.istream.seekable = seekable;
-	return i_stream_create(&tstream->istream, NULL, -1);
+	return i_stream_create(&tstream->istream, NULL, -1, 0);
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -16,12 +16,12 @@ void *ucs2be_str(pool_t pool, const char *str, size_t *size)
 {
 	buffer_t *buf = buffer_create_dynamic(pool, 32);
 
-	while (*str) {
+	while (*str != '\0') {
 		buffer_append_c(buf, '\0');
 		buffer_append_c(buf, *str++);
 	}
 
-	*size = buffer_get_used_size(buf);
+	*size = buf->used;
 	return buffer_free_without_data(&buf);
 }
 

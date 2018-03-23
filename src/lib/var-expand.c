@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -62,7 +62,7 @@ m_str_reverse(const char *str, struct var_expand_context *ctx ATTR_UNUSED)
 	size_t len = strlen(str);
 	char *p, *rev;
 
-	rev = t_malloc(len + 1);
+	rev = t_malloc_no0(len + 1);
 	rev[len] = '\0';
 
 	for (p = rev + len - 1; *str != '\0'; str++)
@@ -130,7 +130,7 @@ m_str_ldap_dn(const char *str, struct var_expand_context *ctx ATTR_UNUSED)
 {
 	string_t *ret = t_str_new(256);
 
-	while (*str) {
+	while (*str != '\0') {
 		if (*str == '.')
 			str_append(ret, ",dc=");
 		else
@@ -167,22 +167,29 @@ static const struct var_expand_modifier modifiers[] = {
 	{ '\0', NULL }
 };
 
-static const char *
-var_expand_short(const struct var_expand_table *table, char key)
+static int
+var_expand_short(const struct var_expand_table *table, char key,
+		 const char **var_r, const char **error_r)
 {
 	const struct var_expand_table *t;
 
 	if (table != NULL) {
 		for (t = table; !TABLE_LAST(t); t++) {
-			if (t->key == key)
-				return t->value != NULL ? t->value : "";
+			if (t->key == key) {
+				*var_r = t->value != NULL ? t->value : "";
+				return 1;
+			}
 		}
 	}
 
 	/* not found */
-	if (key == '%')
-		return "%";
-	return NULL;
+	if (key == '%') {
+		*var_r = "%";
+		return 1;
+	}
+	if (*error_r == NULL)
+		*error_r = t_strdup_printf("Unknown variable '%%%c'", key);
+	return 0;
 }
 
 static int
@@ -268,8 +275,11 @@ var_expand_hash(struct var_expand_context *ctx,
 			truncbits = I_MIN(truncbits, method->digest_size*8);
 		} else if (strcmp(k, "salt") == 0) {
 			str_truncate(salt, 0);
-			var_expand_with_funcs(salt, value, ctx->table,
-						  ctx->func_table, ctx->context);
+			if (var_expand_with_funcs(salt, value, ctx->table,
+						  ctx->func_table, ctx->context,
+						  error_r) < 0) {
+				return -1;
+			}
 			break;
 		} else if (strcmp(k, "format") == 0) {
 			if (strcmp(value, "hex") == 0) {
@@ -300,7 +310,7 @@ var_expand_hash(struct var_expand_context *ctx,
 			return -1;
 		}
 	} else {
-		void *context = t_malloc(method->context_size);
+		void *context = t_malloc_no0(method->context_size);
 
 		str_append_str(tmp, field_value);
 
@@ -343,7 +353,8 @@ var_expand_func(const struct var_expand_func_table *func_table,
 		const char *key, const char *data, void *context,
 		const char **var_r, const char **error_r)
 {
-	const char *value;
+	const char *value = NULL;
+	int ret;
 
 	if (strcmp(key, "env") == 0) {
 		value = getenv(data);
@@ -353,13 +364,14 @@ var_expand_func(const struct var_expand_func_table *func_table,
 	if (func_table != NULL) {
 		for (; func_table->key != NULL; func_table++) {
 			if (strcmp(func_table->key, key) == 0) {
-				value = func_table->func(data, context);
+				ret = func_table->func(data, context, &value, error_r);
 				*var_r = value != NULL ? value : "";
-				return 1;
+				return ret;
 			}
 		}
 	}
-	*error_r = t_strdup_printf("Unknown variable '%%%s'", key);
+	if (*error_r == NULL)
+		*error_r = t_strdup_printf("Unknown variable '%%%s'", key);
 	*var_r = t_strdup_printf("UNSUPPORTED_VARIABLE_%s", key);
 	return 0;
 }
@@ -441,16 +453,14 @@ var_expand_long(struct var_expand_context *ctx,
 			value = "";
 		}
 	}
-	if (value == NULL)
-		value = t_strdup_printf("UNSUPPORTED_VARIABLE_%s", key);
 	*var_r = value;
 	return ret;
 }
 
-void var_expand_with_funcs(string_t *dest, const char *str,
-			   const struct var_expand_table *table,
-			   const struct var_expand_func_table *func_table,
-			   void *context)
+int var_expand_with_funcs(string_t *dest, const char *str,
+			  const struct var_expand_table *table,
+			  const struct var_expand_func_table *func_table,
+			  void *context, const char **error_r)
 {
 	const struct var_expand_modifier *m;
 	const char *var;
@@ -460,6 +470,9 @@ void var_expand_with_funcs(string_t *dest, const char *str,
 	const char *end;
 	unsigned int i, modifier_count;
 	size_t len;
+	int ret, final_ret = 1;
+
+	*error_r = NULL;
 
 	i_zero(&ctx);
 	ctx.table = table;
@@ -542,7 +555,6 @@ void var_expand_with_funcs(string_t *dest, const char *str,
 			var = NULL;
 			if (*str == '{' && (end = strchr(str, '}')) != NULL) {
 				/* %{long_key} */
-				const char *error;
 				unsigned int ctr = 1;
 				bool escape = FALSE;
 				end = str;
@@ -564,14 +576,16 @@ void var_expand_with_funcs(string_t *dest, const char *str,
 				/* if there is no } it will consume rest of the
 				   string */
 				len = end - (str + 1);
-				if (var_expand_long(&ctx, str+1, len, &var, &error) < 0)
-					i_error("var_expand_long(%s) failed: %s",
-						str+1, error);
+				ret = var_expand_long(&ctx, str+1, len,
+						      &var, error_r);
 				i_assert(var != NULL);
 				str = end;
 			} else {
-				var = var_expand_short(table, *str);
+				ret = var_expand_short(ctx.table, *str,
+						       &var, error_r);
 			}
+			if (final_ret > ret)
+				final_ret = ret;
 
 			if (var != NULL) {
 				for (i = 0; i < modifier_count; i++)
@@ -608,12 +622,13 @@ void var_expand_with_funcs(string_t *dest, const char *str,
 			}
 		}
 	}
+	return final_ret;
 }
 
-void var_expand(string_t *dest, const char *str,
-		const struct var_expand_table *table)
+int var_expand(string_t *dest, const char *str,
+	       const struct var_expand_table *table, const char **error_r)
 {
-	var_expand_with_funcs(dest, str, table, NULL, NULL);
+	return var_expand_with_funcs(dest, str, table, NULL, NULL, error_r);
 }
 
 static bool

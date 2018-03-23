@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -588,32 +588,12 @@ void mailbox_list_index_refresh_later(struct mailbox_list *list)
 	}
 }
 
-static int
-list_handle_corruption_locked(struct mailbox_list *list,
-			      enum mail_storage_list_index_rebuild_reason reason)
-{
-	struct mail_storage *const *storagep;
-
-	array_foreach(&list->ns->all_storages, storagep) {
-		if ((*storagep)->v.list_index_corrupted != NULL) {
-			(*storagep)->list_index_rebuild_reason = reason;
-			if ((*storagep)->v.list_index_corrupted(*storagep) < 0)
-				return -1;
-			else {
-				/* FIXME: implement a generic handler that
-				   just lists mailbox directories in filesystem
-				   and adds the missing ones to the index. */
-			}
-		}
-	}
-	return mailbox_list_index_set_uncorrupted(list);
-}
-
 int mailbox_list_index_handle_corruption(struct mailbox_list *list)
 {
 	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
+	struct mail_storage *const *storagep;
 	enum mail_storage_list_index_rebuild_reason reason;
-	int ret;
+	int ret = 0;
 
 	if (ilist->call_corruption_callback)
 		reason = MAIL_STORAGE_LIST_INDEX_REBUILD_REASON_CORRUPTED;
@@ -627,18 +607,19 @@ int mailbox_list_index_handle_corruption(struct mailbox_list *list)
 		return 0;
 	ilist->handling_corruption = TRUE;
 
-	/* Perform the rebuilding locked. Note that if we're here because
-	   INBOX wasn't found, this may be because another process is in the
-	   middle of creating it. Waiting for the lock here makes sure that
-	   we don't start rebuilding before it's finished. In that case the
-	   rebuild is a bit unnecessary, but harmless (and avoiding the rebuild
-	   just adds extra code complexity). */
-	if (mailbox_list_lock(list) < 0)
-		ret = -1;
-	else {
-		ret = list_handle_corruption_locked(list, reason);
-		mailbox_list_unlock(list);
+	array_foreach(&list->ns->all_storages, storagep) {
+		if ((*storagep)->v.list_index_rebuild != NULL) {
+			if ((*storagep)->v.list_index_rebuild(*storagep, reason) < 0)
+				ret = -1;
+			else {
+				/* FIXME: implement a generic handler that
+				   just lists mailbox directories in filesystem
+				   and adds the missing ones to the index. */
+			}
+		}
 	}
+	if (ret == 0)
+		ret = mailbox_list_index_set_uncorrupted(list);
 	ilist->handling_corruption = FALSE;
 	return ret;
 }
@@ -662,8 +643,7 @@ static void mailbox_list_index_deinit(struct mailbox_list *list)
 {
 	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
 
-	if (ilist->to_refresh != NULL)
-		timeout_remove(&ilist->to_refresh);
+	timeout_remove(&ilist->to_refresh);
 	if (ilist->index != NULL) {
 		hash_table_destroy(&ilist->mailbox_hash);
 		hash_table_destroy(&ilist->mailbox_names);
@@ -848,9 +828,8 @@ mailbox_list_index_set_subscribed(struct mailbox_list *_list,
 
 static bool mailbox_list_index_is_enabled(struct mailbox_list *list)
 {
-	if (!list->mail_set->mailbox_list_index)
-		return FALSE;
-	if (strcmp(list->name, MAILBOX_LIST_NAME_NONE) == 0)
+	if (!list->mail_set->mailbox_list_index ||
+	    (list->props & MAILBOX_LIST_PROP_NO_LIST_INDEX) != 0)
 		return FALSE;
 
 	i_assert(list->set.list_index_fname != NULL);
@@ -929,8 +908,9 @@ static void mailbox_list_index_init_finish(struct mailbox_list *list)
 	i_assert(list->set.list_index_fname != NULL);
 	ilist->path = dir == NULL ? "(in-memory mailbox list index)" :
 		p_strdup_printf(list->pool, "%s/%s", dir, list->set.list_index_fname);
-	ilist->index = mail_index_alloc(dir, list->set.list_index_fname);
-	ilist->rebuild_on_missing_inbox = !ilist->has_backing_store &&
+	ilist->index = mail_index_alloc(list->ns->user->event,
+					dir, list->set.list_index_fname);
+	ilist->rebuild_on_missing_inbox =
 		(list->ns->flags & NAMESPACE_FLAG_INBOX_ANY) != 0;
 
 	ilist->ext_id = mail_index_ext_register(ilist->index, "list",

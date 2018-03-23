@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -36,7 +36,8 @@ cmd_save_to_mailbox(struct save_cmd_context *ctx, struct mailbox *box,
 		return -1;
 	}
 
-	trans = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
+	trans = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_EXTERNAL,
+					  __func__);
 	save_ctx = mailbox_save_alloc(trans);
 	if (mailbox_save_begin(&save_ctx, input) < 0) {
 		i_error("Saving failed: %s",

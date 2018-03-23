@@ -1,18 +1,4 @@
-v2.2.35 2018-03-19  Aki Tuomi <aki.tuomi@dovecot.fi>
-	- charset_alias: compile fails with Solaris Studio, reported by
-	  John Woods.
-	- Fix local name handling in v2.2.34 SNI code, bug found by cPanel.
-	- imapc: Don't try to add mails to index if they already exist there.
-	- imapc: If email is modified in istream_opened hook, mail size isn't
-	  updated.
-	- lib-dcrypt: When reading encrypted data, more data would not be
-	  read if buffer was not consumed causing panic or hang.
-	- notify: When notify plugin is used and transaction commit fails in
-	  dsync, crash occurs.
-	- sdbox: When delivering to a mailbox that is over quota, temp files
-	  are not cleaned up when saving or copying fails.
-
-v2.2.34 2018-02-28  Timo Sirainen <tss@iki.fi>
+v2.3.0.1 2018-02-28  Timo Sirainen <tss@iki.fi>
 
 	* CVE-2017-15130: TLS SNI config lookups may lead to excessive
 	  memory usage, causing imap-login/pop3-login VSZ limit to be reached
@@ -34,50 +20,50 @@ v2.2.34 2018-02-28  Timo Sirainen <tss@iki.fi>
 	  fs.suid_dumpable=2". If the old behaviour is wanted, it can still be
 	  enabled by setting:
 	  import_environment=$import_environment PR_SET_DUMPABLE=1
-	* doveconf output now includes the hostname.
+	- imap-login with SSL/TLS connections may end up in infinite loop
 
-	+ mail_attachment_detection_options setting controls when
-	  $HasAttachment and $HasNoAttachment keywords are set for mails.
-	+ imap: Support fetching body snippets using FETCH (SNIPPET) or
-	  (SNIPPET (LAZY=FUZZY))
-	+ fs-compress: Automatically detect whether input is compressed or not.
-	  Prefix the compression algorithm with "maybe-" to enable the
-	  detection, for example: "compress:maybe-gz:6:..."
-	+ Added settings to change dovecot.index* files' optimization behavior.
-	  See https://wiki2.dovecot.org/IndexFiles#Settings
-	+ Auth cache can now utilize auth workers to do password hash
-	  verification by setting auth_cache_verify_password_with_worker=yes.
-	+ Added charset_alias plugin. See
-	  https://wiki2.dovecot.org/Plugins/CharsetAlias
-	+ imap_logout_format and pop3_logout_format settings now support all of
-	  the generic variables (e.g. %{rip}, %{session}, etc.)
-	+ Added auth_policy_check_before_auth, auth_policy_check_after_auth
-	  and auth_policy_report_after_auth settings.
-	- v2.2.33: doveadm-server: Various fixes related to log handling.
-	- v2.2.33: doveadm failed when trying to access UNIX socket that didn't
-	  require authentication.
-	- v2.2.33: doveadm log reopen stopped working
-	- v2.2.30+: IMAP stopped advertising SPECIAL-USE capability
-	- v2.2.30+: IMAP stopped sending untagged OK/NO storage notifications
-	- replication: dsync sends unnecessary replication notification for
-	  changes it does internally. NOTE: Folder creates, renames, deletes
-	  and subscribes still trigger unnecessary replication notifications,
-	  but these should be rather rare.
-	- mail_always/never_cache_fields setting changes weren't applied for
-	  existing dovecot.index.cache files.
-	- Fix compiling and other problems with OpenSSL v1.1
-	- auth policy: With master user logins, lookup using login username.
-	- FTS reindexed all mails unnecessarily after loss of
-	  dovecot.index.cache file
-	- mdbox rebuild repeatedly fails with "missing map extension"
-	- SSL connections may have been hanging with imapc or doveadm client.
-	- cassandra: Using protocol v3 (Cassandra v2.1) caused memory leaks and
-	  also timestamps weren't set to queries.
-	- fs-crypt silently ignored public/private keys specified in
-	  configuration (mail_crypt_global_public/private_key) and just
-	  emitted plaintext output.
-	- lock_method=dotlock caused crashes
-	- imapc: Reconnection may cause crashes and other errors
+v2.3.0 2017-12-22  Timo Sirainen <tss@iki.fi>
+
+	* Various setting changes, see https://wiki2.dovecot.org/Upgrading/2.3
+	* Logging rewrite started: Logging is now based on hierarchical events.
+	  This makes it possible to do various things, like: 1) giving
+	  consistent log prefixes, 2) enabling debug logging with finer
+	  granularity, 3) provide logs in more machine readable formats
+	  (e.g. json). Everything isn't finished yet, especially a lot of the
+	  old logging code still needs to be translated to the new way.
+	* Statistics rewrite started: Stats are now based on (log) events.
+	  It's possible to gather statistics about any event that is logged.
+	  See http://wiki2.dovecot.org/Statistics for details
+	* ssl_dh setting replaces the old generated ssl-parameters.dat
+	* IMAP: When BINARY FETCH finds a broken mails, send [PARSE] error
+	  instead of [UNKNOWNCTE]
+	* Linux: core dumping via PR_SET_DUMPABLE is no longer enabled by
+	  default due to potential security reasons (found by cPanel Security
+	  Team).
+
+	+ Added support for SMTP submission proxy server, which includes
+	  support for BURL and CHUNKING extension.
+	+ LMTP rewrite. Supports now CHUNKING extension and mixing of
+	  local/proxy recipients.
+	+ auth: Support libsodium to add support for ARGON2I and ARGON2ID
+	  password schemes.
+	+ auth: Support BLF-CRYPT password scheme in all platforms
+	+ auth: Added LUA scripting support for passdb/userdb.
+	  See https://wiki2.dovecot.org/AuthDatabase/Lua
+	- Input streams are more reliable now when there are errors or when
+	  the maximum buffer size is reached. Previously in some situations
+	  this could have caused Dovecot to try to read already freed memory.
+	- Output streams weren't previously handling failures when writing a
+	  trailer at the end of the stream. This mainly affected encrypt and
+	  zlib compress ostreams, which could have silently written truncated
+	  files if the last write happened to fail (which shouldn't normally
+	  have ever happened).
+	- virtual plugin: Fixed panic when fetching mails from virtual
+	  mailboxes with IMAP BINARY extension.
+	- doveadm-server: Fix potential hangs with SSL connections
+	- doveadm proxy: Reading commands' output from v2.2.33+ servers could
+	  have caused the output to be corrupted or caused a crash.
+	- Many other smaller fixes
 
 v2.2.33.2 2017-10-20  Timo Sirainen <tss@iki.fi>
 
@@ -1091,7 +1077,7 @@ v2.2.11 2014-02-12  Timo Sirainen <tss@iki.fi>
 	+ stats: Track also wall clock time for commands.
 	+ pop3_migration plugin improvements to try harder to match the UIDLs
 	  correctly.
-	- imap: SEARCH/SORT PARTIAL reponses may have been too large.
+	- imap: SEARCH/SORT PARTIAL responses may have been too large.
 	- doveadm backup: Fixed assert-crash when syncing mailbox deletion.
 
 v2.2.10 2013-11-25  Timo Sirainen <tss@iki.fi>
@@ -2963,7 +2949,7 @@ v1.0.rc27 2007-03-13  Timo Sirainen <tss@iki.fi>
 	  quota recalculation ignored the box).
 	- Index file handling fixes
 	- mbox syncing fixes
-	- Wrong endianess index files still weren't silently rebuilt
+	- Wrong endianness index files still weren't silently rebuilt
 	- IMAP quota plugin: GETQUOTAROOT returned the mailbox name wrong the
 	  namespace had a prefix or if its separator was non-default
 	- IMAP: If client was appending multiple messages with MULTIAPPEND
@@ -2985,7 +2971,7 @@ v1.0.rc26 2007-03-07  Timo Sirainen <tss@iki.fi>
 	  X-IMAP header crashed deliver.
 	- deliver: If mail_debug=yes, drop out DEBUG environment before
 	  calling sendmail binary. Postfix's sendmail didn't really like it.
-	- mbox: X-UID brokeness fixes broke rc25 even with valid X-UID headers.
+	- mbox: X-UID brokenness fixes broke rc25 even with valid X-UID headers.
 	  Now the code should finally work right.
 	- Maildir: When syncing a huge maildir, touch dovecot-uidlist.lock file
 	  once in a while to make sure it doesn't get overwritten by another
@@ -2993,7 +2979,7 @@ v1.0.rc26 2007-03-07  Timo Sirainen <tss@iki.fi>
 	- Maildir++ quota: We didn't handle NUL bytes in maildirsize files very
 	  well. Now the file is rebuilt when they're seen (NFS problem).
 	- Index/view handling fix should fix some crashes/errors
-	- If index files were moved to a different endianess machine, Dovecot
+	- If index files were moved to a different endianness machine, Dovecot
 	  logged all sorts of errors instead of silently rebuilding them.
 	- Convert plugin didn't change hierarchy separators in mailbox names.
 	- PostgreSQL authentication could have lost requests once in a while

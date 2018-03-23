@@ -72,7 +72,7 @@ int scram_sha1_scheme_parse(const unsigned char *credentials, size_t size,
 	}
 	*salt_r = fields[1];
 
-	buf = buffer_create_dynamic(pool_datastack_create(), SHA1_RESULTLEN);
+	buf = t_buffer_create(SHA1_RESULTLEN);
 	if (base64_decode(fields[2], strlen(fields[2]), NULL, buf) < 0 ||
 	    buf->used != SHA1_RESULTLEN) {
 		*error_r = "Invalid SCRAM-SHA-1 StoredKey in passdb";
@@ -90,7 +90,7 @@ int scram_sha1_scheme_parse(const unsigned char *credentials, size_t size,
 	return 0;
 }
 
-int scram_sha1_verify(const char *plaintext, const char *user ATTR_UNUSED,
+int scram_sha1_verify(const char *plaintext, const struct password_generate_params *params ATTR_UNUSED,
 		      const unsigned char *raw_password, size_t size,
 		      const char **error_r)
 {
@@ -135,7 +135,7 @@ int scram_sha1_verify(const char *plaintext, const char *user ATTR_UNUSED,
 	return ret;
 }
 
-void scram_sha1_generate(const char *plaintext, const char *user ATTR_UNUSED,
+void scram_sha1_generate(const char *plaintext, const struct password_generate_params *params ATTR_UNUSED,
 			 const unsigned char **raw_password_r, size_t *size_r)
 {
 	string_t *str;

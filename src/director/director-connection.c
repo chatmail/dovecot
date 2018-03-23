@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 /*
    Handshaking:
@@ -132,19 +132,19 @@ struct director_connection {
 	/* set during command execution */
 	const char *cur_cmd, *const *cur_args;
 
-	unsigned int in:1;
-	unsigned int connected:1;
-	unsigned int version_received:1;
-	unsigned int me_received:1;
-	unsigned int handshake_received:1;
-	unsigned int ignore_host_events:1;
-	unsigned int handshake_sending_hosts:1;
-	unsigned int ping_waiting:1;
-	unsigned int synced:1;
-	unsigned int wrong_host:1;
-	unsigned int verifying_left:1;
-	unsigned int users_unsorted:1;
-	unsigned int connected_user_cpu_set:1;
+	bool in:1;
+	bool connected:1;
+	bool version_received:1;
+	bool me_received:1;
+	bool handshake_received:1;
+	bool ignore_host_events:1;
+	bool handshake_sending_hosts:1;
+	bool ping_waiting:1;
+	bool synced:1;
+	bool wrong_host:1;
+	bool verifying_left:1;
+	bool users_unsorted:1;
+	bool connected_user_cpu_set:1;
 };
 
 static bool director_connection_unref(struct director_connection *conn);
@@ -583,7 +583,7 @@ user_need_refresh(struct director *dir, struct user *user,
 		   already set to). However, try to break USER loops here when
 		   director ring latency is >1sec, but below skip_recent_secs
 		   by just not refreshing the user. */
-		unsigned int skip_recent_secs =
+		time_t skip_recent_secs =
 			I_MIN(dir->set->director_user_expire/4,
 			      DIRECTOR_SKIP_RECENT_REFRESH_MAX_SECS);
 		if ((time_t)user->timestamp + skip_recent_secs >= timestamp)
@@ -614,8 +614,8 @@ director_user_refresh(struct director_connection *conn,
 	if (timestamp + (time_t)dir->set->director_user_expire <= ioloop_time) {
 		/* Ignore this refresh entirely, regardless of whether the
 		   user already exists or not. */
-		dir_debug("user refresh: %u has expired timestamp %ld",
-			  username_hash, (long)timestamp);
+		dir_debug("user refresh: %u has expired timestamp %"PRIdTIME_T,
+			  username_hash, timestamp);
 		return -1;
 	}
 
@@ -729,14 +729,14 @@ director_user_refresh(struct director_connection *conn,
 		   It's not a big problem - most likely it's only a few seconds
 		   difference. The worst that can happen is that some users
 		   take up memory that should have been freed already. */
-		dir_debug("user refresh: %u refreshed timestamp from %u to %ld",
-			  username_hash, user->timestamp, (long)timestamp);
+		dir_debug("user refresh: %u refreshed timestamp from %u to %"PRIdTIME_T,
+			  username_hash, user->timestamp, timestamp);
 		user_directory_refresh(users, user);
 		user->timestamp = timestamp;
 		ret = TRUE;
 	} else {
-		dir_debug("user refresh: %u ignored timestamp %ld (we have %u)",
-			  username_hash, (long)timestamp, user->timestamp);
+		dir_debug("user refresh: %u ignored timestamp %"PRIdTIME_T" (we have %u)",
+			  username_hash, timestamp, user->timestamp);
 	}
 
 	if (unset_weak_user) {
@@ -776,7 +776,7 @@ director_handshake_cmd_user(struct director_connection *conn,
 		return FALSE;
 	}
 
-	if (timestamp > ioloop_time) {
+	if ((time_t)timestamp > ioloop_time) {
 		/* The other director's clock seems to be into the future
 		   compared to us. Don't set any of our users' timestamps into
 		   future though. It's most likely only 1 second difference. */
@@ -889,7 +889,7 @@ static bool director_cmd_director(struct director_connection *conn,
 	}
 	/* just forward this to the entire ring until it reaches back to
 	   itself. some hosts may see this twice, but that's the only way to
-	   guarantee that it gets seen by everyone. reseting the host multiple
+	   guarantee that it gets seen by everyone. resetting the host multiple
 	   times may cause us to handle its commands multiple times, but the
 	   commands can handle that. however, we need to also handle a
 	   situation where the added director never comes back - we don't want
@@ -936,7 +936,7 @@ director_cmd_host_hand_start(struct director_connection *conn,
 		return FALSE;
 	}
 
-	if (remote_ring_completed && !conn->dir->ring_handshaked) {
+	if (remote_ring_completed != 0 && !conn->dir->ring_handshaked) {
 		/* clear everything we have and use only what remote sends us */
 		dir_debug("%s: We're joining a ring - replace all hosts",
 			  conn->name);
@@ -945,7 +945,7 @@ director_cmd_host_hand_start(struct director_connection *conn,
 			hostp = array_idx(hosts, 0);
 			director_remove_host(conn->dir, NULL, NULL, *hostp);
 		}
-	} else if (!remote_ring_completed && conn->dir->ring_handshaked) {
+	} else if (remote_ring_completed == 0 && conn->dir->ring_handshaked) {
 		/* ignore whatever remote sends */
 		dir_debug("%s: Remote is joining our ring - "
 			  "ignore all remote HOSTs", conn->name);
@@ -1190,7 +1190,7 @@ director_cmd_host_int(struct director_connection *conn, const char *const *args,
 	} else {
 		dir_debug("Ignoring host %s update vhost_count=%u "
 			  "down=%d last_updown_change=%ld (hosts_hash=%u)",
-			  net_ip2addr(&ip), vhost_count, down,
+			  net_ip2addr(&ip), vhost_count, down ? 1 : 0,
 			  (long)last_updown_change,
 			  mail_hosts_hash(conn->dir->mail_hosts));
 	}
@@ -1455,8 +1455,10 @@ director_handshake_cmd_options(struct director_connection *conn,
 		if (strcmp(args[i], DIRECTOR_OPT_CONSISTENT_HASHING) == 0)
 			consistent_hashing = TRUE;
 	}
-	if (consistent_hashing != conn->dir->set->director_consistent_hashing) {
-		i_error("director(%s): director_consistent_hashing settings differ between directors",
+	if (!consistent_hashing) {
+		i_error("director(%s): director_consistent_hashing settings "
+			"differ between directors. Set "
+			"director_consistent_hashing=yes on old directors",
 			conn->name);
 		return -1;
 	}
@@ -1603,7 +1605,7 @@ director_connection_sync_host(struct director_connection *conn,
 				  timestamp);
 			return FALSE;
 		} else if (seq < host->last_sync_seq) {
-			i_warning("Last SYNC seq for %s appears to be stale, reseting "
+			i_warning("Last SYNC seq for %s appears to be stale, resetting "
 				  "(seq=%u, timestamp=%u -> seq=%u, timestamp=%u)",
 				  host->name, host->last_sync_seq,
 				  host->last_sync_timestamp, seq, timestamp);
@@ -1838,8 +1840,8 @@ static bool director_cmd_ping(struct director_connection *conn,
 		}
 	}
 	director_connection_send(conn,
-		t_strdup_printf("PONG\t%ld\t%zu\n",
-		(long)ioloop_time, o_stream_get_buffer_used_size(conn->output)));
+		t_strdup_printf("PONG\t%"PRIdTIME_T"\t%zu\n",
+		ioloop_time, o_stream_get_buffer_used_size(conn->output)));
 	return TRUE;
 }
 
@@ -1852,8 +1854,8 @@ director_ping_append_extra(struct director_connection *conn, string_t *str,
 
 	str_printfa(str, "buffer size at PING was %zu bytes", conn->ping_sent_buffer_size);
 	if (pong_sent_time != 0) {
-		str_printfa(str, ", remote sent it %ld secs ago",
-			    (long)(ioloop_time - pong_sent_time));
+		str_printfa(str, ", remote sent it %"PRIdTIME_T" secs ago",
+			    ioloop_time - pong_sent_time);
 	}
 	if (pong_send_buffer_size != (uintmax_t)-1) {
 		str_printfa(str, ", remote buffer size at PONG was %ju bytes",
@@ -2125,7 +2127,8 @@ director_connection_send_hosts(struct director_connection *conn)
 
 	send_updowns = conn->minor_version >= DIRECTOR_VERSION_UPDOWN;
 
-	str_printfa(str, "HOST-HAND-START\t%u\n", conn->dir->ring_handshaked);
+	str_printfa(str, "HOST-HAND-START\t%u\n",
+		    conn->dir->ring_handshaked ? 1 : 0);
 	array_foreach(mail_hosts_get(conn->dir->mail_hosts), hostp) {
 		struct mail_host *host = *hostp;
 		const char *host_tag = mail_host_get_tag(host);
@@ -2146,7 +2149,8 @@ director_connection_send_hosts(struct director_connection *conn)
 		director_connection_send(conn, str_c(str));
 		str_truncate(str, 0);
 	}
-	str_printfa(str, "HOST-HAND-END\t%u\n", conn->dir->ring_handshaked);
+	str_printfa(str, "HOST-HAND-END\t%u\n",
+		    conn->dir->ring_handshaked ? 1 : 0);
 	director_connection_send(conn, str_c(str));
 }
 
@@ -2154,9 +2158,7 @@ static int director_connection_send_done(struct director_connection *conn)
 {
 	i_assert(conn->version_received);
 
-	if (!conn->dir->set->director_consistent_hashing)
-		;
-	else if (conn->minor_version >= DIRECTOR_VERSION_OPTIONS) {
+	if (conn->minor_version >= DIRECTOR_VERSION_OPTIONS) {
 		director_connection_send(conn,
 			"OPTIONS\t"DIRECTOR_OPT_CONSISTENT_HASHING"\n");
 	} else {
@@ -2235,9 +2237,7 @@ static int director_connection_output(struct director_connection *conn)
 	conn->last_output = ioloop_timeval;
 	if (conn->user_iter != NULL) {
 		/* still handshaking USER list */
-		o_stream_cork(conn->output);
 		ret = director_connection_send_users(conn);
-		o_stream_uncork(conn->output);
 		if (ret < 0) {
 			director_connection_log_disconnect(conn, conn->output->stream_errno,
 				o_stream_get_error(conn->output));
@@ -2261,8 +2261,8 @@ director_connection_init_common(struct director *dir, int fd)
 	conn->created = ioloop_timeval;
 	conn->fd = fd;
 	conn->dir = dir;
-	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE, FALSE);
-	conn->output = o_stream_create_fd(conn->fd, dir->set->director_output_buffer_size, FALSE);
+	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE);
+	conn->output = o_stream_create_fd(conn->fd, dir->set->director_output_buffer_size);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	array_append(&dir->connections, &conn, 1);
 	return conn;
@@ -2439,13 +2439,10 @@ void director_connection_deinit(struct director_connection **_conn,
 	}
 	if (conn->user_iter != NULL)
 		director_iterate_users_deinit(&conn->user_iter);
-	if (conn->to_disconnect != NULL)
-		timeout_remove(&conn->to_disconnect);
-	if (conn->to_pong != NULL)
-		timeout_remove(&conn->to_pong);
+	timeout_remove(&conn->to_disconnect);
+	timeout_remove(&conn->to_pong);
 	timeout_remove(&conn->to_ping);
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	io_remove(&conn->io);
 	i_stream_close(conn->input);
 	o_stream_close(conn->output);
 	i_close_fd(&conn->fd);
@@ -2544,8 +2541,7 @@ void director_connection_send(struct director_connection *conn,
 		o_stream_close(conn->output);
 		/* closing the stream when output buffer is full doesn't cause
 		   disconnection itself. */
-		if (conn->to_disconnect != NULL)
-			timeout_remove(&conn->to_disconnect);
+		timeout_remove(&conn->to_disconnect);
 		conn->to_disconnect =
 			timeout_add_short(0, director_disconnect_write_error, conn);
 	} else {
@@ -2606,7 +2602,7 @@ void director_connection_ping(struct director_connection *conn)
 		conn->ping_sent_user_cpu.tv_sec = (time_t)-1;
 	/* send it after getting the buffer size */
 	director_connection_send(conn, t_strdup_printf(
-		"PING\t%ld\t%zu\n", (long)ioloop_time,
+		"PING\t%"PRIdTIME_T"\t%zu\n", ioloop_time,
 		conn->ping_sent_buffer_size));
 }
 

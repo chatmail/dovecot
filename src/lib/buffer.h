@@ -19,16 +19,20 @@ void buffer_create_from_data(buffer_t *buffer, void *data, size_t size);
 void buffer_create_from_const_data(buffer_t *buffer,
 				   const void *data, size_t size);
 #if defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__) > 401
-#define buffer_create_from_data(b,d,s) ({					\
+#define buffer_create_from_data(b,d,s) ({				           \
 	(void)COMPILE_ERROR_IF_TRUE(__builtin_object_size((d),1) < ((s)>0?(s):1)); \
 	buffer_create_from_data((b), (d), (s)); })
-#define buffer_create_from_const_data(b,d,s) ({					\
+#define buffer_create_from_const_data(b,d,s) ({				           \
 	(void)COMPILE_ERROR_IF_TRUE(__builtin_object_size((d),1) < ((s)>0?(s):1)); \
 	buffer_create_from_const_data((b), (d), (s)); })
 #endif
 /* Creates a dynamically growing buffer. Whenever write would exceed the
    current size it's grown. */
 buffer_t *buffer_create_dynamic(pool_t pool, size_t init_size);
+
+#define t_buffer_create(init_size) \
+	buffer_create_dynamic(pool_datastack_create(), (init_size))
+
 /* Free the memory used by buffer. Not needed if the memory is free'd
    directly from the memory pool. */
 void buffer_free(buffer_t **buf);
@@ -38,9 +42,6 @@ void *buffer_free_without_data(buffer_t **buf);
 
 /* Returns the pool buffer was created with. */
 pool_t buffer_get_pool(const buffer_t *buf) ATTR_PURE;
-
-/* Reset the buffer. used size and it's contents are zeroed. */
-void buffer_reset(buffer_t *buf);
 
 /* Write data to buffer at specified position. If pos is beyond the buffer's
    current size, it is zero-filled up to that point (even if data_size==0). */

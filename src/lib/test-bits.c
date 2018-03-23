@@ -1,4 +1,4 @@
-/* Copyright (c) 2001-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2001-2017 Dovecot authors, see the included COPYING file */
 
 /* Unit tests for bit twiddles library */
 
@@ -97,10 +97,109 @@ static void test_sum_overflows(void)
 	test_end();
 }
 
-void test_bits()
+static void test_bits_fraclog(void)
+{
+	unsigned int fracbits;
+	for (fracbits = 0; fracbits < 6; fracbits++) {
+		static char name[] = "fraclog x-bit";
+		name[8] = '0'+ fracbits;
+		test_begin(name);
+
+		unsigned int i;
+		unsigned int last_end = ~0u;
+		for (i = 0; i < BITS_FRACLOG_BUCKETS(fracbits); i++) {
+			unsigned int start = bits_fraclog_bucket_start(i, fracbits);
+			unsigned int end = bits_fraclog_bucket_end(i, fracbits);
+			test_assert_idx(start == last_end + 1, i);
+			last_end = end;
+			test_assert_idx(bits_fraclog(start, fracbits) == i, i);
+			test_assert_idx(bits_fraclog(end, fracbits) == i, i);
+		}
+		test_assert_idx(last_end == ~0u, fracbits);
+
+		test_end();
+	}
+}
+
+/* The compiler *should* generate different code when the fracbits parameter
+   is a compile-time constant, so we also need to check that's the case.
+*/
+static void test_bits_fraclog_const(void)
+{
+#define FRACBITS 2
+#define STR2(s) #s
+#define STR(s) STR2(s)
+	test_begin("fraclog constant " STR(FRACBITS) " bit");
+
+	unsigned int i;
+	unsigned int last_end = ~0u;
+	for (i = 0; i < BITS_FRACLOG_BUCKETS(FRACBITS); i++) {
+		unsigned int start = bits_fraclog_bucket_start(i, FRACBITS);
+		unsigned int end = bits_fraclog_bucket_end(i, FRACBITS);
+		test_assert_idx(start == last_end + 1, i);
+		last_end = end;
+		test_assert_idx(bits_fraclog(start, FRACBITS) == i, i);
+		test_assert_idx(bits_fraclog(end, FRACBITS) == i, i);
+	}
+	test_assert(last_end == ~0u);
+
+	test_end();
+}
+
+static void test_bits_rotl32(void)
+{
+	test_begin("bits_rotl32");
+
+	test_assert(bits_rotl32(0x1c00000eU, 3) == 0xe0000070U);
+	test_assert(bits_rotl32(0xe0000070U, 5) == 0x00000e1cU);
+	test_assert(bits_rotl32(0x00000e1cU, 0) == 0x00000e1cU);
+
+	test_end();
+}
+
+static void test_bits_rotl64(void)
+{
+	test_begin("bits_rotl64");
+
+        test_assert(bits_rotl64(0x1c0000000000000eUL, 3) == 0xe000000000000070UL);
+        test_assert(bits_rotl64(0xe000000000000070UL, 5) == 0x0000000000000e1cUL);
+        test_assert(bits_rotl64(0x0000000000000e1cUL, 0) == 0x0000000000000e1cUL);
+
+	test_end();
+}
+
+static void test_bits_rotr32(void)
+{
+	test_begin("bits_rotr32");
+
+	test_assert(bits_rotr32(0x1c00000eU, 3) == 0xc3800001U);
+	test_assert(bits_rotr32(0xc3800001U, 5) == 0x0e1c0000U);
+	test_assert(bits_rotr32(0x00000e1cU, 0) == 0x00000e1cU);
+
+	test_end();
+}
+
+static void test_bits_rotr64(void)
+{
+	test_begin("bits_rotr64");
+
+	test_assert(bits_rotr64(0x1c0000000000000eUL, 3) == 0xc380000000000001UL);
+	test_assert(bits_rotr64(0xc380000000000001UL, 5) == 0x0e1c000000000000UL);
+	test_assert(bits_rotr64(0x0000000000000e1cUL, 0) == 0x0000000000000e1cUL);
+
+	test_end();
+}
+
+void test_bits(void)
 {
 	test_nearest_power();
 	test_bits_is_power_of_two();
 	test_bits_requiredXX();
+	test_bits_fraclog();
+	test_bits_fraclog_const();
+	test_bits_rotl32();
+	test_bits_rotr32();
+	test_bits_rotl64();
+	test_bits_rotr64();
 	test_sum_overflows();
 }

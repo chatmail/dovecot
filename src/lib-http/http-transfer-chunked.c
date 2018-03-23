@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -47,7 +47,7 @@ struct http_transfer_chunked_istream {
 
 	struct http_header_parser *header_parser;
 
-	unsigned int finished:1;
+	bool finished:1;
 };
 
 /* Chunk parser */
@@ -311,8 +311,7 @@ static int http_transfer_chunked_parse_next(
 	size_t size;
 	int ret;
 
-	while ((ret=i_stream_read_data
-		(input, &tcstream->begin, &size, 0)) > 0) {
+	while ((ret=i_stream_read_more(input, &tcstream->begin, &size)) > 0) {
 		tcstream->cur = tcstream->begin;
 		tcstream->end = tcstream->cur + size;
 
@@ -377,8 +376,9 @@ http_transfer_chunked_istream_read_data(
 	/* read from parent if necessary */
 	data = i_stream_get_data(stream->parent, &size);
 	if (size == 0) {
-		ret = i_stream_read(stream->parent);
-		if (ret <= 0 && (ret != -2 || stream->skip == 0)) {
+		ret = i_stream_read_memarea(stream->parent);
+		if (ret <= 0) {
+			i_assert(ret != -2); /* 0 sized buffer can't be full */
 			if ( stream->parent->eof && stream->parent->stream_errno == 0 ) {
 				/* unexpected EOF */
 				io_stream_set_error(&tcstream->istream.iostream,
@@ -410,11 +410,6 @@ http_transfer_chunked_istream_read_data(
 	tcstream->chunk_pos += size;
 	if (tcstream->chunk_pos >= tcstream->chunk_size)
 		tcstream->state = HTTP_CHUNKED_PARSE_STATE_DATA_READY;
-
-	if ( ret < 0 ) {
-		stream->pos = stream->pos+size;
-		return ret;
-	}
 
 	ret = size;
 	stream->pos = stream->pos+size;
@@ -496,9 +491,7 @@ http_transfer_chunked_istream_destroy(struct iostream_private *stream)
 		http_header_parser_deinit(&tcstream->header_parser);
 
 	// FIXME: copied from istream.c; there's got to be a better way.
-	i_free(tcstream->istream.w_buffer);
-	if (tcstream->istream.parent != NULL)
-		i_stream_unref(&tcstream->istream.parent);
+	i_stream_free_buffer(&tcstream->istream);
 }
 
 struct istream *
@@ -518,7 +511,7 @@ http_transfer_chunked_istream_create(struct istream *input, uoff_t max_size)
 	tcstream->istream.istream.readable_fd = FALSE;
 	tcstream->istream.istream.blocking = input->blocking;
 	tcstream->istream.istream.seekable = FALSE;
-	return i_stream_create(&tcstream->istream, input, i_stream_get_fd(input));
+	return i_stream_create(&tcstream->istream, input, i_stream_get_fd(input), 0);
 }
 
 /*
@@ -536,7 +529,7 @@ struct http_transfer_chunked_ostream {
 
 	size_t chunk_size, chunk_pos;
 
-	unsigned int chunk_active:1;
+	bool chunk_active:1;
 };
 
 static size_t _log16(size_t in)
@@ -626,7 +619,7 @@ http_transfer_chunked_ostream_sendv(struct ostream_private *stream,
 	/* create new iovec */
 	prefix = t_strdup_printf("%llx\r\n", (unsigned long long)tcstream->chunk_size);
 	iov_count = iov_count_new + 2;
-	iov_new = t_malloc(sizeof(struct const_iovec) * iov_count);
+	iov_new = t_new(struct const_iovec, iov_count);
 	iov_new[0].iov_base = prefix;
 	iov_new[0].iov_len = strlen(prefix);
 	memcpy(&iov_new[1], iov, sizeof(struct const_iovec) * iov_count_new);

@@ -8,7 +8,6 @@ EXTRA_DIST = \
 
 wikifiles = ACL.txt \
 	AixPluginsSupport.txt \
-	AttachmentIndicator.txt \
 	AuthDatabase.CheckPassword.txt \
 	AuthDatabase.Dict.txt \
 	AuthDatabase.LDAP.AuthBinds.txt \
@@ -248,7 +247,6 @@ wikifiles = ACL.txt \
 	SocketUnavailable.txt \
 	Statistics.Old.txt \
 	Statistics.txt \
-	Submission.txt \
 	SystemUsers.txt \
 	TestInstallation.txt \
 	TestPop3Installation.txt \

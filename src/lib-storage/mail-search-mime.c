@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -307,10 +307,8 @@ bool mail_search_mime_arg_one_equals(const struct mail_search_mime_arg *arg1,
 	case SEARCH_MIME_DEPTH_MAX:
 	case SEARCH_MIME_INDEX:
 		return arg1->value.number == arg2->value.number;
-		break;
 	}
 	i_unreached();
-	return FALSE;
 }
 
 bool mail_search_mime_arg_equals(const struct mail_search_mime_arg *arg1,
@@ -406,16 +404,13 @@ bool mail_search_mime_arg_to_imap(string_t *dest,
 			return FALSE;
 		break;
 	case SEARCH_MIME_SIZE_EQUAL:
-		str_printfa(dest, "SIZE %llu",
-			(unsigned long long)arg->value.size);
+		str_printfa(dest, "SIZE %"PRIuUOFF_T, arg->value.size);
 		break;
 	case SEARCH_MIME_SIZE_LARGER:
-		str_printfa(dest, "SIZE LARGER %llu",
-			(unsigned long long)arg->value.size);
+		str_printfa(dest, "SIZE LARGER %"PRIuUOFF_T, arg->value.size);
 		break;
 	case SEARCH_MIME_SIZE_SMALLER:
-		str_printfa(dest, "SIZE SMALLER %llu",
-			(unsigned long long)arg->value.size);
+		str_printfa(dest, "SIZE SMALLER %"PRIuUOFF_T, arg->value.size);
 		break;
 	case SEARCH_MIME_DESCRIPTION:
 		str_append(dest, "DESCRIPTION ");
@@ -512,7 +507,7 @@ bool mail_search_mime_arg_to_imap(string_t *dest,
 		if (!mail_search_mime_arg_to_imap_date(dest, arg)) {
 			*error_r = t_strdup_printf(
 				"SENTBEFORE can't be written as IMAP MIMEPART key "
-				"for timestamp %ld", (long)arg->value.time);
+				"for timestamp %"PRIdTIME_T, arg->value.time);
 			return FALSE;
 		}
 		break;
@@ -521,7 +516,7 @@ bool mail_search_mime_arg_to_imap(string_t *dest,
 		if (!mail_search_mime_arg_to_imap_date(dest, arg)) {
 			*error_r = t_strdup_printf(
 				"SENTON can't be written as IMAP MIMEPART key "
-				"for timestamp %ld", (long)arg->value.time);
+				"for timestamp %"PRIdTIME_T, arg->value.time);
 			return FALSE;
 		}
 		break;
@@ -530,7 +525,7 @@ bool mail_search_mime_arg_to_imap(string_t *dest,
 		if (!mail_search_mime_arg_to_imap_date(dest, arg)) {
 			*error_r = t_strdup_printf(
 				"SENTSINCE can't be written as IMAP MIMEPART key "
-				"for timestamp %ld", (long)arg->value.time);
+				"for timestamp %"PRIdTIME_T, arg->value.time);
 			return FALSE;
 		}
 		break;

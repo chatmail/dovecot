@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
@@ -83,7 +83,7 @@ client_http_handle_request(void *context,
 	str_printfa(content, "Server: %s\r\n", ipport);
 	(void)net_ipport2str(&client->ip, client->port, &ipport);
 	str_printfa(content, "Client: %s\r\n", ipport);
-	str_printfa(content, "Host: %s", http_req->target.url->host_name);
+	str_printfa(content, "Host: %s", http_req->target.url->host.name);
 	if (http_req->target.url->port != 0)
 		str_printfa(content, ":%u", http_req->target.url->port);
 	str_append(content, "\r\n");
@@ -207,8 +207,8 @@ int main(int argc, char *argv[])
 	if (argc < 1 || net_str2port(argv[0], &port) < 0)
 		i_fatal("Port parameter missing");
 	if (argc < 2)
-		net_get_ip_any4(&my_ip);
-	else if (net_addr2ip(argv[2], &my_ip) < 0)
+		my_ip = net_ip4_any;
+	else if (net_addr2ip(argv[1], &my_ip) < 0)
 		i_fatal("Invalid IP parameter");
 
 	i_zero(&http_set);

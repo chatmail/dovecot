@@ -1,10 +1,9 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
 #include "ostream.h"
 #include "fdpass.h"
-#include "fd-close-on-exec.h"
 #include "llist.h"
 #include "str.h"
 #include "strescape.h"
@@ -29,7 +28,7 @@ struct master_login_connection {
 	struct io *io;
 	struct ostream *output;
 
-	unsigned int login_success:1;
+	bool login_success:1;
 };
 
 struct master_login_postlogin {
@@ -52,7 +51,7 @@ struct master_login {
 	char *postlogin_socket_path;
 	unsigned int postlogin_timeout_secs;
 
-	unsigned int stopping:1;
+	bool stopping:1;
 };
 
 static void master_login_conn_close(struct master_login_connection *conn);
@@ -240,7 +239,7 @@ static void master_login_postlogin_free(struct master_login_postlogin *pl)
 static void master_login_postlogin_input(struct master_login_postlogin *pl)
 {
 	char buf[1024];
-	const char **auth_args, **p;
+	const char *const *auth_args;
 	size_t len;
 	ssize_t ret;
 	int fd = -1;
@@ -277,10 +276,7 @@ static void master_login_postlogin_input(struct master_login_postlogin *pl)
 		return;
 	}
 
-	auth_args = t_strsplit_tab(str_c(pl->input));
-	for (p = auth_args; *p != NULL; p++)
-		*p = str_tabunescape(t_strdup_noconst(*p));
-
+	auth_args = t_strsplit_tabescaped(str_c(pl->input));
 	master_login_auth_finish(pl->client, auth_args);
 	master_login_postlogin_free(pl);
 }
@@ -419,10 +415,7 @@ static void master_login_conn_input(struct master_login_connection *conn)
 			master_login_conn_close(conn);
 			master_login_conn_unref(&conn);
 		}
-		if (client_fd != -1) {
-			if (close(client_fd) < 0)
-				i_error("close(fd_read client) failed: %m");
-		}
+		i_close_fd(&client_fd);
 		return;
 	}
 	fd_close_on_exec(client_fd, TRUE);
@@ -458,7 +451,7 @@ void master_login_add(struct master_login *login, int fd)
 	conn->login = login;
 	conn->fd = fd;
 	conn->io = io_add(conn->fd, IO_READ, master_login_conn_input, conn);
-	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	conn->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 
 	DLLIST_PREPEND(&login->conns, conn);
@@ -473,8 +466,7 @@ static void master_login_conn_close(struct master_login_connection *conn)
 
 	DLLIST_REMOVE(&conn->login->conns, conn);
 
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	io_remove(&conn->io);
 	o_stream_close(conn->output);
 	if (close(conn->fd) < 0)
 		i_error("close(master login) failed: %m");

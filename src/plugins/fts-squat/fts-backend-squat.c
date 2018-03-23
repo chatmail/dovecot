@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -182,7 +182,7 @@ static int get_all_msg_uids(struct mailbox *box, ARRAY_TYPE(seq_range) *uids)
 	struct mail *mail;
 	int ret;
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);

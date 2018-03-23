@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -109,7 +109,7 @@ int doveadm_print_istream(struct istream *input)
 	size_t size;
 	ssize_t ret;
 
-	while ((ret = i_stream_read_data(input, &data, &size, 0)) > 0) {
+	while ((ret = i_stream_read_more(input, &data, &size)) > 0) {
 		doveadm_print_stream(data, size);
 		i_stream_skip(input, size);
 	}

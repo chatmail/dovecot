@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -73,7 +73,7 @@ fs_dict_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 	dict_set.username = set->username;
 	dict_set.base_dir = set->base_dir;
 
-	if (dict_init_full(p, &dict_set, &fs->dict, &error) < 0) {
+	if (dict_init(p, &dict_set, &fs->dict, &error) < 0) {
 		fs_set_error(_fs, "dict_init(%s) failed: %s", args, error);
 		return -1;
 	}
@@ -93,33 +93,38 @@ static enum fs_properties fs_dict_get_properties(struct fs *fs ATTR_UNUSED)
 	return FS_PROPERTY_ITER | FS_PROPERTY_RELIABLEITER;
 }
 
-static struct fs_file *
-fs_dict_file_init(struct fs *_fs, const char *path,
-		  enum fs_open_mode mode, enum fs_open_flags flags ATTR_UNUSED)
+static struct fs_file *fs_dict_file_alloc(void)
 {
-	struct dict_fs *fs = (struct dict_fs *)_fs;
 	struct dict_fs_file *file;
-	guid_128_t guid;
 	pool_t pool;
-
-	i_assert(mode != FS_OPEN_MODE_APPEND); /* not supported */
-	i_assert(mode != FS_OPEN_MODE_CREATE); /* not supported */
 
 	pool = pool_alloconly_create("fs dict file", 128);
 	file = p_new(pool, struct dict_fs_file, 1);
 	file->pool = pool;
-	file->file.fs = _fs;
+	return &file->file;
+}
+
+static void
+fs_dict_file_init(struct fs_file *_file, const char *path,
+		  enum fs_open_mode mode, enum fs_open_flags flags ATTR_UNUSED)
+{
+	struct dict_fs_file *file = (struct dict_fs_file *)_file;
+	struct dict_fs *fs = (struct dict_fs *)_file->fs;
+	guid_128_t guid;
+
+	i_assert(mode != FS_OPEN_MODE_APPEND); /* not supported */
+	i_assert(mode != FS_OPEN_MODE_CREATE); /* not supported */
+
 	if (mode != FS_OPEN_MODE_CREATE_UNIQUE_128)
-		file->file.path = p_strdup(pool, path);
+		file->file.path = p_strdup(file->pool, path);
 	else {
 		guid_128_generate(guid);
-		file->file.path = p_strdup_printf(pool, "%s/%s", path,
+		file->file.path = p_strdup_printf(file->pool, "%s/%s", path,
 						  guid_128_to_string(guid));
 	}
 	file->key = fs->path_prefix == NULL ?
-		p_strdup(pool, file->file.path) :
-		p_strconcat(pool, fs->path_prefix, file->file.path, NULL);
-	return &file->file;
+		p_strdup(file->pool, file->file.path) :
+		p_strconcat(file->pool, fs->path_prefix, file->file.path, NULL);
 }
 
 static void fs_dict_file_deinit(struct fs_file *_file)
@@ -141,21 +146,22 @@ static bool fs_dict_prefetch(struct fs_file *_file ATTR_UNUSED,
 static int fs_dict_lookup(struct dict_fs_file *file)
 {
 	struct dict_fs *fs = (struct dict_fs *)file->file.fs;
+	const char *error;
 	int ret;
 
 	if (file->value != NULL)
 		return 0;
 
-	ret = dict_lookup(fs->dict, file->pool, file->key, &file->value);
+	ret = dict_lookup(fs->dict, file->pool, file->key, &file->value, &error);
 	if (ret > 0)
 		return 0;
 	else if (ret < 0) {
 		errno = EIO;
-		fs_set_error(&fs->fs, "Dict lookup failed");
+		fs_set_error(&fs->fs, "dict_lookup(%s) failed: %s", file->key, error);
 		return -1;
 	} else {
 		errno = ENOENT;
-		fs_set_error(&fs->fs, "Dict key doesn't exist");
+		fs_set_error(&fs->fs, "Dict key %s doesn't exist", file->key);
 		return -1;
 	}
 }
@@ -204,6 +210,7 @@ static int fs_dict_write_stream_finish(struct fs_file *_file, bool success)
 	struct dict_fs_file *file = (struct dict_fs_file *)_file;
 	struct dict_fs *fs = (struct dict_fs *)_file->fs;
 	struct dict_transaction_context *trans;
+	const char *error;
 
 	o_stream_destroy(&_file->output);
 	if (!success)
@@ -231,9 +238,9 @@ static int fs_dict_write_stream_finish(struct fs_file *_file, bool success)
 		dict_set(trans, file->key, str_c(base64));
 	}
 	}
-	if (dict_transaction_commit(&trans) < 0) {
+	if (dict_transaction_commit(&trans, &error) < 0) {
 		errno = EIO;
-		fs_set_error(_file->fs, "Dict transaction commit failed");
+		fs_set_error(_file->fs, "Dict transaction commit failed: %s", error);
 		return -1;
 	}
 	return 1;
@@ -256,31 +263,35 @@ static int fs_dict_delete(struct fs_file *_file)
 	struct dict_fs_file *file = (struct dict_fs_file *)_file;
 	struct dict_fs *fs = (struct dict_fs *)_file->fs;
 	struct dict_transaction_context *trans;
+	const char *error;
 
 	trans = dict_transaction_begin(fs->dict);
 	dict_unset(trans, file->key);
-	if (dict_transaction_commit(&trans) < 0) {
+	if (dict_transaction_commit(&trans, &error) < 0) {
 		errno = EIO;
-		fs_set_error(_file->fs, "Dict transaction commit failed");
+		fs_set_error(_file->fs, "Dict transaction commit failed: %s", error);
 		return -1;
 	}
 	return 0;
 }
 
-static struct fs_iter *
-fs_dict_iter_init(struct fs *_fs, const char *path, enum fs_iter_flags flags)
+static struct fs_iter *fs_dict_iter_alloc(void)
 {
-	struct dict_fs *fs = (struct dict_fs *)_fs;
-	struct dict_fs_iter *iter;
+	struct dict_fs_iter *iter = i_new(struct dict_fs_iter, 1);
+	return &iter->iter;
+}
 
-	iter = i_new(struct dict_fs_iter, 1);
-	iter->iter.fs = _fs;
-	iter->iter.flags = flags;
+static void
+fs_dict_iter_init(struct fs_iter *_iter, const char *path,
+		  enum fs_iter_flags flags ATTR_UNUSED)
+{
+	struct dict_fs_iter *iter = (struct dict_fs_iter *)_iter;
+	struct dict_fs *fs = (struct dict_fs *)_iter->fs;
+
 	if (fs->path_prefix != NULL)
 		path = t_strconcat(fs->path_prefix, path, NULL);
 
 	iter->dict_iter = dict_iterate_init(fs->dict, path, 0);
-	return &iter->iter;
 }
 
 static const char *fs_dict_iter_next(struct fs_iter *_iter)
@@ -296,11 +307,12 @@ static const char *fs_dict_iter_next(struct fs_iter *_iter)
 static int fs_dict_iter_deinit(struct fs_iter *_iter)
 {
 	struct dict_fs_iter *iter = (struct dict_fs_iter *)_iter;
+	const char *error;
 	int ret;
 
-	ret = dict_iterate_deinit(&iter->dict_iter);
+	ret = dict_iterate_deinit(&iter->dict_iter, &error);
 	if (ret < 0)
-		fs_set_error(_iter->fs, "Dict iteration failed");
+		fs_set_error(_iter->fs, "Dict iteration failed: %s", error);
 	i_free(iter);
 	return ret;
 }
@@ -312,6 +324,7 @@ const struct fs fs_class_dict = {
 		fs_dict_init,
 		fs_dict_deinit,
 		fs_dict_get_properties,
+		fs_dict_file_alloc,
 		fs_dict_file_init,
 		fs_dict_file_deinit,
 		NULL,
@@ -332,6 +345,7 @@ const struct fs fs_class_dict = {
 		fs_default_copy,
 		NULL,
 		fs_dict_delete,
+		fs_dict_iter_alloc,
 		fs_dict_iter_init,
 		fs_dict_iter_next,
 		fs_dict_iter_deinit,

@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "test-lib.h"
@@ -7,7 +7,7 @@
 
 static void test_dns_compare(void)
 {
-	struct {
+	static const struct {
 		const char *a;
 		const char *b;
 		int res;
@@ -44,7 +44,7 @@ static void test_dns_compare(void)
 
 static void test_dns_match(void)
 {
-	struct {
+	static const struct {
 		const char *name;
 		const char *mask;
 		int res;
@@ -114,7 +114,7 @@ static void test_dns_sort(void)
 }
 
 int main(void) {
-	void (*test_functions[])(void) = {
+	void (*const test_functions[])(void) = {
 		test_dns_compare,
 		test_dns_match,
 		test_dns_sort,

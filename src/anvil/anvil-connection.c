@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "common.h"
 #include "llist.h"
@@ -26,10 +26,10 @@ struct anvil_connection {
 	struct ostream *output;
 	struct io *io;
 
-	unsigned int version_received:1;
-	unsigned int handshaked:1;
-	unsigned int master:1;
-	unsigned int fifo:1;
+	bool version_received:1;
+	bool handshaked:1;
+	bool master:1;
+	bool fifo:1;
 };
 
 static struct anvil_connection *anvil_connections = NULL;
@@ -190,9 +190,9 @@ anvil_connection_create(int fd, bool master, bool fifo)
 
 	conn = i_new(struct anvil_connection, 1);
 	conn->fd = fd;
-	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
+	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE);
 	if (!fifo) {
-		conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+		conn->output = o_stream_create_fd(fd, (size_t)-1);
 		o_stream_set_no_error_handling(conn->output, TRUE);
 	}
 	conn->io = io_add(fd, IO_READ, anvil_connection_input, conn);
@@ -210,8 +210,7 @@ void anvil_connection_destroy(struct anvil_connection *conn)
 
 	io_remove(&conn->io);
 	i_stream_destroy(&conn->input);
-	if (conn->output != NULL)
-		o_stream_destroy(&conn->output);
+	o_stream_destroy(&conn->output);
 	if (close(conn->fd) < 0)
 		i_error("close(anvil conn) failed: %m");
 	i_free(conn);

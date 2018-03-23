@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -121,7 +121,7 @@ struct imap_url_parser {
 	struct imap_url *url;
 	const struct imap_url *base;
 
-	unsigned int relative:1;
+	bool relative:1;
 };
 
 static int
@@ -191,9 +191,10 @@ static int imap_url_parse_iserver(struct imap_url_parser *url_parser)
 	 */
 
 	/* "//" iserver */
-	if ((ret = uri_parse_slashslash_authority(parser, &auth)) <= 0)
+	if ((ret = uri_parse_slashslash_host_authority
+		(parser, &auth)) <= 0)
 		return ret;
-	if (auth.host_literal == NULL || *auth.host_literal == '\0') {
+	if (auth.host.name == NULL || *auth.host.name == '\0') {
 		/* This situation is not documented anywhere, but it is not
 		   currently useful either and potentially problematic if not
 		   handled explicitly everywhere. So, it is denied hier for now.
@@ -259,11 +260,8 @@ static int imap_url_parse_iserver(struct imap_url_parser *url_parser)
 	}
 
 	if (url != NULL) {
-		url->host_name = auth.host_literal;
-		url->host_ip = auth.host_ip;
-		url->have_host_ip = auth.have_host_ip;
+		url->host = auth.host;
 		url->port = auth.port;
-		url->have_port = auth.have_port;
 	}
 	return 1;
 }
@@ -415,7 +413,7 @@ imap_url_parse_urlauth(struct imap_url_parser *url_parser, const char *urlext)
 		return -1;
 	}
 
-	uauth_token = buffer_create_dynamic(pool_datastack_create(), 64);
+	uauth_token = t_buffer_create(64);
 	if (hex_to_binary(q, uauth_token) < 0) {
 		parser->error = "Invalid URLAUTH token";
 		return -1;
@@ -797,9 +795,9 @@ static bool imap_url_do_parse(struct imap_url_parser *url_parser)
 	if ((url_parser->flags & IMAP_URL_PARSE_SCHEME_EXTERNAL) == 0) {
 		const char *scheme;
 
-		if ((ret = uri_parse_scheme(parser, &scheme)) < 0)
-			return FALSE;
-		else if (ret > 0) {
+		if (uri_parse_scheme(parser, &scheme) <= 0) {
+			parser->cur = parser->begin;
+		} else {
 			if (strcasecmp(scheme, "imap") != 0) {
 				parser->error = "Not an IMAP URL";
 				return FALSE;
@@ -838,10 +836,7 @@ static bool imap_url_do_parse(struct imap_url_parser *url_parser)
 			struct imap_url *url = url_parser->url;
 			const struct imap_url *base = url_parser->base;
 
-			url->host_name = p_strdup_empty(parser->pool, base->host_name); 
-			url->host_ip = base->host_ip;
-			url->have_host_ip = base->have_host_ip;
-			url->have_port = base->have_port;
+			uri_host_copy(parser->pool, &url->host, &base->host);
 			url->port = base->port;
 			url->userid = p_strdup_empty(parser->pool, base->userid);
 			url->auth_type = p_strdup_empty(parser->pool, base->auth_type);
@@ -905,7 +900,7 @@ int imap_url_parse(const char *url, const struct imap_url *base,
 	i_assert((flags & IMAP_URL_PARSE_REQUIRE_RELATIVE) == 0 || base != NULL);
 	i_assert((flags & IMAP_URL_PARSE_SCHEME_EXTERNAL) == 0 || base == NULL);
 
-	memset(&url_parser, '\0', sizeof(url_parser));
+	i_zero(&url_parser);
 	uri_parser_init(&url_parser.parser, pool_datastack_create(), url);
 
 	url_parser.url = t_new(struct imap_url, 1);
@@ -993,18 +988,8 @@ const char *imap_url_create(const struct imap_url *url)
 	}
 
 	/* server */
-	if (url->host_name != NULL) {
-		/* assume IPv6 literal if starts with '['; avoid encoding */
-		if (*url->host_name == '[')
-			str_append(urlstr, url->host_name);
-		else
-			uri_append_host_name(urlstr, url->host_name);
-	} else if (url->have_host_ip) {
-		uri_append_host_ip(urlstr, &url->host_ip);
-	} else
-		i_unreached();
-	if (url->have_port)
-		uri_append_port(urlstr, url->port);
+	uri_append_host(urlstr, &url->host);
+	uri_append_port(urlstr, url->port);
 
 	/* Older syntax (RFC 2192) requires this slash at all times */
 	str_append_c(urlstr, '/');

@@ -29,6 +29,15 @@ enum imap_parser_flags {
 	IMAP_PARSE_FLAG_STOP_AT_LIST	= 0x100
 };
 
+enum imap_parser_error {
+	/* not fatal */
+	IMAP_PARSE_ERROR_NONE = 0,
+	IMAP_PARSE_ERROR_BAD_SYNTAX,
+	IMAP_PARSE_ERROR_LINE_TOO_LONG,
+	/* fatal */
+	IMAP_PARSE_ERROR_LITERAL_TOO_BIG
+};
+
 struct imap_parser;
 
 /* Create new IMAP argument parser. output is used for sending command
@@ -48,6 +57,10 @@ imap_parser_create(struct istream *input, struct ostream *output,
 void imap_parser_ref(struct imap_parser *parser);
 void imap_parser_unref(struct imap_parser **parser);
 
+/* Enable LITERAL- parser semantics: non-synchronizing literals must not
+   exceed 4096 bytes */
+void imap_parser_enable_literal_minus(struct imap_parser *parser);
+
 /* Reset the parser to initial state. */
 void imap_parser_reset(struct imap_parser *parser);
 
@@ -58,7 +71,8 @@ void imap_parser_set_streams(struct imap_parser *parser, struct istream *input,
 /* Return the last error in parser. fatal is set to TRUE if there's no way to
    continue parsing, currently only if too large non-sync literal size was
    given. */
-const char *imap_parser_get_error(struct imap_parser *parser, bool *fatal);
+const char *imap_parser_get_error(struct imap_parser *parser,
+	enum imap_parser_error *error_r) ATTR_NULL(2);
 
 /* Read a number of arguments. This function doesn't call i_stream_read(), you
    need to do that. Returns number of arguments read (may be less than count

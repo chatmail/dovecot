@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -41,7 +41,7 @@ static int fts_filter_stopwords_read_list(struct fts_filter_stopwords *filter,
 		if (strcspn(line, STOPWORDS_DISALLOWED_CHARS) < len)
 			continue;
 		word = p_strndup(filter->pool, line, len);
-		hash_table_insert(filter->stopwords, word, word);
+		hash_table_update(filter->stopwords, word, word);
 	}
 
 	if (input->stream_errno != 0) {

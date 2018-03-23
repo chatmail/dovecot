@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -58,10 +58,7 @@ static void tcpwrap_client_input(struct tcpwrap_client *client)
 		i_error("Invalid input from client");
 	}
 
-	if (check_fd != -1) {
-		if (close(check_fd) < 0)
-			i_error("close(fdread fd) failed: %m");
-	}
+	i_close_fd(&check_fd);
 	tcpwrap_client_destroy(&client);
 }
 

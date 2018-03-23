@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -48,11 +48,11 @@ struct auth_worker_connection {
 	struct auth_worker_request *request;
 	unsigned int id_counter;
 
-	unsigned int received_error:1;
-	unsigned int restart:1;
-	unsigned int shutdown:1;
-	unsigned int timeout_pending_resume:1;
-	unsigned int resuming:1;
+	bool received_error:1;
+	bool restart:1;
+	bool shutdown:1;
+	bool timeout_pending_resume:1;
+	bool resuming:1;
 };
 
 static ARRAY(struct auth_worker_connection *) connections = ARRAY_INIT;
@@ -192,9 +192,8 @@ static struct auth_worker_connection *auth_worker_create(void)
 
 	conn = i_new(struct auth_worker_connection, 1);
 	conn->fd = fd;
-	conn->input = i_stream_create_fd(fd, AUTH_WORKER_MAX_LINE_LENGTH,
-					 FALSE);
-	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(fd, AUTH_WORKER_MAX_LINE_LENGTH);
+	conn->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	conn->io = io_add(fd, IO_READ, worker_input, conn);
 	conn->to = timeout_add(AUTH_WORKER_MAX_IDLE_SECS * 1000,
@@ -241,12 +240,10 @@ static void auth_worker_destroy(struct auth_worker_connection **_conn,
 				conn->request->context);
 	}
 
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	io_remove(&conn->io);
 	i_stream_destroy(&conn->input);
 	o_stream_destroy(&conn->output);
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 
 	if (close(conn->fd) < 0)
 		i_error("close(auth worker) failed: %m");
@@ -481,8 +478,7 @@ void auth_worker_server_resume_input(struct auth_worker_connection *conn)
 		conn->io = io_add(conn->fd, IO_READ, worker_input, conn);
 	if (!conn->timeout_pending_resume) {
 		conn->timeout_pending_resume = TRUE;
-		if (conn->to != NULL)
-			timeout_remove(&conn->to);
+		timeout_remove(&conn->to);
 		conn->to = timeout_add_short(0, worker_input_resume, conn);
 	}
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 
@@ -30,13 +30,13 @@ struct zlib_istream {
 	uint32_t crc32;
 	struct stat last_parent_statbuf;
 
-	unsigned int gz:1;
-	unsigned int log_errors:1;
-	unsigned int marked:1;
-	unsigned int header_read:1;
-	unsigned int trailer_read:1;
-	unsigned int zs_closed:1;
-	unsigned int starting_concated_output:1;
+	bool gz:1;
+	bool log_errors:1;
+	bool marked:1;
+	bool header_read:1;
+	bool trailer_read:1;
+	bool zs_closed:1;
+	bool starting_concated_output:1;
 };
 
 static void i_stream_zlib_init(struct zlib_istream *zstream);
@@ -59,8 +59,7 @@ static void zlib_read_error(struct zlib_istream *zstream, const char *error)
 	io_stream_set_error(&zstream->istream.iostream,
 			    "zlib.read(%s): %s at %"PRIuUOFF_T,
 			    i_stream_get_name(&zstream->istream.istream), error,
-			    zstream->istream.abs_start_offset +
-			    zstream->istream.istream.v_offset);
+			    i_stream_get_absolute_offset(&zstream->istream.istream));
 	if (zstream->log_errors)
 		i_error("%s", zstream->istream.iostream.error);
 }
@@ -73,8 +72,8 @@ static int i_stream_zlib_read_header(struct istream_private *stream)
 	unsigned int pos, fextra_size;
 	int ret;
 
-	ret = i_stream_read_data(stream->parent, &data, &size,
-				 zstream->prev_size);
+	ret = i_stream_read_bytes(stream->parent, &data, &size,
+				  zstream->prev_size + 1);
 	if (size == zstream->prev_size) {
 		stream->istream.stream_errno = stream->parent->stream_errno;
 		if (ret == -1 && stream->istream.stream_errno == 0) {
@@ -139,8 +138,8 @@ static int i_stream_zlib_read_trailer(struct zlib_istream *zstream)
 	size_t size;
 	int ret;
 
-	ret = i_stream_read_data(stream->parent, &data, &size,
-				 GZ_TRAILER_SIZE-1);
+	ret = i_stream_read_bytes(stream->parent, &data, &size,
+				  GZ_TRAILER_SIZE);
 	if (size == zstream->prev_size) {
 		stream->istream.stream_errno = stream->parent->stream_errno;
 		if (ret == -1 && stream->istream.stream_errno == 0) {
@@ -184,7 +183,7 @@ static ssize_t i_stream_zlib_read(struct istream_private *stream)
 			if (ret <= 0)
 				return ret;
 		}
-		if (!zstream->gz || i_stream_is_eof(stream->parent)) {
+		if (!zstream->gz || i_stream_read_eof(stream->parent)) {
 			stream->istream.eof = TRUE;
 			return -1;
 		}
@@ -242,28 +241,16 @@ static ssize_t i_stream_zlib_read(struct istream_private *stream)
 	}
 	zstream->high_pos = 0;
 
-	if (stream->pos + CHUNK_SIZE > stream->buffer_size) {
-		/* try to keep at least CHUNK_SIZE available */
-		if (!zstream->marked && stream->skip > 0) {
-			/* don't try to keep anything cached if we don't
-			   have a seek mark. */
-			i_stream_compress(stream);
-		}
-		if (stream->buffer_size < i_stream_get_max_buffer_size(&stream->istream))
-			i_stream_grow_buffer(stream, CHUNK_SIZE);
-
-		if (stream->pos == stream->buffer_size) {
-			if (stream->skip > 0) {
-				/* lose our buffer cache */
-				i_stream_compress(stream);
-			}
-
-			if (stream->pos == stream->buffer_size)
-				return -2; /* buffer full */
-		}
+	if (!zstream->marked) {
+		if (!i_stream_try_alloc(stream, CHUNK_SIZE, &out_size))
+			return -2; /* buffer full */
+	} else {
+		/* try to avoid compressing, so we can quickly seek backwards */
+		if (!i_stream_try_alloc_avoid_compress(stream, CHUNK_SIZE, &out_size))
+			return -2; /* buffer full */
 	}
 
-	if (i_stream_read_data(stream->parent, &data, &size, 0) < 0) {
+	if (i_stream_read_more(stream->parent, &data, &size) < 0) {
 		if (stream->parent->stream_errno != 0) {
 			stream->istream.stream_errno =
 				stream->parent->stream_errno;
@@ -283,7 +270,6 @@ static ssize_t i_stream_zlib_read(struct istream_private *stream)
 	zstream->zs.next_in = (void *)data;
 	zstream->zs.avail_in = size;
 
-	out_size = stream->buffer_size - stream->pos;
 	zstream->zs.next_out = stream->w_buffer + stream->pos;
 	zstream->zs.avail_out = out_size;
 	ret = inflate(&zstream->zs, Z_SYNC_FLUSH);
@@ -514,7 +500,7 @@ i_stream_create_zlib(struct istream *input, bool gz, bool log_errors)
 	zstream->istream.istream.seekable = input->seekable;
 
 	return i_stream_create(&zstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }
 
 struct istream *i_stream_create_gz(struct istream *input, bool log_errors)

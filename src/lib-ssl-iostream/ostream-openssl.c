@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -26,8 +26,7 @@ static void o_stream_ssl_destroy(struct iostream_private *stream)
 
 	sstream->ssl_io->ssl_output = NULL;
 	ssl_iostream_unref(&sstream->ssl_io);
-	if (sstream->buffer != NULL)
-		buffer_free(&sstream->buffer);
+	buffer_free(&sstream->buffer);
 }
 
 static size_t
@@ -48,7 +47,7 @@ o_stream_ssl_buffer(struct ssl_ostream *sstream, const struct const_iovec *iov,
 	}
 
 	if (sstream->ostream.max_buffer_size == 0) {
-		/* we're requeted to use whatever space is available in
+		/* we're requested to use whatever space is available in
 		   the buffer */
 		avail = buffer_get_writable_size(sstream->buffer) - sstream->buffer->used;
 	} else {
@@ -95,8 +94,8 @@ static int o_stream_ssl_flush_buffer(struct ssl_ostream *sstream)
 				CONST_PTR_OFFSET(sstream->buffer->data, pos),
 				sstream->buffer->used - pos);
 		if (ret <= 0) {
-			ret = openssl_iostream_handle_write_error(sstream->ssl_io,
-								  ret, "SSL_write");
+			ret = openssl_iostream_handle_error(sstream->ssl_io,
+				ret, OPENSSL_IOSTREAM_SYNC_TYPE_WRITE, "SSL_write");
 			if (ret < 0) {
 				io_stream_set_error(&sstream->ostream.iostream,
 					"%s", sstream->ssl_io->last_error);
@@ -107,7 +106,8 @@ static int o_stream_ssl_flush_buffer(struct ssl_ostream *sstream)
 				break;
 		} else {
 			pos += ret;
-			(void)openssl_iostream_bio_sync(sstream->ssl_io);
+			(void)openssl_iostream_bio_sync(sstream->ssl_io,
+				OPENSSL_IOSTREAM_SYNC_TYPE_WRITE);
 		}
 	}
 	buffer_delete(sstream->buffer, 0, pos);
@@ -117,10 +117,10 @@ static int o_stream_ssl_flush_buffer(struct ssl_ostream *sstream)
 static int o_stream_ssl_flush(struct ostream_private *stream)
 {
 	struct ssl_ostream *sstream = (struct ssl_ostream *)stream;
-	struct ostream *plain_output = sstream->ssl_io->plain_output;
 	int ret;
 
-	if ((ret = openssl_iostream_more(sstream->ssl_io)) < 0) {
+	if ((ret = openssl_iostream_more(sstream->ssl_io,
+				OPENSSL_IOSTREAM_SYNC_TYPE_HANDSHAKE)) < 0) {
 		/* handshake failed */
 		io_stream_set_error(&stream->iostream, "%s",
 				    sstream->ssl_io->last_error);
@@ -133,17 +133,12 @@ static int o_stream_ssl_flush(struct ostream_private *stream)
 
 	if (ret == 0 && sstream->ssl_io->want_read) {
 		/* we need to read more data until we can continue. */
-		o_stream_set_flush_pending(plain_output, FALSE);
+		o_stream_set_flush_pending(sstream->ssl_io->plain_output,
+					   FALSE);
 		sstream->ssl_io->ostream_flush_waiting_input = TRUE;
 		ret = 1;
 	}
-
-	if (ret <= 0)
-		return ret;
-
-	/* return 1 only when the output buffer is empty, which is what the
-	   caller expects. */
-	return o_stream_get_buffer_used_size(plain_output) == 0 ? 1 : 0;
+	return ret;
 }
 
 static ssize_t

@@ -30,7 +30,8 @@ dist_stopwords_DATA = \
 	stopwords/stopwords_ru.txt \
 	stopwords/stopwords_sv.txt
 
-BUILT_SOURCES = word-boundary-data.c word-break-data.c
+BUILT_SOURCES = $(srcdir)/word-boundary-data.c \
+		$(srcdir)/word-break-data.c
 
 EXTRA_DIST = \
 	udhr_fra.txt \
@@ -41,15 +42,15 @@ EXTRA_DIST = \
 	word-break-data.c \
 	stopwords/stopwords_malformed.txt
 
-WordBreakProperty.txt:
-	test -f WordBreakProperty.txt || wget https://dovecot.org/res/WordBreakProperty.txt
-$(srcdir)/word-boundary-data.c: word-properties.pl WordBreakProperty.txt
-	perl word-properties.pl boundaries WordBreakProperty.txt > $@
+$(srcdir)/WordBreakProperty.txt:
+	test -f $@ || wget -O $@ https://dovecot.org/res/WordBreakProperty.txt
+$(srcdir)/word-boundary-data.c: $(srcdir)/word-properties.pl $(srcdir)/WordBreakProperty.txt
+	perl $(srcdir)/word-properties.pl boundaries $(srcdir)/WordBreakProperty.txt > $@
 
-PropList.txt:
-	test -f PropList.txt || wget https://dovecot.org/res/PropList.txt
-$(srcdir)/word-break-data.c: word-properties.pl PropList.txt
-	perl word-properties.pl breaks PropList.txt > $@
+$(srcdir)/PropList.txt:
+	test -f $@ || wget -O $@ https://dovecot.org/res/PropList.txt
+$(srcdir)/word-break-data.c: $(srcdir)/word-properties.pl $(srcdir)/PropList.txt
+	perl $(srcdir)/word-properties.pl breaks $(srcdir)/PropList.txt > $@
 
 
 if BUILD_FTS_STEMMER
@@ -148,8 +149,7 @@ test_fts_tokenizer_SOURCES = test-fts-tokenizer.c
 test_fts_tokenizer_LDADD = fts-tokenizer.lo fts-tokenizer-generic.lo fts-tokenizer-address.lo fts-tokenizer-common.lo ../lib-mail/libmail.la $(test_libs)
 test_fts_tokenizer_DEPENDENCIES = ../lib-mail/libmail.la $(test_deps)
 
-check: check-am check-test
-check-test: all-am
+check-local:
 	for bin in $(test_programs); do \
 	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
 	done

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -42,7 +42,7 @@ struct mysql_db {
 	MYSQL *mysql;
 	unsigned int next_query_connection;
 
-	unsigned int ssl_set:1;
+	bool ssl_set:1;
 };
 
 struct mysql_result {
@@ -63,7 +63,7 @@ struct mysql_transaction_context {
 	pool_t query_pool;
 	const char *error;
 
-	unsigned int failed:1;
+	bool failed:1;
 };
 
 extern const struct sql_db driver_mysql_db;
@@ -173,7 +173,7 @@ static void driver_mysql_parse_connect_string(struct mysql_db *db,
 	const char **field;
 
 	db->ssl_cipher = "HIGH";
-	db->ssl_verify_server_cert = 0; /* FIXME: change to 1 for v2.3 */
+	db->ssl_verify_server_cert = 1;
 	db->connect_timeout = SQL_CONNECT_TIMEOUT_SECS;
 	db->read_timeout = MYSQL_DEFAULT_READ_TIMEOUT_SECS;
 	db->write_timeout = MYSQL_DEFAULT_WRITE_TIMEOUT_SECS;
@@ -541,12 +541,13 @@ static void
 driver_mysql_transaction_commit(struct sql_transaction_context *ctx,
 				sql_commit_callback_t *callback, void *context)
 {
+	struct sql_commit_result result;
 	const char *error;
 
+	i_zero(&result);
 	if (sql_transaction_commit_s(&ctx, &error) < 0)
-		callback(error, context);
-	else
-		callback(NULL, context);
+		result.error = error;
+	callback(&result, context);
 }
 
 static int ATTR_NULL(3)

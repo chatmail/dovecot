@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -103,7 +103,7 @@ hardlink_replace(const char *src, const char *dest, ino_t src_inode)
 	i_assert(p != NULL);
 	destdir = t_strdup_until(dest, p);
 
-	random_fill_weak(randbuf, sizeof(randbuf));
+	random_fill(randbuf, sizeof(randbuf));
 	tmppath = t_strdup_printf("%s/temp.%s.%s.%s",
 				  destdir, my_hostname, my_pid,
 				  binary_to_hex(randbuf, sizeof(randbuf)));

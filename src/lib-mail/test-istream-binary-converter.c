@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "base64.h"
@@ -123,8 +123,8 @@ static void test_istream_binary_converter_mime(void)
 
 static void test_istream_binary_converter_root(void)
 {
-	buffer_t *inbuf = buffer_create_dynamic(pool_datastack_create(), 512);
-	buffer_t *outbuf = buffer_create_dynamic(pool_datastack_create(), 512);
+	buffer_t *inbuf = t_buffer_create(512);
+	buffer_t *outbuf = t_buffer_create(512);
 	const char *const suffixes[] = { "\n", "\r\n", "\n\r\n\n\n" };
 	unsigned int i;
 	unsigned int input_hdr_len = sizeof(mail_input_root_hdr)-1;
@@ -169,7 +169,7 @@ static int test_input_file(const char *path)
 	/* get hash when directly reading input */
 	input = i_stream_create_crlf(file_input);
 	sha1_init(&hash);
-	while (i_stream_read_data(input, &data, &size, 0) > 0) {
+	while (i_stream_read_more(input, &data, &size) > 0) {
 		sha1_loop(&hash, data, size);
 		i_stream_skip(input, size);
 	}
@@ -181,7 +181,7 @@ static int test_input_file(const char *path)
 	input = i_stream_create_crlf(file_input);
 	input2 = i_stream_create_binary_converter(input);
 	sha1_init(&hash);
-	while (i_stream_read_data(input2, &data, &size, 0) > 0) {
+	while (i_stream_read_more(input2, &data, &size) > 0) {
 		sha1_loop(&hash, data, size);
 		i_stream_skip(input2, size);
 	}
@@ -202,7 +202,7 @@ static int test_input_file(const char *path)
 
 int main(int argc, char *argv[])
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_istream_binary_converter_mime,
 		test_istream_binary_converter_root,
 		test_istream_binary_converter_root_nonbinary,

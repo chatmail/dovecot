@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "pop3-common.h"
 #include "array.h"
@@ -69,7 +69,7 @@ static void client_commit_timeout(struct client *client)
 	}
 
 	(void)mailbox_transaction_commit(&client->trans);
-	client->trans = mailbox_transaction_begin(client->mailbox, 0);
+	client->trans = mailbox_transaction_begin(client->mailbox, 0, __func__);
 }
 
 static void client_idle_timeout(struct client *client)
@@ -158,7 +158,7 @@ static int read_mailbox(struct client *client, uint32_t *failed_uid_r)
 	client->uid_validity = status.uidvalidity;
 	client->messages_count = status.messages;
 
-	t = mailbox_transaction_begin(client->mailbox, 0);
+	t = mailbox_transaction_begin(client->mailbox, 0, __func__);
 
 	search_args = mail_search_build_init();
 	if (client->deleted_kw != NULL) {
@@ -206,7 +206,7 @@ static int read_mailbox(struct client *client, uint32_t *failed_uid_r)
 		ret = -1;
 
 	if (ret <= 0) {
-		/* commit the transaction instead of rollbacking to make sure
+		/* commit the transaction instead of rolling back to make sure
 		   we don't lose data (virtual sizes) added to cache file */
 		(void)mailbox_transaction_commit(&t);
 		array_free(&message_sizes);
@@ -396,8 +396,8 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 	client->session_id = p_strdup(pool, session_id);
 	client->fd_in = fd_in;
 	client->fd_out = fd_out;
-	client->input = i_stream_create_fd(fd_in, MAX_INBUF_SIZE, FALSE);
-	client->output = o_stream_create_fd(fd_out, (size_t)-1, FALSE);
+	client->input = i_stream_create_fd(fd_in, MAX_INBUF_SIZE);
+	client->output = o_stream_create_fd(fd_out, (size_t)-1);
 	o_stream_set_no_error_handling(client->output, TRUE);
 	o_stream_set_flush_callback(client->output, client_output, client);
 
@@ -500,8 +500,8 @@ static const char *client_build_uidl_change_string(struct client *client)
 			new_hash ^= crc32_str(client->message_uidls[i]);
 	} else {
 		for (i = 0, new_hash = 0; i < client->messages_count; i++) {
-			if (client->deleted_bitmask[i / CHAR_BIT] &
-			    (1 << (i % CHAR_BIT)))
+			if ((client->deleted_bitmask[i / CHAR_BIT] &
+			     (1 << (i % CHAR_BIT))) != 0)
 				continue;
 			new_hash ^= crc32_str(client->message_uidls[i]);
 		}
@@ -546,10 +546,15 @@ static const char *client_stats(struct client *client)
 	const struct var_expand_table *tab =
 		t_var_expand_merge_tables(logout_tab, user_tab);
 	string_t *str;
+	const char *error;
 
 	str = t_str_new(128);
-	var_expand_with_funcs(str, client->set->pop3_logout_format, tab,
-			      mail_user_var_expand_func_table, client->user);
+	if (var_expand_with_funcs(str, client->set->pop3_logout_format,
+				  tab, mail_user_var_expand_func_table,
+				  client->user, &error) < 0) {
+		i_error("Failed to expand pop3_logout_format=%s: %s",
+			client->set->pop3_logout_format, error);
+	}
 	return str_c(str);
 }
 
@@ -604,21 +609,17 @@ static void client_default_destroy(struct client *client, const char *reason)
 
 	if (client->session_dotlock != NULL)
 		file_dotlock_delete(&client->session_dotlock);
-	if (client->to_session_dotlock_refresh != NULL)
-		timeout_remove(&client->to_session_dotlock_refresh);
+	timeout_remove(&client->to_session_dotlock_refresh);
 
-	if (client->uidl_pool != NULL)
-		pool_unref(&client->uidl_pool);
+	pool_unref(&client->uidl_pool);
 	i_free(client->message_sizes);
 	i_free(client->deleted_bitmask);
 	i_free(client->seen_bitmask);
 	i_free(client->msgnum_to_seq_map);
 
-	if (client->io != NULL)
-		io_remove(&client->io);
+	io_remove(&client->io);
 	timeout_remove(&client->to_idle);
-	if (client->to_commit != NULL)
-		timeout_remove(&client->to_commit);
+	timeout_remove(&client->to_commit);
 
 	i_stream_destroy(&client->input);
 	o_stream_destroy(&client->output);
@@ -661,8 +662,7 @@ void client_disconnect(struct client *client, const char *reason)
 	i_stream_close(client->input);
 	o_stream_close(client->output);
 
-	if (client->to_idle != NULL)
-		timeout_remove(&client->to_idle);
+	timeout_remove(&client->to_idle);
 	client->to_idle = timeout_add(0, client_destroy_timeout, client);
 }
 
@@ -799,7 +799,6 @@ static void client_input(struct client *client)
 
 static int client_output(struct client *client)
 {
-	o_stream_cork(client->output);
 	if (o_stream_flush(client->output) < 0) {
 		client_destroy(client, NULL);
 		return 1;
@@ -829,7 +828,6 @@ static int client_output(struct client *client)
 		}
 	}
 
-	o_stream_uncork(client->output);
 	if (client->cmd != NULL) {
 		/* command not finished yet */
 		return 0;
@@ -841,7 +839,7 @@ static int client_output(struct client *client)
 	}
 }
 
-void clients_destroy_all(struct mail_storage_service_ctx *storage_service)
+void clients_destroy_all(void)
 {
 	while (pop3_clients != NULL) {
 		if (pop3_clients->cmd == NULL) {
@@ -851,7 +849,6 @@ void clients_destroy_all(struct mail_storage_service_ctx *storage_service)
 		mail_storage_service_io_activate_user(pop3_clients->service_user);
 		client_destroy(pop3_clients, "Server shutting down.");
 	}
-	mail_storage_service_io_deactivate(storage_service);
 }
 
 struct pop3_client_vfuncs pop3_client_vfuncs = {

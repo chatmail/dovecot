@@ -21,6 +21,16 @@
 #  define NULL ((void *)0)
 #endif
 
+#ifndef __has_extension
+  #define __has_extension(x) 0  // Compatibility with non-clang compilers.
+#endif
+
+#if (defined(__GNUC__) && __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)) || \
+    (defined(__clang__) && (__has_extension(attribute_deprecated_with_message)))
+int rand(void) __attribute__((deprecated("Do not use rand, use i_rand")));
+int rand_r(unsigned int*) __attribute__((deprecated("Do not use rand_r, use i_rand")));
+#endif
+
 #ifndef __cplusplus
 #ifdef HAVE__BOOL
 typedef _Bool bool;
@@ -59,6 +69,11 @@ typedef unsigned long uint_fast32_t;
 
 #ifndef HAVE_SOCKLEN_T
 typedef int socklen_t;
+#endif
+
+/* WORDS_BIGENDIAN needs to be undefined if not enabled */
+#if defined(WORDS_BIGENDIAN) && WORDS_BIGENDIAN == 0
+#  undef WORDS_BIGENDIAN
 #endif
 
 #ifdef HAVE_SYS_SYSMACROS_H
@@ -212,19 +227,19 @@ int i_my_clock_gettime(int clk_id, struct timespec *tp);
    use our own instead if really needed */
 #define i_toupper(x) ((char) toupper((int) (unsigned char) (x)))
 #define i_tolower(x) ((char) tolower((int) (unsigned char) (x)))
-#define i_isalnum(x) isalnum((int) (unsigned char) (x))
-#define i_isalpha(x) isalpha((int) (unsigned char) (x))
-#define i_isascii(x) isascii((int) (unsigned char) (x))
-#define i_isblank(x) isblank((int) (unsigned char) (x))
-#define i_iscntrl(x) iscntrl((int) (unsigned char) (x))
-#define i_isdigit(x) isdigit((int) (unsigned char) (x))
-#define i_isgraph(x) isgraph((int) (unsigned char) (x))
-#define i_islower(x) islower((int) (unsigned char) (x))
-#define i_isprint(x) isprint((int) (unsigned char) (x))
-#define i_ispunct(x) ispunct((int) (unsigned char) (x))
-#define i_isspace(x) isspace((int) (unsigned char) (x))
-#define i_isupper(x) isupper((int) (unsigned char) (x))
-#define i_isxdigit(x) isxdigit((int) (unsigned char) (x))
+#define i_isalnum(x) (isalnum((int) (unsigned char) (x)) != 0)
+#define i_isalpha(x) (isalpha((int) (unsigned char) (x)) != 0)
+#define i_isascii(x) (isascii((int) (unsigned char) (x)) != 0)
+#define i_isblank(x) (isblank((int) (unsigned char) (x)) != 0)
+#define i_iscntrl(x) (iscntrl((int) (unsigned char) (x)) != 0)
+#define i_isdigit(x) (isdigit((int) (unsigned char) (x)) != 0)
+#define i_isgraph(x) (isgraph((int) (unsigned char) (x)) != 0)
+#define i_islower(x) (islower((int) (unsigned char) (x)) != 0)
+#define i_isprint(x) (isprint((int) (unsigned char) (x)) != 0)
+#define i_ispunct(x) (ispunct((int) (unsigned char) (x)) != 0)
+#define i_isspace(x) (isspace((int) (unsigned char) (x)) != 0)
+#define i_isupper(x) (isupper((int) (unsigned char) (x)) != 0)
+#define i_isxdigit(x) (isxdigit((int) (unsigned char) (x)) != 0)
 
 #ifndef EOVERFLOW
 #  define EOVERFLOW ERANGE

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -67,7 +67,7 @@ subsfile_list_read_header(struct mailbox_list *list, struct istream *input,
 
 	*version_r = 0;
 
-	ret = i_stream_read_data(input, &data, &size, version2_header_len-1);
+	ret = i_stream_read_bytes(input, &data, &size, version2_header_len);
 	if (ret < 0) {
 		i_assert(ret == -1);
 		if (input->stream_errno != 0)
@@ -127,7 +127,7 @@ int subsfile_set_subscribed(struct mailbox_list *list, const char *path,
 	int fd_in, fd_out;
 	enum mailbox_list_path_type type;
 	bool found, changed = FALSE, failed = FALSE;
-	unsigned int version = 0;
+	unsigned int version = 2;
 
 	if (strcasecmp(name, "INBOX") == 0)
 		name = "INBOX";
@@ -231,7 +231,7 @@ int subsfile_set_subscribed(struct mailbox_list *list, const char *path,
 	}
 
 	if (changed && !failed) {
-		if (o_stream_nfinish(output) < 0) {
+		if (o_stream_finish(output) < 0) {
 			subswrite_set_syscall_error(list, "write()", path);
 			failed = TRUE;
 		} else if (mail_set->parsed_fsync_mode != FSYNC_MODE_NEVER) {
@@ -242,7 +242,7 @@ int subsfile_set_subscribed(struct mailbox_list *list, const char *path,
 			}
 		}
 	} else {
-		o_stream_ignore_last_errors(output);
+		o_stream_abort(output);
 	}
 	o_stream_destroy(&output);
 
@@ -297,8 +297,7 @@ int subsfile_list_deinit(struct subsfile_list_context **_ctx)
 
 	*_ctx = NULL;
 
-	if (ctx->input != NULL)
-		i_stream_destroy(&ctx->input);
+	i_stream_destroy(&ctx->input);
 	str_free(&ctx->name);
 	i_free(ctx->path);
 	i_free(ctx);

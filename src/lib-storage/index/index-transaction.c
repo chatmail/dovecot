@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -28,6 +28,7 @@ index_transaction_index_commit(struct mail_index_transaction *index_trans,
 	struct mailbox_transaction_context *t =
 		MAIL_STORAGE_CONTEXT(index_trans);
 	struct index_mailbox_sync_pvt_context *pvt_sync_ctx = NULL;
+	const char *error;
 	int ret = 0;
 
 	index_pop3_uidl_update_exists_finish(t);
@@ -35,14 +36,16 @@ index_transaction_index_commit(struct mail_index_transaction *index_trans,
 		t->changes->changed = TRUE;
 
 	if (t->attr_pvt_trans != NULL) {
-		if (dict_transaction_commit(&t->attr_pvt_trans) < 0) {
-			mail_storage_set_internal_error(t->box->storage);
+		if (dict_transaction_commit(&t->attr_pvt_trans, &error) < 0) {
+			mailbox_set_critical(t->box,
+				"Dict private transaction commit failed: %s", error);
 			ret = -1;
 		}
 	}
 	if (t->attr_shared_trans != NULL) {
-		if (dict_transaction_commit(&t->attr_shared_trans) < 0) {
-			mail_storage_set_internal_error(t->box->storage);
+		if (dict_transaction_commit(&t->attr_shared_trans, &error) < 0) {
+			mailbox_set_critical(t->box,
+				"Dict shared transaction commit failed: %s", error);
 			ret = -1;
 		}
 	}
@@ -91,8 +94,6 @@ index_transaction_index_commit(struct mail_index_transaction *index_trans,
 		index_mailbox_sync_pvt_deinit(&pvt_sync_ctx);
 	}
 
-	if (ret < 0)
-		mail_index_set_error_nolog(t->box->index, mailbox_get_last_error(t->box, NULL));
 	index_transaction_free(t);
 	return ret;
 }
@@ -148,7 +149,8 @@ void index_transaction_init_pvt(struct mailbox_transaction_context *t)
 
 void index_transaction_init(struct mailbox_transaction_context *t,
 			    struct mailbox *box,
-			    enum mailbox_transaction_flags flags)
+			    enum mailbox_transaction_flags flags,
+			    const char *reason)
 {
 	enum mail_index_transaction_flags itrans_flags;
 
@@ -158,8 +160,8 @@ void index_transaction_init(struct mailbox_transaction_context *t,
 	if ((flags & MAILBOX_TRANSACTION_FLAG_REFRESH) != 0)
 		mail_index_refresh(box->index);
 
-	t->flags = flags;
 	t->box = box;
+	t->reason = i_strdup(reason);
 	t->itrans = mail_index_transaction_begin(box->view, itrans_flags);
 	t->view = mail_index_transaction_open_updated_view(t->itrans);
 
@@ -182,12 +184,13 @@ void index_transaction_init(struct mailbox_transaction_context *t,
 
 struct mailbox_transaction_context *
 index_transaction_begin(struct mailbox *box,
-			enum mailbox_transaction_flags flags)
+			enum mailbox_transaction_flags flags,
+			const char *reason)
 {
 	struct mailbox_transaction_context *t;
 
 	t = i_new(struct mailbox_transaction_context, 1);
-	index_transaction_init(t, box, flags);
+	index_transaction_init(t, box, flags, reason);
 	return t;
 }
 

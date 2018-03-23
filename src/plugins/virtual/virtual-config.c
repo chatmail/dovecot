@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -43,7 +43,6 @@ virtual_search_args_parse(const string_t *rule, const char **error_r)
 	struct mail_search_parser *parser;
 	struct mail_search_args *sargs;
 	const char *charset = "UTF-8";
-	bool fatal;
 	int ret;
 
 	if (str_len(rule) == 0) {
@@ -59,7 +58,7 @@ virtual_search_args_parse(const string_t *rule, const char **error_r)
 	ret = imap_parser_finish_line(imap_parser, 0,  0, &args);
 	if (ret < 0) {
 		sargs = NULL;
-		*error_r = t_strdup(imap_parser_get_error(imap_parser, &fatal));
+		*error_r = t_strdup(imap_parser_get_error(imap_parser, NULL));
 	} else {
 		parser = mail_search_parser_init_imap(args);
 		if (mail_search_build(mail_search_register_get_imap(),
@@ -478,16 +477,16 @@ int virtual_config_read(struct virtual_mailbox *mbox)
 	fd = open(path, O_RDONLY);
 	if (fd == -1) {
 		if (errno == EACCES) {
-			mail_storage_set_critical(storage, "%s",
+			mailbox_set_critical(&mbox->box, "%s",
 				mail_error_eacces_msg("open", path));
 		} else if (errno != ENOENT) {
-			mail_storage_set_critical(storage,
-						  "open(%s) failed: %m", path);
+			mailbox_set_critical(&mbox->box,
+					     "open(%s) failed: %m", path);
 		} else if (errno == ENOENT) {
 			mail_storage_set_error(storage, MAIL_ERROR_NOTFOUND,
 				T_MAIL_ERR_MAILBOX_NOT_FOUND(mbox->box.vname));
 		} else {
-			mail_storage_set_critical(storage,
+			mailbox_set_critical(&mbox->box,
 				"stat(%s) failed: %m", box_path);
 		}
 		return -1;
@@ -498,7 +497,7 @@ int virtual_config_read(struct virtual_mailbox *mbox)
 	ctx.mbox = mbox;
 	ctx.pool = mbox->box.pool;
 	ctx.rule = t_str_new(256);
-	ctx.input = i_stream_create_fd(fd, (size_t)-1, FALSE);
+	ctx.input = i_stream_create_fd(fd, (size_t)-1);
 	i_stream_set_return_partial_line(ctx.input, TRUE);
 	while ((line = i_stream_read_next_line(ctx.input)) != NULL) {
 		linenum++;
@@ -509,18 +508,18 @@ int virtual_config_read(struct virtual_mailbox *mbox)
 		else
 			ret = virtual_config_parse_line(&ctx, line, &error);
 		if (ret < 0) {
-			mail_storage_set_critical(storage,
-						  "%s: Error at line %u: %s",
-						  path, linenum, error);
+			mailbox_set_critical(&mbox->box,
+					     "%s: Error at line %u: %s",
+					     path, linenum, error);
 			break;
 		}
 	}
 	if (ret == 0) {
 		ret = virtual_config_add_rule(&ctx, &error);
 		if (ret < 0) {
-			mail_storage_set_critical(storage,
-						  "%s: Error at line %u: %s",
-						  path, linenum, error);
+			mailbox_set_critical(&mbox->box,
+					     "%s: Error at line %u: %s",
+					     path, linenum, error);
 		}
 	}
 
@@ -528,12 +527,12 @@ int virtual_config_read(struct virtual_mailbox *mbox)
 	if (ret == 0 && ctx.have_wildcards) {
 		ret = virtual_config_expand_wildcards(&ctx, &error);
 		if (ret < 0)
-			mail_storage_set_critical(storage, "%s: %s", path, error);
+			mailbox_set_critical(&mbox->box, "%s: %s", path, error);
 	}
 
 	if (ret == 0 && !ctx.have_mailbox_defines) {
-		mail_storage_set_critical(storage,
-					  "%s: No mailboxes defined", path);
+		mailbox_set_critical(&mbox->box,
+				     "%s: No mailboxes defined", path);
 		ret = -1;
 	}
 	if (ret == 0)

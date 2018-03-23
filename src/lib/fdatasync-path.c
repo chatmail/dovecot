@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "fdatasync-path.h"
@@ -16,7 +16,7 @@ int fdatasync_path(const char *path)
 	if (fd == -1)
 		return -1;
 	if (fdatasync(fd) < 0) {
-		/* Some OSes/FSes don't allow fsyncing directores. Silently
+		/* Some OSes/FSes don't allow fsyncing directories. Silently
 		   ignore the problem. */
 		if (errno == EBADF) {
 			/* e.g. NetBSD */

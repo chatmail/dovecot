@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -35,11 +35,11 @@ static int
 quota_reply_write(string_t *str, struct mail_user *user,
 		  struct mail_user *owner, struct quota_root *root)
 {
-        const char *name, *const *list;
+        const char *name, *const *list, *error;
 	unsigned int i;
 	uint64_t value, limit;
 	size_t prefix_len, orig_len = str_len(str);
-	int ret = 0;
+	enum quota_get_result ret = QUOTA_GET_RESULT_UNLIMITED;
 
 	str_append(str, "* QUOTA ");
 	name = imap_quota_root_get_name(user, owner, root);
@@ -49,25 +49,27 @@ quota_reply_write(string_t *str, struct mail_user *user,
 	prefix_len = str_len(str);
 	list = quota_root_get_resources(root);
 	for (i = 0; *list != NULL; list++) {
-		ret = quota_get_resource(root, "", *list, &value, &limit);
-		if (ret < 0)
+		ret = quota_get_resource(root, "", *list, &value, &limit, &error);
+		if (ret == QUOTA_GET_RESULT_INTERNAL_ERROR) {
+			i_error("Failed to get quota resource %s: %s",
+				*list, error);
 			break;
-		if (ret > 0) {
+		}
+		if (ret == QUOTA_GET_RESULT_LIMITED) {
 			if (i > 0)
 				str_append_c(str, ' ');
-			str_printfa(str, "%s %llu %llu", *list,
-				    (unsigned long long)value,
-				    (unsigned long long)limit);
+			str_printfa(str, "%s %"PRIu64" %"PRIu64, *list,
+				    value, limit);
 			i++;
 		}
 	}
-	if (ret <= 0 && str_len(str) == prefix_len) {
+	if (str_len(str) == prefix_len) {
 		/* this quota root doesn't have any quota actually enabled. */
 		str_truncate(str, orig_len);
-		return ret;
+	} else {
+		str_append(str, ")\r\n");
 	}
-	str_append(str, ")\r\n");
-	return 1;
+	return ret == QUOTA_GET_RESULT_INTERNAL_ERROR ? -1 : 0;
 }
 
 static bool cmd_getquotaroot(struct client_command_context *cmd)

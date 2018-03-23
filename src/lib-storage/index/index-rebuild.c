@@ -1,10 +1,11 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "mail-cache.h"
 #include "mail-index-modseq.h"
 #include "mailbox-list-private.h"
+#include "mailbox-recent-flags.h"
 #include "index-storage.h"
 #include "index-rebuild.h"
 
@@ -213,7 +214,8 @@ index_index_rebuild_init(struct mailbox *box, struct mail_index_view *view,
 	/* if backup index file exists, try to use it */
 	index_dir = mailbox_get_index_path(box);
 	backup_path = t_strconcat(box->index_prefix, ".backup", NULL);
-	ctx->backup_index = mail_index_alloc(index_dir, backup_path);
+	ctx->backup_index = mail_index_alloc(box->storage->user->event,
+					     index_dir, backup_path);
 
 #ifndef MMAP_CONFLICTS_WRITE
 	if (box->storage->set->mmap_disable)

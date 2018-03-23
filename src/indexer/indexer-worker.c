@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "restrict-access.h"
@@ -46,6 +46,7 @@ static void drop_privileges(void)
 int main(int argc, char *argv[])
 {
 	enum master_service_flags service_flags =
+		MASTER_SERVICE_FLAG_SEND_STATS |
 		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
 	enum mail_storage_service_flags storage_service_flags =
 		MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT |

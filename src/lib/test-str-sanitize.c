@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
@@ -12,7 +12,7 @@ struct str_sanitize_test {
 
 void test_str_sanitize(void)
 {
-	static struct str_sanitize_test tests[] = {
+	static const struct str_sanitize_test tests[] = {
 		{ NULL,    2, NULL },
 		{ "",      2, NULL },
 		{ "a",     2, NULL },

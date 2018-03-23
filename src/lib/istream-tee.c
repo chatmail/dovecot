@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -17,7 +17,7 @@ struct tee_child_istream {
 	struct tee_istream *tee;
 	struct tee_child_istream *next;
 
-	unsigned int last_read_waiting:1;
+	bool last_read_waiting:1;
 };
 
 static void tee_streams_update_buffer(struct tee_istream *tee)
@@ -101,6 +101,8 @@ static void i_stream_tee_destroy(struct iostream_private *stream)
 	} else {
 		tee_streams_skip(tstream->tee);
 	}
+	/* i_stream_unref() shouldn't unref the parent */
+	tstream->istream.parent = NULL;
 }
 
 static void
@@ -229,7 +231,8 @@ struct istream *tee_i_stream_create_child(struct tee_istream *tee)
 	tstream->next = tee->children;
 	tee->children = tstream;
 
-	ret = i_stream_create(&tstream->istream, input, i_stream_get_fd(input));
+	ret = i_stream_create(&tstream->istream, input, i_stream_get_fd(input),
+			      ISTREAM_CREATE_FLAG_NOOP_SNAPSHOT);
 	i_stream_set_name(&tstream->istream.istream, i_stream_get_name(input));
 	/* we keep the reference in tee stream, no need for extra references */
 	i_stream_unref(&input);

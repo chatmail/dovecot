@@ -5,6 +5,7 @@ struct imap_login_settings {
 	const char *imap_capability;
 	const char *imap_id_send;
 	const char *imap_id_log;
+	bool imap_literal_minus;
 	bool imap_id_retain;
 };
 

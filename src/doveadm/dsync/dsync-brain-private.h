@@ -7,8 +7,6 @@
 #include "dsync-mailbox-state.h"
 
 #define DSYNC_LOCK_FILENAME ".dovecot-sync.lock"
-#define DSYNC_MAILBOX_LOCK_FILENAME ".dovecot-box-sync.lock"
-#define DSYNC_MAILBOX_DEFAULT_LOCK_TIMEOUT_SECS 30
 
 struct dsync_mailbox_tree_sync_change;
 
@@ -87,8 +85,6 @@ struct dsync_brain {
 	struct dsync_mailbox_exporter *box_exporter;
 
 	struct mailbox *box;
-	struct file_lock *box_lock;
-	unsigned int mailbox_lock_timeout_secs;
 	struct dsync_mailbox local_dsync_box, remote_dsync_box;
 	pool_t dsync_box_pool;
 	/* list of mailbox states
@@ -105,25 +101,26 @@ struct dsync_brain {
 
 	const char *changes_during_sync;
 	enum mail_error mail_error;
+
 	const char *const *hashed_headers;
 
-	unsigned int master_brain:1;
-	unsigned int mail_requests:1;
-	unsigned int backup_send:1;
-	unsigned int backup_recv:1;
-	unsigned int purge:1;
-	unsigned int debug:1;
-	unsigned int sync_visible_namespaces:1;
-	unsigned int no_mail_sync:1;
-	unsigned int no_backup_overwrite:1;
-	unsigned int no_mail_prefetch:1;
-	unsigned int no_mailbox_renames:1;
-	unsigned int changes_during_remote_sync:1;
-	unsigned int require_full_resync:1;
-	unsigned int verbose_proctitle:1;
-	unsigned int no_notify:1;
-	unsigned int failed:1;
-	unsigned int empty_hdr_workaround:1;
+	bool master_brain:1;
+	bool mail_requests:1;
+	bool backup_send:1;
+	bool backup_recv:1;
+	bool purge:1;
+	bool debug:1;
+	bool sync_visible_namespaces:1;
+	bool no_mail_sync:1;
+	bool no_backup_overwrite:1;
+	bool no_mail_prefetch:1;
+	bool no_mailbox_renames:1;
+	bool changes_during_remote_sync:1;
+	bool require_full_resync:1;
+	bool verbose_proctitle:1;
+	bool no_notify:1;
+	bool failed:1;
+	bool empty_hdr_workaround:1;
 };
 
 extern const char *dsync_box_state_names[DSYNC_BOX_STATE_DONE+1];

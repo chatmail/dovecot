@@ -1,10 +1,9 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "str.h"
 #include "strescape.h"
-#include "fd-set-nonblock.h"
 #include "ioloop.h"
 #include "net.h"
 #include "write-full.h"
@@ -37,7 +36,7 @@ struct replication_user {
 struct replication_mail_txn_context {
 	struct mail_namespace *ns;
 	bool new_messages;
-	bool sync_trans;
+	char *reason;
 };
 
 static MODULE_CONTEXT_DEFINE_INIT(replication_user_module,
@@ -216,10 +215,7 @@ replication_mail_transaction_begin(struct mailbox_transaction_context *t)
 
 	ctx = i_new(struct replication_mail_txn_context, 1);
 	ctx->ns = mailbox_get_namespace(t->box);
-	if ((t->flags & MAILBOX_TRANSACTION_FLAG_SYNC) != 0) {
-		/* Transaction is from dsync. Don't trigger replication back. */
-		ctx->sync_trans = TRUE;
-	}
+	ctx->reason = i_strdup(t->reason);
 	return ctx;
 }
 
@@ -257,13 +253,13 @@ replication_mail_transaction_commit(void *txn,
 		REPLICATION_USER_CONTEXT(ctx->ns->user);
 	enum replication_priority priority;
 
-	if (ruser != NULL && !ctx->sync_trans &&
-	    (ctx->new_messages || changes->changed)) {
+	if (ruser != NULL && (ctx->new_messages || changes->changed)) {
 		priority = !ctx->new_messages ? REPLICATION_PRIORITY_LOW :
 			ruser->sync_secs == 0 ? REPLICATION_PRIORITY_HIGH :
 			REPLICATION_PRIORITY_SYNC;
-		replication_notify(ctx->ns, priority, "transaction commit");
+		replication_notify(ctx->ns, priority, ctx->reason);
 	}
+	i_free(ctx->reason);
 	i_free(ctx);
 }
 
@@ -381,11 +377,7 @@ void replication_plugin_init(struct module *module)
 
 void replication_plugin_deinit(void)
 {
-	if (fifo_fd != -1) {
-		if (close(fifo_fd) < 0)
-			i_error("close(%s) failed: %m", fifo_path);
-		fifo_fd = -1;
-	}
+	i_close_fd_path(&fifo_fd, fifo_path);
 	i_free_and_null(fifo_path);
 
 	mail_storage_hooks_remove(&replication_mail_storage_hooks);

@@ -1,5 +1,5 @@
-.\" Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file
-.TH DOVEADM 1 "2014-10-07" "Dovecot v2.2" "Dovecot"
+.\" Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file
+.TH DOVEADM 1 "2014-10-07" "Dovecot v2.3" "Dovecot"
 .SH NAME
 doveadm \- Dovecot\(aqs administration utility
 .\"------------------------------------------------------------------------
@@ -62,11 +62,6 @@ Disconnect users by user name and/or IP address.
 .B doveadm log
 .BR doveadm\-log (1),
 Locate, test or reopen Dovecot\(aqs log files.
-.\"-------------------------------------
-.TP
-.B doveadm mount
-.BR doveadm\-mount (1),
-Manage the list of mountpoints where mails are stored.
 .\"-------------------------------------
 .TP
 .B doveadm penalty
@@ -194,7 +189,7 @@ Initialize/recalculate or show current quota usage.
 .TP
 .B doveadm replicator
 .BR doveadm\-replicator (1),
-Manage users\(aq mail replicaton.
+Manage users\(aq mail replication.
 .\"-------------------------------------
 .TP
 .B doveadm stats

@@ -25,7 +25,6 @@ Settings changes
  * 'ssl_protocols' setting was replaced by 'ssl_min_protocol'. Now you only
    specify the minimum ssl protocol version Dovecot accepts, defaulting to
    TLSv1.
- * 'SSLv2' is no longer supported in 'ssl_protocols'.
 
 Statistics redesign
 -------------------
@@ -147,4 +146,4 @@ Other changes
     * user_disabled -> code=user_disabled
     * pass_expired -> code=pass_expired
 
-(This file was created from the wiki on 2018-03-19 04:42)
+(This file was created from the wiki on 2018-02-28 04:42)

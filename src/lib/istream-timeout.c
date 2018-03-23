@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -22,8 +22,7 @@ static void i_stream_timeout_close(struct iostream_private *stream,
 {
 	struct timeout_istream *tstream = (struct timeout_istream *)stream;
 
-	if (tstream->to != NULL)
-		timeout_remove(&tstream->to);
+	timeout_remove(&tstream->to);
 	if (close_parent)
 		i_stream_close(tstream->istream.parent);
 }
@@ -139,5 +138,5 @@ i_stream_create_timeout(struct istream *input, unsigned int timeout_msecs)
 	tstream->istream.istream.blocking = input->blocking;
 	tstream->istream.istream.seekable = input->seekable;
 	return i_stream_create(&tstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }

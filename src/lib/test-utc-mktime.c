@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "utc-mktime.h"
@@ -23,7 +23,6 @@ void test_utc_mktime(void)
 		{ 1970, 1, 1, 0, 0, 0, 0 },
 		{ 2038, 1, 19, 3, 14, 7, 2147483647 },
 		{ INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX, -1 },
-		{ 2106, 2, 7, 6, 28, 15, 4294967295 },
 #if TIME_T_MAX_BITS > 32
 		{ 2106, 2, 7, 6, 28, 16, 4294967296 },
 #endif

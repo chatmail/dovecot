@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hash.h"
@@ -42,7 +42,7 @@ static int cmd_deduplicate_uidlist(struct doveadm_mail_cmd_context *_ctx,
 	arg = mail_search_build_add(search_args, SEARCH_UIDSET);
 	arg->value.seqset = uids;
 
-	trans = mailbox_transaction_begin(box, 0);
+	trans = mailbox_transaction_begin(box, 0, __func__);
 	search_ctx = mailbox_search_init(trans, search_args, NULL, 0, NULL);
 	mail_search_args_unref(&search_args);
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -24,9 +24,9 @@ struct mail_index_sync_ctx {
 	ARRAY(struct mail_index_sync_list) sync_list;
 	uint32_t next_uid;
 
-	unsigned int no_warning:1;
-	unsigned int seen_nonexternal_transactions:1;
-	unsigned int fully_synced:1;
+	bool no_warning:1;
+	bool seen_nonexternal_transactions:1;
+	bool fully_synced:1;
 };
 
 static void mail_index_sync_add_expunge(struct mail_index_sync_ctx *ctx)

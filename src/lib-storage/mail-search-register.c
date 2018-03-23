@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -9,7 +9,7 @@ struct mail_search_register {
 	ARRAY(struct mail_search_register_arg) args;
 	mail_search_register_fallback_t *fallback;
 
-	unsigned int args_sorted:1;
+	bool args_sorted:1;
 };
 
 struct mail_search_register *mail_search_register_init(void)

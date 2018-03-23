@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "seq-range-array.h"
@@ -6,6 +6,7 @@
 #include "array.h"
 #include "index-mailbox-size.h"
 #include "index-sync-private.h"
+#include "mailbox-recent-flags.h"
 
 struct index_storage_list_index_record {
 	uint32_t size;
@@ -279,9 +280,9 @@ void index_sync_update_recent_count(struct mailbox *box)
 
 	hdr = mail_index_get_header(box->view);
 	if (hdr->first_recent_uid < ibox->recent_flags_prev_first_recent_uid) {
-		mail_storage_set_critical(box->storage,
-			"Mailbox %s: first_recent_uid unexpectedly shrank: %u -> %u",
-			box->vname, ibox->recent_flags_prev_first_recent_uid,
+		mailbox_set_critical(box,
+			"first_recent_uid unexpectedly shrank: %u -> %u",
+			ibox->recent_flags_prev_first_recent_uid,
 			hdr->first_recent_uid);
 		mailbox_recent_flags_reset(box);
 	}
@@ -322,7 +323,7 @@ int index_mailbox_sync_deinit(struct mailbox_sync_context *_ctx,
 
 	/* finish handling expunges, so we don't break when updating
 	   recent flags */
-	while (index_mailbox_sync_next_expunge(ctx, &sync_rec) > 0) ;
+	while (index_mailbox_sync_next_expunge(ctx, &sync_rec)) ;
 
 	/* convert sequences to uids before syncing view */
 	index_sync_search_results_uidify(ctx);
@@ -464,8 +465,7 @@ index_storage_list_index_has_changed_full(struct mailbox *box,
 	if (stat(path, &st) < 0) {
 		if (errno == ENOENT)
 			return INDEX_STORAGE_LIST_CHANGE_NOT_IN_FS;
-		mail_storage_set_critical(box->storage,
-					  "stat(%s) failed: %m", path);
+		mailbox_set_critical(box, "stat(%s) failed: %m", path);
 		return INDEX_STORAGE_LIST_CHANGE_ERROR;
 	}
 	if (rec->size != (st.st_size & 0xffffffffU))
@@ -477,7 +477,7 @@ index_storage_list_index_has_changed_full(struct mailbox *box,
 
 int index_storage_list_index_has_changed(struct mailbox *box,
 					 struct mail_index_view *list_view,
-					 uint32_t seq)
+					 uint32_t seq, bool quick ATTR_UNUSED)
 {
 	switch (index_storage_list_index_has_changed_full(box, list_view, seq)) {
 	case INDEX_STORAGE_LIST_CHANGE_ERROR:
@@ -521,8 +521,7 @@ void index_storage_list_index_update_sync(struct mailbox *box,
 
 	path = t_strconcat(dir, "/", box->index_prefix, ".log", NULL);
 	if (stat(path, &st) < 0) {
-		mail_storage_set_critical(box->storage,
-					  "stat(%s) failed: %m", path);
+		mailbox_set_critical(box, "stat(%s) failed: %m", path);
 		return;
 	}
 

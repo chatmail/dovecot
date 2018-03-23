@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mail-storage.h"
@@ -12,7 +12,7 @@ struct imap_metadata_transaction {
 	enum mail_error error;
 	char *error_string;
 
-	unsigned int server:1;
+	bool server:1;
 };
 
 bool imap_metadata_verify_entry_name(const char *name, const char **error_r)
@@ -121,7 +121,8 @@ imap_metadata_get_mailbox_transaction(struct imap_metadata_transaction *imtrans)
 
 	if (imtrans->box == NULL || mailbox_open(imtrans->box) < 0)
 		return -1;
-	imtrans->trans = mailbox_transaction_begin(imtrans->box, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
+	imtrans->trans = mailbox_transaction_begin(imtrans->box,
+			MAILBOX_TRANSACTION_FLAG_EXTERNAL, __func__);
 	return 0;
 }
 
@@ -162,9 +163,7 @@ int imap_metadata_get(struct imap_metadata_transaction *imtrans,
 	i_zero(value_r);
 	if (!imap_metadata_entry2key(imtrans, entry, &type, &key))
 		return 0;
-	if (imap_metadata_get_mailbox_transaction(imtrans) < 0)
-		return -1;
-	return mailbox_attribute_get(imtrans->trans, type, key, value_r);
+	return mailbox_attribute_get(imtrans->box, type, key, value_r);
 }
 
 int imap_metadata_get_stream(struct imap_metadata_transaction *imtrans,
@@ -176,9 +175,7 @@ int imap_metadata_get_stream(struct imap_metadata_transaction *imtrans,
 	i_zero(value_r);
 	if (!imap_metadata_entry2key(imtrans, entry, &type, &key))
 		return 0;
-	if (imap_metadata_get_mailbox_transaction(imtrans) < 0)
-		return -1;
-	return mailbox_attribute_get_stream(imtrans->trans, type, key, value_r);
+	return mailbox_attribute_get_stream(imtrans->box, type, key, value_r);
 }
 
 struct imap_metadata_iter {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "array.h"
@@ -95,7 +95,7 @@ static int proxy_write_login(struct imap_client *client, string_t *str)
 {
 	struct dsasl_client_settings sasl_set;
 	const unsigned char *output;
-	unsigned int len;
+	size_t len;
 	const char *mech_name, *error;
 
 	/* Send CAPABILITY command if we don't know the capabilities yet.
@@ -255,7 +255,7 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 	struct ostream *output;
 	string_t *str;
 	const unsigned char *data;
-	unsigned int data_len;
+	size_t data_len;
 	const char *error;
 	int ret;
 
@@ -344,7 +344,6 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 		client_send_login_reply(imap_client, str, line + 5);
 		o_stream_nsend(client->output, str_data(str), str_len(str));
 
-		(void)client_skip_line(imap_client);
 		client_proxy_finish_destroy_client(client);
 		return 1;
 	} else if (strncmp(line, "L ", 2) == 0) {

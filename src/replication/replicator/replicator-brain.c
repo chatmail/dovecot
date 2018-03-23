@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -21,7 +21,7 @@ struct replicator_brain {
 
 	ARRAY_TYPE(dsync_client) dsync_clients;
 
-	unsigned int deinitializing:1;
+	bool deinitializing:1;
 };
 
 static void replicator_brain_fill(struct replicator_brain *brain);
@@ -62,8 +62,7 @@ void replicator_brain_deinit(struct replicator_brain **_brain)
 	brain->deinitializing = TRUE;
 	array_foreach_modifiable(&brain->dsync_clients, connp)
 		dsync_client_deinit(connp);
-	if (brain->to != NULL)
-		timeout_remove(&brain->to);
+	timeout_remove(&brain->to);
 	pool_unref(&brain->pool);
 }
 
@@ -108,8 +107,11 @@ static void dsync_callback(enum dsync_reply reply, const char *state,
 			   void *context)
 {
 	struct replicator_sync_context *ctx = context;
+	struct replicator_user *user = ctx->user;
 
-	if (reply == DSYNC_REPLY_NOUSER) {
+	if (!replicator_user_unref(&user)) {
+		/* user was already removed */
+	} else if (reply == DSYNC_REPLY_NOUSER) {
 		/* user no longer exists, remove from replication */
 		replicator_queue_remove(ctx->brain->queue, &ctx->user);
 	} else {
@@ -154,6 +156,7 @@ dsync_replicate(struct replicator_brain *brain, struct replicator_user *user)
 	ctx = i_new(struct replicator_sync_context, 1);
 	ctx->brain = brain;
 	ctx->user = user;
+	replicator_user_ref(user);
 	dsync_client_sync(conn, user->username, user->state, full,
 			  dsync_callback, ctx);
 	return TRUE;
@@ -173,8 +176,7 @@ static bool replicator_brain_fill_next(struct replicator_brain *brain)
 	user = replicator_queue_pop(brain->queue, &next_secs);
 	if (user == NULL) {
 		/* nothing more to do */
-		if (brain->to != NULL)
-			timeout_remove(&brain->to);
+		timeout_remove(&brain->to);
 		brain->to = timeout_add(next_secs * 1000,
 					replicator_brain_timeout, brain);
 		return FALSE;

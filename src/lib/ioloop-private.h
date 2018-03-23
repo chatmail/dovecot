@@ -31,8 +31,8 @@ struct ioloop {
 
 	unsigned int io_pending_count;
 
-	unsigned int running:1;
-	unsigned int iolooping:1;
+	bool running:1;
+	bool iolooping:1;
 };
 
 struct io {
@@ -77,7 +77,7 @@ struct timeout {
 	struct ioloop *ioloop;
 	struct ioloop_context *ctx;
 
-	unsigned int one_shot:1;
+	bool one_shot:1;
 };
 
 struct io_wait_timer {
@@ -117,8 +117,5 @@ void io_loop_handler_deinit(struct ioloop *ioloop);
 
 void io_loop_notify_remove(struct io *io);
 void io_loop_notify_handler_deinit(struct ioloop *ioloop);
-
-void io_loop_context_activate(struct ioloop_context *ctx);
-void io_loop_context_deactivate(struct ioloop_context *ctx);
 
 #endif
