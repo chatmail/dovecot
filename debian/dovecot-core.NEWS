@@ -1,3 +1,19 @@
+dovecot (1:2.3.0.1-1) experimental; urgency=medium
+
+  Upgrading to the 2.3 series may require manual configuration changes.
+  Some settings have been removed, while others have had their defaults
+  changed. See
+
+    /usr/share/doc/dovecot-core/wiki/Upgrading.2.3.txt.gz
+
+  or the online version at
+
+    https://wiki2.dovecot.org/Upgrading/2.3
+
+  for more information and review your configuration accordingly.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Sat, 24 Mar 2018 00:34:07 +0200
+
 dovecot (1:2.2.31-1) unstable; urgency=medium
 
   TLS is now enabled by default, using the ssl-cert-snakeoil certificate
