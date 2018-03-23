@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "seq-range-array.h"
@@ -177,8 +177,9 @@ bool cmd_store(struct client_command_context *cmd)
 		flags |= MAILBOX_TRANSACTION_FLAG_REFRESH;
 	}
 
-	t = mailbox_transaction_begin(client->mailbox, flags);
-	imap_transaction_set_cmd_reason(t, cmd);
+	t = mailbox_transaction_begin(client->mailbox, flags,
+				      imap_client_command_get_reason(cmd));
+
 	search_ctx = mailbox_search_init(t, search_args, NULL,
 					 MAIL_FETCH_FLAGS, NULL);
 	mail_search_args_unref(&search_args);

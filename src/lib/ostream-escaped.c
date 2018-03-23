@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -97,9 +97,7 @@ o_stream_escaped_flush(struct ostream_private *stream)
 
 	if ((ret = o_stream_escaped_send_outbuf(estream)) <= 0)
 		return ret;
-	if ((ret = o_stream_flush(stream->parent)) < 0)
-		o_stream_copy_error_from_parent(stream);
-	return ret;
+	return o_stream_flush_parent(stream);
 }
 
 static void o_stream_escaped_destroy(struct iostream_private *stream)

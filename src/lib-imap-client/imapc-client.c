@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -32,6 +32,7 @@ const struct imapc_capability_name imapc_capability_names[] = {
 	{ "ESEARCH", IMAPC_CAPABILITY_ESEARCH },
 	{ "WITHIN", IMAPC_CAPABILITY_WITHIN },
 	{ "QUOTA", IMAPC_CAPABILITY_QUOTA },
+	{ "ID", IMAPC_CAPABILITY_ID },
 
 	{ "IMAP4REV1", IMAPC_CAPABILITY_IMAP4REV1 },
 	{ NULL, 0 }
@@ -68,6 +69,7 @@ imapc_client_init(const struct imapc_client_settings *set)
 	client->set.username = p_strdup(pool, set->username);
 	client->set.password = p_strdup(pool, set->password);
 	client->set.sasl_mechanisms = p_strdup(pool, set->sasl_mechanisms);
+	client->set.session_id_prefix = p_strdup(pool, set->session_id_prefix);
 	client->set.use_proxyauth = set->use_proxyauth;
 	client->set.dns_client_socket_path =
 		p_strdup(pool, set->dns_client_socket_path);
@@ -102,11 +104,12 @@ imapc_client_init(const struct imapc_client_settings *set)
 		i_zero(&ssl_set);
 		ssl_set.ca_dir = set->ssl_ca_dir;
 		ssl_set.ca_file = set->ssl_ca_file;
-		ssl_set.verify_remote_cert = set->ssl_verify;
+		ssl_set.allow_invalid_cert = !set->ssl_verify;
 		ssl_set.crypto_device = set->ssl_crypto_device;
 
-		if (ssl_iostream_context_init_client(&ssl_set, &client->ssl_ctx,
-						     &error) < 0) {
+		if (ssl_iostream_client_context_cache_get(&ssl_set,
+							  &client->ssl_ctx,
+							  &error) < 0) {
 			i_error("imapc(%s:%u): Couldn't initialize SSL context: %s",
 				set->host, set->port, error);
 		}
@@ -135,7 +138,7 @@ void imapc_client_unref(struct imapc_client **_client)
 		return;
 
 	if (client->ssl_ctx != NULL)
-		ssl_iostream_context_deinit(&client->ssl_ctx);
+		ssl_iostream_context_unref(&client->ssl_ctx);
 	pool_unref(&client->pool);
 }
 
@@ -314,7 +317,7 @@ void imapc_client_login(struct imapc_client *client)
 {
 	struct imapc_client_connection *conn;
 
-	i_assert(client->login_callback);
+	i_assert(client->login_callback != NULL);
 	i_assert(array_count(&client->conns) == 0);
 
 	conn = imapc_client_add_connection(client);
@@ -440,8 +443,7 @@ void imapc_client_mailbox_close(struct imapc_client_mailbox **_box)
 	}
 
 	imapc_msgmap_deinit(&box->msgmap);
-	if (box->to_send_idle != NULL)
-		timeout_remove(&box->to_send_idle);
+	timeout_remove(&box->to_send_idle);
 	i_free(box);
 }
 

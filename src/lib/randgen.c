@@ -1,37 +1,98 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "randgen.h"
-
-
-#ifdef DEV_URANDOM_PATH
-
-#include "fd-close-on-exec.h"
 #include <unistd.h>
 #include <fcntl.h>
 
+/* get randomness from either getrandom, arc4random or /dev/urandom */
+
+#if defined(HAVE_GETRANDOM) && HAVE_DECL_GETRANDOM != 0
+#  include <sys/random.h>
+#  define USE_GETRANDOM
+static bool getrandom_present = TRUE;
+#elif defined(HAVE_ARC4RANDOM)
+#  if defined(HAVE_LIBBSD)
+#    include <bsd/stdlib.h>
+#  endif
+#  define USE_ARC4RANDOM
+#else
+static bool getrandom_present = FALSE;
+#  define USE_RANDOM_DEV
+#endif
+
 static int init_refcount = 0;
-static int urandom_fd;
+static int urandom_fd = -1;
+
+static void random_open_urandom(void)
+{
+	urandom_fd = open(DEV_URANDOM_PATH, O_RDONLY);
+	if (urandom_fd == -1) {
+		if (errno == ENOENT) {
+			i_fatal("open("DEV_URANDOM_PATH") failed: doesn't exist,"
+				"currently we require it");
+		} else {
+			i_fatal("open("DEV_URANDOM_PATH") failed: %m");
+		}
+	}
+	fd_close_on_exec(urandom_fd, TRUE);
+}
+
+#if defined(USE_GETRANDOM) || defined(USE_RANDOM_DEV)
+static inline int random_read(char *buf, size_t size)
+{
+	ssize_t ret = 0;
+# if defined(USE_GETRANDOM)
+	if (getrandom_present) {
+		ret = getrandom(buf, size, 0);
+		if (ret < 0 && errno == ENOSYS) {
+			getrandom_present = FALSE;
+			/* It gets complicated here...  While the libc (and its
+			headers) indicated that getrandom() was available when
+			we were compiled, the kernel disagreed just now at
+			runtime. Fall back to reading /dev/urandom. */
+			random_open_urandom();
+		}
+	}
+	/* this is here to avoid clang complain,
+	   because getrandom_present will be always FALSE
+	   if USE_GETRANDOM is not defined */
+	if (!getrandom_present)
+# endif
+		ret = read(urandom_fd, buf, size);
+	if (unlikely(ret <= 0)) {
+		if (ret == 0) {
+			i_fatal("read("DEV_URANDOM_PATH") failed: EOF");
+		} else if (errno != EINTR) {
+			if (getrandom_present) {
+				i_fatal("getrandom() failed: %m");
+			} else {
+				i_fatal("read("DEV_URANDOM_PATH") failed: %m");
+			}
+		}
+	}
+	i_assert(ret > 0 || errno == EINTR);
+	return ret;
+}
+#endif
 
 void random_fill(void *buf, size_t size)
 {
-	size_t pos;
-	ssize_t ret;
-
 	i_assert(init_refcount > 0);
 	i_assert(size < SSIZE_T_MAX);
 
+#if defined(USE_ARC4RANDOM)
+	arc4random_buf(buf, size);
+#else
+	size_t pos;
+	ssize_t ret;
+
 	for (pos = 0; pos < size; ) {
-		ret = read(urandom_fd, (char *) buf + pos, size - pos);
-		if (unlikely(ret <= 0)) {
-			if (ret == 0)
-				i_fatal("EOF when reading from "DEV_URANDOM_PATH);
-			else if (errno != EINTR)
-				i_fatal("read("DEV_URANDOM_PATH") failed: %m");
-		} else {
+		ret = random_read(PTR_OFFSET(buf, pos), size - pos);
+		if (ret > -1)
 			pos += ret;
-		}
 	}
+#endif /* defined(USE_ARC4RANDOM) */
 }
 
 void random_init(void)
@@ -40,80 +101,19 @@ void random_init(void)
 
 	if (init_refcount++ > 0)
 		return;
-
-	urandom_fd = open(DEV_URANDOM_PATH, O_RDONLY);
-	if (urandom_fd == -1) {
-		if (errno == ENOENT) {
-			i_fatal(DEV_URANDOM_PATH" doesn't exist, "
-				"currently we require it");
-		} else {
-			i_fatal("Can't open "DEV_URANDOM_PATH": %m");
-		}
-	}
-
+#if defined(USE_RANDOM_DEV)
+	random_open_urandom();
+#endif
+	/* DO NOT REMOVE THIS - It is also
+	   needed to make sure getrandom really works.
+	*/
 	random_fill(&seed, sizeof(seed));
-	rand_set_seed(seed);
-
-	fd_close_on_exec(urandom_fd, TRUE);
+	srand(seed);
 }
 
 void random_deinit(void)
 {
 	if (--init_refcount > 0)
 		return;
-
 	i_close_fd(&urandom_fd);
-}
-
-#elif defined(HAVE_OPENSSL_RAND_H)
-#include <openssl/rand.h>
-#include <openssl/err.h>
-
-static const char *ssl_last_error(void)
-{
-	unsigned long err;
-	char *buf;
-	size_t err_size = 256;
-
-	err = ERR_get_error();
-	if (err == 0)
-		return strerror(errno);
-
-	buf = t_malloc(err_size);
-	buf[err_size-1] = '\0';
-	ERR_error_string_n(err, buf, err_size-1);
-	return buf;
-}
-
-void random_fill(void *buf, size_t size)
-{
-	if (RAND_bytes(buf, size) != 1)
-		i_fatal("RAND_pseudo_bytes() failed: %s", ssl_last_error());
-}
-
-void random_init(void)
-{
-	unsigned int seed;
-
-	if (RAND_status() == 0) {
-		i_fatal("Random generator not initialized: "
-			"Install egd on /var/run/egd-pool");
-	}
-
-	random_fill(&seed, sizeof(seed));
-	rand_set_seed(seed);
-}
-
-void random_deinit(void) {}
-
-#else
-#  error No random number generator, use eg. OpenSSL.
-#endif
-
-void random_fill_weak(void *buf, size_t size)
-{
-	unsigned char *cbuf = buf;
-
-	for (; size > 0; size--)
-		*cbuf++ = (unsigned char)rand();
 }

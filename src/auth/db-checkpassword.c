@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 
@@ -38,7 +38,7 @@ struct chkpw_auth_request {
 	size_t output_pos, output_len;
 
 	int exit_status;
-	unsigned int exited:1;
+	bool exited:1;
 };
 
 struct db_checkpassword {
@@ -63,20 +63,11 @@ env_put_extra_fields(const ARRAY_TYPE(auth_field) *extra_fields)
 
 static void checkpassword_request_close(struct chkpw_auth_request *request)
 {
-	if (request->io_in != NULL)
-		io_remove(&request->io_in);
-	if (request->io_out != NULL)
-		io_remove(&request->io_out);
+	io_remove(&request->io_in);
+	io_remove(&request->io_out);
 
-	if (request->fd_in != -1) {
-		if (close(request->fd_in) < 0)
-			i_error("checkpassword: close() failed: %m");
-		request->fd_in = -1;
-	}
-	if (request->fd_out != -1) {
-		if (close(request->fd_out) < 0)
-			i_error("checkpassword: close() failed: %m");
-	}
+	i_close_fd(&request->fd_in);
+	i_close_fd(&request->fd_out);
 }
 
 static void checkpassword_request_free(struct chkpw_auth_request **_request)
@@ -138,7 +129,7 @@ checkpassword_request_finish_auth(struct chkpw_auth_request *request)
 	/* standard checkpassword exit codes: */
 	case 1:
 		/* (1 is additionally defined in vpopmail for
-		   "pop/smtp/webmal/ imap/access denied") */
+		   "pop/smtp/webmail/ imap/access denied") */
 		auth_request_log_info(request->request, AUTH_SUBSYS_DB,
 				      "Login failed (status=%d)",
 				      request->exit_status);
@@ -294,9 +285,14 @@ checkpassword_get_cmd(struct auth_request *request, const char *args,
 		      const char *checkpassword_reply_path)
 {
 	string_t *str;
+	const char *error;
 
 	str = t_str_new(256);
-	auth_request_var_expand(str, args, request, NULL);
+	if (auth_request_var_expand(str, args, request, NULL, &error) <= 0) {
+		i_error("Failed to expand checkpassword_path=%s: %s",
+			args, error);
+	}
+
 	return t_strconcat(str_c(str), " ", checkpassword_reply_path, NULL);
 }
 
@@ -339,8 +335,7 @@ static void checkpassword_child_output(struct chkpw_auth_request *request)
 	size_t size;
 	ssize_t ret;
 
-	buf = buffer_create_dynamic(pool_datastack_create(),
-				    CHECKPASSWORD_MAX_REQUEST_LEN);
+	buf = t_buffer_create(CHECKPASSWORD_MAX_REQUEST_LEN);
 	buffer_append(buf, auth_request->user, strlen(auth_request->user)+1);
 	if (request->auth_password != NULL) {
 		buffer_append(buf, request->auth_password,

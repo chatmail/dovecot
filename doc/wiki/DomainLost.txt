@@ -57,4 +57,4 @@ password_query = SELECT username, domain, password FROM users WHERE username =
 '%n' AND domain = '%d'
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-03-19 04:42)
+(This file was created from the wiki on 2018-02-28 04:42)

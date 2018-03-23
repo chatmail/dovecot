@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -31,7 +31,7 @@ struct status_cmd_context {
 	struct mailbox_status total_status;
 	struct mailbox_metadata total_metadata;
 
-	unsigned int total_sum:1;
+	bool total_sum:1;
 };
 
 static void status_parse_fields(struct status_cmd_context *ctx,

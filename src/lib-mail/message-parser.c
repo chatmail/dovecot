@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -19,7 +19,7 @@ struct message_boundary {
 	const char *boundary;
 	size_t len;
 
-	unsigned int epilogue_found:1;
+	bool epilogue_found:1;
 };
 
 struct message_parser_ctx {
@@ -44,9 +44,10 @@ struct message_parser_ctx {
 	int (*parse_next_block)(struct message_parser_ctx *ctx,
 				struct message_block *block_r);
 
-	unsigned int part_seen_content_type:1;
-	unsigned int multipart:1;
-	unsigned int eof:1;
+	bool part_seen_content_type:1;
+	bool multipart:1;
+	bool preparsed:1;
+	bool eof:1;
 };
 
 message_part_header_callback_t *null_message_part_header_callback = NULL;
@@ -132,8 +133,8 @@ static int message_parser_read_more(struct message_parser_ctx *ctx,
 	}
 
 	*full_r = FALSE;
-	ret = i_stream_read_data(ctx->input, &block_r->data,
-				 &block_r->size, ctx->want_count);
+	ret = i_stream_read_bytes(ctx->input, &block_r->data,
+				  &block_r->size, ctx->want_count + 1);
 	if (ret <= 0) {
 		switch (ret) {
 		case 0:
@@ -661,7 +662,7 @@ static int parse_next_header(struct message_parser_ctx *ctx,
 		i_assert(ctx->last_boundary == NULL);
 		ctx->multipart = FALSE;
 		ctx->parse_next_block = parse_next_body_to_boundary;
-	} else if (part->flags & MESSAGE_PART_FLAG_MESSAGE_RFC822)
+	} else if ((part->flags & MESSAGE_PART_FLAG_MESSAGE_RFC822) != 0)
 		ctx->parse_next_block = parse_next_body_message_rfc822_init;
 	else if (ctx->boundaries != NULL)
 		ctx->parse_next_block = parse_next_body_to_boundary;
@@ -1073,17 +1074,20 @@ message_parser_init_from_parts(struct message_part *parts,
 	i_assert(parts != NULL);
 
 	ctx = message_parser_init_int(input, hdr_flags, flags);
+	ctx->preparsed = TRUE;
 	ctx->parts = ctx->part = parts;
 	ctx->parse_next_block = preparsed_parse_next_header_init;
 	return ctx;
 }
 
-int message_parser_deinit(struct message_parser_ctx **_ctx,
+void message_parser_deinit(struct message_parser_ctx **_ctx,
 			  struct message_part **parts_r)
 {
 	const char *error;
 
-	return message_parser_deinit_from_parts(_ctx, parts_r, &error);
+	i_assert((**_ctx).preparsed == FALSE);
+	if (message_parser_deinit_from_parts(_ctx, parts_r, &error) < 0)
+		i_panic("message_parser_deinit_from_parts: %s", error);
 }
 
 int message_parser_deinit_from_parts(struct message_parser_ctx **_ctx,

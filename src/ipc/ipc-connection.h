@@ -29,12 +29,13 @@ struct ipc_connection {
 	/* running commands */
 	ARRAY(struct ipc_connection_cmd *) cmds;
 
-	unsigned int version_received:1;
-	unsigned int handshake_received:1;
+	bool version_received:1;
+	bool handshake_received:1;
 };
 
 struct ipc_connection *ipc_connection_create(int listen_fd, int fd);
-void ipc_connection_destroy(struct ipc_connection **conn);
+void ipc_connection_destroy(struct ipc_connection **conn,
+			    bool log_error, const char *error);
 
 struct ipc_connection *
 ipc_connection_lookup_id(struct ipc_group *group, unsigned int id);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 
@@ -31,6 +31,7 @@ char *i_strdup_until(const void *str, const void *end)
 
 char *i_strndup(const void *str, size_t max_chars)
 {
+	i_assert(str != NULL);
 	return p_strndup(default_pool, str, max_chars);
 }
 
@@ -56,18 +57,15 @@ char *i_strconcat(const char *str1, ...)
 	char *ret;
 	size_t len;
 
+	i_assert(str1 != NULL);
+
 	va_start(args, str1);
 
 	T_BEGIN {
 		const char *temp = vstrconcat(str1, args, &len);
-	
-		if (temp == NULL)
-			ret = NULL;
-		else {
-			t_buffer_alloc(len);
-			ret = p_malloc(default_pool, len);
-			memcpy(ret, temp, len);
-		}
+		t_buffer_alloc(len);
+		ret = p_malloc(default_pool, len);
+		memcpy(ret, temp, len);
 	} T_END;
 
 	va_end(args);

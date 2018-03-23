@@ -148,11 +148,6 @@ test_http_deps = \
 	../lib-settings/libsettings.la \
 	$(test_deps)
 
-test_http_libs_ssl=
-if BUILD_OPENSSL
-test_http_libs_ssl += ../lib-ssl-iostream/libssl_iostream_openssl.la
-endif
-
 test_http_payload_SOURCES = test-http-payload.c
 test_http_payload_LDFLAGS = -export-dynamic
 test_http_payload_LDADD = \
@@ -164,8 +159,7 @@ test_http_client_SOURCES = test-http-client.c
 test_http_client_LDFLAGS = -export-dynamic
 test_http_client_LDADD = \
 	$(test_http_libs) \
-	$(test_http_libs_ssl)
-
+	../lib-ssl-iostream/libssl_iostream_openssl.la
 test_http_client_DEPENDENCIES = \
 	$(test_http_deps)
 
@@ -190,8 +184,7 @@ test_http_server_errors_LDADD = \
 test_http_server_errors_DEPENDENCIES = \
 	$(test_http_deps)
 
-check: check-am check-test
-check-test: all-am
+check-local:
 	for bin in $(test_programs); do \
 	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
 	done

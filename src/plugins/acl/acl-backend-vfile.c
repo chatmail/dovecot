@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -197,7 +197,7 @@ acl_backend_vfile_exists(struct acl_backend_vfile *backend, const char *path,
 
 	if (validity->last_check + (time_t)backend->cache_secs > ioloop_time) {
 		/* use the cached value */
-		return validity->last_mtime != ACL_VFILE_VALIDITY_MTIME_NOTFOUND;
+		return validity->last_mtime != ACL_VFILE_VALIDITY_MTIME_NOTFOUND ? 1 : 0;
 	}
 
 	validity->last_check = ioloop_time;
@@ -304,8 +304,7 @@ static void acl_backend_vfile_object_deinit(struct acl_object *_aclobj)
 
 	if (array_is_created(&aclobj->aclobj.rights))
 		array_free(&aclobj->aclobj.rights);
-	if (aclobj->aclobj.rights_pool != NULL)
-		pool_unref(&aclobj->aclobj.rights_pool);
+	pool_unref(&aclobj->aclobj.rights_pool);
 	i_free(aclobj->aclobj.name);
 	i_free(aclobj);
 }
@@ -367,7 +366,7 @@ acl_backend_vfile_read(struct acl_object *aclobj, bool global, const char *path,
 	if (aclobj->backend->debug)
 		i_debug("acl vfile: reading file %s", path);
 
-	input = i_stream_create_fd(fd, (size_t)-1, FALSE);
+	input = i_stream_create_fd(fd, (size_t)-1);
 	i_stream_set_return_partial_line(input, TRUE);
 	linenum = 0;
 	while ((line = i_stream_read_next_line(input)) != NULL) {
@@ -504,10 +503,10 @@ acl_backend_vfile_refresh(struct acl_object *aclobj, const char *path,
 	if (ret < 0) {
 		if (errno == ENOENT || errno == ENOTDIR) {
 			/* if the file used to exist, we have to re-read it */
-			return validity->last_mtime != ACL_VFILE_VALIDITY_MTIME_NOTFOUND;
+			return validity->last_mtime != ACL_VFILE_VALIDITY_MTIME_NOTFOUND ? 1 : 0;
 		} 
 		if (errno == EACCES)
-			return validity->last_mtime != ACL_VFILE_VALIDITY_MTIME_NOACCESS;
+			return validity->last_mtime != ACL_VFILE_VALIDITY_MTIME_NOACCESS ? 1 : 0;
 		i_error("stat(%s) failed: %m", path);
 		return -1;
 	}

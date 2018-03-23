@@ -1,10 +1,11 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "dbox-attachment.h"
 #include "sdbox-storage.h"
 #include "sdbox-file.h"
 #include "sdbox-sync.h"
+#include "mailbox-recent-flags.h"
 
 #define SDBOX_REBUILD_COUNT 3
 
@@ -115,9 +116,8 @@ static int sdbox_sync_index(struct sdbox_sync_context *ctx)
 				return -1;
 			return 1;
 		}
-		mail_storage_set_critical(box->storage,
-			"sdbox %s: Broken index: missing UIDVALIDITY",
-			mailbox_get_path(box));
+		mailbox_set_critical(box,
+			"sdbox: Broken index: missing UIDVALIDITY");
 		sdbox_set_mailbox_corrupted(box);
 		return 0;
 	}
@@ -190,7 +190,6 @@ sdbox_refresh_header(struct sdbox_mailbox *mbox, bool retry, bool log_error)
 int sdbox_sync_begin(struct sdbox_mailbox *mbox, enum sdbox_sync_flags flags,
 		     struct sdbox_sync_context **ctx_r)
 {
-	struct mail_storage *storage = mbox->box.storage;
 	const struct mail_index_header *hdr =
 		mail_index_get_header(mbox->box.view);
 	struct sdbox_sync_context *ctx;
@@ -242,9 +241,8 @@ int sdbox_sync_begin(struct sdbox_mailbox *mbox, enum sdbox_sync_flags flags,
 		   rebuild. */
 		if (ret == 0) {
 			if (i >= SDBOX_REBUILD_COUNT) {
-				mail_storage_set_critical(storage,
-					"sdbox %s: Index keeps breaking",
-					mailbox_get_path(&ctx->mbox->box));
+				mailbox_set_critical(&ctx->mbox->box,
+					"sdbox: Index keeps breaking");
 				ret = -1;
 			} else {
 				/* do a full resync and try again. */
@@ -308,7 +306,7 @@ int sdbox_sync(struct sdbox_mailbox *mbox, enum sdbox_sync_flags flags)
 struct mailbox_sync_context *
 sdbox_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
-	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)box;
+	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(box);
 	enum sdbox_sync_flags sdbox_sync_flags = 0;
 	int ret = 0;
 

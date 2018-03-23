@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "test-common.h"
@@ -214,7 +214,7 @@ static void test_http_date_invalid(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_http_date_valid,
 		test_http_date_invalid,
 		NULL

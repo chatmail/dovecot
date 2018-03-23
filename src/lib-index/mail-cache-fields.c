@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -394,38 +394,22 @@ int mail_cache_header_fields_read(struct mail_cache *cache)
 			return -1;
 		}
 
-		/* ignore any forced-flags in the file */
-		enum mail_cache_decision_type file_dec =
-			decisions[i] & ~MAIL_CACHE_DECISION_FORCED;
-
 		if (hash_table_lookup_full(cache->field_name_hash, names,
 					   &orig_key, &orig_value)) {
 			/* already exists, see if decision can be updated */
 			fidx = POINTER_CAST_TO(orig_value, unsigned int);
-			enum mail_cache_decision_type cur_dec =
-				cache->fields[fidx].field.decision;
-			if ((cur_dec & MAIL_CACHE_DECISION_FORCED) != 0) {
-				/* Forced decision. If the decision has
-				   changed, update the fields in the file. */
-				if ((cur_dec & ~MAIL_CACHE_DECISION_FORCED) != file_dec)
-					cache->field_header_write_pending = TRUE;
-			} else if (cache->fields[fidx].decision_dirty) {
-				/* Decisions have recently been updated
-				   internally. Don't change them. */
-			} else {
-				/* Use the decision from the cache file. */
-				cache->fields[fidx].field.decision = file_dec;
+			if (!cache->fields[fidx].decision_dirty) {
+				cache->fields[fidx].field.decision =
+					decisions[i];
 			}
 			if (field_type_verify(cache, fidx,
 					      types[i], sizes[i]) < 0)
 				return -1;
 		} else {
-			/* field is currently unknown, so just use whatever
-			   exists in the file. */
 			field.name = names;
 			field.type = types[i];
 			field.field_size = sizes[i];
-			field.decision = file_dec;
+			field.decision = decisions[i];
 			mail_cache_register_fields(cache, &field, 1);
 			fidx = field.idx;
 		}
@@ -519,7 +503,7 @@ static int mail_cache_header_fields_update_locked(struct mail_cache *cache)
 	    mail_cache_header_fields_get_offset(cache, &offset, NULL) < 0)
 		return -1;
 
-	buffer = buffer_create_dynamic(pool_datastack_create(), 256);
+	buffer = t_buffer_create(256);
 
 	copy_to_buf(cache, buffer, FALSE,
 		    offsetof(struct mail_cache_field, last_used),

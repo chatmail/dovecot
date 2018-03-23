@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "utc-offset.h"
@@ -34,7 +34,7 @@ static const char *imap_parse_date_internal(const char *str, struct tm *tm)
 	if (str == NULL || *str == '\0')
 		return NULL;
 
-	memset(tm, 0, sizeof(struct tm));
+	i_zero(tm);
 
 	/* "dd-mon-yyyy [hh:mi:ss +|-zone]"
 	   dd is 1-2 digits and may be prefixed with space or zero. */
@@ -183,7 +183,7 @@ imap_to_datetime_tm(const struct tm *tm, int timezone_offset)
 	char *buf;
 
 	/* @UNSAFE: but faster than t_strdup_printf() call.. */
-	buf = t_malloc(27);
+	buf = t_malloc0(27);
 	imap_to_date_tm(buf, tm);
 	buf[11] = ' ';
 

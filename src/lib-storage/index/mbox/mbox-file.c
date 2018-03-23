@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -81,8 +81,7 @@ int mbox_file_open_stream(struct mbox_mailbox *mbox)
 		} else {
 			mbox->mbox_file_stream =
 				i_stream_create_fd(mbox->mbox_fd,
-						   MBOX_READ_BLOCK_SIZE,
-						   FALSE);
+						   MBOX_READ_BLOCK_SIZE);
 			i_stream_set_init_buffer_size(mbox->mbox_file_stream,
 						      MBOX_READ_BLOCK_SIZE);
 		}
@@ -126,8 +125,7 @@ void mbox_file_close_stream(struct mbox_mailbox *mbox)
 	/* if we read anything, fix the atime if needed */
 	mbox_file_fix_atime(mbox);
 
-	if (mbox->mbox_stream != NULL)
-		i_stream_destroy(&mbox->mbox_stream);
+	i_stream_destroy(&mbox->mbox_stream);
 
 	if (mbox->mbox_file_stream != NULL) {
 		if (mbox->mbox_fd == -1) {
@@ -152,10 +150,9 @@ int mbox_file_lookup_offset(struct mbox_mailbox *mbox,
 		return -1;
 
 	if (data == NULL) {
-		mail_storage_set_critical(&mbox->storage->storage,
-			"Cached message offset lost for seq %u in mbox file %s",
-			seq, mailbox_get_path(&mbox->box));
-                mbox->mbox_hdr.dirty_flag = TRUE;
+		mailbox_set_critical(&mbox->box,
+			"Cached message offset lost for seq %u in mbox", seq);
+		mbox->mbox_hdr.dirty_flag = 1;
                 mbox->mbox_broken_offsets = TRUE;
 		return 0;
 	}
@@ -186,18 +183,18 @@ int mbox_file_seek(struct mbox_mailbox *mbox, struct mail_index_view *view,
 			return -1;
 		}
 
-		if (mbox->mbox_hdr.dirty_flag)
+		if (mbox->mbox_hdr.dirty_flag != 0)
 			return 0;
 
-		mail_storage_set_critical(&mbox->storage->storage,
-			"Cached message offset %s is invalid for mbox file %s",
-			dec2str(offset), mailbox_get_path(&mbox->box));
-		mbox->mbox_hdr.dirty_flag = TRUE;
+		mailbox_set_critical(&mbox->box,
+			"Cached message offset %s is invalid for mbox",
+			dec2str(offset));
+		mbox->mbox_hdr.dirty_flag = 1;
 		mbox->mbox_broken_offsets = TRUE;
 		return 0;
 	}
 
-	if (mbox->mbox_hdr.dirty_flag) {
+	if (mbox->mbox_hdr.dirty_flag != 0) {
 		/* we're dirty - make sure this is the correct mail */
 		if (!mbox_sync_parse_match_mail(mbox, view, seq))
 			return 0;

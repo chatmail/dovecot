@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "crc32.h"
@@ -173,8 +173,8 @@ imap_state_export_mailbox_mails(buffer_t *dest, struct mailbox *box,
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);
 
-	trans = mailbox_transaction_begin(box, 0);
-	mailbox_transaction_set_reason(trans, "unhibernate");
+	trans = mailbox_transaction_begin(box, 0,
+				"unhibernate imap_state_export_mailbox_mails");
 	search_ctx = mailbox_search_init(trans, search_args, NULL, 0, NULL);
 	mail_search_args_unref(&search_args);
 
@@ -362,8 +362,8 @@ import_send_expunges(struct client *client,
 				       &uids_filter, &expunged_uids)) {
 		*error_r = t_strdup_printf(
 			"Couldn't get recently expunged UIDs "
-			"(uidnext=%u highest_modseq=%llu)", state->uidnext,
-			(unsigned long long)state->highest_modseq);
+			"(uidnext=%u highest_modseq=%"PRIu64")",
+			state->uidnext, state->highest_modseq);
 		return -1;
 	}
 	seq_range_array_iter_init(&iter, &expunged_uids);
@@ -371,8 +371,8 @@ import_send_expunges(struct client *client,
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);
 
-	trans = mailbox_transaction_begin(client->mailbox, 0);
-	mailbox_transaction_set_reason(trans, "unhibernate");
+	trans = mailbox_transaction_begin(client->mailbox, 0,
+					  "unhibernate import_send_expunges");
 	search_ctx = mailbox_search_init(trans, search_args, NULL, 0, NULL);
 	mail_search_args_unref(&search_args);
 
@@ -448,7 +448,8 @@ import_send_expunges(struct client *client,
 
 static int
 import_send_flag_changes(struct client *client,
-			 const struct mailbox_import_state *state)
+			 const struct mailbox_import_state *state,
+			 unsigned int *flag_change_count_r)
 {
 	struct imap_fetch_context *fetch_ctx;
 	struct mail_search_args *search_args;
@@ -456,6 +457,7 @@ import_send_flag_changes(struct client *client,
 	pool_t pool;
 	int ret;
 
+	*flag_change_count_r = 0;
 	if (state->messages == 0)
 		return 0;
 
@@ -485,6 +487,7 @@ import_send_flag_changes(struct client *client,
 	while (imap_fetch_more_no_lock_update(fetch_ctx) == 0) ;
 
 	ret = imap_fetch_end(fetch_ctx);
+	*flag_change_count_r = fetch_ctx->fetched_mails_count;
 	imap_fetch_free(&fetch_ctx);
 	return ret;
 }
@@ -560,7 +563,7 @@ import_state_mailbox_open(struct client *client,
         struct mailbox_status status;
 	const struct seq_range *range;
 	enum mailbox_flags flags = 0;
-	unsigned int expunge_count;
+	unsigned int expunge_count, new_mails_count = 0, flag_change_count = 0;
 	uint32_t uid;
 	int ret = 0;
 
@@ -620,9 +623,9 @@ import_state_mailbox_open(struct client *client,
 		return -1;
 	}
 	if (status.highest_modseq < state->highest_modseq) {
-		*error_r = t_strdup_printf("Mailbox HIGHESTMODSEQ shrank %llu -> %llu",
-					   (unsigned long long)state->highest_modseq,
-					   (unsigned long long)status.highest_modseq);
+		*error_r = t_strdup_printf("Mailbox HIGHESTMODSEQ shrank %"PRIu64" -> %"PRIu64,
+					   state->highest_modseq,
+					   status.highest_modseq);
 		mailbox_free(&box);
 		return -1;
 	}
@@ -656,6 +659,8 @@ import_state_mailbox_open(struct client *client,
 
 	if (state->messages - expunge_count < client->messages_count) {
 		/* new messages arrived */
+		new_mails_count = client->messages_count -
+			(state->messages - expunge_count);
 		client_send_line(client,
 			t_strdup_printf("* %u EXISTS", client->messages_count));
 		client_send_line(client,
@@ -669,7 +674,7 @@ import_state_mailbox_open(struct client *client,
 	} else {
 		client_send_mailbox_flags(client, TRUE);
 	}
-	if (import_send_flag_changes(client, state) < 0) {
+	if (import_send_flag_changes(client, state, &flag_change_count) < 0) {
 		*error_r = "Couldn't send flag changes";
 		return -1;
 	}
@@ -677,10 +682,13 @@ import_state_mailbox_open(struct client *client,
 	    !client->nonpermanent_modseqs &&
 	    status.highest_modseq != state->highest_modseq) {
 		client_send_line(client, t_strdup_printf(
-			"* OK [HIGHESTMODSEQ %llu] Highest",
-			(unsigned long long)status.highest_modseq));
+			"* OK [HIGHESTMODSEQ %"PRIu64"] Highest",
+			status.highest_modseq));
 		client->sync_last_full_modseq = status.highest_modseq;
 	}
+	i_debug("Unhibernation sync: %u expunges, %u new messages, %u flag changes, %"PRIu64" modseq changes",
+		expunge_count, new_mails_count, flag_change_count,
+		status.highest_modseq - state->highest_modseq);
 	return 0;
 }
 
@@ -786,6 +794,8 @@ void imap_state_import_idle_cmd_tag(struct client *client, const char *tag)
 		i_assert(command != NULL);
 		cmd->func = command->func;
 		cmd->cmd_flags = command->flags;
+		client_command_init_finished(cmd);
+
 		if (command_exec(cmd)) {
 			/* IDLE terminated because of an external change, but
 			   DONE was already buffered */

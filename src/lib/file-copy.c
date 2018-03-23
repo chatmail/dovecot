@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -18,7 +18,7 @@ static int file_copy_to_tmp(const char *srcpath, const char *tmppath,
 	struct stat st;
 	mode_t old_umask;
 	int fd_in, fd_out;
-	off_t ret;
+	int ret = -1;
 
 	if (try_hardlink) {
 		/* see if hardlinking works */
@@ -67,13 +67,25 @@ static int file_copy_to_tmp(const char *srcpath, const char *tmppath,
 	if (fchown(fd_out, (uid_t)-1, st.st_gid) < 0 && errno != EPERM)
 		i_error("fchown(%s) failed: %m", tmppath);
 
-	input = i_stream_create_fd(fd_in, IO_BLOCK_SIZE, FALSE);
+	input = i_stream_create_fd(fd_in, IO_BLOCK_SIZE);
 	output = o_stream_create_fd_file(fd_out, 0, FALSE);
 
-	while ((ret = o_stream_send_istream(output, input)) > 0) ;
-
-	if (ret < 0)
-		i_error("write(%s) failed: %m", tmppath);
+	switch (o_stream_send_istream(output, input)) {
+	case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
+		ret = 0;
+		break;
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
+		i_unreached();
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
+		i_error("read(%s) failed: %s", srcpath,
+			i_stream_get_error(input));
+		break;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+		i_error("write(%s) failed: %s", tmppath,
+			o_stream_get_error(output));
+		break;
+	}
 
 	i_stream_destroy(&input);
 	o_stream_destroy(&output);

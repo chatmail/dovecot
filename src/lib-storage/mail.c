@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -10,7 +10,6 @@
 #include "hostpid.h"
 #include "mail-cache.h"
 #include "mail-storage-private.h"
-#include "message-part-data.h"
 
 #include <time.h>
 
@@ -350,20 +349,7 @@ int mail_get_special(struct mail *mail, enum mail_fetch_field field,
 int mail_get_backend_mail(struct mail *mail, struct mail **real_mail_r)
 {
 	struct mail_private *p = (struct mail_private *)mail;
-
-	*real_mail_r = p->v.get_real_mail(mail);
-	return *real_mail_r == NULL ? -1 : 0;
-}
-
-struct mail *mail_get_real_mail(struct mail *mail)
-{
-	struct mail *backend_mail;
-
-	if (mail_get_backend_mail(mail, &backend_mail) < 0) {
-		i_panic("FIXME: Error occurred in mail_get_real_mail(), "
-			"switch to using mail_get_backend_mail() instead");
-	}
-	return backend_mail;
+	return p->v.get_backend_mail(mail, real_mail_r);
 }
 
 void mail_update_flags(struct mail *mail, enum modify_type modify_type,
@@ -437,24 +423,12 @@ void mail_precache(struct mail *mail)
 	} T_END;
 }
 
-void mail_set_cache_corrupted(struct mail *mail, enum mail_fetch_field field)
-{
-	mail_set_cache_corrupted_reason(mail, field, "");
-}
-
-void mail_set_cache_corrupted_reason(struct mail *mail,
-				     enum mail_fetch_field field,
-				     const char *reason)
+void mail_set_cache_corrupted(struct mail *mail,
+			      enum mail_fetch_field field,
+			      const char *reason)
 {
 	struct mail_private *p = (struct mail_private *)mail;
-
-	/* FIXME: v2.3: rename set_cache_corrupted_reason() to just
-	   set_cache_corrupted(). we have two here for backwards API
-	   compatibility. */
-	if (p->v.set_cache_corrupted_reason != NULL)
-		p->v.set_cache_corrupted_reason(mail, field, reason);
-	else
-		p->v.set_cache_corrupted(mail, field);
+	p->v.set_cache_corrupted(mail, field, reason);
 }
 
 void mail_generate_guid_128_hash(const char *guid, guid_128_t guid_128_r)
@@ -467,81 +441,11 @@ void mail_generate_guid_128_hash(const char *guid, guid_128_t guid_128_r)
 		buffer_create_from_data(&buf, guid_128_r, GUID_128_SIZE);
 		buffer_set_used_size(&buf, 0);
 		sha1_get_digest(guid, strlen(guid), sha1_sum);
-#if SHA1_RESULTLEN < DBOX_GUID_BIN_LEN
+#if SHA1_RESULTLEN < GUID_128_SIZE
 #  error not possible
 #endif
 		buffer_append(&buf,
 			      sha1_sum + SHA1_RESULTLEN - GUID_128_SIZE,
 			      GUID_128_SIZE);
 	}
-}
-
-static bool
-mail_message_has_attachment(struct message_part *part,
-			    const struct message_part_attachment_settings *set)
-{
-	for (; part != NULL; part = part->next) {
-		if (message_part_is_attachment(part, set) ||
-		    mail_message_has_attachment(part->children, set))
-			return TRUE;
-	}
-
-	return FALSE;
-}
-
-bool mail_has_attachment_keywords(struct mail *mail)
-{
-	const char *const *kw = mail_get_keywords(mail);
-	return (str_array_icase_find(kw, MAIL_KEYWORD_HAS_ATTACHMENT) !=
-		str_array_icase_find(kw, MAIL_KEYWORD_HAS_NO_ATTACHMENT));
-}
-
-void mail_set_attachment_keywords(struct mail *mail)
-{
-	const struct mail_storage_settings *mail_set =
-		mail_storage_get_settings(mailbox_get_storage(mail->box));
-
-	const char *const keyword_has_attachment[] = {
-		MAIL_KEYWORD_HAS_ATTACHMENT,
-		NULL,
-	};
-	const char *const keyword_has_no_attachment[] = {
-		MAIL_KEYWORD_HAS_NO_ATTACHMENT,
-		NULL
-	};
-	struct message_part_attachment_settings set = {
-		.content_type_filter =
-			mail_set->parsed_mail_attachment_content_type_filter,
-		.exclude_inlined =
-			mail_set->parsed_mail_attachment_exclude_inlined,
-	};
-	struct mail_keywords *kw_has = NULL, *kw_has_not = NULL;
-
-	/* walk all parts and see if there is an attachment */
-	struct message_part *parts;
-	if (mail_get_parts(mail, &parts) < 0) {
-		mail_storage_set_critical(mail->box->storage,
-			"Failed to add attachment keywords: "
-			"mail_get_parts() failed: %s",
-			mail_storage_get_last_internal_error(mail->box->storage, NULL));
-		return;
-	} else if (mailbox_keywords_create(mail->box, keyword_has_attachment, &kw_has) < 0 ||
-		   mailbox_keywords_create(mail->box, keyword_has_no_attachment, &kw_has_not) < 0) {
-		if (mail_set->mail_debug) {
-			i_debug("Failed to add attachment keywords: mailbox_keyword_create(%s) failed: %s",
-				mailbox_get_vname(mail->box),
-				mail_storage_get_last_error(mail->box->storage, NULL));
-		}
-	} else {
-		bool has_attachment = mail_message_has_attachment(parts, &set);
-
-		/* make sure only one of the keywords gets set */
-		mail_update_keywords(mail, MODIFY_REMOVE, has_attachment ? kw_has_not : kw_has);
-		mail_update_keywords(mail, MODIFY_ADD, has_attachment ? kw_has : kw_has_not);
-	}
-
-	if (kw_has != NULL)
-		mailbox_keywords_unref(&kw_has);
-	if (kw_has_not != NULL)
-		mailbox_keywords_unref(&kw_has_not);
 }

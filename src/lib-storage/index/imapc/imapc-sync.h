@@ -28,12 +28,13 @@ struct imapc_sync_context {
 	enum modify_type prev_modify_type;
 	string_t *prev_flags;
 
-	unsigned int failed:1;
+	bool failed:1;
 };
 
 struct mailbox_sync_context *
 imapc_mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags);
 int imapc_mailbox_sync_deinit(struct mailbox_sync_context *ctx,
 			      struct mailbox_sync_status *status_r);
+void imapc_sync_mailbox_reopened(struct imapc_mailbox *mbox);
 
 #endif

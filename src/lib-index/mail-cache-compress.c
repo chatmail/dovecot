@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -304,7 +304,7 @@ mail_cache_copy(struct mail_cache *cache, struct mail_index_transaction *trans,
 
 	mail_cache_view_close(&cache_view);
 
-	if (o_stream_nfinish(output) < 0) {
+	if (o_stream_finish(output) < 0) {
 		mail_cache_set_syscall_error(cache, "write()");
 		o_stream_destroy(&output);
 		array_free(ext_offsets);
@@ -412,7 +412,7 @@ static int mail_cache_compress_has_file_changed(struct mail_cache *cache)
 				   was unusable and was just unlinked */
 				return 1;
 			}
-			return hdr.file_seq != cache->need_compress_file_seq;
+			return hdr.file_seq != cache->need_compress_file_seq ? 1 : 0;
 		} else if (errno != ESTALE || i >= NFS_ESTALE_RETRY_COUNT) {
 			mail_cache_set_syscall_error(cache, "read()");
 			return -1;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -69,10 +69,8 @@ master_auth_connection_deinit(struct master_auth_connection **_conn)
 	if (conn->callback != NULL)
 		conn->callback(NULL, conn->context);
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	timeout_remove(&conn->to);
+	io_remove(&conn->io);
 	if (conn->fd != -1) {
 		if (close(conn->fd) < 0)
 			i_fatal("close(%s) failed: %m", conn->path);
@@ -180,8 +178,7 @@ void master_auth_request_full(struct master_auth *auth,
 		i_fatal("fstat(auth dest fd) failed: %m");
 	req.ino = st.st_ino;
 
-	buf = buffer_create_dynamic(pool_datastack_create(),
-				    sizeof(req) + req.data_size);
+	buf = t_buffer_create(sizeof(req) + req.data_size);
 	buffer_append(buf, &req, sizeof(req));
 	buffer_append(buf, params->data, req.data_size);
 

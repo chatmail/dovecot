@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2008-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -34,7 +34,7 @@ struct auth_master_connection *mail_user_auth_master_conn;
 static void mail_user_deinit_base(struct mail_user *user)
 {
 	if (user->_attr_dict != NULL) {
-		(void)dict_wait(user->_attr_dict);
+		dict_wait(user->_attr_dict);
 		dict_deinit(&user->_attr_dict);
 	}
 	mail_namespaces_deinit(&user->namespaces);
@@ -52,7 +52,8 @@ static void mail_user_stats_fill_base(struct mail_user *user ATTR_UNUSED,
 }
 
 static struct mail_user *
-mail_user_alloc_int(const char *username,
+mail_user_alloc_int(struct event *parent_event,
+		    const char *username,
 		    const struct setting_parser_info *set_info,
 		    const struct mail_user_settings *set, pool_t pool)
 {
@@ -72,6 +73,9 @@ mail_user_alloc_int(const char *username,
 	user->service = master_service_get_name(master_service);
 	user->default_normalizer = uni_utf8_to_decomposed_titlecase;
 	user->session_create_time = ioloop_time;
+	user->event = event_create(parent_event);
+	event_add_category(user->event, &event_category_storage);
+	event_add_str(user->event, "user", username);
 
 	/* check settings so that the duplicated structure will again
 	   contain the parsed fields */
@@ -86,31 +90,33 @@ mail_user_alloc_int(const char *username,
 }
 
 struct mail_user *
-mail_user_alloc_nodup_set(const char *username,
+mail_user_alloc_nodup_set(struct event *parent_event,
+			  const char *username,
 			  const struct setting_parser_info *set_info,
 			  const struct mail_user_settings *set)
 {
 	pool_t pool;
 
 	pool = pool_alloconly_create(MEMPOOL_GROWING"mail user", 16*1024);
-	return mail_user_alloc_int(username, set_info, set, pool);
+	return mail_user_alloc_int(parent_event, username, set_info, set, pool);
 }
 
-struct mail_user *mail_user_alloc(const char *username,
+struct mail_user *mail_user_alloc(struct event *parent_event,
+				  const char *username,
 				  const struct setting_parser_info *set_info,
 				  const struct mail_user_settings *set)
 {
 	pool_t pool;
 
 	pool = pool_alloconly_create(MEMPOOL_GROWING"mail user", 16*1024);
-	return mail_user_alloc_int(username, set_info,
+	return mail_user_alloc_int(parent_event, username, set_info,
 				   settings_dup(set_info, set, pool), pool);
 }
 
 static void
 mail_user_expand_plugins_envs(struct mail_user *user)
 {
-	const char **envs, *home;
+	const char **envs, *home, *error;
 	string_t *str;
 	unsigned int i, count;
 
@@ -131,9 +137,15 @@ mail_user_expand_plugins_envs(struct mail_user *user)
 			return;
 		}
 		str_truncate(str, 0);
-		var_expand_with_funcs(str, envs[i+1],
-				      mail_user_var_expand_table(user),
-				      mail_user_var_expand_func_table, user);
+		if (var_expand_with_funcs(str, envs[i+1],
+					  mail_user_var_expand_table(user),
+					  mail_user_var_expand_func_table, user,
+					  &error) <= 0) {
+			user->error = p_strdup_printf(user->pool,
+				"Failed to expand plugin setting %s = '%s': %s",
+				envs[i], envs[i+1], error);
+			return;
+		}
 		envs[i+1] = p_strdup(user->pool, str_c(str));
 	}
 }
@@ -141,7 +153,7 @@ mail_user_expand_plugins_envs(struct mail_user *user)
 int mail_user_init(struct mail_user *user, const char **error_r)
 {
 	const struct mail_storage_settings *mail_set;
-	const char *home, *key, *value;
+	const char *home, *key, *value, *error;
 	bool need_home_dir;
 
 	need_home_dir = user->_home == NULL &&
@@ -154,9 +166,13 @@ int mail_user_init(struct mail_user *user, const char **error_r)
 	}
 
 	/* expand settings after we can expand %h */
-	settings_var_expand_with_funcs(user->set_info, user->set,
-				       user->pool, mail_user_var_expand_table(user),
-				       mail_user_var_expand_func_table, user);
+	if (settings_var_expand_with_funcs(user->set_info, user->set,
+					   user->pool, mail_user_var_expand_table(user),
+					   mail_user_var_expand_func_table, user,
+					   &error) <= 0) {
+		user->error = p_strdup_printf(user->pool,
+			"Failed to expand settings: %s", error);
+	}
 	user->settings_expanded = TRUE;
 	mail_user_expand_plugins_envs(user);
 
@@ -202,6 +218,7 @@ void mail_user_unref(struct mail_user **_user)
 	   assert-crash in mail_user_ref() that is called by some handlers. */
 	user->v.deinit_pre(user);
 	user->v.deinit(user);
+	event_unref(&user->event);
 	i_assert(user->refcount == 1);
 	pool_unref(&user->pool);
 }
@@ -217,90 +234,104 @@ struct mail_user *mail_user_find(struct mail_user *user, const char *name)
 	return NULL;
 }
 
+static void
+mail_user_connection_init_from(struct mail_user_connection_data *conn,
+	pool_t pool, const struct mail_user_connection_data *src)
+{
+	*conn = *src;
+
+	if (src->local_ip != NULL && src->local_ip->family != 0) {
+		conn->local_ip = p_new(pool, struct ip_addr, 1);
+		*conn->local_ip = *src->local_ip;
+	}
+	if (src->remote_ip != NULL && src->remote_ip->family != 0) {
+		conn->remote_ip = p_new(pool, struct ip_addr, 1);
+		*conn->remote_ip = *src->remote_ip;
+	}
+}
+
 void mail_user_set_vars(struct mail_user *user, const char *service,
-			const struct ip_addr *local_ip,
-			const struct ip_addr *remote_ip)
+			const struct mail_user_connection_data *conn)
 {
 	i_assert(service != NULL);
 
 	user->service = p_strdup(user->pool, service);
-	if (local_ip != NULL && local_ip->family != 0) {
-		user->local_ip = p_new(user->pool, struct ip_addr, 1);
-		*user->local_ip = *local_ip;
-	}
-	if (remote_ip != NULL && remote_ip->family != 0) {
-		user->remote_ip = p_new(user->pool, struct ip_addr, 1);
-		*user->remote_ip = *remote_ip;
-	}
+	event_add_str(user->event, "service", service);
+
+	mail_user_connection_init_from(&user->conn, user->pool, conn);
+	if (user->conn.local_ip != NULL)
+		event_add_str(user->event, "local_ip",
+			      net_ip2addr(user->conn.local_ip));
+	if (user->conn.remote_ip != NULL)
+		event_add_str(user->event, "remote_ip",
+			      net_ip2addr(user->conn.remote_ip));
 }
 
 const struct var_expand_table *
 mail_user_var_expand_table(struct mail_user *user)
 {
-	static struct var_expand_table static_tab[] = {
-		{ 'u', NULL, "user" },
-		{ 'n', NULL, "username" },
-		{ 'd', NULL, "domain" },
-		{ 's', NULL, "service" },
-		{ 'h', NULL, "home" },
-		{ 'l', NULL, "lip" },
-		{ 'r', NULL, "rip" },
-		{ 'p', NULL, "pid" },
-		{ 'i', NULL, "uid" },
-		{ '\0', NULL, "gid" },
-		{ '\0', NULL, "session" },
-		{ '\0', NULL, "auth_user" },
-		{ '\0', NULL, "auth_username" },
-		{ '\0', NULL, "auth_domain" },
+	/* use a cached table, unless home directory has been set afterwards */
+	if (user->var_expand_table != NULL &&
+	    user->var_expand_table[4].value == user->_home)
+		return user->var_expand_table;
+
+	const char *username =
+		p_strdup(user->pool, t_strcut(user->username, '@'));
+	const char *domain = i_strchr_to_next(user->username, '@');
+	const char *local_ip = user->conn.local_ip == NULL ? NULL :
+		p_strdup(user->pool, net_ip2addr(user->conn.local_ip));
+	const char *remote_ip = user->conn.remote_ip == NULL ? NULL :
+		p_strdup(user->pool, net_ip2addr(user->conn.remote_ip));
+
+	const char *auth_user, *auth_username, *auth_domain;
+	if (user->auth_user == NULL) {
+		auth_user = user->username;
+		auth_username = username;
+		auth_domain = domain;
+	} else {
+		auth_user = user->auth_user;
+		auth_username =
+			p_strdup(user->pool, t_strcut(user->auth_user, '@'));
+		auth_domain = i_strchr_to_next(user->auth_user, '@');
+	}
+
+	const struct var_expand_table stack_tab[] = {
+		{ 'u', user->username, "user" },
+		{ 'n', username, "username" },
+		{ 'd', domain, "domain" },
+		{ 's', user->service, "service" },
+		{ 'h', user->_home /* don't look it up unless we need it */, "home" },
+		{ 'l', local_ip, "lip" },
+		{ 'r', remote_ip, "rip" },
+		{ 'p', my_pid, "pid" },
+		{ 'i', p_strdup(user->pool, dec2str(user->uid)), "uid" },
+		{ '\0', p_strdup(user->pool, dec2str(user->gid)), "gid" },
+		{ '\0', user->session_id, "session" },
+		{ '\0', auth_user, "auth_user" },
+		{ '\0', auth_username, "auth_username" },
+		{ '\0', auth_domain, "auth_domain" },
 		/* NOTE: keep this synced with imap-hibernate's
 		   imap_client_var_expand_table() */
 		{ '\0', NULL, NULL }
 	};
 	struct var_expand_table *tab;
 
-	/* use a cached table, unless home directory has been set afterwards */
-	if (user->var_expand_table != NULL &&
-	    user->var_expand_table[4].value == user->_home)
-		return user->var_expand_table;
-
-	tab = p_malloc(user->pool, sizeof(static_tab));
-	memcpy(tab, static_tab, sizeof(static_tab));
-
-	tab[0].value = user->username;
-	tab[1].value = p_strdup(user->pool, t_strcut(user->username, '@'));
-	tab[2].value = strchr(user->username, '@');
-	if (tab[2].value != NULL) tab[2].value++;
-	tab[3].value = user->service;
-	tab[4].value = user->_home; /* don't look it up unless we need it */
-	tab[5].value = user->local_ip == NULL ? NULL :
-		p_strdup(user->pool, net_ip2addr(user->local_ip));
-	tab[6].value = user->remote_ip == NULL ? NULL :
-		p_strdup(user->pool, net_ip2addr(user->remote_ip));
-	tab[7].value = my_pid;
-	tab[8].value = p_strdup(user->pool, dec2str(user->uid));
-	tab[9].value = p_strdup(user->pool, dec2str(user->gid));
-	tab[10].value = user->session_id;
-	if (user->auth_user == NULL) {
-		tab[11].value = tab[0].value;
-		tab[12].value = tab[1].value;
-		tab[13].value = tab[2].value;
-	} else {
-		tab[11].value = user->auth_user;
-		tab[12].value = p_strdup(user->pool, t_strcut(user->auth_user, '@'));
-		tab[13].value = strchr(user->auth_user, '@');
-		if (tab[13].value != NULL) tab[13].value++;
-	}
+	tab = p_malloc(user->pool, sizeof(stack_tab));
+	memcpy(tab, stack_tab, sizeof(stack_tab));
 
 	user->var_expand_table = tab;
 	return user->var_expand_table;
 }
 
-static const char *
-mail_user_var_expand_func_userdb(const char *data, void *context)
+static int
+mail_user_var_expand_func_userdb(const char *data, void *context,
+				 const char **value_r,
+				 const char **error_r ATTR_UNUSED)
 {
 	struct mail_user *user = context;
 
-	return mail_storage_service_fields_var_expand(data, user->userdb_fields);
+	*value_r = mail_storage_service_fields_var_expand(data, user->userdb_fields);
+	return 1;
 }
 
 void mail_user_set_home(struct mail_user *user, const char *home)
@@ -368,10 +399,10 @@ static int mail_user_userdb_lookup_home(struct mail_user *user)
 
 	i_zero(&info);
 	info.service = user->service;
-	if (user->local_ip != NULL)
-		info.local_ip = *user->local_ip;
-	if (user->remote_ip != NULL)
-		info.remote_ip = *user->remote_ip;
+	if (user->conn.local_ip != NULL)
+		info.local_ip = *user->conn.local_ip;
+	if (user->conn.remote_ip != NULL)
+		info.remote_ip = *user->conn.remote_ip;
 
 	userdb_pool = pool_alloconly_create("userdb lookup", 2048);
 	ret = auth_master_user_lookup(mail_user_auth_master_conn,
@@ -385,26 +416,31 @@ static int mail_user_userdb_lookup_home(struct mail_user *user)
 	return ret;
 }
 
-static void mail_user_get_mail_home(struct mail_user *user)
+static bool mail_user_get_mail_home(struct mail_user *user)
 {
-	const char *home = user->set->mail_home;
+	const char *error, *home = user->set->mail_home;
 	string_t *str;
 
 	if (user->settings_expanded) {
 		user->_home = home[0] != '\0' ? home : NULL;
-		return;
+		return TRUE;
 	}
 	/* we're still initializing user. need to do the expansion ourself. */
 	i_assert(home[0] == SETTING_STRVAR_UNEXPANDED[0]);
 	home++;
 	if (home[0] == '\0')
-		return;
+		return TRUE;
 
 	str = t_str_new(128);
-	var_expand_with_funcs(str, home,
-			      mail_user_var_expand_table(user),
-			      mail_user_var_expand_func_table, user);
+	if (var_expand_with_funcs(str, home,
+				  mail_user_var_expand_table(user),
+				  mail_user_var_expand_func_table, user,
+				  &error) <= 0) {
+		i_error("Failed to expand mail_home=%s: %s", home, error);
+		return FALSE;
+	}
 	user->_home = p_strdup(user->pool, str_c(str));
+	return TRUE;
 }
 
 int mail_user_get_home(struct mail_user *user, const char **home_r)
@@ -418,7 +454,8 @@ int mail_user_get_home(struct mail_user *user, const char **home_r)
 
 	if (mail_user_auth_master_conn == NULL) {
 		/* no userdb connection. we can only use mail_home setting. */
-		mail_user_get_mail_home(user);
+		if (!mail_user_get_mail_home(user))
+			return -1;
 	} else if ((ret = mail_user_userdb_lookup_home(user)) < 0) {
 		/* userdb lookup failed */
 		return -1;
@@ -428,7 +465,8 @@ int mail_user_get_home(struct mail_user *user, const char **home_r)
 	} else if (user->_home == NULL) {
 		/* no home returned by userdb lookup, fallback to
 		   mail_home setting. */
-		mail_user_get_mail_home(user);
+		if (!mail_user_get_mail_home(user))
+			return -1;
 	}
 	user->home_looked_up = TRUE;
 
@@ -446,6 +484,31 @@ bool mail_user_is_plugin_loaded(struct mail_user *user, struct module *module)
 		ret = str_array_find(plugins, module_get_plugin_name(module));
 	} T_END;
 	return ret;
+}
+
+bool mail_user_plugin_getenv_bool(struct mail_user *user, const char *name)
+{
+	return mail_user_set_plugin_getenv_bool(user->set, name);
+}
+
+bool mail_user_set_plugin_getenv_bool(const struct mail_user_settings *set,
+				      const char *name)
+{
+	const char *env = mail_user_set_plugin_getenv(set, name);
+
+	if (env == NULL)
+		return FALSE;
+	switch (env[0]) {
+		case 'n':
+		case 'N':
+		case '0':
+		case 'f':
+		case 'F':
+		return FALSE;
+	}
+
+	//any other value including empty string will be treated as TRUE.
+	return TRUE;
 }
 
 const char *mail_user_plugin_getenv(struct mail_user *user, const char *name)
@@ -503,7 +566,8 @@ int mail_user_lock_file_create(struct mail_user *user, const char *lock_fname,
 			       unsigned int lock_secs,
 			       struct file_lock **lock_r, const char **error_r)
 {
-	const char *home, *path;
+	bool created;
+	const char *home, *path, *error;
 	int ret;
 
 	if ((ret = mail_user_get_home(user, &home)) < 0) {
@@ -533,14 +597,21 @@ int mail_user_lock_file_create(struct mail_user *user, const char *lock_fname,
 				       lock_fname);
 		lock_set.mkdir_mode = 0700;
 	}
-	return mail_storage_lock_create(path, &lock_set, mail_set, lock_r, error_r);
+
+	if (file_create_locked(path, &lock_set, lock_r, &created, &error) == -1) {
+		*error_r = t_strdup_printf("file_create_locked(%s) failed: %s", path, error);
+		return errno == EAGAIN ? 0 : -1;
+	}
+	file_lock_set_unlink_on_free(*lock_r, TRUE);
+	file_lock_set_close_on_free(*lock_r, TRUE);
+	return 1;
 }
 
 const char *mail_user_get_anvil_userip_ident(struct mail_user *user)
 {
-	if (user->remote_ip == NULL)
+	if (user->conn.remote_ip == NULL)
 		return NULL;
-	return t_strconcat(net_ip2addr(user->remote_ip), "/",
+	return t_strconcat(net_ip2addr(user->conn.remote_ip), "/",
 			   str_tabescape(user->username), NULL);
 }
 
@@ -601,16 +672,15 @@ struct mail_user *mail_user_dup(struct mail_user *user)
 {
 	struct mail_user *user2;
 
-	user2 = mail_user_alloc(user->username, user->set_info,
-				user->unexpanded_set);
+	user2 = mail_user_alloc(event_get_parent(user->event), user->username,
+				user->set_info, user->unexpanded_set);
 	if (user2->_service_user != NULL) {
 		user2->_service_user = user->_service_user;
 		mail_storage_service_user_ref(user2->_service_user);
 	}
 	if (user->_home != NULL)
 		mail_user_set_home(user2, user->_home);
-	mail_user_set_vars(user2, user->service,
-			   user->local_ip, user->remote_ip);
+	mail_user_set_vars(user2, user->service, &user->conn);
 	user2->uid = user->uid;
 	user2->gid = user->gid;
 	user2->anonymous = user->anonymous;

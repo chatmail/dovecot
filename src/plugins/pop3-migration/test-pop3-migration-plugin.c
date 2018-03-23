@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "sha1.h"
@@ -9,7 +9,7 @@
 
 static void test_pop3_migration_get_hdr_sha1(void)
 {
-	struct {
+	static const struct {
 		const char *input;
 		const char *sha1;
 		bool have_eoh;
@@ -55,7 +55,7 @@ static void test_pop3_migration_get_hdr_sha1(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_pop3_migration_get_hdr_sha1,
 		NULL
 	};

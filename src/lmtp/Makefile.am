@@ -15,9 +15,11 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-I$(top_srcdir)/src/lib-storage \
 	-I$(top_srcdir)/src/lib-storage/index \
-	-I$(top_srcdir)/src/lib-storage/index/raw
+	-I$(top_srcdir)/src/lib-storage/index/raw \
+	$(BINARY_CFLAGS)
 
-lmtp_LDFLAGS = -export-dynamic
+lmtp_LDFLAGS = -export-dynamic \
+	$(BINARY_LDFLAGS)
 
 lmtp_LDADD = \
 	$(LIBDOVECOT_LDA) \
@@ -32,6 +34,7 @@ lmtp_SOURCES = \
 	main.c \
 	client.c \
 	commands.c \
+	lmtp-local.c \
 	lmtp-proxy.c \
 	lmtp-settings.c
 
@@ -39,5 +42,6 @@ noinst_HEADERS = \
 	main.h \
 	client.h \
 	commands.h \
+	lmtp-local.h \
 	lmtp-proxy.h \
 	lmtp-settings.h

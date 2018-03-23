@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ostream.h"
@@ -217,8 +217,8 @@ static void imap_search_send_result_standard(struct imap_search_context *ctx)
 	}
 
 	if (ctx->highest_seen_modseq != 0) {
-		str_printfa(str, " (MODSEQ %llu)",
-			    (unsigned long long)ctx->highest_seen_modseq);
+		str_printfa(str, " (MODSEQ %"PRIu64")",
+			    ctx->highest_seen_modseq);
 	}
 	str_append(str, "\r\n");
 	o_stream_nsend(ctx->cmd->client->output, str_data(str), str_len(str));
@@ -354,8 +354,8 @@ static void imap_search_send_result(struct imap_search_context *ctx)
 	if ((ctx->return_options & SEARCH_RETURN_COUNT) != 0)
 		str_printfa(str, " COUNT %u", ctx->result_count);
 	if (ctx->highest_seen_modseq != 0) {
-		str_printfa(str, " MODSEQ %llu",
-			    (unsigned long long)ctx->highest_seen_modseq);
+		str_printfa(str, " MODSEQ %"PRIu64,
+			    ctx->highest_seen_modseq);
 	}
 	str_append(str, "\r\n");
 	o_stream_nsend(client->output, str_data(str), str_len(str));
@@ -580,8 +580,8 @@ bool imap_search_start(struct imap_search_context *ctx,
 	}
 
 	ctx->box = cmd->client->mailbox;
-	ctx->trans = mailbox_transaction_begin(ctx->box, 0);
-	imap_transaction_set_cmd_reason(ctx->trans, cmd);
+	ctx->trans = mailbox_transaction_begin(ctx->box, 0,
+					       imap_client_command_get_reason(cmd));
 	ctx->sargs = sargs;
 	ctx->search_ctx =
 		mailbox_search_init(ctx->trans, sargs, sort_program, 0, NULL);
@@ -631,8 +631,7 @@ static int imap_search_deinit(struct imap_search_context *ctx)
 
 	(void)mailbox_transaction_commit(&ctx->trans);
 
-	if (ctx->to != NULL)
-		timeout_remove(&ctx->to);
+	timeout_remove(&ctx->to);
 	if (array_is_created(&ctx->relevancy_scores))
 		array_free(&ctx->relevancy_scores);
 	array_free(&ctx->result);

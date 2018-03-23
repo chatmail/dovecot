@@ -1,9 +1,10 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "mail-cache.h"
 #include "mail-index-modseq.h"
+#include "mailbox-recent-flags.h"
 #include "index-storage.h"
 
 static void
@@ -281,7 +282,7 @@ index_mailbox_get_first_save_date(struct mailbox *box,
 		return 0;
 	}
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	mail = mail_alloc(t, 0, NULL);
 	for (seq = 1; seq <= hdr->messages_count; seq++) {
 		mail_set_seq(mail, seq);

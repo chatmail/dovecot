@@ -79,7 +79,7 @@ struct acl_rights {
 	const char *const *neg_rights;
 
 	/* These rights are global for all users */
-	unsigned int global:1;
+	bool global:1;
 };
 ARRAY_DEFINE_TYPE(acl_rights, struct acl_rights);
 
@@ -125,10 +125,11 @@ bool acl_backend_rights_match_me(struct acl_backend *backend,
 /* List mailboxes that have lookup right to some non-owners. */
 struct acl_mailbox_list_context *
 acl_backend_nonowner_lookups_iter_init(struct acl_backend *backend);
-int acl_backend_nonowner_lookups_iter_next(struct acl_mailbox_list_context *ctx,
+bool acl_backend_nonowner_lookups_iter_next(struct acl_mailbox_list_context *ctx,
 					   const char **name_r);
-void
+int
 acl_backend_nonowner_lookups_iter_deinit(struct acl_mailbox_list_context **ctx);
+
 /* Force a rebuild for nonowner lookups index */
 int acl_backend_nonowner_lookups_rebuild(struct acl_backend *backend);
 
@@ -156,9 +157,9 @@ int acl_object_update(struct acl_object *aclobj,
 
 /* List all identifiers. */
 struct acl_object_list_iter *acl_object_list_init(struct acl_object *aclobj);
-int acl_object_list_next(struct acl_object_list_iter *iter,
-                         struct acl_rights *rights_r);
-void acl_object_list_deinit(struct acl_object_list_iter **iter);
+bool acl_object_list_next(struct acl_object_list_iter *iter,
+			  struct acl_rights *rights_r);
+int acl_object_list_deinit(struct acl_object_list_iter **iter);
 
 /* Returns the canonical ID for the right. */
 const char *acl_rights_get_id(const struct acl_rights *right);

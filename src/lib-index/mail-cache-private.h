@@ -79,9 +79,9 @@ struct mail_cache_field_private {
 	uint32_t uid_highwater;
 
 	/* Unused fields aren't written to cache file */
-	unsigned int used:1;
-	unsigned int adding:1;
-	unsigned int decision_dirty:1;
+	bool used:1;
+	bool adding:1;
+	bool decision_dirty:1;
 };
 
 struct mail_cache {
@@ -108,6 +108,7 @@ struct mail_cache {
 	unsigned int remap_counter;
 
 	struct dotlock_settings dotlock_settings;
+	struct dotlock *dotlock;
 	struct file_lock *file_lock;
 
 	/* mmap_disable=no: hdr points to data / NULL when cache is invalid.
@@ -133,13 +134,13 @@ struct mail_cache {
 	unsigned int *file_field_map;
 	unsigned int file_fields_count;
 
-	unsigned int opened:1;
-	unsigned int locked:1;
-	unsigned int last_lock_failed:1;
-	unsigned int hdr_modified:1;
-	unsigned int field_header_write_pending:1;
-	unsigned int compressing:1;
-	unsigned int map_with_read:1;
+	bool opened:1;
+	bool locked:1;
+	bool last_lock_failed:1;
+	bool hdr_modified:1;
+	bool field_header_write_pending:1;
+	bool compressing:1;
+	bool map_with_read:1;
 };
 
 struct mail_cache_loop_track {
@@ -174,7 +175,7 @@ struct mail_cache_view {
 	uint8_t cached_exists_value;
 	uint32_t cached_exists_seq;
 
-	unsigned int no_decision_updates:1;
+	bool no_decision_updates:1;
 };
 
 struct mail_cache_iterate_field {
@@ -195,10 +196,10 @@ struct mail_cache_lookup_iterate_ctx {
 
 	unsigned int trans_next_idx;
 
-	unsigned int stop:1;
-	unsigned int failed:1;
-	unsigned int memory_appends_checked:1;
-	unsigned int disk_appends_checked:1;
+	bool stop:1;
+	bool failed:1;
+	bool memory_appends_checked:1;
+	bool disk_appends_checked:1;
 };
 
 /* Explicitly lock the cache file. Returns -1 if error / timed out,
@@ -249,14 +250,9 @@ void mail_cache_file_close(struct mail_cache *cache);
 int mail_cache_reopen(struct mail_cache *cache);
 
 /* Notify the decision handling code that field was looked up for seq.
-   This should be called even for fields that aren't currently in cache file.
-   This is used to update caching decisions for fields that already exist
-   in the cache file. */
+   This should be called even for fields that aren't currently in cache file */
 void mail_cache_decision_state_update(struct mail_cache_view *view,
 				      uint32_t seq, unsigned int field);
-/* Notify the decision handling code when field is committed to cache.
-   If this is the first time the field is added to cache, its caching decision
-   is updated to TEMP. */
 void mail_cache_decision_add(struct mail_cache_view *view, uint32_t seq,
 			     unsigned int field);
 

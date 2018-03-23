@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "fdpass.h"
@@ -16,8 +16,7 @@ i_stream_unix_close(struct iostream_private *stream, bool close_parent)
 {
 	struct unix_istream *ustream = (struct unix_istream *)stream;
 
-	if (ustream->read_fd != -1)
-		i_close_fd(&ustream->read_fd);
+	i_close_fd(&ustream->read_fd);
 	i_stream_file_close(stream, close_parent);
 }
 
@@ -35,12 +34,8 @@ static ssize_t i_stream_unix_read(struct istream_private *stream)
 	if (!i_stream_try_alloc(stream, 1, &size))
 		return -2;
 
-	do {
-		ret = fd_read(stream->fd,
-			      stream->w_buffer + stream->pos, size,
-			      &ustream->read_fd);
-	} while (unlikely(ret < 0 && errno == EINTR &&
-			  stream->istream.blocking));
+	ret = fd_read(stream->fd, stream->w_buffer + stream->pos, size,
+		      &ustream->read_fd);
 	if (ustream->read_fd != -1)
 		ustream->next_read_fd = FALSE;
 
@@ -52,8 +47,8 @@ static ssize_t i_stream_unix_read(struct istream_private *stream)
 	}
 
 	if (unlikely(ret < 0)) {
-		if (errno == EINTR || errno == EAGAIN) {
-			i_assert(!stream->istream.blocking);
+		if ((errno == EINTR || errno == EAGAIN) &&
+		    !stream->istream.blocking) {
 			return 0;
 		} else {
 			i_assert(errno != 0);

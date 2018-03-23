@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 /* FIXME: cache handling could be useful to move to Dovecot core, so that if
    we're using this plugin together with zlib plugin there would be just one
@@ -73,10 +73,8 @@ static void mail_crypt_cache_close(struct mail_crypt_user *muser)
 {
 	struct mail_crypt_cache *cache = &muser->cache;
 
-	if (cache->to != NULL)
-		timeout_remove(&cache->to);
-	if (cache->input != NULL)
-		i_stream_unref(&cache->input);
+	timeout_remove(&cache->to);
+	i_stream_unref(&cache->input);
 	i_zero(cache);
 }
 
@@ -131,22 +129,18 @@ static int mail_crypt_istream_get_private_key(const char *pubkey_digest,
 	if (*priv_key_r != NULL) return 1;
 
 	struct mail_namespace *ns = mailbox_get_namespace(_mail->box);
-	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(_mail->box, 0);
 
 	if (ns->type == MAIL_NAMESPACE_TYPE_SHARED) {
-		ret = mail_crypt_box_get_shared_key(t, pubkey_digest,
+		ret = mail_crypt_box_get_shared_key(_mail->box, pubkey_digest,
 						    priv_key_r, error_r);
 	} else if (ns->type != MAIL_NAMESPACE_TYPE_PUBLIC) {
-		ret = mail_crypt_get_private_key(t, pubkey_digest,
+		ret = mail_crypt_get_private_key(_mail->box, pubkey_digest,
 						 FALSE, FALSE, priv_key_r,
 						 error_r);
 	} else {
 		*error_r = "Public emails cannot have keys";
 		ret = -1;
 	}
-
-	(void)mailbox_transaction_commit(&t);
 
 	i_assert(ret <= 0 || *priv_key_r != NULL);
 
@@ -282,7 +276,7 @@ mail_crypt_mail_save_begin(struct mail_save_context *ctx,
 		const char *error;
 		int ret;
 
-		if ((ret = mail_crypt_box_get_public_key(ctx->transaction, &pub_key,
+		if ((ret = mail_crypt_box_get_public_key(box, &pub_key,
 							 &error)) <= 0)
 		{
 			struct dcrypt_keypair pair;
@@ -472,7 +466,6 @@ static struct module crypto_post_module = {
 void mail_crypt_plugin_init(struct module *module)
 {
 	const char* error;
-	random_init();
 	if (!dcrypt_initialize("openssl", NULL, &error))
 		i_fatal("dcrypt_initialize(): %s", error);
 	mail_storage_hooks_add(module, &mail_crypt_mail_storage_hooks);
@@ -489,5 +482,4 @@ void mail_crypt_plugin_deinit(void)
 {
 	mail_storage_hooks_remove(&mail_crypt_mail_storage_hooks);
 	mail_storage_hooks_remove(&mail_crypt_mail_storage_hooks_post);
-	random_deinit();
 }

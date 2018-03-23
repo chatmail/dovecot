@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -42,7 +42,7 @@ mail_search_arg_to_imap_date(string_t *dest, const struct mail_search_arg *arg)
 	const char *str;
 
 	if ((arg->value.search_flags &
-	     MAIL_SEARCH_ARG_FLAG_USE_TZ) == 0) {
+	     MAIL_SEARCH_ARG_FLAG_UTC_TIMES) == 0) {
 		struct tm *tm = localtime(&timestamp);
 		int tz_offset = utc_offset(tm, timestamp);
 		timestamp -= tz_offset * 60;
@@ -152,9 +152,9 @@ bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
 		else if (arg->value.date_type != MAIL_SEARCH_DATE_TYPE_RECEIVED ||
 			 arg->value.time > ioloop_time) {
 			*error_r = t_strdup_printf(
-				"SEARCH_BEFORE can't be written as IMAP for timestamp %ld (type=%d, use_tz=%d)",
+				"SEARCH_BEFORE can't be written as IMAP for timestamp %ld (type=%d, utc_times=%d)",
 				(long)arg->value.time, arg->value.date_type,
-				(arg->value.search_flags & MAIL_SEARCH_ARG_FLAG_USE_TZ) != 0);
+				(arg->value.search_flags & MAIL_SEARCH_ARG_FLAG_UTC_TIMES) != 0);
 			return FALSE;
 		} else {
 			str_truncate(dest, start_pos);
@@ -176,9 +176,9 @@ bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
 		}
 		if (!mail_search_arg_to_imap_date(dest, arg)) {
 			*error_r = t_strdup_printf(
-				"SEARCH_ON can't be written as IMAP for timestamp %ld (type=%d, use_tz=%d)",
+				"SEARCH_ON can't be written as IMAP for timestamp %ld (type=%d, utc_times=%d)",
 				(long)arg->value.time, arg->value.date_type,
-				(arg->value.search_flags & MAIL_SEARCH_ARG_FLAG_USE_TZ) != 0);
+				(arg->value.search_flags & MAIL_SEARCH_ARG_FLAG_UTC_TIMES) != 0);
 			return FALSE;
 		}
 		break;
@@ -199,9 +199,9 @@ bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
 		else if (arg->value.date_type != MAIL_SEARCH_DATE_TYPE_RECEIVED ||
 			 arg->value.time >= ioloop_time) {
 			*error_r = t_strdup_printf(
-				"SEARCH_SINCE can't be written as IMAP for timestamp %ld (type=%d, use_tz=%d)",
+				"SEARCH_SINCE can't be written as IMAP for timestamp %ld (type=%d, utc_times=%d)",
 				(long)arg->value.time, arg->value.date_type,
-				(arg->value.search_flags & MAIL_SEARCH_ARG_FLAG_USE_TZ) != 0);
+				(arg->value.search_flags & MAIL_SEARCH_ARG_FLAG_UTC_TIMES) != 0);
 			return FALSE;
 		} else {
 			str_truncate(dest, start_pos);
@@ -210,10 +210,10 @@ bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
 		}
 		break;
 	case SEARCH_SMALLER:
-		str_printfa(dest, "SMALLER %llu", (unsigned long long)arg->value.size);
+		str_printfa(dest, "SMALLER %"PRIuUOFF_T, arg->value.size);
 		break;
 	case SEARCH_LARGER:
-		str_printfa(dest, "LARGER %llu", (unsigned long long)arg->value.size);
+		str_printfa(dest, "LARGER %"PRIuUOFF_T, arg->value.size);
 		break;
 	case SEARCH_HEADER:
 	case SEARCH_HEADER_ADDRESS:
@@ -269,7 +269,7 @@ bool mail_search_arg_to_imap(string_t *dest, const struct mail_search_arg *arg,
 			}
 			str_append_c(dest, ' ');
 		}
-		str_printfa(dest, "%llu", (unsigned long long)arg->value.modseq->modseq);
+		str_printfa(dest, "%"PRIu64, arg->value.modseq->modseq);
 		break;
 	}
 	case SEARCH_INTHREAD:

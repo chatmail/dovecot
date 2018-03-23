@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -27,7 +27,7 @@ struct imap_msgpart_url {
 	
 	struct imap_msgpart_open_result result;
 
-	unsigned int decode_cte_to_binary:1;
+	bool decode_cte_to_binary:1;
 };
 
 int imap_msgpart_url_create(struct mail_user *user, const struct imap_url *url,
@@ -176,7 +176,7 @@ int imap_msgpart_url_open_mail(struct imap_msgpart_url *mpurl,
 		return ret;
 
 	/* start transaction */
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	mail = mail_alloc(t, MAIL_FETCH_MESSAGE_PARTS |
 			  MAIL_FETCH_IMAP_BODYSTRUCTURE, NULL);
 
@@ -274,8 +274,7 @@ void imap_msgpart_url_free(struct imap_msgpart_url **_mpurl)
 
 	*_mpurl = NULL;
 
-	if (mpurl->result.input != NULL)
-		i_stream_unref(&mpurl->result.input);
+	i_stream_unref(&mpurl->result.input);
 	if (mpurl->part != NULL)
 		imap_msgpart_free(&mpurl->part);
 	if (mpurl->mail != NULL)

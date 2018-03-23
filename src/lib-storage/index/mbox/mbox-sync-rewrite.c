@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -15,9 +15,10 @@
 int mbox_move(struct mbox_sync_context *sync_ctx,
 	      uoff_t dest, uoff_t source, uoff_t size)
 {
+	struct mbox_mailbox *mbox = sync_ctx->mbox;
 	struct istream *input;
 	struct ostream *output;
-	off_t ret;
+	int ret;
 
 	i_assert(source > 0 || (dest != 1 && dest != 2));
 	i_assert(size < OFF_T_MAX);
@@ -36,27 +37,34 @@ int mbox_move(struct mbox_sync_context *sync_ctx,
 		return -1;
 	}
 
+	/* we're moving data within a file. it really shouldn't be failing at
+	   this point or we're corrupted. */
 	input = i_stream_create_limit(sync_ctx->file_input, size);
-	ret = o_stream_send_istream(output, input);
-	i_stream_unref(&input);
-
-        if (ret == (off_t)size)
-		ret = 0;
-	else if (ret >= 0) {
+	(void)o_stream_send_istream(output, input);
+	if (input->stream_errno != 0) {
+		mailbox_set_critical(&mbox->box,
+			"read() failed with mbox: %s",
+			i_stream_get_error(input));
+		ret = -1;
+	} else if (output->stream_errno != 0) {
+		mailbox_set_critical(&mbox->box,
+			"write() failed with mbox: %s",
+			o_stream_get_error(output));
+		ret = -1;
+	} else if (input->v_offset != size) {
 		mbox_sync_set_critical(sync_ctx,
 			"mbox_move(%"PRIuUOFF_T", %"PRIuUOFF_T", %"PRIuUOFF_T
 			") moved only %"PRIuUOFF_T" bytes",
-			dest, source, size, (uoff_t)ret);
+			dest, source, size, input->v_offset);
 		ret = -1;
-	} else if (ret < 0) {
-		errno = output->stream_errno;
-		mbox_set_syscall_error(sync_ctx->mbox,
-				       "o_stream_send_istream()");
+	} else {
+		ret = 0;
 	}
+	i_stream_unref(&input);
 
 	mbox_sync_file_updated(sync_ctx, FALSE);
 	o_stream_destroy(&output);
-	return (int)ret;
+	return ret;
 }
 
 static int mbox_fill_space(struct mbox_sync_context *sync_ctx,
@@ -234,7 +242,7 @@ static void mbox_sync_first_mail_written(struct mbox_sync_mail_context *ctx,
 		ctx->last_uid_value_start_pos;
 
 	if (ctx->imapbase_updated) {
-		/* update so a) we don't try to update it later unneededly,
+		/* update so a) we don't try to update it later needlessly,
 		   b) if we do actually update it, we see the correct value */
 		ctx->sync_ctx->base_uid_last = ctx->last_uid_updated_value;
 	}
@@ -427,7 +435,7 @@ static int mbox_sync_read_and_move(struct mbox_sync_context *sync_ctx,
 				"seq=%u uid=%u uid_broken=%d "
 				"originally needed %"PRIuUOFF_T
 				" bytes, now needs %"PRIuSIZE_T" bytes",
-				seq, mails[idx].uid, mails[idx].uid_broken,
+				seq, mails[idx].uid, mails[idx].uid_broken ? 1 : 0,
 				(uoff_t)-mails[idx].space, need_space);
 			return -1;
 		}

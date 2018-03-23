@@ -1,8 +1,9 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "str.h"
+#include "sort.h"
 #include "ostream.h"
 #include "env-util.h"
 #include "execv-const.h"
@@ -289,7 +290,8 @@ int main(int argc, char *argv[])
 {
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_STANDALONE |
-		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
+		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN |
+		MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME;
 	struct doveadm_cmd_context cctx;
 	const char *cmd_name;
 	unsigned int i;
@@ -297,7 +299,7 @@ int main(int argc, char *argv[])
 	int c;
 
 	i_zero(&cctx);
-	cctx.cli = TRUE;
+	cctx.conn_type = DOVEADM_CONNECTION_TYPE_CLI;
 
 	i_set_failure_exit_callback(failure_exit_callback);
 	doveadm_dsync_main(&argc, &argv);
@@ -340,7 +342,7 @@ int main(int argc, char *argv[])
 	for (i = 0; i < N_ELEMENTS(doveadm_cmdline_commands); i++)
 		doveadm_register_cmd(doveadm_cmdline_commands[i]);
 	doveadm_register_auth_commands();
-	doveadm_cmd_register_ver2(&doveadm_cmd_stats_top_ver2);
+	doveadm_cmd_register_ver2(&doveadm_cmd_oldstats_top_ver2);
 
 	if (cmd_name != NULL && (quick_init ||
 				 strcmp(cmd_name, "config") == 0 ||
@@ -352,7 +354,8 @@ int main(int argc, char *argv[])
 		quick_init = TRUE;
 	} else {
 		quick_init = FALSE;
-		doveadm_print_ostream = o_stream_create_fd(STDOUT_FILENO, 0, FALSE);
+		master_service_init_stats_client(master_service, TRUE);
+		doveadm_print_ostream = o_stream_create_fd(STDOUT_FILENO, 0);
 		o_stream_set_no_error_handling(doveadm_print_ostream, TRUE);
 		doveadm_dump_init();
 		doveadm_mail_init();

@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
@@ -151,9 +151,9 @@ static void test_base32_random(void)
 
 	test_begin("padded base32 encode/decode with random input");
 	for (i = 0; i < 1000; i++) {
-		max = rand() % sizeof(buf);
+		max = i_rand_limit(sizeof(buf));
 		for (j = 0; j < max; j++)
-			buf[j] = rand();
+			buf[j] = i_rand();
 
 		str_truncate(str, 0);
 		str_truncate(dest, 0);
@@ -166,9 +166,9 @@ static void test_base32_random(void)
 
 	test_begin("padded base32hex encode/decode with random input");
 	for (i = 0; i < 1000; i++) {
-		max = rand() % sizeof(buf);
+		max = i_rand_limit(sizeof(buf));
 		for (j = 0; j < max; j++)
-			buf[j] = rand();
+			buf[j] = i_rand();
 
 		str_truncate(str, 0);
 		str_truncate(dest, 0);

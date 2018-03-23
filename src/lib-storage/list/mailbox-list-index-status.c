@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -66,7 +66,7 @@ index_list_open_view(struct mailbox *box, bool status_check,
 		ret = 0;
 	} else T_BEGIN {
 		ret = box->v.list_index_has_changed == NULL ? 0 :
-			box->v.list_index_has_changed(box, view, seq);
+			box->v.list_index_has_changed(box, view, seq, FALSE);
 	} T_END;
 
 	if (ret != 0) {
@@ -541,7 +541,7 @@ index_list_update_first_saved(struct mailbox *box,
 	first_saved.timestamp = (uint32_t)-1;
 
 	if (changes->first_uid != 0) {
-		t = mailbox_transaction_begin(box, 0);
+		t = mailbox_transaction_begin(box, 0, __func__);
 		mail = mail_alloc(t, MAIL_FETCH_SAVE_DATE, NULL);
 		messages_count = mail_index_view_get_messages_count(box->view);
 		for (seq = 1; seq <= messages_count; seq++) {
@@ -633,7 +633,7 @@ static int index_list_update_mailbox(struct mailbox *box)
 		return 0;
 	if (box->deleting) {
 		/* don't update status info while mailbox is being deleted.
-		   especially not a good idea if we're rollbacking a created
+		   especially not a good idea if we're rolling back a created
 		   mailbox that somebody else had just created */
 		return 0;
 	}
@@ -652,7 +652,7 @@ static int index_list_update_mailbox(struct mailbox *box)
 		/* if backend state changed on the last check, update it here
 		   now. we probably don't need to bother checking again if the
 		   state had changed? */
-		ret = ilist->index_last_check_changed;
+		ret = ilist->index_last_check_changed ? 1 : 0;
 	}
 	mail_index_view_close(&list_view);
 	if (ret <= 0) {
@@ -682,7 +682,8 @@ static int index_list_update_mailbox(struct mailbox *box)
 		ilist->updating_status = TRUE;
 		if (index_list_has_changed(box, list_view, &changes))
 			index_list_update(box, list_view, list_trans, &changes);
-		if (box->v.list_index_update_sync != NULL) {
+		if (box->v.list_index_update_sync != NULL &&
+		    !MAILBOX_IS_NEVER_IN_INDEX(box)) {
 			box->v.list_index_update_sync(box, list_trans,
 						      changes.seq);
 		}
@@ -716,16 +717,17 @@ void mailbox_list_index_update_mailbox_index(struct mailbox *box,
 	if ((ret = index_list_open_view(box, FALSE, &list_view, &changes.seq)) <= 0)
 		return;
 
+	guid_128_empty(mailbox_guid);
 	(void)mailbox_list_index_status(box->list, list_view, changes.seq,
 					CACHED_STATUS_ITEMS, &status,
 					mailbox_guid, NULL);
+
 	if (update->uid_validity != 0) {
 		changes.rec_changed = TRUE;
 		changes.status.uidvalidity = update->uid_validity;
 	}
 	if (!guid_128_equals(update->mailbox_guid, mailbox_guid) &&
-	    !guid_128_is_empty(update->mailbox_guid) &&
-	    !guid_128_is_empty(mailbox_guid)) {
+	    !guid_128_is_empty(update->mailbox_guid)) {
 		changes.rec_changed = TRUE;
 		memcpy(changes.guid, update->mailbox_guid, sizeof(changes.guid));
 		guid_changed = TRUE;
@@ -816,11 +818,8 @@ void mailbox_list_index_status_set_info_flags(struct mailbox *box, uint32_t uid,
 		/* our in-memory tree is out of sync */
 		ret = 1;
 	} else T_BEGIN {
-		/* kludge: avoid breaking API for v2.2.x. Fixed in v2.3.x. */
-		box->list_index_has_changed_quick = TRUE;
 		ret = box->v.list_index_has_changed == NULL ? 0 :
-			box->v.list_index_has_changed(box, view, seq);
-		box->list_index_has_changed_quick = FALSE;
+			box->v.list_index_has_changed(box, view, seq, TRUE);
 	} T_END;
 
 	if (ret != 0) {

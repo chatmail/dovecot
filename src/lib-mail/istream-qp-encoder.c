@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -21,8 +21,7 @@ static void i_stream_qp_encoder_close(struct iostream_private *stream,
 
 	if (bstream->qp != NULL)
 		qp_encoder_deinit(&bstream->qp);
-	if (bstream->buf != NULL)
-		buffer_free(&bstream->buf);
+	buffer_free(&bstream->buf);
 	if (close_parent)
 		i_stream_close(bstream->istream.parent);
 }
@@ -72,7 +71,7 @@ static ssize_t i_stream_qp_encoder_read(struct istream_private *stream)
 		}
 
 		/* need to read more input */
-		ret = i_stream_read_more(stream->parent, &data, &size);
+		ret = i_stream_read_more_memarea(stream->parent, &data, &size);
 		if (ret == 0)
 			return ret;
 		if (size == 0 && ret == -1) {
@@ -124,5 +123,5 @@ struct istream *i_stream_create_qp_encoder(struct istream *input,
 	bstream->istream.istream.blocking = input->blocking;
 	bstream->istream.istream.seekable = input->seekable;
 	return i_stream_create(&bstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }

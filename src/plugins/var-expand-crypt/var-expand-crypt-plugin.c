@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -53,34 +53,31 @@ var_expand_crypt_settings(struct var_expand_crypt_context *ctx,
 
 		if (strcmp(k, "iv") == 0) {
 			str_truncate(ctx->iv, 0);
-			var_expand_with_funcs(ctx->iv, value, ctx->ctx->table,
-					      ctx->ctx->func_table,
-					      ctx->ctx->context);
+			if (var_expand_with_funcs(ctx->iv, value, ctx->ctx->table,
+						  ctx->ctx->func_table,
+						  ctx->ctx->context, error_r) < 0) {
+				return -1;
+			}
 			const char *hexiv = t_strdup(str_c(ctx->iv));
 			/* try to decode IV */
 			str_truncate(ctx->iv, 0);
 			hex_to_binary(hexiv, ctx->iv);
-			if (str_len(ctx->iv) == 0) {
-				*error_r = "iv is not valid hex encoded value";
-				return -1;
-			}
 		} if (strcmp(k, "noiv") == 0) {
 			ctx->enc_result_only = strcasecmp(value, "yes")==0;
 		} if (strcmp(k, "algo") == 0) {
 			ctx->algo = value;
 		} else if (strcmp(k, "key") == 0) {
 			str_truncate(ctx->enckey, 0);
-			var_expand_with_funcs(ctx->enckey, value,
-					      ctx->ctx->table,
-					      ctx->ctx->func_table,
-					      ctx->ctx->context);
+			if (var_expand_with_funcs(ctx->enckey, value,
+						  ctx->ctx->table,
+						  ctx->ctx->func_table,
+						  ctx->ctx->context,
+						  error_r) < 0) {
+				return -1;
+			}
 			const char *hexkey = t_strdup(str_c(ctx->enckey));
 			str_truncate(ctx->enckey, 0);
 			hex_to_binary(hexkey, ctx->enckey);
-			if (str_len(ctx->enckey) == 0) {
-				*error_r = "key is not valid hex encoded value";
-				return -1;
-			}
 		} else if (strcmp(k, "format") == 0) {
 			if (strcmp(value, "hex") == 0) {
 				ctx->format = FORMAT_HEX;

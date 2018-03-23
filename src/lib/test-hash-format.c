@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
@@ -21,7 +21,7 @@ void test_hash_format(void)
 		"%{sha1:168}",
 		NULL
 	};
-	static struct hash_format_test tests[] = {
+	static const struct hash_format_test tests[] = {
 		{ "%{sha1}", "8843d7f92416211de9ebb963ff4ce28125932878" },
 		{ "*%{sha1}*", "*8843d7f92416211de9ebb963ff4ce28125932878*" },
 		{ "*%{sha1:8}*", "*88*" },

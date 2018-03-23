@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -21,8 +21,7 @@ static void i_stream_qp_decoder_close(struct iostream_private *stream,
 
 	if (bstream->qp != NULL)
 		qp_decoder_deinit(&bstream->qp);
-	if (bstream->buf != NULL)
-		buffer_free(&bstream->buf);
+	buffer_free(&bstream->buf);
 	if (close_parent)
 		i_stream_close(bstream->istream.parent);
 }
@@ -69,7 +68,7 @@ static ssize_t i_stream_qp_decoder_read(struct istream_private *stream)
 		}
 
 		/* need to read more input */
-		ret = i_stream_read_data(stream->parent, &data, &size, 0);
+		ret = i_stream_read_more_memarea(stream->parent, &data, &size);
 		if (ret <= 0) {
 			stream->istream.stream_errno = stream->parent->stream_errno;
 			stream->istream.eof = stream->parent->eof;
@@ -83,7 +82,7 @@ static ssize_t i_stream_qp_decoder_read(struct istream_private *stream)
 			}
 			io_stream_set_error(&stream->iostream,
 				"Invalid quoted-printable input trailer: %s", error);
-			stream->istream.stream_errno = EINVAL;
+			stream->istream.stream_errno = EPIPE;
 			return -1;
 		}
 		if (qp_decoder_more(bstream->qp, data, size,
@@ -137,5 +136,5 @@ struct istream *i_stream_create_qp_decoder(struct istream *input)
 	bstream->istream.istream.blocking = input->blocking;
 	bstream->istream.istream.seekable = input->seekable;
 	return i_stream_create(&bstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }

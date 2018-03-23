@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -75,7 +75,8 @@ cmd_mailbox_metadata_set_run(struct doveadm_mail_cmd_context *_ctx,
 		return ret;
 
 	trans = mailbox_transaction_begin(box, ctx->empty_mailbox_name ?
-					  MAILBOX_TRANSACTION_FLAG_EXTERNAL : 0);
+					  MAILBOX_TRANSACTION_FLAG_EXTERNAL : 0,
+					  __func__);
 
 	ret = ctx->value.value == NULL ?
 		mailbox_attribute_unset(trans, ctx->key_type, ctx->key) :
@@ -197,7 +198,6 @@ cmd_mailbox_metadata_get_run(struct doveadm_mail_cmd_context *_ctx,
 	struct metadata_cmd_context *ctx = (struct metadata_cmd_context *)_ctx;
 	struct mail_namespace *ns;
 	struct mailbox *box;
-	struct mailbox_transaction_context *trans;
 	struct mail_attribute_value value;
 	int ret;
 
@@ -206,9 +206,7 @@ cmd_mailbox_metadata_get_run(struct doveadm_mail_cmd_context *_ctx,
 	if (ret != 0)
 		return ret;
 
-	trans = mailbox_transaction_begin(box, 0);
-
-	ret = mailbox_attribute_get_stream(trans, ctx->key_type, ctx->key, &value);
+	ret = mailbox_attribute_get_stream(box, ctx->key_type, ctx->key, &value);
 	if (ret < 0) {
 		i_error("Failed to get attribute: %s",
 			mailbox_get_last_internal_error(box, NULL));
@@ -222,7 +220,6 @@ cmd_mailbox_metadata_get_run(struct doveadm_mail_cmd_context *_ctx,
 		doveadm_print(value.value);
 	}
 
-	(void)mailbox_transaction_commit(&trans);
 	mailbox_free(&box);
 	return ret;
 }

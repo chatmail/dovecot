@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -77,7 +77,7 @@ static void
 driver_sqlpool_query_callback(struct sql_result *result,
 			      struct sqlpool_request *request);
 static void
-driver_sqlpool_commit_callback(const char *error,
+driver_sqlpool_commit_callback(const struct sql_commit_result *result,
 			       struct sqlpool_transaction_context *ctx);
 
 static struct sqlpool_request * ATTR_NULL(2)
@@ -227,8 +227,7 @@ sqlpool_handle_connect_failed(struct sqlpool_db *db, struct sql_db *conndb)
 	conndb->connect_failure_count++;
 
 	/* reconnect after the delay */
-	if (conndb->to_reconnect != NULL)
-		timeout_remove(&conndb->to_reconnect);
+	timeout_remove(&conndb->to_reconnect);
 	conndb->to_reconnect = timeout_add(conndb->connect_delay * 1000,
 					   sqlpool_reconnect, conndb);
 
@@ -493,8 +492,7 @@ static void driver_sqlpool_abort_requests(struct sqlpool_db *db)
 
 		sqlpool_request_abort(&request);
 	}
-	if (db->request_to != NULL)
-		timeout_remove(&db->request_to);
+	timeout_remove(&db->request_to);
 }
 
 static void driver_sqlpool_deinit(struct sql_db *_db)
@@ -711,16 +709,15 @@ driver_sqlpool_transaction_free(struct sqlpool_transaction_context *ctx)
 {
 	if (ctx->commit_request != NULL)
 		sqlpool_request_abort(&ctx->commit_request);
-	if (ctx->query_pool != NULL)
-		pool_unref(&ctx->query_pool);
+	pool_unref(&ctx->query_pool);
 	i_free(ctx);
 }
 
 static void
-driver_sqlpool_commit_callback(const char *error,
+driver_sqlpool_commit_callback(const struct sql_commit_result *result,
 			       struct sqlpool_transaction_context *ctx)
 {
-	ctx->callback(error, ctx->context);
+	ctx->callback(result, ctx->context);
 	driver_sqlpool_transaction_free(ctx);
 }
 

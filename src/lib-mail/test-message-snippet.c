@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -6,7 +6,7 @@
 #include "message-snippet.h"
 #include "test-common.h"
 
-static struct {
+static const struct {
 	const char *input;
 	unsigned int max_snippet_chars;
 	const char *output;
@@ -86,7 +86,7 @@ static void test_message_snippet(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_message_snippet,
 		NULL
 	};

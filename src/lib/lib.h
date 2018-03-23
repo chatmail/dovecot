@@ -32,7 +32,7 @@
 #include "mempool.h"
 #include "imem.h"
 #include "byteorder.h"
-#include "rand.h"
+#include "fd-util.h"
 
 typedef struct buffer buffer_t;
 typedef struct buffer string_t;
@@ -47,6 +47,7 @@ typedef void lib_atexit_callback_t(void);
 #include "hash-decl.h" /* HASH_TABLE*()s may exist in any header */
 #include "strfuncs.h"
 #include "strnum.h"
+#include "event-log.h"
 
 #define LIB_ATEXIT_PRIORITY_HIGH -10
 #define LIB_ATEXIT_PRIORITY_DEFAULT 0
@@ -56,11 +57,6 @@ typedef void lib_atexit_callback_t(void);
    also inside chroots. */
 extern int dev_null_fd;
 
-int close_keep_errno(int *fd);
-/* Close fd_in and fd_out, unless they're already -1. They can point to the
-   same fd, in which case they're closed only once. If they point to stdin
-   or stdout, they're replaced with /dev/null. */
-void fd_close_maybe_stdio(int *fd_in, int *fd_out);
 /* Call unlink(). If it fails, log an error including the source filename
    and line number. */
 int i_unlink(const char *path, const char *source_fname,
@@ -89,5 +85,16 @@ void lib_atexit_run(void);
 void lib_init(void);
 bool lib_is_initialized(void);
 void lib_deinit(void);
+
+uint32_t i_rand(void);
+/* Returns a random integer < upper_bound. */
+uint32_t i_rand_limit(uint32_t upper_bound);
+
+/* Returns a random integer >= min_val, and <= max_val. */
+static inline uint32_t i_rand_minmax(uint32_t min_val, uint32_t max_val)
+{
+	i_assert(min_val <= max_val);
+	return min_val + i_rand_limit(max_val - min_val + 1);
+}
 
 #endif

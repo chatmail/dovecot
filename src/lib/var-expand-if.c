@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -144,9 +144,10 @@ static int var_expand_if_comp(const char *lhs, const char *_op, const char *rhs,
 			size_t siz;
 			char *errbuf;
 			siz = regerror(ec, &reg, NULL, 0);
-			errbuf = t_malloc(siz);
+			errbuf = t_malloc_no0(siz);
 			(void)regerror(ec, &reg, errbuf, siz);
-			i_error("if: regex failed: %s", errbuf);
+			*error_r = t_strdup_printf("if: regex failed: %s",
+						   errbuf);
 			return -1;
 		}
 		if ((ec = regexec(&reg, lhs, 0, 0, 0)) != 0) {
@@ -180,6 +181,7 @@ int var_expand_if(struct var_expand_context *ctx,
 	string_t *parbuf;
 	const char *const *parms;
 	unsigned int depth = 0;
+	int ret;
 	bool result, escape = FALSE, maybe_var = FALSE;
 
 	if (p == NULL) {
@@ -246,8 +248,11 @@ int var_expand_if(struct var_expand_context *ctx,
 	for(;*parms != NULL; parms++) {
 		/* expand the parameters */
 		string_t *param = t_str_new(64);
-		var_expand_with_funcs(param, *parms, ctx->table,
-				      ctx->func_table, ctx->context);
+		if ((ret = var_expand_with_funcs(param, *parms, ctx->table,
+						 ctx->func_table, ctx->context,
+						 error_r)) <= 0) {
+			return ret;
+		}
 		const char *p = str_c(param);
 		array_append(&params, &p, 1);
 	}

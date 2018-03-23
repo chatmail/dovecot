@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 /*
    These tests were done with various Linux 2.6 kernels, FreeBSD 6.2 and
@@ -28,7 +28,7 @@
 */
 
 #include "lib.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "nfs-workarounds.h"
 
 #include <fcntl.h>
@@ -323,9 +323,9 @@ nfs_flush_file_handle_cache_dir(const char *path, bool try_parent ATTR_UNUSED)
 			return TRUE;
 		}
 
-		if (t_get_current_dir(&cur_path) < 0) {
-			i_error("nfs_flush_file_handle_cache_dir: "
-				"getcwd() failed");
+		const char *error;
+		if (t_get_working_dir(&cur_path, &error) < 0) {
+			i_error("nfs_flush_file_handle_cache_dir: %s", error);
 			i_close_fd(&cur_dir_fd);
 			return TRUE;
 		}

@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "str.h"
@@ -123,7 +123,7 @@ static void test_istream_qp_encoder(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_istream_qp_encoder,
 		NULL
 	};

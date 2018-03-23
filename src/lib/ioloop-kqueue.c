@@ -9,7 +9,6 @@
 #ifdef IOLOOP_KQUEUE
 
 #include "array.h"
-#include "fd-close-on-exec.h"
 #include "ioloop-private.h"
 
 #include <unistd.h>
@@ -100,7 +99,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 
 	/* since we're not freeing memory in any case, just increase
 	   deleted counter so next handle_add() can just decrease it
-	   insteading of appending to the events array */
+	   instead of appending to the events array */
 	ctx->deleted_count++;
 
 	i_assert(io->refcount > 0);

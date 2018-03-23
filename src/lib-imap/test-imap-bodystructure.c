@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -400,7 +400,7 @@ msg_parse(pool_t pool, const char *message, bool parse_bodystructure)
 	}
 	test_assert(ret < 0);
 
-	test_assert(message_parser_deinit(&parser, &parts) == 0);
+	message_parser_deinit(&parser, &parts);
 	i_stream_unref(&input);
 	return parts;
 }
@@ -531,7 +531,7 @@ static void test_imap_bodystructure_normalize(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_imap_bodystructure_write,
 		test_imap_bodystructure_parse,
 		test_imap_bodystructure_normalize,

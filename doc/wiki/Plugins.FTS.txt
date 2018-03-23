@@ -75,4 +75,4 @@ All the FTS settings go inside 'plugin {} ' section of 90-plugin.conf.
    SEARCH fails with:'NO [INUSE] Timeout while waiting for indexing to finish'
    (v2.1+)
 
-(This file was created from the wiki on 2018-03-19 04:42)
+(This file was created from the wiki on 2018-02-28 04:42)

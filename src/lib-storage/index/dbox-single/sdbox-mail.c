@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -21,16 +21,14 @@ static void sdbox_mail_set_expunged(struct dbox_mail *mail)
 		return;
 	}
 
-	mail_storage_set_critical(_mail->box->storage,
-				  "dbox %s: Unexpectedly lost uid=%u",
-				  mailbox_get_path(_mail->box), _mail->uid);
+	mail_set_critical(_mail, "dbox: Unexpectedly lost uid");
 	sdbox_set_mailbox_corrupted(_mail->box);
 }
 
 static int sdbox_mail_file_set(struct dbox_mail *mail)
 {
 	struct mail *_mail = &mail->imail.mail.mail;
-	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)_mail->box;
+	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(_mail->box);
 	bool deleted;
 	int ret;
 
@@ -50,9 +48,8 @@ static int sdbox_mail_file_set(struct dbox_mail *mail)
 		/* it doesn't have input stream yet */
 		ret = dbox_file_open(mail->open_file, &deleted);
 		if (ret <= 0) {
-			mail_storage_set_critical(_mail->box->storage,
-				"dbox %s: Unexpectedly lost mail being saved",
-				  mailbox_get_path(_mail->box));
+			mail_set_critical(_mail,
+				"dbox: Unexpectedly lost mail being saved");
 			sdbox_set_mailbox_corrupted(_mail->box);
 			return -1;
 		}
@@ -64,8 +61,8 @@ static int
 sdbox_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 		       const char **value_r)
 {
-	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)_mail->box;
-	struct dbox_mail *mail = (struct dbox_mail *)_mail;
+	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(_mail->box);
+	struct dbox_mail *mail = DBOX_MAIL(_mail);
 	struct stat st;
 
 	switch (field) {
@@ -163,7 +160,7 @@ struct mail_vfuncs sdbox_mail_vfuncs = {
 	dbox_mail_get_stream,
 	index_mail_get_binary_stream,
 	sdbox_mail_get_special,
-	index_mail_get_real_mail,
+	index_mail_get_backend_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
 	index_mail_update_modseq,
@@ -172,5 +169,4 @@ struct mail_vfuncs sdbox_mail_vfuncs = {
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,
 	index_mail_opened,
-	index_mail_set_cache_corrupted_reason
 };

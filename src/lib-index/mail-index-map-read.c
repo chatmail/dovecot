@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -167,7 +167,7 @@ mail_index_try_read_map(struct mail_index_map *map,
 			pos = hdr->header_size;
 
 		/* place the base header into memory. */
-		buffer_reset(map->hdr_copy_buf);
+		buffer_set_used_size(map->hdr_copy_buf, 0);
 		buffer_append(map->hdr_copy_buf, buf, pos);
 
 		if (pos != hdr->header_size) {

@@ -1,10 +1,9 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "llist.h"
 #include "str.h"
-#include "dict-sql.h"
 #include "dict-private.h"
 
 static ARRAY(struct dict *) dict_drivers;
@@ -20,6 +19,13 @@ static struct dict *dict_driver_lookup(const char *name)
 			return dict;
 	}
 	return NULL;
+}
+
+void dict_transaction_commit_async_noop_callback(
+	const struct dict_commit_result *result ATTR_UNUSED,
+	void *context ATTR_UNUSED)
+{
+	/* do nothing */
 }
 
 void dict_driver_register(struct dict *driver)
@@ -52,21 +58,8 @@ void dict_driver_unregister(struct dict *driver)
 		array_free(&dict_drivers);
 }
 
-int dict_init(const char *uri, enum dict_data_type value_type,
-	      const char *username, const char *base_dir, struct dict **dict_r,
-	      const char **error_r)
-{
-	struct dict_settings set;
-
-	i_zero(&set);
-	set.value_type = value_type;
-	set.username = username;
-	set.base_dir = base_dir;
-	return dict_init_full(uri, &set, dict_r, error_r);
-}
-
-int dict_init_full(const char *uri, const struct dict_settings *set,
-		   struct dict **dict_r, const char **error_r)
+int dict_init(const char *uri, const struct dict_settings *set,
+	      struct dict **dict_r, const char **error_r)
 {
 	struct dict *dict;
 	const char *p, *name, *error;
@@ -108,9 +101,10 @@ void dict_deinit(struct dict **_dict)
 	dict->v.deinit(dict);
 }
 
-int dict_wait(struct dict *dict)
+void dict_wait(struct dict *dict)
 {
-	return dict->v.wait == NULL ? 1 : dict->v.wait(dict);
+	if (dict->v.wait != NULL)
+		dict->v.wait(dict);
 }
 
 bool dict_switch_ioloop(struct dict *dict)
@@ -128,10 +122,10 @@ static bool dict_key_prefix_is_valid(const char *key)
 }
 
 int dict_lookup(struct dict *dict, pool_t pool, const char *key,
-		const char **value_r)
+		const char **value_r, const char **error_r)
 {
 	i_assert(dict_key_prefix_is_valid(key));
-	return dict->v.lookup(dict, pool, key, value_r);
+	return dict->v.lookup(dict, pool, key, value_r, error_r);
 }
 
 void dict_lookup_async(struct dict *dict, const char *key,
@@ -142,9 +136,7 @@ void dict_lookup_async(struct dict *dict, const char *key,
 
 		i_zero(&result);
 		result.ret = dict_lookup(dict, pool_datastack_create(),
-					 key, &result.value);
-		if (result.ret < 0)
-			result.error = "Lookup failed";
+					 key, &result.value, &result.error);
 		const char *const values[] = { result.value, NULL };
 		result.values = values;
 		callback(&result, context);
@@ -177,7 +169,6 @@ dict_iterate_init_multiple(struct dict *dict, const char *const *paths,
 
 	if (dict->v.iterate_init == NULL) {
 		/* not supported by backend */
-		i_error("%s: dict iteration not supported", dict->name);
 		ctx = &dict_iter_unsupported;
 	} else {
 		ctx = dict->v.iterate_init(dict, paths, flags);
@@ -222,7 +213,8 @@ bool dict_iterate_has_more(struct dict_iterate_context *ctx)
 	return ctx->has_more;
 }
 
-int dict_iterate_deinit(struct dict_iterate_context **_ctx)
+int dict_iterate_deinit(struct dict_iterate_context **_ctx,
+			const char **error_r)
 {
 	struct dict_iterate_context *ctx = *_ctx;
 
@@ -230,7 +222,7 @@ int dict_iterate_deinit(struct dict_iterate_context **_ctx)
 	ctx->dict->iter_count--;
 
 	*_ctx = NULL;
-	return ctx->dict->v.iterate_deinit(ctx);
+	return ctx->dict->v.iterate_deinit(ctx, error_r);
 }
 
 struct dict_transaction_context *dict_transaction_begin(struct dict *dict)
@@ -269,15 +261,38 @@ void dict_transaction_set_timestamp(struct dict_transaction_context *ctx,
 		ctx->dict->v.set_timestamp(ctx, ts);
 }
 
-int dict_transaction_commit(struct dict_transaction_context **_ctx)
+struct dict_commit_sync_result {
+	int ret;
+	char *error;
+};
+
+static void
+dict_transaction_commit_sync_callback(const struct dict_commit_result *result,
+				      void *context)
+{
+	struct dict_commit_sync_result *sync_result = context;
+
+	sync_result->ret = result->ret;
+	sync_result->error = i_strdup(result->error);
+}
+
+int dict_transaction_commit(struct dict_transaction_context **_ctx,
+			    const char **error_r)
 {
 	struct dict_transaction_context *ctx = *_ctx;
+	struct dict_commit_sync_result result;
 
 	*_ctx = NULL;
+
+	i_zero(&result);
 	i_assert(ctx->dict->transaction_count > 0);
 	ctx->dict->transaction_count--;
 	DLLIST_REMOVE(&ctx->dict->transactions, ctx);
-	return ctx->dict->v.transaction_commit(ctx, FALSE, NULL, NULL);
+	ctx->dict->v.transaction_commit(ctx, FALSE,
+		dict_transaction_commit_sync_callback, &result);
+	*error_r = t_strdup(result.error);
+	i_free(result.error);
+	return result.ret;
 }
 
 void dict_transaction_commit_async(struct dict_transaction_context **_ctx,
@@ -290,6 +305,8 @@ void dict_transaction_commit_async(struct dict_transaction_context **_ctx,
 	i_assert(ctx->dict->transaction_count > 0);
 	ctx->dict->transaction_count--;
 	DLLIST_REMOVE(&ctx->dict->transactions, ctx);
+	if (callback == NULL)
+		callback = dict_transaction_commit_async_noop_callback;
 	ctx->dict->v.transaction_commit(ctx, TRUE, callback, context);
 }
 
@@ -323,15 +340,6 @@ void dict_unset(struct dict_transaction_context *ctx,
 	T_BEGIN {
 		ctx->dict->v.unset(ctx, key);
 	} T_END;
-	ctx->changed = TRUE;
-}
-
-void dict_append(struct dict_transaction_context *ctx,
-		 const char *key, const char *value)
-{
-	i_assert(dict_key_prefix_is_valid(key));
-
-	ctx->dict->v.append(ctx, key, value);
 	ctx->changed = TRUE;
 }
 

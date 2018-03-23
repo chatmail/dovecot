@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "dcrypt.h"
@@ -8,7 +8,6 @@
 #include "istream-decrypt.h"
 #include "doveadm-dump.h"
 #include "hex-binary.h"
-#include "buffer.h"
 #include "str.h"
 #include <stdio.h>
 #include <sys/types.h>

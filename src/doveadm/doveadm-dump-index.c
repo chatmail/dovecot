@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -227,7 +227,7 @@ static void dump_extension_header(struct mail_index *index,
 		printf("header\n");
 		printf(" - highest uid . = %u\n", hdr->highest_uid);
 		printf(" - message count = %u\n", hdr->message_count);
-		printf(" - vsize ....... = %llu\n", (unsigned long long)hdr->vsize);
+		printf(" - vsize ....... = %"PRIu64"\n", hdr->vsize);
 	} else if (strcmp(ext->name, "maildir") == 0) {
 		const struct maildir_index_header *hdr = data;
 
@@ -246,8 +246,7 @@ static void dump_extension_header(struct mail_index *index,
 
 		printf("header\n");
 		printf(" - sync_mtime . = %s\n", unixdate2str(hdr->sync_mtime));
-		printf(" - sync_size .. = %llu\n",
-		       (unsigned long long)hdr->sync_size);
+		printf(" - sync_size .. = %"PRIu64"\n", hdr->sync_size);
 		printf(" - dirty_flag . = %d\n", hdr->dirty_flag);
 		printf(" - mailbox_guid = %s\n",
 		       guid_128_to_string(hdr->mailbox_guid));
@@ -284,8 +283,7 @@ static void dump_extension_header(struct mail_index *index,
 		const struct mail_index_modseq_header *hdr = data;
 
 		printf("header\n");
-		printf(" - highest_modseq = %llu\n",
-		       (unsigned long long)hdr->highest_modseq);
+		printf(" - highest_modseq = %"PRIu64"\n", hdr->highest_modseq);
 		printf(" - log_seq ...... = %u\n", hdr->log_seq);
 		printf(" - log_offset ... = %u\n", hdr->log_offset);
 	} else if (strcmp(ext->name, "fts") == 0) {
@@ -315,8 +313,8 @@ static void dump_extension_header(struct mail_index *index,
 			printf(" - id ........... = %u\n", rec->id);
 			printf(" - uid_validity . = %u\n", rec->uid_validity);
 			printf(" - next_uid ..... = %u\n", rec->next_uid);
-			printf(" - highest_modseq = %llu\n",
-			       (unsigned long long)rec->highest_modseq);
+			printf(" - highest_modseq = %"PRIu64"\n",
+			       rec->highest_modseq);
 
 			name += rec->name_len;
 		}
@@ -511,16 +509,6 @@ dump_cache_mime_parts(string_t *str, const void *data, unsigned int size)
 	dump_message_part(str, part);
 }
 
-static void
-dump_cache_snippet(string_t *str, const unsigned char *data, unsigned int size)
-{
-	if (size == 0)
-		return;
-	str_printfa(str, " (version=%u: ", data[0]);
-	str_append_n(str, data+1, size-1);
-	str_append_c(str, ')');
-}
-
 static void dump_cache(struct mail_cache_view *cache_view, unsigned int seq)
 {
 	struct mail_cache_lookup_iterate_ctx iter;
@@ -557,7 +545,7 @@ static void dump_cache(struct mail_cache_view *cache_view, unsigned int seq)
 			} else if (size == sizeof(uint64_t)) {
 				uint64_t value;
 				memcpy(&value, data, sizeof(value));
-				str_printfa(str, "%llu ", (unsigned long long)value);
+				str_printfa(str, "%"PRIu64, value);
 			}
 			/* fall through */
 		case MAIL_CACHE_FIELD_VARIABLE_SIZE:
@@ -565,8 +553,6 @@ static void dump_cache(struct mail_cache_view *cache_view, unsigned int seq)
 			str_printfa(str, "(%s)", binary_to_hex(data, size));
 			if (strcmp(field->name, "mime.parts") == 0)
 				dump_cache_mime_parts(str, data, size);
-			else if (strcmp(field->name, "body.snippet") == 0)
-				dump_cache_snippet(str, data, size);
 			break;
 		case MAIL_CACHE_FIELD_STRING:
 			if (size > 0)
@@ -672,7 +658,7 @@ static void dump_record(struct mail_index_view *view, unsigned int seq)
 		else if (ext[i].record_size == sizeof(uint64_t) &&
 			 ext[i].record_align == sizeof(uint64_t)) {
 			uint64_t value = *((const uint64_t *)data);
-			str_printfa(str, "%10llu", (unsigned long long)value);
+			str_printfa(str, "%10"PRIu64, value);
 		} else {
 			str_append(str, "          ");
 		}
@@ -719,8 +705,7 @@ static void dump_record(struct mail_index_view *view, unsigned int seq)
 			printf("                   : uidnext  = %u\n", lrec->uidnext);
 		} else if (strcmp(ext[i].name, "vsize") == 0) {
 			const struct mailbox_index_vsize *vrec = data;
-			printf("                   : vsize         = %llu\n",
-			       (unsigned long long)vrec->vsize);
+			printf("                   : vsize         = %"PRIu64"\n", vrec->vsize);
 			printf("                   : highest_uid   = %u\n", vrec->highest_uid);
 			printf("                   : message_count = %u\n", vrec->message_count);
 		}
@@ -742,15 +727,15 @@ static struct mail_index *path_open_index(const char *path)
 
 	if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
 		if (dir_has_index(path, "dovecot.index"))
-			return mail_index_alloc(path, "dovecot.index");
+			return mail_index_alloc(NULL, path, "dovecot.index");
 		else if (dir_has_index(path, "dovecot.map.index"))
-			return mail_index_alloc(path, "dovecot.map.index");
+			return mail_index_alloc(NULL, path, "dovecot.map.index");
 		else
 			return NULL;
 	} else if ((p = strrchr(path, '/')) != NULL)
-		return mail_index_alloc(t_strdup_until(path, p), p + 1);
+		return mail_index_alloc(NULL, t_strdup_until(path, p), p + 1);
 	else
-		return mail_index_alloc(".", path);
+		return mail_index_alloc(NULL, ".", path);
 }
 
 static void cmd_dump_index(int argc ATTR_UNUSED, char *argv[])
@@ -808,7 +793,7 @@ static bool test_dump_index(const char *path)
 		return FALSE;
 
 	ret = mail_index_open(index, MAIL_INDEX_OPEN_FLAG_READONLY) > 0;
-	if (ret > 0)
+	if (ret)
 		mail_index_close(index);
 	mail_index_free(&index);
 	return ret;

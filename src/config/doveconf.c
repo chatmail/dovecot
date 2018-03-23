@@ -1,8 +1,8 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "module-dir.h"
 #include "env-util.h"
 #include "guid.h"
@@ -39,7 +39,7 @@ struct config_dump_human_context {
 	ARRAY_TYPE(const_string) errors;
 	struct config_export_context *export_ctx;
 
-	unsigned int list_prefix_sent:1;
+	bool list_prefix_sent:1;
 };
 
 #define LIST_KEY_PREFIX "\001"
@@ -123,7 +123,7 @@ static void prefix_stack_reset_str(ARRAY_TYPE(prefix_stack) *stack)
 
 static struct config_dump_human_context *
 config_dump_human_init(const char *const *modules, enum config_dump_scope scope,
-		       bool check_settings)
+		       bool check_settings, bool in_section)
 {
 	struct config_dump_human_context *ctx;
 	enum config_dump_flags flags;
@@ -140,7 +140,8 @@ config_dump_human_init(const char *const *modules, enum config_dump_scope scope,
 		CONFIG_DUMP_FLAG_CALLBACK_ERRORS;
 	if (check_settings)
 		flags |= CONFIG_DUMP_FLAG_CHECK_SETTINGS;
-
+	if (in_section)
+		flags |= CONFIG_DUMP_FLAG_IN_SECTION;
 	ctx->export_ctx = config_export_init(modules, scope, flags,
 					     config_request_get_strings, ctx);
 	return ctx;
@@ -308,7 +309,8 @@ config_dump_human_output(struct config_dump_human_context *ctx,
 		if (hide_passwords && value[1] != '\0' &&
 		    ((value-key > 9 && strncmp(value-9, "_password", 9) == 0) ||
 		     (value-key > 8 && strncmp(value-8, "_api_key", 8) == 0) ||
-		     strncmp(key, "ssl_key",7) == 0)) {
+		     strncmp(key, "ssl_key",7) == 0 ||
+		     strncmp(key, "ssl_dh",6) == 0)) {
 			o_stream_nsend_str(output, " # hidden, use -P to show it");
 		} else if (!value_need_quote(value+1))
 			o_stream_nsend_str(output, value+1);
@@ -416,7 +418,7 @@ config_dump_human_sections(struct ostream *output,
 
 	for (; *filters != NULL; filters++) {
 		ctx = config_dump_human_init(modules, CONFIG_DUMP_SCOPE_SET,
-					     FALSE);
+					     FALSE, TRUE);
 		indent = config_dump_filter_begin(ctx->list_prefix,
 						  &(*filters)->filter);
 		config_export_parsers(ctx->export_ctx, (*filters)->parsers);
@@ -438,11 +440,11 @@ config_dump_human(const struct config_filter *filter, const char *const *modules
 	struct ostream *output;
 	int ret;
 
-	output = o_stream_create_fd(STDOUT_FILENO, 0, FALSE);
+	output = o_stream_create_fd(STDOUT_FILENO, 0);
 	o_stream_set_no_error_handling(output, TRUE);
 	o_stream_cork(output);
 
-	ctx = config_dump_human_init(modules, scope, TRUE);
+	ctx = config_dump_human_init(modules, scope, TRUE, FALSE);
 	config_export_by_filter(ctx->export_ctx, filter);
 	ret = config_dump_human_output(ctx, output, 0, setting_name_filter, hide_passwords);
 	config_dump_human_deinit(ctx);
@@ -465,7 +467,7 @@ config_dump_one(const struct config_filter *filter, bool hide_key,
 	size_t len;
 	bool dump_section = FALSE;
 
-	ctx = config_dump_human_init(NULL, scope, FALSE);
+	ctx = config_dump_human_init(NULL, scope, FALSE, FALSE);
 	config_export_by_filter(ctx->export_ctx, filter);
 	if (config_export_finish(&ctx->export_ctx) < 0)
 		return -1;
@@ -684,12 +686,14 @@ static void hostname_verify_format(const char *arg)
 
 static void check_wrong_config(const char *config_path)
 {
-	const char *base_dir, *symlink_path, *prev_path;
+	const char *base_dir, *symlink_path, *prev_path, *error;
 
 	base_dir = get_setting("master", "base_dir");
 	symlink_path = t_strconcat(base_dir, "/"PACKAGE".conf", NULL);
-	if (t_readlink(symlink_path, &prev_path) < 0)
+	if (t_readlink(symlink_path, &prev_path, &error) < 0) {
+		i_error("t_readlink(%s) failed: %s", symlink_path, error);
 		return;
+	}
 
 	if (strcmp(prev_path, config_path) != 0) {
 		i_warning("Dovecot was last started using %s, "
@@ -706,6 +710,9 @@ static void failure_exit_callback(int *status)
 
 int main(int argc, char *argv[])
 {
+	enum master_service_flags master_service_flags =
+		MASTER_SERVICE_FLAG_STANDALONE |
+		MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME;
 	enum config_dump_scope scope = CONFIG_DUMP_SCOPE_ALL;
 	const char *orig_config_path, *config_path, *module;
 	ARRAY(const char *) module_names;
@@ -725,8 +732,7 @@ int main(int argc, char *argv[])
 	}
 
 	i_zero(&filter);
-	master_service = master_service_init("config",
-					     MASTER_SERVICE_FLAG_STANDALONE,
+	master_service = master_service_init("config", master_service_flags,
 					     &argc, &argv, "adf:hHm:nNpPexS");
 	orig_config_path = t_strdup(master_service_get_config_path(master_service));
 
@@ -857,7 +863,6 @@ int main(int argc, char *argv[])
 		info = sysinfo_get(get_setting("mail", "mail_location"));
 		if (*info != '\0')
 			printf("# %s\n", info);
-		printf("# Hostname: %s\n", my_hostdomain());
 		if (!config_path_specified)
 			check_wrong_config(config_path);
 		if (scope == CONFIG_DUMP_SCOPE_ALL)

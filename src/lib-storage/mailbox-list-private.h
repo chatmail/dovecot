@@ -124,9 +124,6 @@ struct mailbox_list {
 	struct mailbox_log *changelog;
 	time_t changelog_timestamp;
 
-	struct file_lock *lock;
-	int lock_refcount;
-
 	pool_t guid_cache_pool;
 	HASH_TABLE(uint8_t *, struct mailbox_guid_cache_rec *) guid_cache;
 	bool guid_cache_errors;
@@ -141,11 +138,11 @@ struct mailbox_list {
 
 	ARRAY(union mailbox_list_module_context *) module_contexts;
 
-	unsigned int index_root_dir_created:1;
-	unsigned int list_index_root_dir_created:1;
-	unsigned int guid_cache_updated:1;
-	unsigned int guid_cache_invalidated:1;
-	unsigned int last_error_is_internal:1;
+	bool index_root_dir_created:1;
+	bool list_index_root_dir_created:1;
+	bool guid_cache_updated:1;
+	bool guid_cache_invalidated:1;
+	bool last_error_is_internal:1;
 };
 
 union mailbox_list_iterate_module_context {
@@ -173,8 +170,8 @@ struct mailbox_list_iter_update_context {
 	struct imap_match_glob *glob;
 	enum mailbox_info_flags leaf_flags, parent_flags;
 
-	unsigned int update_only:1;
-	unsigned int match_parents:1;
+	bool update_only:1;
+	bool match_parents:1;
 };
 
 /* Modules should use do "my_id = mailbox_list_module_id++" and
@@ -246,7 +243,5 @@ const struct mailbox_info *
 mailbox_list_iter_autocreate_filter(struct mailbox_list_iterate_context *ctx,
 				    const struct mailbox_info *_info);
 
-int mailbox_list_lock(struct mailbox_list *list);
-void mailbox_list_unlock(struct mailbox_list *list);
 
 #endif

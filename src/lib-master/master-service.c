@@ -1,23 +1,25 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "lib-signals.h"
+#include "event-filter.h"
 #include "ioloop.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "array.h"
 #include "strescape.h"
 #include "env-util.h"
 #include "home-expand.h"
 #include "process-title.h"
 #include "restrict-access.h"
-#include "fd-close-on-exec.h"
 #include "settings-parser.h"
 #include "syslog-util.h"
+#include "stats-client.h"
 #include "master-instance.h"
 #include "master-login.h"
 #include "master-service-ssl.h"
 #include "master-service-private.h"
 #include "master-service-settings.h"
+#include "iostream-ssl.h"
 
 #include <unistd.h>
 #include <sys/stat.h>
@@ -176,8 +178,10 @@ master_service_init(const char *name, enum master_service_flags flags,
 		    int *argc, char **argv[], const char *getopt_str)
 {
 	struct master_service *service;
+	data_stack_frame_t datastack_frame_id = 0;
 	unsigned int count;
 	const char *value;
+	const char *error;
 
 	i_assert(name != NULL);
 
@@ -206,6 +210,12 @@ master_service_init(const char *name, enum master_service_flags flags,
 	   is properly initialized */
 	i_set_failure_prefix("%s(init): ", name);
 
+	/* make sure all the data stack allocations during init will be freed
+	   before we get to ioloop. the corresponding t_pop() is in
+	   master_service_init_finish(). */
+	if ((flags & MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME) == 0)
+		datastack_frame_id = t_push(NULL);
+
 	/* ignore these signals as early as possible */
 	lib_signals_init();
         lib_signals_ignore(SIGPIPE, TRUE);
@@ -214,7 +224,7 @@ master_service_init(const char *name, enum master_service_flags flags,
 	if (getenv(MASTER_UID_ENV) == NULL)
 		flags |= MASTER_SERVICE_FLAG_STANDALONE;
 
-	process_title_init(argv);
+	process_title_init(*argc, argv);
 
 	service = i_new(struct master_service, 1);
 	service->argc = *argc;
@@ -228,6 +238,7 @@ master_service_init(const char *name, enum master_service_flags flags,
 	service->ioloop = io_loop_create();
 	service->service_count_left = UINT_MAX;
 	service->config_fd = -1;
+	service->datastack_frame_id = datastack_frame_id;
 
 	service->config_path = i_strdup(getenv(MASTER_CONFIG_FILE_ENV));
 	if (service->config_path == NULL)
@@ -250,6 +261,10 @@ master_service_init(const char *name, enum master_service_flags flags,
 		master_service_init_socket_listeners(service);
 	} T_END;
 
+	/* load SSL module if necessary */
+	if (service->want_ssl_settings && ssl_module_load(&error) < 0)
+		i_fatal("Cannot load SSL module: %s", error);
+
 	/* set up some kind of logging until we know exactly how and where
 	   we want to log */
 	if (getenv("LOG_SERVICE") != NULL)
@@ -258,6 +273,19 @@ master_service_init(const char *name, enum master_service_flags flags,
 		i_set_failure_prefix("%s(%s): ", name, getenv("USER"));
 	else
 		i_set_failure_prefix("%s: ", name);
+
+	/* Initialize debug logging */
+	value = getenv(DOVECOT_LOG_DEBUG_ENV);
+	if (value != NULL) {
+		struct event_filter *filter = event_filter_create();
+		const char *error;
+		if (master_service_log_debug_parse(filter, value, &error) < 0) {
+			i_error("Invalid "DOVECOT_LOG_DEBUG_ENV" - ignoring: %s",
+				error);
+		}
+		event_set_global_debug_log_filter(filter);
+		event_filter_unref(&filter);
+	}
 
 	if ((flags & MASTER_SERVICE_FLAG_STANDALONE) == 0) {
 		/* initialize master_status structure */
@@ -423,6 +451,19 @@ void master_service_init_log(struct master_service *service,
 		service->log_initialized = TRUE;
 }
 
+void master_service_init_stats_client(struct master_service *service,
+				      bool silent_notfound_errors)
+{
+	if (service->stats_client == NULL &&
+	    service->set->stats_writer_socket_path[0] != '\0') T_BEGIN {
+		const char *path = t_strdup_printf("%s/%s",
+			service->set->base_dir,
+			service->set->stats_writer_socket_path);
+		service->stats_client =
+			stats_client_init(path, silent_notfound_errors);
+	} T_END;
+}
+
 void master_service_set_die_with_master(struct master_service *service,
 					bool set)
 {
@@ -455,8 +496,9 @@ static bool get_instance_config(const char *name, const char **config_path_r)
 	inst = master_instance_list_find_by_name(list, name);
 	if (inst != NULL) {
 		path = t_strdup_printf("%s/dovecot.conf", inst->base_dir);
-		if (t_readlink(path, config_path_r) < 0)
-			i_fatal("readlink(%s) failed: %m", path);
+		const char *error;
+		if (t_readlink(path, config_path_r, &error) < 0)
+			i_fatal("t_readlink(%s) failed: %s", path, error);
 	}
 	master_instance_list_deinit(&list);
 	return inst != NULL;
@@ -564,6 +606,12 @@ void master_service_init_finish(struct master_service *service)
 		service->master_status.available_count--;
 	}
 	master_status_update(service);
+
+	/* close data stack frame opened by master_service_init() */
+	if ((service->flags & MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME) == 0) {
+		if (!t_pop(&service->datastack_frame_id))
+			i_panic("Leaked t_pop() call");
+	}
 }
 
 static void master_service_import_environment_real(const char *import_environment)
@@ -893,8 +941,7 @@ void master_service_client_connection_destroyed(struct master_service *service)
 static void master_service_set_login_state(struct master_service *service,
 					   enum master_login_state state)
 {
-	if (service->to_overflow_state != NULL)
-		timeout_remove(&service->to_overflow_state);
+	timeout_remove(&service->to_overflow_state);
 
 	switch (state) {
 	case MASTER_LOGIN_STATE_NONFULL:
@@ -933,11 +980,7 @@ static void master_service_refresh_login_state(struct master_service *service)
 
 void master_service_close_config_fd(struct master_service *service)
 {
-	if (service->config_fd != -1) {
-		if (close(service->config_fd) < 0)
-			i_error("close(master config fd) failed: %m");
-		service->config_fd = -1;
-	}
+	i_close_fd(&service->config_fd);
 }
 
 void master_service_deinit(struct master_service **_service)
@@ -952,17 +995,14 @@ void master_service_deinit(struct master_service **_service)
 	master_service_io_listeners_remove(service);
 	master_service_ssl_ctx_deinit(service);
 
+	if (service->stats_client != NULL)
+		stats_client_deinit(&service->stats_client);
 	master_service_close_config_fd(service);
-	if (service->to_die != NULL)
-		timeout_remove(&service->to_die);
-	if (service->to_overflow_state != NULL)
-		timeout_remove(&service->to_overflow_state);
-	if (service->to_status != NULL)
-		timeout_remove(&service->to_status);
-	if (service->io_status_error != NULL)
-		io_remove(&service->io_status_error);
-	if (service->io_status_write != NULL)
-		io_remove(&service->io_status_write);
+	timeout_remove(&service->to_die);
+	timeout_remove(&service->to_overflow_state);
+	timeout_remove(&service->to_status);
+	io_remove(&service->io_status_error);
+	io_remove(&service->io_status_write);
 	if (array_is_created(&service->config_overrides))
 		array_free(&service->config_overrides);
 
@@ -1076,8 +1116,7 @@ void master_service_io_listeners_remove(struct master_service *service)
 	unsigned int i;
 
 	for (i = 0; i < service->socket_count; i++) {
-		if (service->listeners[i].io != NULL)
-			io_remove(&service->listeners[i].io);
+		io_remove(&service->listeners[i].io);
 	}
 }
 
@@ -1123,17 +1162,13 @@ master_status_send(struct master_service *service, bool important_update)
 {
 	ssize_t ret;
 
-	if (service->to_status != NULL)
-		timeout_remove(&service->to_status);
+	timeout_remove(&service->to_status);
 
 	ret = write(MASTER_STATUS_FD, &service->master_status,
 		    sizeof(service->master_status));
 	if (ret == sizeof(service->master_status)) {
 		/* success */
-		if (service->io_status_write != NULL) {
-			/* delayed important update sent successfully */
-			io_remove(&service->io_status_write);
-		}
+		io_remove(&service->io_status_write);
 		service->last_sent_status_time = ioloop_time;
 		service->last_sent_status_avail_count =
 			service->master_status.available_count;
@@ -1176,10 +1211,8 @@ void master_status_update(struct master_service *service)
 	    service->master_status.available_count ==
 	    service->last_sent_status_avail_count) {
 		/* a) closed, b) updating to same state */
-		if (service->to_status != NULL)
-			timeout_remove(&service->to_status);
-		if (service->io_status_write != NULL)
-			io_remove(&service->io_status_write);
+		timeout_remove(&service->to_status);
+		io_remove(&service->io_status_write);
 		return;
 	}
 	if (ioloop_time == service->last_sent_status_time &&
@@ -1237,4 +1270,10 @@ bool version_string_verify_full(const char *line, const char *service_name,
 		}
 	} T_END;
 	return ret;
+}
+
+bool master_service_is_ssl_module_loaded(struct master_service *service)
+{
+	/* if this is TRUE, then ssl module is loaded by init */
+	return service->want_ssl_settings;
 }

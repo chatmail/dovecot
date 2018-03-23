@@ -1,7 +1,8 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
+#include "sort.h"
 #include "bsearch-insert-pos.h"
 #include "file-cache.h"
 #include "file-lock.h"
@@ -27,7 +28,7 @@
 
 struct uidlist_list {
 	unsigned int uid_count:31;
-	unsigned int uid_begins_with_pointer:1;
+	bool uid_begins_with_pointer:1;
 	uint32_t uid_list[UIDLIST_LIST_SIZE];
 };
 
@@ -54,8 +55,8 @@ struct squat_uidlist {
 	const uint32_t *cur_block_end_indexes;
 
 	size_t max_size;
-	unsigned int corrupted:1;
-	unsigned int building:1;
+	bool corrupted:1;
+	bool building:1;
 };
 
 struct squat_uidlist_build_context {
@@ -69,7 +70,7 @@ struct squat_uidlist_build_context {
 	uint32_t list_start_idx;
 
 	struct squat_uidlist_file_header build_hdr;
-	unsigned int need_reopen:1;
+	bool need_reopen:1;
 };
 
 struct squat_uidlist_rebuild_context {
@@ -126,7 +127,7 @@ uidlist_write_array(struct ostream *output, const uint32_t *uid_list,
 	base_uid = uid_list[0] & ~UID_LIST_MASK_RANGE;
 	datastack = uid_count < 1024*8/SQUAT_PACK_MAX_SIZE;
 	if (datastack)
-		uidbuf = t_malloc(SQUAT_PACK_MAX_SIZE * uid_count);
+		uidbuf = t_malloc_no0(SQUAT_PACK_MAX_SIZE * uid_count);
 	else
 		uidbuf = i_malloc(SQUAT_PACK_MAX_SIZE * uid_count);
 	bufp = uidbuf;
@@ -556,11 +557,7 @@ static void squat_uidlist_close(struct squat_uidlist *uidlist)
 		file_lock_free(&uidlist->file_lock);
 	if (uidlist->dotlock != NULL)
 		file_dotlock_delete(&uidlist->dotlock);
-	if (uidlist->fd != -1) {
-		if (close(uidlist->fd) < 0)
-			i_error("close(%s) failed: %m", uidlist->path);
-		uidlist->fd = -1;
-	}
+	i_close_fd_path(&uidlist->fd, uidlist->path);
 	uidlist->corrupted = FALSE;
 }
 
@@ -713,7 +710,7 @@ int squat_uidlist_build_init(struct squat_uidlist *uidlist,
 
 	ctx = i_new(struct squat_uidlist_build_context, 1);
 	ctx->uidlist = uidlist;
-	ctx->output = o_stream_create_fd(uidlist->fd, 0, FALSE);
+	ctx->output = o_stream_create_fd(uidlist->fd, 0);
 	if (ctx->output->offset == 0) {
 		struct squat_uidlist_file_header hdr;
 
@@ -863,7 +860,7 @@ int squat_uidlist_build_finish(struct squat_uidlist_build_context *ctx)
 		(void)o_stream_seek(ctx->output, ctx->build_hdr.used_file_size);
 	}
 
-	if (o_stream_nfinish(ctx->output) < 0) {
+	if (o_stream_finish(ctx->output) < 0) {
 		i_error("write() to %s failed: %s", ctx->uidlist->path,
 			o_stream_get_error(ctx->output));
 		return -1;
@@ -930,7 +927,7 @@ int squat_uidlist_rebuild_init(struct squat_uidlist_build_context *build_ctx,
 	ctx->uidlist = build_ctx->uidlist;
 	ctx->build_ctx = build_ctx;
 	ctx->fd = fd;
-	ctx->output = o_stream_create_fd(ctx->fd, 0, FALSE);
+	ctx->output = o_stream_create_fd(ctx->fd, 0);
 	ctx->next_uid_list_idx = 0x100;
 	o_stream_cork(ctx->output);
 
@@ -1067,7 +1064,7 @@ int squat_uidlist_rebuild_finish(struct squat_uidlist_rebuild_context *ctx,
 
 		if (ctx->uidlist->corrupted)
 			ret = -1;
-		else if (o_stream_nfinish(ctx->output) < 0) {
+		else if (o_stream_finish(ctx->output) < 0) {
 			i_error("write(%s) failed: %s", temp_path,
 				o_stream_get_error(ctx->output));
 			ret = -1;
@@ -1077,13 +1074,14 @@ int squat_uidlist_rebuild_finish(struct squat_uidlist_rebuild_context *ctx,
 			ret = -1;
 		}
 		ctx->build_ctx->need_reopen = TRUE;
+	} else {
+		o_stream_abort(ctx->output);
 	}
 
 	/* we no longer require the entire uidlist to be in memory,
 	   let it be used for something more useful. */
 	squat_uidlist_free_from_memory(ctx->uidlist);
 
-	o_stream_ignore_last_errors(ctx->output);
 	o_stream_unref(&ctx->output);
 	if (close(ctx->fd) < 0)
 		i_error("close(%s) failed: %m", temp_path);

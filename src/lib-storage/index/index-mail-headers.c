@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -36,10 +36,9 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 {
 	struct mail *_mail = &mail->mail.mail;
 	const struct index_mail_line *lines;
-	const unsigned char *header, *data;
+	const unsigned char *header;
 	const uint8_t *match;
 	buffer_t *buf;
-	size_t data_size;
 	unsigned int i, j, count, match_idx, match_count;
 	bool noncontiguous;
 
@@ -49,8 +48,8 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 
 	lines = array_get(&mail->header_lines, &count);
 	match = array_get(&mail->header_match, &match_count);
-	header = buffer_get_data(mail->header_data, NULL);
-	buf = buffer_create_dynamic(pool_datastack_create(), 256);
+	header = mail->header_data->data;
+	buf = t_buffer_create(256);
 
 	/* go through all the header lines we found */
 	for (i = match_idx = 0; i < count; i = j) {
@@ -119,9 +118,8 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 				      lines[j-1].end_pos - lines[i].start_pos);
 		}
 
-		data = buffer_get_data(buf, &data_size);
 		index_mail_cache_add_idx(mail, lines[i].field_idx,
-					 data, data_size);
+					 buf->data, buf->used);
 	}
 
 	for (; match_idx < match_count; match_idx++) {
@@ -375,7 +373,7 @@ index_mail_parse_header_cb(struct message_header_line *hdr,
 struct istream *
 index_mail_cache_parse_init(struct mail *_mail, struct istream *input)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct istream *input2;
 
 	i_assert(mail->data.tee_stream == NULL);
@@ -386,10 +384,6 @@ index_mail_cache_parse_init(struct mail *_mail, struct istream *input)
 	mail->data.save_sent_date = TRUE;
 	mail->data.save_bodystructure_header = TRUE;
 	mail->data.save_bodystructure_body = TRUE;
-	/* Don't unnecessarily waste time generating a snippet, since it's
-	   not as cheap as the others to generate. */
-	if (index_mail_want_cache(mail, MAIL_CACHE_BODY_SNIPPET))
-		mail->data.save_body_snippet = TRUE;
 
 	mail->data.tee_stream = tee_i_stream_create(input);
 	input = tee_i_stream_create_child(mail->data.tee_stream);
@@ -533,10 +527,9 @@ int index_mail_headers_get_envelope(struct index_mail *mail)
 
 static size_t get_header_size(buffer_t *buffer, size_t pos)
 {
-	const unsigned char *data;
-	size_t i, size;
+	const unsigned char *data = buffer->data;
+	size_t i, size = buffer->used;
 
-	data = buffer_get_data(buffer, &size);
 	i_assert(pos <= size);
 
 	for (i = pos; i < size; i++) {
@@ -557,7 +550,7 @@ static int index_mail_header_is_parsed(struct index_mail *mail,
 
 	match = array_get(&mail->header_match, &count);
 	if (field_idx < count && HEADER_MATCH_USABLE(mail, match[field_idx]))
-		return (match[field_idx] & HEADER_MATCH_FLAG_FOUND) != 0;
+		return (match[field_idx] & HEADER_MATCH_FLAG_FOUND) != 0 ? 1 : 0;
 	return -1;
 }
 
@@ -597,7 +590,7 @@ index_mail_get_parsed_header(struct index_mail *mail, unsigned int field_idx)
 	first_line_idx = *line_idx - 1;
 
 	p_array_init(&header_values, mail->mail.data_pool, 4);
-	header = buffer_get_data(mail->header_data, NULL);
+	header = mail->header_data->data;
 
 	lines = array_get(&mail->header_lines, &lines_count);
 	for (i = first_line_idx; i < lines_count; i++) {
@@ -795,7 +788,7 @@ index_mail_headers_decode(struct index_mail *mail, const char *const **_list,
 int index_mail_get_headers(struct mail *_mail, const char *field,
 			   bool decode_to_utf8, const char *const **value_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	bool retry = TRUE;
 	int ret;
 
@@ -829,7 +822,7 @@ int index_mail_get_headers(struct mail *_mail, const char *field,
 int index_mail_get_first_header(struct mail *_mail, const char *field,
 				bool decode_to_utf8, const char **value_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	const char *const *list;
 	bool retry = TRUE;
 	int ret;
@@ -875,7 +868,7 @@ int index_mail_get_header_stream(struct mail *_mail,
 				 struct mailbox_header_lookup_ctx *headers,
 				 struct istream **stream_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct istream *input;
 	string_t *dest;
 

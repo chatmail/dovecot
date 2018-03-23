@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mail-copy.h"
@@ -54,7 +54,7 @@ cydir_mailbox_alloc(struct mail_storage *storage, struct mailbox_list *list,
 
 	index_storage_mailbox_alloc(&mbox->box, vname, flags, MAIL_INDEX_PREFIX);
 
-	mbox->storage = (struct cydir_storage *)storage;
+	mbox->storage = CYDIR_STORAGE(storage);
 	return &mbox->box;
 }
 
@@ -70,12 +70,11 @@ static int cydir_mailbox_open(struct mailbox *box)
 			T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
 		return -1;
 	} else if (errno == EACCES) {
-		mail_storage_set_critical(box->storage, "%s",
+		mailbox_set_critical(box, "%s",
 			mail_error_eacces_msg("stat", box_path));
 		return -1;
 	} else {
-		mail_storage_set_critical(box->storage, "stat(%s) failed: %m",
-					  box_path);
+		mailbox_set_critical(box, "stat(%s) failed: %m", box_path);
 		return -1;
 	}
 	if (index_storage_mailbox_open(box, FALSE) < 0)

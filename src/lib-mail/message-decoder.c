@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -35,7 +35,7 @@ struct message_decoder_context {
 	char *content_type, *content_charset;
 	enum message_cte message_cte;
 
-	unsigned int binary_input:1;
+	bool binary_input:1;
 };
 
 static void

@@ -1,9 +1,8 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
 #include "file-lock.h"
-#include "file-dotlock.h"
 #include "time-util.h"
 
 #include <time.h>
@@ -15,7 +14,6 @@
 struct file_lock {
 	int fd;
 	char *path;
-	struct dotlock *dotlock;
 
 	struct timeval locked_time;
 	int lock_type;
@@ -104,7 +102,7 @@ file_lock_find_proc_locks(int lock_fd ATTR_UNUSED)
 	int fd;
 
 	if (!have_proc_locks)
-		return FALSE;
+		return NULL;
 
 	if (fstat(lock_fd, &st) < 0)
 		return "";
@@ -199,7 +197,7 @@ static int file_lock_do(int fd, const char *path, int lock_type,
 		fl.l_start = 0;
 		fl.l_len = 0;
 
-		ret = fcntl(fd, timeout_secs ? F_SETLKW : F_SETLK, &fl);
+		ret = fcntl(fd, timeout_secs != 0 ? F_SETLKW : F_SETLK, &fl);
 		if (timeout_secs != 0) {
 			alarm(0);
 			file_lock_wait_end(path);
@@ -354,23 +352,6 @@ void file_lock_set_close_on_free(struct file_lock *lock, bool set)
 	lock->close_on_free = set;
 }
 
-struct file_lock *file_lock_from_dotlock(struct dotlock **dotlock)
-{
-	struct file_lock *lock;
-
-	lock = i_new(struct file_lock, 1);
-	lock->fd = -1;
-	lock->path = i_strdup(file_dotlock_get_lock_path(*dotlock));
-	lock->lock_type = F_WRLCK;
-	lock->lock_method = FILE_LOCK_METHOD_DOTLOCK;
-	if (gettimeofday(&lock->locked_time, NULL) < 0)
-		i_fatal("gettimeofday() failed: %m");
-	lock->dotlock = *dotlock;
-
-	*dotlock = NULL;
-	return lock;
-}
-
 static void file_unlock_real(struct file_lock *lock)
 {
 	const char *error;
@@ -393,8 +374,7 @@ void file_unlock(struct file_lock **_lock)
 	   could be deleting the new lock. */
 	i_assert(!lock->unlink_on_free);
 
-	if (lock->dotlock == NULL)
-		file_unlock_real(lock);
+	file_unlock_real(lock);
 	file_lock_free(&lock);
 }
 
@@ -434,13 +414,8 @@ void file_lock_free(struct file_lock **_lock)
 {
 	struct file_lock *lock = *_lock;
 
-	if (lock == NULL)
-		return;
-
 	*_lock = NULL;
 
-	if (lock->dotlock != NULL)
-		file_dotlock_delete(&lock->dotlock);
 	if (lock->unlink_on_free)
 		file_try_unlink_locked(lock);
 	if (lock->close_on_free)

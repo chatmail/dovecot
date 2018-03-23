@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "userdb.h"
@@ -24,8 +24,8 @@ struct userdb_sql_request {
 struct sql_userdb_iterate_context {
 	struct userdb_iterate_context ctx;
 	struct sql_result *result;
-	unsigned int freed:1;
-	unsigned int call_iter:1;
+	bool freed:1;
+	bool call_iter:1;
 };
 
 static void userdb_sql_iterate_next(struct userdb_iterate_context *_ctx);
@@ -105,10 +105,17 @@ static void userdb_sql_lookup(struct auth_request *auth_request,
 	struct sql_userdb_module *module =
 		(struct sql_userdb_module *)_module;
 	struct userdb_sql_request *sql_request;
-	const char *query;
+	const char *query, *error;
 
-	query = t_auth_request_var_expand(module->conn->set.user_query,
-		   	auth_request, userdb_sql_escape);
+	if (t_auth_request_var_expand(module->conn->set.user_query,
+				      auth_request, userdb_sql_escape,
+				      &query, &error) <= 0) {
+		auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
+			"Failed to expand user_query=%s: %s",
+			module->conn->set.user_query, error);
+		callback(USERDB_RESULT_INTERNAL_FAILURE, auth_request);
+		return;
+	}
 
 	auth_request_ref(auth_request);
 	sql_request = i_new(struct userdb_sql_request, 1);
@@ -141,10 +148,15 @@ userdb_sql_iterate_init(struct auth_request *auth_request,
 	struct sql_userdb_module *module =
 		(struct sql_userdb_module *)_module;
 	struct sql_userdb_iterate_context *ctx;
-	const char *query;
+	const char *query, *error;
 
-	query = t_auth_request_var_expand(module->conn->set.iterate_query,
-		   auth_request, userdb_sql_escape);
+	if (t_auth_request_var_expand(module->conn->set.iterate_query,
+				      auth_request, userdb_sql_escape,
+				      &query, &error) <= 0) {
+		auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
+			"Failed to expand iterate_query=%s: %s",
+			module->conn->set.iterate_query, error);
+	}
 
 	ctx = i_new(struct sql_userdb_iterate_context, 1);
 	ctx->ctx.auth_request = auth_request;

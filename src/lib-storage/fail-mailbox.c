@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -140,7 +140,8 @@ static void fail_mailbox_notify_changes(struct mailbox *box ATTR_UNUSED)
 
 static struct mailbox_transaction_context *
 fail_mailbox_transaction_begin(struct mailbox *box,
-			       enum mailbox_transaction_flags flags)
+			       enum mailbox_transaction_flags flags,
+			       const char *reason ATTR_UNUSED)
 {
 	struct mailbox_transaction_context *ctx;
 

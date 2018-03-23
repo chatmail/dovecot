@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -54,16 +54,16 @@ struct fts_transaction_context {
 	uint32_t highest_virtual_uid;
 	unsigned int precache_extra_count;
 
-	unsigned int precached:1;
-	unsigned int mails_saved:1;
-	unsigned int failed:1;
+	bool precached:1;
+	bool mails_saved:1;
+	bool failed:1;
 };
 
 struct fts_mail {
 	union mail_module_context module_ctx;
 	char score[30];
 
-	unsigned int virtual_mail:1;
+	bool virtual_mail:1;
 };
 
 static MODULE_CONTEXT_DEFINE_INIT(fts_storage_module,
@@ -105,10 +105,9 @@ fts_mailbox_get_status(struct mailbox *box, enum mailbox_status_items items,
 		if (fts_mailbox_get_last_cached_seq(box, &seq) < 0)
 			return -1;
 
-		/* Always use the FTS's last_cached_seq. This is because we
-		   don't want to reindex all mails to FTS if .cache file is
-		   deleted. */
-		status_r->last_cached_seq = seq;
+		/* use whichever is smaller */
+		if (status_r->last_cached_seq > seq)
+			status_r->last_cached_seq = seq;
 	}
 	return 0;
 }
@@ -218,8 +217,8 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	fctx->orig_matches = buffer_create_dynamic(default_pool, 64);
 	fctx->virtual_mailbox = t->box->virtual_vfuncs != NULL;
 	fctx->enforced =
-		mail_user_plugin_getenv(t->box->storage->user,
-					"fts_enforced") != NULL;
+		mail_user_plugin_getenv_bool(t->box->storage->user,
+					"fts_enforced");
 	i_array_init(&fctx->levels, 8);
 	fctx->scores = i_new(struct fts_scores, 1);
 	fctx->scores->refcount = 1;
@@ -229,8 +228,8 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	/* FIXME: we'll assume that all the args are fuzzy. not good,
 	   but would require much more work to fix it. */
 	if (!fts_args_have_fuzzy(args->args) &&
-	    mail_user_plugin_getenv(t->box->storage->user,
-				    "fts_no_autofuzzy") != NULL)
+	    mail_user_plugin_getenv_bool(t->box->storage->user,
+				    "fts_no_autofuzzy"))
 		fctx->flags |= FTS_LOOKUP_FLAG_NO_AUTO_FUZZY;
 	/* transaction contains the last search's scores. they can be
 	   queried later with mail_get_special() */
@@ -552,7 +551,8 @@ void fts_mail_allocated(struct mail *_mail)
 
 static struct mailbox_transaction_context *
 fts_transaction_begin(struct mailbox *box,
-		      enum mailbox_transaction_flags flags)
+		      enum mailbox_transaction_flags flags,
+		      const char *reason)
 {
 	struct fts_mailbox *fbox = FTS_CONTEXT(box);
 	struct mailbox_transaction_context *t;
@@ -560,7 +560,7 @@ fts_transaction_begin(struct mailbox *box,
 
 	ft = i_new(struct fts_transaction_context, 1);
 
-	t = fbox->module_ctx.super.transaction_begin(box, flags);
+	t = fbox->module_ctx.super.transaction_begin(box, flags, reason);
 	MODULE_CONTEXT_SET(t, fts_storage_module, ft);
 	return t;
 }
@@ -657,8 +657,8 @@ fts_transaction_commit(struct mailbox_transaction_context *t,
 	const char *error;
 
 	autoindex = ft->mails_saved && !fbox->fts_mailbox_excluded &&
-		mail_user_plugin_getenv(box->storage->user,
-					"fts_autoindex") != NULL;
+		mail_user_plugin_getenv_bool(box->storage->user,
+					"fts_autoindex");
 
 	if (fts_transaction_end(t, &error) < 0) {
 		mail_storage_set_error(t->box->storage, MAIL_ERROR_TEMP,
@@ -723,9 +723,7 @@ static int fts_sync_deinit(struct mailbox_sync_context *ctx,
 
 	if (optimize) {
 		if (fts_backend_optimize(flist->backend) < 0) {
-			mail_storage_set_critical(box->storage,
-				"FTS optimize for mailbox %s failed",
-				box->vname);
+			mailbox_set_critical(box, "FTS optimize failed");
 			ret = -1;
 		}
 	}

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #define _GNU_SOURCE /* setresgid() */
 #include <stdio.h> /* for AIX */
@@ -325,17 +325,16 @@ void restrict_access(const struct restrict_access_settings *set,
 
 		if (chroot(set->chroot_dir) != 0)
 			i_fatal("chroot(%s) failed: %m", set->chroot_dir);
+		/* makes static analyzers happy, and is more secure */
+		if (chdir("/") != 0)
+			i_fatal("chdir(/) failed: %m");
+
 		chroot_dir = i_strdup(set->chroot_dir);
 
 		if (home != NULL) {
 			if (chdir(home) < 0) {
 				i_error("chdir(%s) failed: %m", home);
-				home = NULL;
 			}
-		}
-		if (home == NULL) {
-			if (chdir("/") != 0)
-				i_fatal("chdir(/) failed: %m");
 		}
 	}
 
@@ -477,30 +476,14 @@ const char *restrict_access_get_current_chroot(void)
 	return chroot_dir;
 }
 
-void restrict_access_set_dumpable(bool allow ATTR_UNUSED)
+void restrict_access_allow_coredumps(bool allow ATTR_UNUSED)
 {
 #ifdef HAVE_PR_SET_DUMPABLE
-	if (prctl(PR_SET_DUMPABLE, allow ? 1 : 0, 0, 0, 0) < 0)
-		i_error("prctl(PR_SET_DUMPABLE) failed: %m");
-#endif
-}
-
-bool restrict_access_get_dumpable(void)
-{
-#ifdef HAVE_PR_SET_DUMPABLE
-	bool allow = FALSE;
-	if (prctl(PR_GET_DUMPABLE, &allow, 0, 0, 0) < 0)
-		i_error("prctl(PR_GET_DUMPABLE) failed: %m");
-	return allow;
-#endif
-	return TRUE;
-}
-
-void restrict_access_allow_coredumps(bool allow)
-{
 	if (getenv("PR_SET_DUMPABLE") != NULL) {
-		restrict_access_set_dumpable(allow);
+		if (prctl(PR_SET_DUMPABLE, allow ? 1 : 0, 0, 0, 0) < 0)
+			i_error("prctl(PR_SET_DUMPABLE) failed: %m");
 	}
+#endif
 }
 
 int restrict_access_use_priv_gid(void)

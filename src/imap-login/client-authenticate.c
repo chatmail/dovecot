@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -60,11 +60,9 @@ void imap_client_auth_result(struct client *client,
 		i_zero(&url);
 		url.userid = reply->destuser;
 		url.auth_type = client->auth_mech_name;
-		url.host_name = reply->host;
-		if (reply->port != 143) {
-			url.have_port = TRUE;
+		url.host.name = reply->host;
+		if (reply->port != 143)
 			url.port = reply->port;
-		}
 		str_append(referral, "REFERRAL ");
 		str_append(referral, imap_url_create(&url));
 
@@ -76,10 +74,12 @@ void imap_client_auth_result(struct client *client,
 					       str_c(referral), text);
 		}
 		break;
+	case CLIENT_AUTH_RESULT_INVALID_BASE64:
 	case CLIENT_AUTH_RESULT_ABORTED:
 		client_send_reply(client, IMAP_CMD_REPLY_BAD, text);
 		break;
 	case CLIENT_AUTH_RESULT_AUTHFAILED_REASON:
+	case CLIENT_AUTH_RESULT_MECH_INVALID:
 		if (text[0] == '[')
 			client_send_reply(client, IMAP_CMD_REPLY_NO, text);
 		else {
@@ -96,8 +96,17 @@ void imap_client_auth_result(struct client *client,
 				       IMAP_RESP_CODE_UNAVAILABLE, text);
 		break;
 	case CLIENT_AUTH_RESULT_SSL_REQUIRED:
+	case CLIENT_AUTH_RESULT_MECH_SSL_REQUIRED:
 		client_send_reply_code(client, IMAP_CMD_REPLY_NO,
 				       IMAP_RESP_CODE_PRIVACYREQUIRED, text);
+		break;
+	case CLIENT_AUTH_RESULT_PASS_EXPIRED:
+		client_send_reply_code(client, IMAP_CMD_REPLY_NO,
+				       IMAP_RESP_CODE_EXPIRED, text);
+		break;
+	case CLIENT_AUTH_RESULT_LOGIN_DISABLED:
+		client_send_reply_code(client, IMAP_CMD_REPLY_NO,
+				       IMAP_RESP_CODE_CONTACTADMIN, text);
 		break;
 	case CLIENT_AUTH_RESULT_AUTHFAILED:
 		client_send_reply_code(client, IMAP_CMD_REPLY_NO,
@@ -113,13 +122,17 @@ imap_client_auth_begin(struct imap_client *imap_client, const char *mech_name,
 	char *prefix;
 
 	prefix = i_strdup_printf("%d%s",
-			imap_client->client_ignores_capability_resp_code,
+			imap_client->client_ignores_capability_resp_code ? 1 : 0,
 			imap_client->cmd_tag);
 
 	i_free(imap_client->common.master_data_prefix);
 	imap_client->common.master_data_prefix = (void *)prefix;
 	imap_client->common.master_data_prefix_len = strlen(prefix)+1;
 
+	if (*init_resp == '\0')
+		init_resp = NULL;
+	else if (strcmp(init_resp, "=") == 0)
+		init_resp = "";
 	return client_auth_begin(&imap_client->common, mech_name, init_resp);
 }
 
@@ -187,14 +200,13 @@ int cmd_login(struct imap_client *imap_client, const struct imap_arg *args)
 	}
 
 	/* authorization ID \0 authentication ID \0 pass */
-	plain_login = buffer_create_dynamic(pool_datastack_create(), 64);
+	plain_login = t_buffer_create(64);
 	buffer_append_c(plain_login, '\0');
 	buffer_append(plain_login, user, strlen(user));
 	buffer_append_c(plain_login, '\0');
 	buffer_append(plain_login, pass, strlen(pass));
 
-	base64 = buffer_create_dynamic(pool_datastack_create(),
-        			MAX_BASE64_ENCODED_SIZE(plain_login->used));
+	base64 = t_buffer_create(MAX_BASE64_ENCODED_SIZE(plain_login->used));
 	base64_encode(plain_login->data, plain_login->used, base64);
 	return imap_client_auth_begin(imap_client, "PLAIN", str_c(base64));
 }

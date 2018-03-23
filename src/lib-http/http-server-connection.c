@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "llist.h"
@@ -107,15 +107,17 @@ http_server_connection_get_stats(struct http_server_connection *conn)
 static void
 http_server_connection_input_halt(struct http_server_connection *conn)
 {
-	connection_input_halt(&conn->conn);
+	io_remove(&conn->conn.io);
 }
 
 static void
 http_server_connection_input_resume(struct http_server_connection *conn)
 {
-	if (!conn->closed && !conn->input_broken && !conn->close_indicated &&
+	if (conn->conn.io == NULL && !conn->closed &&
+		!conn->input_broken && !conn->close_indicated &&
 		!conn->in_req_callback && conn->incoming_payload == NULL) {
-		connection_input_resume(&conn->conn);
+		conn->conn.io = io_add_istream(conn->conn.input,
+       http_server_connection_input, &conn->conn);
 	}
 }
 
@@ -129,8 +131,7 @@ http_server_connection_idle_timeout(struct http_server_connection *conn)
 static void
 http_server_connection_timeout_stop(struct http_server_connection *conn)
 {
-	if (conn->to_idle != NULL)
-		timeout_remove(&conn->to_idle);
+	timeout_remove(&conn->to_idle);
 }
 
 static void
@@ -216,6 +217,9 @@ static void http_server_payload_destroyed(struct http_server_request *req)
 	stream_errno = conn->incoming_payload->stream_errno;
 	conn->incoming_payload = NULL;
 
+	if (conn->payload_handler != NULL)
+		http_server_payload_handler_destroy(&conn->payload_handler);
+
 	/* handle errors in transfer stream */
 	if (req->response == NULL && stream_errno != 0 &&
 		conn->conn.input->stream_errno == 0) {
@@ -278,8 +282,6 @@ static void http_server_payload_destroyed(struct http_server_request *req)
 static void http_server_connection_request_callback(
 	struct http_server_connection *conn, struct http_server_request *req)
 {
-	unsigned int old_refcount = req->refcount;
-
 	/* CONNECT method */
 	if (strcmp(req->req.method, "CONNECT") == 0) {
 		if (conn->callbacks->handle_connect_request == NULL) {
@@ -301,10 +303,6 @@ static void http_server_connection_request_callback(
 		}
 		conn->callbacks->handle_request(conn->context, req);
 	}
-
-	i_assert((req->response != NULL &&
-		  req->response->submitted) ||
-		 req->refcount > old_refcount);
 }
 
 static bool
@@ -312,7 +310,9 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 	struct http_server_request *req)
 {
 	const struct http_server_settings *set = &conn->server->set;
+	unsigned int old_refcount;
 	struct istream *payload;
+	bool payload_destroyed = FALSE;
 
 	i_assert(!conn->in_req_callback);
 	i_assert(conn->incoming_payload == NULL);
@@ -343,6 +343,7 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 	   our one before calling it */
 	http_server_connection_input_halt(conn);
 
+	old_refcount = req->refcount;
 	conn->in_req_callback = TRUE;
 	http_server_connection_request_callback(conn, req);
 	if (conn->closed) {
@@ -350,6 +351,7 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 		return FALSE;
 	}
 	conn->in_req_callback = FALSE;
+	req->callback_refcount = req->refcount - old_refcount;
 
 	if (req->req.payload != NULL) {
 		/* send 100 Continue when appropriate */
@@ -367,6 +369,7 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 		if (conn->to_input != NULL) {
 			/* already finished reading the payload */
 			http_server_payload_finished(conn);
+			payload_destroyed = TRUE;
 		}
 	}
 
@@ -378,6 +381,9 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 		if (req->response != NULL && req->response->submitted)
 			http_server_request_submit_response(req);
 	}
+
+	i_assert(!payload_destroyed || req->callback_refcount > 0 ||
+		(req->response != NULL && req->response->submitted));
 
 	if (conn->incoming_payload == NULL) {
 		if (conn->conn.io == NULL && conn->to_input == NULL)
@@ -397,7 +403,6 @@ http_server_connection_ssl_init(struct http_server_connection *conn)
 	if (conn->server->set.debug)
 		http_server_connection_debug(conn, "Starting SSL handshake");
 
-	http_server_connection_input_halt(conn);
 	if (master_service_ssl_init(master_service,
 				&conn->conn.input, &conn->conn.output,
 				&conn->ssl_iostream, &error) < 0) {
@@ -405,8 +410,6 @@ http_server_connection_ssl_init(struct http_server_connection *conn)
 			"Couldn't initialize SSL server for %s: %s", conn->conn.name, error);
 		return -1;
 	}
-	http_server_connection_input_resume(conn);
-
 	if (ssl_iostream_handshake(conn->ssl_iostream) < 0) {
 		http_server_connection_error(conn,"SSL handshake failed: %s",
 			ssl_iostream_get_last_error(conn->ssl_iostream));
@@ -773,6 +776,9 @@ int http_server_connection_discard_payload(
 	i_assert(conn->conn.io == NULL);
 	i_assert(server->ioloop == NULL);
 
+	if (conn->payload_handler != NULL)
+		http_server_payload_handler_destroy(&conn->payload_handler);
+
 	/* destroy payload wrapper early to advance state */
 	if (conn->incoming_payload != NULL) {
 		i_stream_unref(&conn->incoming_payload);
@@ -840,7 +846,7 @@ http_server_connection_next_response(struct http_server_connection *conn)
 		return FALSE;
 
 	req = conn->request_queue_head;
-	if (req == NULL) {
+	if (req == NULL || req->state == HTTP_SERVER_REQUEST_STATE_NEW) {
 		/* no requests pending */
 		http_server_connection_debug(conn, "No more requests pending");
 		http_server_connection_timeout_start(conn);
@@ -1068,6 +1074,7 @@ http_server_connection_create(struct http_server *server,
 	net_set_nonblock(fd_in, TRUE);
 	if (fd_in != fd_out)
 		net_set_nonblock(fd_out, TRUE);
+	(void)net_set_tcp_nodelay(fd_out, TRUE);
 
 	if (set->socket_send_buffer_size > 0) {
 		if (net_set_send_buffer_size(fd_out,
@@ -1081,7 +1088,6 @@ http_server_connection_create(struct http_server *server,
 			i_error("net_set_recv_buffer_size(%"PRIuSIZE_T") failed: %m",
 				set->socket_recv_buffer_size);
 	}
-	(void)net_set_tcp_nodelay(fd_out, TRUE);
 
 	/* get a name for this connection */
 	if (fd_in != fd_out || net_getpeername(fd_in, &addr, &port) < 0) {
@@ -1146,6 +1152,8 @@ http_server_connection_disconnect(struct http_server_connection *conn,
 						 http_server_payload_destroyed);
 		conn->incoming_payload = NULL;
 	}
+	if (conn->payload_handler != NULL)
+		http_server_payload_handler_destroy(&conn->payload_handler);
 
 	/* drop all requests before connection is closed */
 	req = conn->request_queue_head;
@@ -1155,16 +1163,12 @@ http_server_connection_disconnect(struct http_server_connection *conn,
 		req = req_next;
 	}
 
-	if (conn->to_input != NULL)
-		timeout_remove(&conn->to_input);
+	timeout_remove(&conn->to_input);
 
 	http_server_connection_timeout_stop(conn);
-	if (conn->io_resp_payload != NULL)
-		io_remove(&conn->io_resp_payload);
-	if (conn->conn.output != NULL) {
-		o_stream_nflush(conn->conn.output);
+	io_remove(&conn->io_resp_payload);
+	if (conn->conn.output != NULL)
 		o_stream_uncork(conn->conn.output);
-	}
 
 	if (conn->http_parser != NULL)
 		http_request_parser_deinit(&conn->http_parser);
@@ -1254,6 +1258,8 @@ void http_server_connection_switch_ioloop(struct http_server_connection *conn)
 		conn->to_idle = io_loop_move_timeout(&conn->to_idle);
 	if (conn->io_resp_payload != NULL)
 		conn->io_resp_payload = io_loop_move_io(&conn->io_resp_payload);
+	if (conn->payload_handler != NULL)
+		http_server_payload_handler_switch_ioloop(conn->payload_handler);
 	if (conn->incoming_payload != NULL)
 		i_stream_switch_ioloop(conn->incoming_payload);
 	connection_switch_ioloop(&conn->conn);

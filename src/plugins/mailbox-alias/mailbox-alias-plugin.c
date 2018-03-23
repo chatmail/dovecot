@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -158,7 +158,7 @@ mailbox_alias_create_symlink(struct mailbox *box,
 					       "Mailbox already exists");
 			return -1;
 		}
-		mail_storage_set_critical(box->storage,
+		mailbox_set_critical(box,
 			"symlink(%s, %s) failed: %m", fname, new_path);
 		return -1;
 	}

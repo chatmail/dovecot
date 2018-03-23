@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -17,8 +17,8 @@ struct message_header_parser_ctx {
 	buffer_t *value_buf;
 
 	enum message_header_parser_flags flags;
-	unsigned int skip_line:1;
-	unsigned int has_nuls:1;
+	bool skip_line:1;
+	bool has_nuls:1;
 };
 
 struct message_header_parser_ctx *
@@ -81,7 +81,7 @@ int message_parse_header_next(struct message_header_parser_ctx *ctx,
 	continues = FALSE;
 
 	for (startpos = 0;;) {
-		ret = i_stream_read_data(ctx->input, &msg, &size, startpos+1);
+		ret = i_stream_read_bytes(ctx->input, &msg, &size, startpos+2);
 		if (ret >= 0) {
 			/* we want to know one byte in advance to find out
 			   if it's multiline header */
@@ -277,7 +277,7 @@ int message_parse_header_next(struct message_header_parser_ctx *ctx,
 
 		line->value = msg + colon_pos+1;
 		line->value_len = size - colon_pos - 1;
-		if (ctx->flags & MESSAGE_HEADER_PARSER_FLAG_SKIP_INITIAL_LWSP) {
+		if ((ctx->flags & MESSAGE_HEADER_PARSER_FLAG_SKIP_INITIAL_LWSP) != 0) {
 			/* get value. skip all LWSP after ':'. Note that
 			   RFC2822 doesn't say we should, but history behind
 			   it..
@@ -342,7 +342,7 @@ int message_parse_header_next(struct message_header_parser_ctx *ctx,
 				buffer_append_c(ctx->value_buf, '\r');
 			buffer_append_c(ctx->value_buf, '\n');
 		}
-		if ((ctx->flags & MESSAGE_HEADER_PARSER_FLAG_CLEAN_ONELINE) &&
+		if ((ctx->flags & MESSAGE_HEADER_PARSER_FLAG_CLEAN_ONELINE) != 0 &&
 		    line->value_len > 0 && line->value[0] != ' ' &&
 		    IS_LWSP(line->value[0])) {
 			buffer_append_c(ctx->value_buf, ' ');
@@ -352,8 +352,8 @@ int message_parse_header_next(struct message_header_parser_ctx *ctx,
 			buffer_append(ctx->value_buf,
 				      line->value, line->value_len);
 		}
-		line->full_value = buffer_get_data(ctx->value_buf,
-						   &line->full_value_len);
+		line->full_value = ctx->value_buf->data;
+		line->full_value_len = ctx->value_buf->used;
 	} else {
 		/* we didn't want full_value, and this is a continued line. */
 		line->full_value = NULL;

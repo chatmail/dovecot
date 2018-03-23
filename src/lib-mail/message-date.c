@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -37,7 +37,7 @@ static int parse_timezone(const unsigned char *str, size_t len)
 		/* numeric offset */
 		if (!i_isdigit(str[1]) || !i_isdigit(str[2]) ||
 		    !i_isdigit(str[3]) || !i_isdigit(str[4]))
-			return FALSE;
+			return 0;
 
 		offset = ((str[1]-'0') * 10 + (str[2]-'0')) * 60  +
 			(str[3]-'0') * 10 + (str[4]-'0');

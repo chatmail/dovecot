@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -12,7 +12,7 @@
 
 static void test_mail_index_modseq_get_next_log_offset(void)
 {
-	struct {
+	static const struct {
 		uint32_t log_seq;
 		uoff_t log_offset;
 	} tests[] = {
@@ -29,15 +29,16 @@ static void test_mail_index_modseq_get_next_log_offset(void)
 	struct mail_index_view *view, *view2;
 	struct mail_index_transaction *trans;
 	uint32_t seq, uid;
+	const char *error;
 
-	(void)unlink_directory(TESTDIR_NAME, UNLINK_DIRECTORY_FLAG_RMDIR);
+	(void)unlink_directory(TESTDIR_NAME, UNLINK_DIRECTORY_FLAG_RMDIR, &error);
 	if (mkdir(TESTDIR_NAME, 0700) < 0)
 		i_error("mkdir(%s) failed: %m", TESTDIR_NAME);
 
 	ioloop_time = 1;
 
 	test_begin("mail_transaction_log_file_get_modseq_next_offset()");
-	index = mail_index_alloc(TESTDIR_NAME, "test.dovecot.index");
+	index = mail_index_alloc(NULL, TESTDIR_NAME, "test.dovecot.index");
 	test_assert(mail_index_open_or_create(index, MAIL_INDEX_OPEN_FLAG_CREATE) == 0);
 	view = mail_index_view_open(index);
 	mail_index_modseq_enable(index);
@@ -77,13 +78,13 @@ static void test_mail_index_modseq_get_next_log_offset(void)
 	mail_index_close(index);
 	mail_index_free(&index);
 
-	(void)unlink_directory(TESTDIR_NAME, UNLINK_DIRECTORY_FLAG_RMDIR);
+	(void)unlink_directory(TESTDIR_NAME, UNLINK_DIRECTORY_FLAG_RMDIR, &error);
 	test_end();
 }
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_mail_index_modseq_get_next_log_offset,
 		NULL
 	};

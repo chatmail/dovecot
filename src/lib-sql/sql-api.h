@@ -1,6 +1,8 @@
 #ifndef SQL_API_H
 #define SQL_API_H
 
+struct timespec;
+
 /* This SQL API is designed to work asynchronously. The underlying drivers
    however may not. */
 
@@ -69,8 +71,7 @@ struct sql_commit_result {
 };
 
 typedef void sql_query_callback_t(struct sql_result *result, void *context);
-typedef void sql_commit_callback_t(const char *error, void *context);
-typedef void sql_commit2_callback_t(const struct sql_commit_result *result, void *context);
+typedef void sql_commit_callback_t(const struct sql_commit_result *result, void *context);
 
 void sql_drivers_init(void);
 void sql_drivers_deinit(void);
@@ -178,15 +179,22 @@ const char *sql_result_get_field_name(struct sql_result *result,
 /* Return field index for given name, or -1 if not found. */
 int sql_result_find_field(struct sql_result *result, const char *field_name);
 
-/* Returns value of given field as string. */
+/* Returns value of given field as string. Note that it can be NULL. */
 const char *sql_result_get_field_value(struct sql_result *result,
 				       unsigned int idx);
+/* Returns a binary value. Note that a NULL is returned as NULL with size=0,
+   while empty string returns non-NULL with size=0. */
 const unsigned char *
 sql_result_get_field_value_binary(struct sql_result *result,
 				  unsigned int idx, size_t *size_r);
+/* Find the field and return its value. NULL return value can mean that either
+   the field didn't exist or that its value is NULL. */
 const char *sql_result_find_field_value(struct sql_result *result,
 					const char *field_name);
-/* Return all values of current row. */
+/* Return all values of current row. Note that this array is not
+   NULL-terminated - you must use sql_result_get_fields_count() to find out
+   the array's length. It's also possible that some of the values inside the
+   array are NULL. */
 const char *const *sql_result_get_values(struct sql_result *result);
 
 /* Return last error message in result. */
@@ -202,15 +210,8 @@ void sql_transaction_commit(struct sql_transaction_context **ctx,
 #define sql_transaction_commit(ctx, callback, context) \
 	  sql_transaction_commit(ctx + \
 		CALLBACK_TYPECHECK(callback, void (*)( \
-			const char *, typeof(context))), \
-		(sql_commit_callback_t *)callback, context)
-void sql_transaction_commit2(struct sql_transaction_context **ctx,
-			     sql_commit2_callback_t *callback, void *context);
-#define sql_transaction_commit2(ctx, callback, context) \
-	  sql_transaction_commit2(ctx + \
-		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct sql_commit_result *, typeof(context))), \
-		(sql_commit2_callback_t *)callback, context)
+		(sql_commit_callback_t *)callback, context)
 /* Synchronous commit. Returns 0 if ok, -1 if error. */
 int sql_transaction_commit_s(struct sql_transaction_context **ctx,
 			     const char **error_r);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hostpid.h"
@@ -31,8 +31,8 @@ rawlog_write_timestamp(struct rawlog_iostream *rstream, bool line_ends)
 		return;
 
 	buffer_create_from_data(&buf, data, sizeof(data));
-	str_printfa(&buf, "%lu.%06u ",
-		    (unsigned long)ioloop_timeval.tv_sec,
+	str_printfa(&buf, "%"PRIdTIME_T".%06u ",
+		    ioloop_timeval.tv_sec,
 		    (unsigned int)ioloop_timeval.tv_usec);
 	if ((rstream->flags & IOSTREAM_RAWLOG_FLAG_BUFFERED) != 0) {
 		str_append_c(&buf, rstream->input ? 'I' : 'O');
@@ -125,7 +125,7 @@ void iostream_rawlog_write(struct rawlog_iostream *rstream,
 		iostream_rawlog_write_unbuffered(rstream, data, size);
 	o_stream_uncork(rstream->rawlog_output);
 
-	if (o_stream_nfinish(rstream->rawlog_output) < 0) {
+	if (o_stream_flush(rstream->rawlog_output) < 0) {
 		i_error("write(%s) failed: %s",
 			o_stream_get_name(rstream->rawlog_output),
 			o_stream_get_error(rstream->rawlog_output));
@@ -135,10 +135,8 @@ void iostream_rawlog_write(struct rawlog_iostream *rstream,
 
 void iostream_rawlog_close(struct rawlog_iostream *rstream)
 {
-	if (rstream->rawlog_output != NULL)
-		o_stream_unref(&rstream->rawlog_output);
-	if (rstream->buffer != NULL)
-		buffer_free(&rstream->buffer);
+	o_stream_unref(&rstream->rawlog_output);
+	buffer_free(&rstream->buffer);
 }
 
 static void

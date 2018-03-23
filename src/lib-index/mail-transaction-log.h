@@ -85,7 +85,7 @@ struct mail_transaction_header {
 
 struct mail_transaction_modseq_update {
 	uint32_t uid;
-	/* don't use uint64_t here. it adds extra 32 bits of paddiong and also
+	/* don't use uint64_t here. it adds extra 32 bits of padding and also
 	   causes problems with CPUs that require alignment */
 	uint32_t modseq_low32;
 	uint32_t modseq_high32;
@@ -189,11 +189,11 @@ struct mail_transaction_log_append_ctx {
 	unsigned int transaction_count;
 
 	/* same as mail_index_transaction->sync_transaction */
-	unsigned int index_sync_transaction:1;
+	bool index_sync_transaction:1;
 	/* same as mail_index_transaction->tail_offset_changed */
-	unsigned int tail_offset_changed:1;
-	unsigned int sync_includes_this:1;
-	unsigned int want_fsync:1;
+	bool tail_offset_changed:1;
+	bool sync_includes_this:1;
+	bool want_fsync:1;
 };
 
 #define LOG_IS_BEFORE(seq1, offset1, seq2, offset2) \
@@ -306,7 +306,7 @@ bool mail_transaction_log_is_head_prev(struct mail_transaction_log *log,
 
 /* Move currently opened log head file to memory (called by
    mail_index_move_to_memory()) */
-void mail_transaction_log_move_to_memory(struct mail_transaction_log *log);
+int mail_transaction_log_move_to_memory(struct mail_transaction_log *log);
 /* Unlink transaction log files */
 int mail_transaction_log_unlink(struct mail_transaction_log *log);
 

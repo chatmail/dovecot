@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -79,8 +79,7 @@ void fts_expunge_log_deinit(struct fts_expunge_log **_log)
 	struct fts_expunge_log *log = *_log;
 
 	*_log = NULL;
-	if (log->fd != -1)
-		i_close_fd(&log->fd);
+	i_close_fd(&log->fd);
 	i_free(log->path);
 	i_free(log);
 }
@@ -353,7 +352,7 @@ fts_expunge_log_write(struct fts_expunge_log_append_ctx *ctx)
 	return ret;
 }
 
-static int fts_expunge_log_append_finalise(struct fts_expunge_log_append_ctx **_ctx,
+static int fts_expunge_log_append_finalize(struct fts_expunge_log_append_ctx **_ctx,
 					   bool commit)
 {
 	struct fts_expunge_log_append_ctx *ctx = *_ctx;
@@ -383,12 +382,12 @@ int fts_expunge_log_uid_count(struct fts_expunge_log *log,
 
 int fts_expunge_log_append_commit(struct fts_expunge_log_append_ctx **_ctx)
 {
-	return fts_expunge_log_append_finalise(_ctx, TRUE);
+	return fts_expunge_log_append_finalize(_ctx, TRUE);
 }
 
 int fts_expunge_log_append_abort(struct fts_expunge_log_append_ctx **_ctx)
 {
-	return fts_expunge_log_append_finalise(_ctx, FALSE);
+	return fts_expunge_log_append_finalize(_ctx, FALSE);
 }
 
 struct fts_expunge_log_read_ctx *
@@ -401,7 +400,7 @@ fts_expunge_log_read_begin(struct fts_expunge_log *log)
 	if (fts_expunge_log_reopen_if_needed(log, FALSE) < 0)
 		ctx->failed = TRUE;
 	else if (log->fd != -1)
-		ctx->input = i_stream_create_fd(log->fd, (size_t)-1, FALSE);
+		ctx->input = i_stream_create_fd(log->fd, (size_t)-1);
 	ctx->unlink = TRUE;
 	return ctx;
 }
@@ -448,7 +447,7 @@ fts_expunge_log_read_next(struct fts_expunge_log_read_ctx *ctx)
 		return NULL;
 
 	/* initial read to try to get the record */
-	(void)i_stream_read_data(ctx->input, &data, &size, IO_BLOCK_SIZE);
+	(void)i_stream_read_bytes(ctx->input, &data, &size, IO_BLOCK_SIZE);
 	if (size == 0 && ctx->input->stream_errno == 0) {
 		/* expected EOF - mark the file as read by unlinking it */
 		if (ctx->unlink)
@@ -456,8 +455,8 @@ fts_expunge_log_read_next(struct fts_expunge_log_read_ctx *ctx)
 
 		/* try reading again, in case something new was written */
 		i_stream_sync(ctx->input);
-		(void)i_stream_read_data(ctx->input, &data, &size,
-					 IO_BLOCK_SIZE);
+		(void)i_stream_read_bytes(ctx->input, &data, &size,
+					  IO_BLOCK_SIZE);
 	}
 	if (size < sizeof(*rec)) {
 		if (size == 0 && ctx->input->stream_errno == 0) {
@@ -479,8 +478,7 @@ fts_expunge_log_read_next(struct fts_expunge_log_read_ctx *ctx)
 
 	/* read the entire record */
 	while (size < rec->record_size) {
-		if (i_stream_read_data(ctx->input, &data, &size,
-				       rec->record_size-1) < 0) {
+		if (i_stream_read_bytes(ctx->input, &data, &size, rec->record_size) < 0) {
 			fts_expunge_log_read_failure(ctx, rec->record_size);
 			return NULL;
 		}
@@ -522,8 +520,7 @@ int fts_expunge_log_read_end(struct fts_expunge_log_read_ctx **_ctx)
 			i_unlink_if_exists(ctx->log->path);
 	}
 
-	if (ctx->input != NULL)
-		i_stream_unref(&ctx->input);
+	i_stream_unref(&ctx->input);
 	i_free(ctx);
 	return ret;
 }

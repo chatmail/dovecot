@@ -109,7 +109,7 @@ struct mail_index_registered_ext {
 	mail_index_expunge_handler_t *expunge_handler;
 
 	void *expunge_context;
-	unsigned int expunge_handler_call_always:1;
+	bool expunge_handler_call_always:1;
 };
 
 struct mail_index_record_map {
@@ -154,6 +154,8 @@ union mail_index_module_context {
 
 struct mail_index {
 	char *dir, *prefix;
+	char *cache_dir;
+	struct event *event;
 
 	struct mail_cache *cache;
 	struct mail_transaction_log *log;
@@ -216,24 +218,25 @@ struct mail_index {
 	ARRAY(union mail_index_module_context *) module_contexts;
 
 	char *error;
-	unsigned int nodiskspace:1;
-	unsigned int index_lock_timeout:1;
+	bool nodiskspace:1;
+	bool index_lock_timeout:1;
 
-	unsigned int index_delete_requested:1; /* next sync sets it deleted */
-	unsigned int index_deleted:1; /* no changes allowed anymore */
-	unsigned int log_sync_locked:1;
-	unsigned int readonly:1;
-	unsigned int mapping:1;
-	unsigned int syncing:1;
-	unsigned int need_recreate:1;
-	unsigned int index_min_write:1;
-	unsigned int modseqs_enabled:1;
-	unsigned int initial_create:1;
-	unsigned int initial_mapped:1;
-	unsigned int fscked:1;
+	bool index_delete_requested:1; /* next sync sets it deleted */
+	bool index_deleted:1; /* no changes allowed anymore */
+	bool log_sync_locked:1;
+	bool readonly:1;
+	bool mapping:1;
+	bool syncing:1;
+	bool need_recreate:1;
+	bool index_min_write:1;
+	bool modseqs_enabled:1;
+	bool initial_create:1;
+	bool initial_mapped:1;
+	bool fscked:1;
 };
 
 extern struct mail_index_module_register mail_index_module_register;
+extern struct event_category event_category_index;
 
 /* Add/replace sync handler for specified extra record. */
 void mail_index_register_expunge_handler(struct mail_index *index,
@@ -335,12 +338,8 @@ void mail_index_view_transaction_unref(struct mail_index_view *view);
 
 void mail_index_fsck_locked(struct mail_index *index);
 
-/* Log an error and set it as the index's current error that is available
-   with mail_index_get_error_message(). */
 void mail_index_set_error(struct mail_index *index, const char *fmt, ...)
 	ATTR_FORMAT(2, 3);
-/* Same as mail_index_set_error(), but don't log the error. */
-void mail_index_set_error_nolog(struct mail_index *index, const char *str);
 /* "%s failed with index file %s: %m" */
 void mail_index_set_syscall_error(struct mail_index *index,
 				  const char *function);

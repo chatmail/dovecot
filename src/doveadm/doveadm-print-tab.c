@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -8,7 +8,7 @@
 struct doveadm_print_tab_context {
 	unsigned int header_idx, header_count;
 
-	unsigned int header_written:1;
+	bool header_written:1;
 };
 
 static struct doveadm_print_tab_context ctx;

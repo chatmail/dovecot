@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -386,8 +386,7 @@ test_client_connection_refused_response(
 	struct _connection_refused *ctx)
 {
 	test_assert(ctx->to == NULL);
-	if (ctx->to != NULL)
-		timeout_remove(&ctx->to);
+	timeout_remove(&ctx->to);
 
 	if (debug)
 		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
@@ -497,8 +496,7 @@ test_client_connection_lost_prematurely_response(
 	struct _connection_lost_prematurely *ctx)
 {
 	test_assert(ctx->to == NULL);
-	if (ctx->to != NULL)
-		timeout_remove(&ctx->to);
+	timeout_remove(&ctx->to);
 
 	if (debug)
 		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
@@ -1025,10 +1023,11 @@ test_connection_lost_input(struct server_connection *conn)
 		return;
 	}
 	if (ret < 0) {
-		if (i_stream_is_eof(conn->conn.input))
+		i_assert(conn->conn.input->eof);
+		if (conn->conn.input->stream_errno == 0)
 			i_fatal("server: Client stream ended prematurely");
 		else
-			i_fatal("server: Streem error: %s",
+			i_fatal("server: Stream error: %s",
 				i_stream_get_error(conn->conn.input));
 	}
 }
@@ -1675,8 +1674,7 @@ static void
 test_client_request_timed_out2_timeout(
 	struct _request_timed_out2_ctx *ctx)
 {
-	if (ctx->to != NULL)
-		timeout_remove(&ctx->to);
+	timeout_remove(&ctx->to);
 	i_debug("TIMEOUT");
 }
 
@@ -1696,8 +1694,7 @@ test_client_request_timed_out2_response(
 		if (ctx->to != NULL && ctx->max_parallel_connections <= 1)
 			timeout_reset(ctx->to);
 	} else {
-		if (ctx->to != NULL)
-			timeout_remove(&ctx->to);
+		timeout_remove(&ctx->to);
 		i_free(ctx);
 		io_loop_stop(ioloop);
 	}
@@ -1818,7 +1815,7 @@ test_request_aborted_early_input(struct server_connection *conn ATTR_UNUSED)
 		"HTTP/1.1 404 Not Found\r\n"
 		"\r\n";
 
-	/* wait one second to respon */
+	/* wait one second to respond */
 	sleep(1);
 
 	/* respond */
@@ -2021,7 +2018,7 @@ test_client_deinit_early_input(struct server_connection *conn ATTR_UNUSED)
 		"HTTP/1.1 404 Not Found\r\n"
 		"\r\n";
 
-	/* wait one second to respon */
+	/* wait one second to respond */
 	sleep(1);
 
 	/* respond */
@@ -2914,7 +2911,7 @@ static void test_reconnect_failure(void)
  * All tests
  */
 
-static void (*test_functions[])(void) = {
+static void (*const test_functions[])(void) = {
 	test_unconfigured_ssl,
 	test_unconfigured_ssl_abort,
 	test_invalid_url,
@@ -3144,8 +3141,7 @@ static void test_run_client_server(
 				ioloop = io_loop_create();
 				server_test(i);
 				io_loop_destroy(&ioloop);
-				if (fd_listen != -1)
-					i_close_fd(&fd_listen);
+				i_close_fd(&fd_listen);
 				i_free(bind_ports);
 				i_free(server_pids);
 				/* wait for it to be killed; this way, valgrind will not
@@ -3153,8 +3149,7 @@ static void test_run_client_server(
 				sleep(60);
 				exit(1);
 			}
-			if (fd_listen != -1)
-				i_close_fd(&fd_listen);
+			i_close_fd(&fd_listen);
 		}
 		if (debug)
 			i_debug("client: PID=%s", my_pid);
@@ -3181,15 +3176,13 @@ static void test_run_client_server(
 			ioloop = io_loop_create();
 			dns_test();
 			io_loop_destroy(&ioloop);
-			if (fd_listen != -1)
-				i_close_fd(&fd_listen);
+			i_close_fd(&fd_listen);
 			/* wait for it to be killed; this way, valgrind will not
 			   object to this process going away inelegantly. */
 			sleep(60);
 			exit(1);
 		}
-		if (fd_listen != -1)
-			i_close_fd(&fd_listen);
+		i_close_fd(&fd_listen);
 	}
 
 	/* parent: client */
@@ -3218,7 +3211,7 @@ volatile sig_atomic_t terminating = 0;
 static void
 test_signal_handler(int signo)
 {
-	if (terminating)
+	if (terminating != 0)
 		raise(signo);
 	terminating = 1;
 

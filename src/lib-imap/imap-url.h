@@ -1,10 +1,11 @@
 #ifndef IMAP_URL_H
 #define IMAP_URL_H
 
+#include "uri-util.h"
+
 struct imap_url {
 	/* server */
-	const char *host_name;
-	struct ip_addr host_ip;
+	struct uri_host host;
 	in_port_t port;
 
 	/* user */
@@ -33,9 +34,7 @@ struct imap_url {
 	size_t uauth_token_size;
 	time_t uauth_expire; /* (time_t)-1 if not set */
 
-	unsigned int have_host_ip:1; /* url uses IP address */
-	unsigned int have_port:1;
-	unsigned int have_partial:1;
+	bool have_partial:1;
 };
 
 /*

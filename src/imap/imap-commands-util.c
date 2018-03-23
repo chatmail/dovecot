@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -136,12 +136,6 @@ const char *imap_client_command_get_reason(struct client_command_context *cmd)
 {
 	return cmd->args[0] == '\0' ? cmd->name :
 		t_strdup_printf("%s %s", cmd->name, cmd->human_args);
-}
-
-void imap_transaction_set_cmd_reason(struct mailbox_transaction_context *trans,
-				     struct client_command_context *cmd)
-{
-	mailbox_transaction_set_reason(trans, imap_client_command_get_reason(cmd));
 }
 
 const char *

@@ -31,39 +31,44 @@
       overflows.
 */
 
-extern unsigned int data_stack_frame;
+#ifndef STATIC_CHECKER
+typedef unsigned int data_stack_frame_t;
+#else
+typedef struct data_stack_frame *data_stack_frame_t;
+#endif
+
+extern unsigned int data_stack_frame_id;
 
 /* All t_..() allocations between t_push*() and t_pop() are freed after t_pop()
    is called. Returns the current stack frame number, which can be used
    to detect missing t_pop() calls:
 
-   x = t_push(__func__); .. if (t_pop() != x) abort();
+   x = t_push(marker); .. if (!t_pop(x)) abort();
 
    In DEBUG mode, t_push_named() makes a temporary allocation for the name,
    but is safe to call in a loop as it performs the allocation within its own
    frame. However, you should always prefer to use T_BEGIN { ... } T_END below.
 */
-unsigned int t_push(const char *marker) ATTR_HOT;
-unsigned int t_push_named(const char *format, ...) ATTR_HOT ATTR_FORMAT(1, 2);
-unsigned int t_pop(void) ATTR_HOT;
-/* Simplifies the if (t_pop() != x) check by comparing it internally and
-   panicking if it doesn't match. */
-void t_pop_check(unsigned int *id) ATTR_HOT;
+data_stack_frame_t t_push(const char *marker) ATTR_HOT;
+data_stack_frame_t t_push_named(const char *format, ...) ATTR_HOT ATTR_FORMAT(1, 2);
+/* Returns TRUE on success, FALSE if t_pop() call was leaked. The caller
+   should panic. */
+bool t_pop(data_stack_frame_t *id) ATTR_HOT;
+/* Pop the last data stack frame. This shouldn't be called outside test code. */
+void t_pop_last_unsafe(void);
 
 /* Usage: T_BEGIN { code } T_END */
-#ifndef DEBUG
+#define T_STRING(x)	#x
+#define T_XSTRING(x)	T_STRING(x)	/* expand and then stringify */
 #define T_BEGIN \
-	STMT_START { unsigned int _data_stack_cur_id = t_push(NULL);
-#elif defined (__GNUC__) && !defined (__STRICT_ANSI__)
-#define T_BEGIN \
-	STMT_START { unsigned int _data_stack_cur_id = t_push(__FUNCTION__);
-#else
-#define T_CAT2(a,b) (a ":" #b)
-#define T_BEGIN \
-	STMT_START { unsigned int _data_stack_cur_id = t_push(T_CAT2(__FILE__,__LINE__));
-#endif
+	STMT_START { \
+		data_stack_frame_t _data_stack_cur_id = t_push(__FILE__ ":" T_XSTRING(__LINE__));
 #define T_END \
-	t_pop_check(&_data_stack_cur_id); } STMT_END
+	STMT_START { \
+		if (unlikely(!t_pop(&_data_stack_cur_id))) \
+			i_panic("Leaked t_pop() call"); \
+	} STMT_END; \
+	} STMT_END
 
 /* WARNING: Be careful when using these functions, it's too easy to
    accidentally save the returned value somewhere permanently.
@@ -75,7 +80,7 @@ void t_pop_check(unsigned int *id) ATTR_HOT;
 
    t_malloc() calls never fail. If there's not enough memory left,
    i_panic() will be called. */
-void *t_malloc(size_t size) ATTR_MALLOC ATTR_RETURNS_NONNULL;
+void *t_malloc_no0(size_t size) ATTR_MALLOC ATTR_RETURNS_NONNULL;
 void *t_malloc0(size_t size) ATTR_MALLOC ATTR_RETURNS_NONNULL;
 
 /* Try growing allocated memory. Returns TRUE if successful. Works only

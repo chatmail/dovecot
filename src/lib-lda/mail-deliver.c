@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -9,12 +9,15 @@
 #include "unichar.h"
 #include "var-expand.h"
 #include "message-address.h"
+#include "smtp-address.h"
 #include "lda-settings.h"
 #include "mail-storage.h"
 #include "mail-namespace.h"
 #include "mail-storage-private.h"
-#include "duplicate.h"
+#include "mail-duplicate.h"
 #include "mail-deliver.h"
+
+#define DUPLICATE_DB_NAME "lda-dupes"
 
 #define MAIL_DELIVER_USER_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, mail_deliver_user_module)
@@ -43,7 +46,6 @@ struct mail_deliver_cache {
 
 struct mail_deliver_mailbox {
 	union mailbox_module_context module_ctx;
-	bool delivery_box;
 };
 
 struct mail_deliver_transaction {
@@ -63,7 +65,8 @@ static MODULE_CONTEXT_DEFINE_INIT(mail_deliver_user_module,
 static MODULE_CONTEXT_DEFINE_INIT(mail_deliver_storage_module,
 				  &mail_storage_module_register);
 
-const char *mail_deliver_get_address(struct mail *mail, const char *header)
+const struct smtp_address *
+mail_deliver_get_address(struct mail *mail, const char *header)
 {
 	struct message_address *addr;
 	const char *str;
@@ -75,7 +78,7 @@ const char *mail_deliver_get_address(struct mail *mail, const char *header)
 				     strlen(str), 1, FALSE);
 	return addr == NULL || addr->mailbox == NULL || addr->domain == NULL ||
 		*addr->mailbox == '\0' || *addr->domain == '\0' ?
-		NULL : t_strconcat(addr->mailbox, "@", addr->domain, NULL);
+		NULL : smtp_address_create_from_msg_temp(addr);
 }
 
 static void update_cache(pool_t pool, const char **old_str, const char *new_str)
@@ -105,7 +108,7 @@ mail_deliver_log_update_cache(struct mail_deliver_cache *cache, pool_t pool,
 		subject = str_sanitize(subject, 80);
 	update_cache(pool, &cache->subject, subject);
 
-	from = str_sanitize(mail_deliver_get_address(mail, "From"), 80);
+	from = smtp_address_encode(mail_deliver_get_address(mail, "From"));
 	update_cache(pool, &cache->from, from);
 
 	if (mail_get_special(mail, MAIL_FETCH_FROM_ENVELOPE, &from_envelope) > 0)
@@ -148,7 +151,7 @@ mail_deliver_ctx_get_log_var_expand_table(struct mail_deliver_context *ctx,
 		{ 'w', dec2str(ctx->cache->vsize), "vsize" },
 		{ '\0', dec2str(delivery_time_msecs), "delivery_time" },
 		{ '\0', dec2str(ctx->session_time_msecs), "session_time" },
-		{ '\0', ctx->dest_addr, "to_envelope" },
+		{ '\0', smtp_address_encode(ctx->rcpt_params.orcpt.addr), "to_envelope" },
 		{ '\0', ctx->cache->storage_id, "storage_id" },
 		{ '\0', NULL, NULL }
 	};
@@ -160,7 +163,7 @@ void mail_deliver_log(struct mail_deliver_context *ctx, const char *fmt, ...)
 	va_list args;
 	string_t *str;
 	const struct var_expand_table *tab;
-	const char *msg;
+	const char *msg, *error;
 
 	if (*ctx->set->deliver_log_format == '\0')
 		return;
@@ -170,7 +173,10 @@ void mail_deliver_log(struct mail_deliver_context *ctx, const char *fmt, ...)
 
 	str = t_str_new(256);
 	tab = mail_deliver_ctx_get_log_var_expand_table(ctx, msg);
-	var_expand(str, ctx->set->deliver_log_format, tab);
+	if (var_expand(str, ctx->set->deliver_log_format, tab, &error) <= 0) {
+		i_error("Failed to expand deliver_log_format=%s: %s",
+			ctx->set->deliver_log_format, error);
+	}
 
 	i_info("%s", str_c(str));
 	va_end(args);
@@ -199,10 +205,8 @@ int mail_deliver_save_open(struct mail_deliver_save_open_context *ctx,
 			   const char *name, struct mailbox **box_r,
 			   enum mail_error *error_r, const char **error_str_r)
 {
-	struct mail_namespace *ns;
 	struct mailbox *box;
-	enum mailbox_flags flags =
-		MAILBOX_FLAG_SAVEONLY | MAILBOX_FLAG_POST_SESSION;
+	enum mailbox_flags flags = 0;
 
 	*box_r = NULL;
 	*error_r = MAIL_ERROR_NONE;
@@ -214,54 +218,16 @@ int mail_deliver_save_open(struct mail_deliver_save_open_context *ctx,
 		return -1;
 	}
 
-	ns = mail_namespace_find(ctx->user->namespaces, name);
-	if (strcmp(name, ns->prefix) == 0 &&
-	    (ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
-		/* delivering to a namespace prefix means we actually want to
-		   deliver to the INBOX instead */
-		name = "INBOX";
-		ns = mail_namespace_find_inbox(ctx->user->namespaces);
-	}
-
-	if (strcasecmp(name, "INBOX") == 0) {
-		/* deliveries to INBOX must always succeed,
-		   regardless of ACLs */
-		flags |= MAILBOX_FLAG_IGNORE_ACLS;
-	}
-
-	*box_r = box = mailbox_alloc(ns->list, name, flags);
-	mailbox_set_reason(box, "lib-lda delivery");
-	/* flag that this mailbox is used for delivering the mail.
-	   the context isn't set in pigeonhole testuite. */
-	struct mail_deliver_mailbox *mbox = MAIL_DELIVER_STORAGE_CONTEXT(box);
-	if (mbox != NULL)
-		mbox->delivery_box = TRUE;
+	if (ctx->lda_mailbox_autocreate)
+		flags |= MAILBOX_FLAG_AUTO_CREATE;
+	if (ctx->lda_mailbox_autosubscribe)
+		flags |= MAILBOX_FLAG_AUTO_SUBSCRIBE;
+	*box_r = box = mailbox_alloc_delivery(ctx->user, name, flags);
 
 	if (mailbox_open(box) == 0)
 		return 0;
-
 	*error_str_r = mailbox_get_last_internal_error(box, error_r);
-	if (!ctx->lda_mailbox_autocreate || *error_r != MAIL_ERROR_NOTFOUND)
-		return -1;
-
-	/* try creating it. */
-	if (mailbox_create(box, NULL, FALSE) < 0) {
-		*error_str_r = mailbox_get_last_internal_error(box, error_r);
-		if (*error_r != MAIL_ERROR_EXISTS)
-			return -1;
-		/* someone else just created it */
-	}
-	if (ctx->lda_mailbox_autosubscribe) {
-		/* (try to) subscribe to it */
-		(void)mailbox_set_subscribed(box, TRUE);
-	}
-
-	/* and try opening again */
-	if (mailbox_open(box) < 0) {
-		*error_str_r = mailbox_get_last_internal_error(box, error_r);
-		return -1;
-	}
-	return 0;
+	return -1;
 }
 
 static bool mail_deliver_check_duplicate(struct mail_deliver_session *session,
@@ -321,7 +287,7 @@ mail_deliver_open_mail(struct mailbox *box, uint32_t uid,
 	if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FAST) < 0)
 		return NULL;
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	mail = mail_alloc(t, wanted_fields, NULL);
 
 	if (!mail_set_uid(mail, uid)) {
@@ -352,12 +318,12 @@ int mail_deliver_save(struct mail_deliver_context *ctx, const char *mailbox,
 
 	i_assert(ctx->dest_mail == NULL);
 
-	default_save = strcmp(mailbox, ctx->dest_mailbox_name) == 0;
+	default_save = strcmp(mailbox, ctx->rcpt_default_mailbox) == 0;
 	if (default_save)
 		ctx->tried_default_save = TRUE;
 
 	i_zero(&open_ctx);
-	open_ctx.user = ctx->dest_user;
+	open_ctx.user = ctx->rcpt_user;
 	open_ctx.lda_mailbox_autocreate = ctx->set->lda_mailbox_autocreate;
 	open_ctx.lda_mailbox_autosubscribe = ctx->set->lda_mailbox_autosubscribe;
 
@@ -377,13 +343,15 @@ int mail_deliver_save(struct mail_deliver_context *ctx, const char *mailbox,
 	trans_flags = MAILBOX_TRANSACTION_FLAG_EXTERNAL;
 	if (ctx->save_dest_mail)
 		trans_flags |= MAILBOX_TRANSACTION_FLAG_ASSIGN_UIDS;
-	t = mailbox_transaction_begin(box, trans_flags);
+	t = mailbox_transaction_begin(box, trans_flags, __func__);
 
 	kw = str_array_length(keywords) == 0 ? NULL :
 		mailbox_keywords_create_valid(box, keywords);
 	save_ctx = mailbox_save_alloc(t);
-	if (ctx->src_envelope_sender != NULL)
-		mailbox_save_set_from_envelope(save_ctx, ctx->src_envelope_sender);
+	if (ctx->mail_from != NULL) {
+		mailbox_save_set_from_envelope(save_ctx,
+			smtp_address_encode(ctx->mail_from));
+	}
 	mailbox_save_set_flags(save_ctx, flags, kw);
 
 	headers_ctx = mailbox_header_lookup_init(box, lda_log_wanted_headers);
@@ -407,14 +375,17 @@ int mail_deliver_save(struct mail_deliver_context *ctx, const char *mailbox,
 		if (ctx->save_dest_mail) {
 			/* copying needs the message body. with maildir we also
 			   need to get the GUID in case the message gets
-			   expunged */
+			   expunged. get these early so the copying won't fail
+			   later on. */
 			i_assert(array_count(&changes.saved_uids) == 1);
 			const struct seq_range *range =
 				array_idx(&changes.saved_uids, 0);
 			i_assert(range->seq1 == range->seq2);
 			ctx->dest_mail = mail_deliver_open_mail(box, range->seq1,
 				MAIL_FETCH_STREAM_BODY | MAIL_FETCH_GUID, &t);
-			if (mail_get_special(ctx->dest_mail, MAIL_FETCH_GUID, &guid) < 0) {
+			if (ctx->dest_mail == NULL) {
+				i_assert(t == NULL);
+			} else if (mail_get_special(ctx->dest_mail, MAIL_FETCH_GUID, &guid) < 0) {
 				mail_free(&ctx->dest_mail);
 				mailbox_transaction_rollback(&t);
 			}
@@ -431,22 +402,45 @@ int mail_deliver_save(struct mail_deliver_context *ctx, const char *mailbox,
 	return ret;
 }
 
-const char *mail_deliver_get_return_address(struct mail_deliver_context *ctx)
+const struct smtp_address *
+mail_deliver_get_return_address(struct mail_deliver_context *ctx)
 {
-	if (ctx->src_envelope_sender != NULL)
-		return ctx->src_envelope_sender;
+	struct smtp_address *address;
+	const char *path, *error;
+	int ret;
 
-	return mail_deliver_get_address(ctx->src_mail, "Return-Path");
+	if (!smtp_address_isnull(ctx->mail_from))
+		return ctx->mail_from;
+
+	if ((ret=mail_get_first_header(ctx->src_mail,
+				       "Return-Path", &path)) <= 0) {
+		if (ret < 0) {
+			struct mailbox *box = ctx->src_mail->box;
+			i_warning("Failed read return-path header: %s",
+				mailbox_get_last_internal_error(box, NULL));
+		}
+		return NULL;
+	}
+	if (smtp_address_parse_path(ctx->pool, path,
+				    SMTP_ADDRESS_PARSE_FLAG_BRACKETS_OPTIONAL,
+				    &address, &error) < 0) {
+		i_warning("Failed to parse return-path header: %s", error);
+		return NULL;
+	}
+	return address;
 }
 
 const char *mail_deliver_get_new_message_id(struct mail_deliver_context *ctx)
 {
 	static int count = 0;
+	struct mail_user *user = ctx->rcpt_user;
+	const struct mail_storage_settings *mail_set =
+		mail_user_set_get_storage_set(user);
 
 	return t_strdup_printf("<dovecot-%s-%s-%d@%s>",
 			       dec2str(ioloop_timeval.tv_sec),
 			       dec2str(ioloop_timeval.tv_usec),
-			       count++, ctx->set->hostname);
+			       count++, mail_set->hostname);
 }
 
 static bool mail_deliver_is_tempfailed(struct mail_deliver_context *ctx,
@@ -467,7 +461,7 @@ int mail_deliver(struct mail_deliver_context *ctx,
 		 struct mail_storage **storage_r)
 {
 	struct mail_deliver_user *muser =
-		MAIL_DELIVER_USER_CONTEXT(ctx->dest_user);
+		MAIL_DELIVER_USER_CONTEXT(ctx->rcpt_user);
 	int ret;
 
 	i_assert(muser->deliver_ctx == NULL);
@@ -480,7 +474,8 @@ int mail_deliver(struct mail_deliver_context *ctx,
 	if (deliver_mail == NULL)
 		ret = -1;
 	else {
-		ctx->dup_ctx = duplicate_init(ctx->dest_user);
+		ctx->dup_db = mail_duplicate_db_init(ctx->rcpt_user,
+						     DUPLICATE_DB_NAME);
 		if (deliver_mail(ctx, storage_r) <= 0) {
 			/* if message was saved, don't bounce it even though
 			   the script failed later. */
@@ -489,7 +484,7 @@ int mail_deliver(struct mail_deliver_context *ctx,
 			/* success. message may or may not have been saved. */
 			ret = 0;
 		}
-		duplicate_deinit(&ctx->dup_ctx);
+		mail_duplicate_db_deinit(&ctx->dup_db);
 		if (ret < 0 && mail_deliver_is_tempfailed(ctx, *storage_r)) {
 			muser->deliver_ctx = NULL;
 			return -1;
@@ -498,14 +493,14 @@ int mail_deliver(struct mail_deliver_context *ctx,
 
 	if (ret < 0 && !ctx->tried_default_save) {
 		/* plugins didn't handle this. save into the default mailbox. */
-		ret = mail_deliver_save(ctx, ctx->dest_mailbox_name, 0, NULL,
+		ret = mail_deliver_save(ctx, ctx->rcpt_default_mailbox, 0, NULL,
 					storage_r);
 		if (ret < 0 && mail_deliver_is_tempfailed(ctx, *storage_r)) {
 			muser->deliver_ctx = NULL;
 			return -1;
 		}
 	}
-	if (ret < 0 && strcasecmp(ctx->dest_mailbox_name, "INBOX") != 0) {
+	if (ret < 0 && strcasecmp(ctx->rcpt_default_mailbox, "INBOX") != 0) {
 		/* still didn't work. try once more to save it
 		   to INBOX. */
 		ret = mail_deliver_save(ctx, "INBOX", 0, NULL, storage_r);
@@ -594,7 +589,8 @@ mail_deliver_cache_update_post_commit(struct mailbox *orig_box, uint32_t uid)
 
 static struct mailbox_transaction_context *
 mail_deliver_transaction_begin(struct mailbox *box,
-			       enum mailbox_transaction_flags flags)
+			       enum mailbox_transaction_flags flags,
+			       const char *reason)
 {
 	struct mail_deliver_mailbox *mbox = MAIL_DELIVER_STORAGE_CONTEXT(box);
 	struct mail_deliver_user *muser =
@@ -605,7 +601,7 @@ mail_deliver_transaction_begin(struct mailbox *box,
 	i_assert(muser != NULL);
 	i_assert(muser->deliver_ctx != NULL);
 
-	t = mbox->module_ctx.super.transaction_begin(box, flags);
+	t = mbox->module_ctx.super.transaction_begin(box, flags, reason);
 	dt = p_new(muser->deliver_ctx->pool, struct mail_deliver_transaction, 1);
 
 	MODULE_CONTEXT_SET(t, mail_deliver_storage_module, dt);
@@ -633,7 +629,7 @@ mail_deliver_transaction_commit(struct mailbox_transaction_context *ctx,
 	   we also want to do this only for commits generated by sieve.
 	   other plugins or storage backends may be creating transactions as
 	   well, which we need to ignore. */
-	if (mbox->delivery_box)
+	if ((box->flags & MAILBOX_FLAG_POST_SESSION) != 0)
 		muser->deliver_ctx->cache = &dt->cache;
 
 	if (mbox->module_ctx.super.transaction_commit(ctx, changes_r) < 0)
@@ -667,6 +663,9 @@ static void mail_deliver_mailbox_allocated(struct mailbox *box)
 	   and should not be involved */
 	if (muser->deliver_ctx == NULL)
 		return;
+
+	if ((box->flags & MAILBOX_FLAG_POST_SESSION) != 0)
+		mailbox_set_reason(box, "lib-lda delivery");
 
 	mbox = p_new(box->pool, struct mail_deliver_mailbox, 1);
 	mbox->module_ctx.super = *v;

@@ -2,13 +2,13 @@
 #define HTTP_URL_H
 
 #include "net.h"
+#include "uri-util.h"
 
 struct http_request_target;
 
 struct http_url {
 	/* server */
-	const char *host_name;
-	struct ip_addr host_ip;
+	struct uri_host host;
 	in_port_t port;
 
 	/* userinfo (not parsed by default) */
@@ -24,9 +24,7 @@ struct http_url {
 	/* #fragment (still encoded) */
 	const char *enc_fragment;
 
-	unsigned int have_host_ip:1; /* URL uses IP address */
-	unsigned int have_port:1;
-	unsigned int have_ssl:1;
+	bool have_ssl:1;
 };
 
 /*

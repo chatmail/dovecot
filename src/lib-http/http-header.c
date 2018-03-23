@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -30,7 +30,7 @@ http_header_field_add(struct http_header *header,
 	void *value;
 
 	hfield = array_append_space(&header->fields);
-	hfield->key = p_strdup(pool, name);
+	hfield->name = p_strdup(pool, name);
 	hfield->size = size;
 
 	value = p_malloc(pool, size+1);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -39,12 +39,12 @@ struct importer_new_mail {
 	/* UID for the mail in the virtual \All mailbox */
 	uint32_t virtual_all_uid;
 
-	unsigned int uid_in_local:1;
-	unsigned int uid_is_usable:1;
-	unsigned int skip:1;
-	unsigned int expunged:1;
-	unsigned int copy_failed:1;
-	unsigned int saved:1;
+	bool uid_in_local:1;
+	bool uid_is_usable:1;
+	bool skip:1;
+	bool expunged:1;
+	bool copy_failed:1;
+	bool saved:1;
 };
 
 /* for quickly testing that two-way sync doesn't actually do any unexpected
@@ -114,22 +114,22 @@ struct dsync_mailbox_importer {
 
 	enum mail_error mail_error;
 
-	unsigned int failed:1;
-	unsigned int require_full_resync:1;
-	unsigned int debug:1;
-	unsigned int stateful_import:1;
-	unsigned int last_common_uid_found:1;
-	unsigned int cur_uid_has_change:1;
-	unsigned int cur_mail_skip:1;
-	unsigned int local_expunged_guids_set:1;
-	unsigned int new_uids_assigned:1;
-	unsigned int want_mail_requests:1;
-	unsigned int master_brain:1;
-	unsigned int revert_local_changes:1;
-	unsigned int mails_have_guids:1;
-	unsigned int mails_use_guid128:1;
-	unsigned int delete_mailbox:1;
-	unsigned int empty_hdr_workaround:1;
+	bool failed:1;
+	bool require_full_resync:1;
+	bool debug:1;
+	bool stateful_import:1;
+	bool last_common_uid_found:1;
+	bool cur_uid_has_change:1;
+	bool cur_mail_skip:1;
+	bool local_expunged_guids_set:1;
+	bool new_uids_assigned:1;
+	bool want_mail_requests:1;
+	bool master_brain:1;
+	bool revert_local_changes:1;
+	bool mails_have_guids:1;
+	bool mails_use_guid128:1;
+	bool delete_mailbox:1;
+	bool empty_hdr_workaround:1;
 };
 
 static const char *dsync_mail_change_type_names[] = {
@@ -205,9 +205,11 @@ dsync_mailbox_import_transaction_begin(struct dsync_mailbox_importer *importer)
 		MAILBOX_TRANSACTION_FLAG_ASSIGN_UIDS;
 
 	importer->trans = mailbox_transaction_begin(importer->box,
-						    importer->transaction_flags);
+						    importer->transaction_flags,
+						    "dsync import");
 	importer->ext_trans = mailbox_transaction_begin(importer->box,
-							ext_trans_flags);
+							ext_trans_flags,
+							"dsync ext import");
 	importer->mail = mail_alloc(importer->trans, 0, NULL);
 	importer->ext_mail = mail_alloc(importer->ext_trans, 0, NULL);
 }
@@ -315,14 +317,14 @@ dsync_mailbox_import_init(struct mailbox *box,
 			importer->local_uid_next, last_common_uid));
 	} else if (importer->local_initial_highestmodseq < last_common_modseq) {
 		dsync_import_unexpected_state(importer, t_strdup_printf(
-			"local HIGHESTMODSEQ %llu < last common HIGHESTMODSEQ %llu",
-			(unsigned long long)importer->local_initial_highestmodseq,
-			(unsigned long long)last_common_modseq));
+			"local HIGHESTMODSEQ %"PRIu64" < last common HIGHESTMODSEQ %"PRIu64,
+			importer->local_initial_highestmodseq,
+			last_common_modseq));
 	} else if (importer->local_initial_highestpvtmodseq < last_common_pvt_modseq) {
 		dsync_import_unexpected_state(importer, t_strdup_printf(
-			"local HIGHESTMODSEQ %llu < last common HIGHESTMODSEQ %llu",
-			(unsigned long long)importer->local_initial_highestpvtmodseq,
-			(unsigned long long)last_common_pvt_modseq));
+			"local HIGHESTMODSEQ %"PRIu64" < last common HIGHESTMODSEQ %"PRIu64,
+			importer->local_initial_highestpvtmodseq,
+			last_common_pvt_modseq));
 	}
 
 	importer->local_changes = dsync_transaction_log_scan_get_hash(log_scan);
@@ -341,7 +343,7 @@ dsync_mailbox_import_lookup_attr(struct dsync_mailbox_importer *importer,
 
 	*attr_r = NULL;
 
-	if (mailbox_attribute_get_stream(importer->trans, type, key, &value) < 0) {
+	if (mailbox_attribute_get_stream(importer->box, type, key, &value) < 0) {
 		i_error("Mailbox %s: Failed to get attribute %s: %s",
 			mailbox_get_vname(importer->box), key,
 			mailbox_get_last_internal_error(importer->box,
@@ -384,8 +386,8 @@ dsync_istreams_cmp(struct istream *input1, struct istream *input2, int *cmp_r)
 	*cmp_r = -1; /* quiet gcc */
 
 	for (;;) {
-		(void)i_stream_read_data(input1, &data1, &size1, 0);
-		(void)i_stream_read_data(input2, &data2, &size2, 0);
+		(void)i_stream_read_more(input1, &data1, &size1);
+		(void)i_stream_read_more(input2, &data2, &size2);
 
 		if (size1 == 0 || size2 == 0)
 			break;
@@ -397,13 +399,11 @@ dsync_istreams_cmp(struct istream *input1, struct istream *input2, int *cmp_r)
 		i_stream_skip(input2, size);
 	}
 	if (input1->stream_errno != 0) {
-		errno = input1->stream_errno;
 		i_error("read(%s) failed: %s", i_stream_get_name(input1),
 			i_stream_get_error(input1));
 		return -1;
 	}
 	if (input2->stream_errno != 0) {
-		errno = input2->stream_errno;
 		i_error("read(%s) failed: %s", i_stream_get_name(input2),
 			i_stream_get_error(input2));
 		return -1;
@@ -2197,7 +2197,8 @@ dsync_mailbox_import_find_virtual_uids(struct dsync_mailbox_importer *importer)
 
 	importer->virtual_trans =
 		mailbox_transaction_begin(importer->virtual_all_box,
-					  importer->transaction_flags);
+					  importer->transaction_flags,
+					  __func__);
 	search_ctx = mailbox_search_init(importer->virtual_trans, search_args,
 					 NULL, MAIL_FETCH_GUID, NULL);
 	mail_search_args_unref(&search_args);
@@ -2621,7 +2622,7 @@ reassign_uids_in_seq_range(struct dsync_mailbox_importer *importer,
 		     array_count(unwanted_uids));
 	array_append_array(&arg->value.seqset, unwanted_uids);
 
-	trans = mailbox_transaction_begin(box, trans_flags);
+	trans = mailbox_transaction_begin(box, trans_flags, __func__);
 	search_ctx = mailbox_search_init(trans, search_args, NULL, 0, NULL);
 	mail_search_args_unref(&search_args);
 
@@ -2788,11 +2789,11 @@ static int dsync_mailbox_import_finish(struct dsync_mailbox_importer *importer,
 		update.min_highest_pvt_modseq = importer->remote_highest_pvt_modseq;
 
 		imp_debug(importer, "Finish update: min_next_uid=%u "
-			  "min_first_recent_uid=%u min_highest_modseq=%llu "
-			  "min_highest_pvt_modseq=%llu",
+			  "min_first_recent_uid=%u min_highest_modseq=%"PRIu64" "
+			  "min_highest_pvt_modseq=%"PRIu64,
 			  update.min_next_uid, update.min_first_recent_uid,
-			  (unsigned long long)update.min_highest_modseq,
-			  (unsigned long long)update.min_highest_pvt_modseq);
+			  update.min_highest_modseq,
+			  update.min_highest_pvt_modseq);
 
 		if (mailbox_update(importer->box, &update) < 0) {
 			i_error("Mailbox %s: Update failed: %s",

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -29,19 +29,26 @@ void io_stream_init(struct iostream_private *stream)
 
 void io_stream_ref(struct iostream_private *stream)
 {
+	i_assert(stream->refcount > 0);
+
 	stream->refcount++;
 }
 
-void io_stream_unref(struct iostream_private *stream)
+bool io_stream_unref(struct iostream_private *stream)
 {
-	const struct iostream_destroy_callback *dc;
-
 	i_assert(stream->refcount > 0);
 	if (--stream->refcount != 0)
-		return;
+		return TRUE;
 
 	stream->close(stream, FALSE);
 	stream->destroy(stream);
+	return FALSE;
+}
+
+void io_stream_free(struct iostream_private *stream)
+{
+	const struct iostream_destroy_callback *dc;
+
 	if (array_is_created(&stream->destroy_callbacks)) {
 		array_foreach(&stream->destroy_callbacks, dc)
 			dc->callback(dc->context);

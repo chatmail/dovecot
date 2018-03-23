@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -44,7 +44,7 @@ static void test_message_header_decode(void)
 	for (i = 0; i < N_ELEMENTS(data); i += 2) {
 		str_truncate(dest, 0);
 		message_header_decode_utf8((const unsigned char *)data[i],
-					   strlen(data[i]), dest, FALSE);
+					   strlen(data[i]), dest, NULL);
 		test_assert(strcmp(str_c(dest), data[i+1]) == 0);
 	}
 	test_end();
@@ -74,8 +74,8 @@ static void test_message_header_decode_encode_random(void)
 		/* fill only with 7bit data so we don't have to worry about
 		   the data being valid UTF-8 */
 		for (j = 0; j < sizeof(buf); j++)
-			buf[j] = rand() % 128;
-		buflen = rand() % sizeof(buf);
+			buf[j] = i_rand_limit(128);
+		buflen = i_rand_limit(sizeof(buf));
 
 		str_truncate(encoded, 0);
 		str_truncate(decoded, 0);
@@ -102,7 +102,7 @@ static void test_message_header_decode_encode_random(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_message_header_decode,
 		test_message_header_decode_read_overflow,
 		test_message_header_decode_encode_random,

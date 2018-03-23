@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -69,7 +69,7 @@ static void cmd_dump_imapzlib(int argc ATTR_UNUSED, char *argv[])
 	input2 = i_stream_create_deflate(input, TRUE);
 	i_stream_unref(&input);
 
-	while (i_stream_read_data(input2, &data, &size, 0) != -1) {
+	while (i_stream_read_more(input2, &data, &size) != -1) {
 		if (fwrite(data, 1, size, stdout) != size)
 			break;
 		i_stream_skip(input2, size);
@@ -164,8 +164,8 @@ static void cmd_zlibconnect(int argc ATTR_UNUSED, char *argv[])
 
 	i_zero(&client);
 	client.fd = fd;
-	client.input = i_stream_create_fd(fd, (size_t)-1, FALSE);
-	client.output = o_stream_create_fd(fd, 0, FALSE);
+	client.input = i_stream_create_fd(fd, (size_t)-1);
+	client.output = o_stream_create_fd(fd, 0);
 	o_stream_set_no_error_handling(client.output, TRUE);
 	client.io_client = io_add(STDIN_FILENO, IO_READ, client_input, &client);
 	client.io_server = io_add(fd, IO_READ, server_input, &client);

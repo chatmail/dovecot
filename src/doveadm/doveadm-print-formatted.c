@@ -1,13 +1,14 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
 #include "str.h"
 #include "ostream.h"
-#include "client-connection.h"
+#include "doveadm.h"
 #include "doveadm-server.h"
 #include "doveadm-print.h"
 #include "doveadm-print-private.h"
+#include "client-connection.h"
 #include "var-expand.h"
 
 struct doveadm_print_formatted_context {
@@ -58,11 +59,15 @@ static void doveadm_print_formatted_print(const char *value)
 	if (ctx.format == NULL) {
 		i_fatal("formatted formatter cannot be used without a format.");
 	}
+	const char *error;
 	struct var_expand_table *entry = array_idx_modifiable(&ctx.headers, ctx.idx++);
 	entry->value = value;
 
 	if (ctx.idx >= array_count(&ctx.headers)) {
-		var_expand(ctx.buf, ctx.format, array_idx(&ctx.headers,0));
+		if (var_expand(ctx.buf, ctx.format, array_idx(&ctx.headers,0), &error) <= 0) {
+			i_error("Failed to expand print format '%s': %s",
+				ctx.format, error);
+		}
 		doveadm_print_formatted_flush();
 		ctx.idx = 0;
 	}

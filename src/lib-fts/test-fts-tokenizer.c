@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2014-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "unichar.h"
@@ -113,7 +113,7 @@ test_tokenizer_inputoutput(struct fts_tokenizer *tok, const char *_input,
 	/* test input in random chunks */
 	outi = first_outi;
 	for (i = 0; i < input_len; i += char_len) {
-		max = rand() % (input_len - i) + 1;
+		max = i_rand_minmax(1, input_len - i);
 		for (char_len = 0; char_len < max; )
 			char_len += uni_utf8_char_bytes(input[i+char_len]);
 		while (fts_tokenizer_next(tok, input+i, char_len, &token, &error) > 0) {
@@ -428,7 +428,7 @@ static void test_fts_tokenizer_address_search(void)
 
 static void test_fts_tokenizer_delete_trailing_partial_char(void)
 {
-	const struct {
+	static const struct {
 		const char *str;
 		unsigned int truncated_len;
 	} tests[] = {
@@ -488,7 +488,7 @@ static void test_fts_tokenizer_random(void)
 
 	for (i = 0; i < 10000; i++) T_BEGIN {
 		for (unsigned int j = 0; j < sizeof(addr); j++)
-			addr[j] = test_chars[rand() % N_ELEMENTS(test_chars)];
+			addr[j] = test_chars[i_rand() % N_ELEMENTS(test_chars)];
 		str_truncate(str, 0);
 		(void)uni_utf8_get_valid_data(addr, sizeof(addr), str);
 		while (fts_tokenizer_next(tok, str_data(str), str_len(str),
@@ -502,7 +502,7 @@ static void test_fts_tokenizer_random(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_fts_tokenizer_find,
 		test_fts_tokenizer_generic_only,
 		test_fts_tokenizer_generic_tr29_only,

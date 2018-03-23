@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -79,7 +79,7 @@ struct pop3c_client {
 	const char *input_line;
 	struct istream *dot_input;
 
-	unsigned int running:1;
+	bool running:1;
 };
 
 static void
@@ -123,11 +123,12 @@ pop3c_client_init(const struct pop3c_client_settings *set)
 		i_zero(&ssl_set);
 		ssl_set.ca_dir = set->ssl_ca_dir;
 		ssl_set.ca_file = set->ssl_ca_file;
-		ssl_set.verify_remote_cert = set->ssl_verify;
+		ssl_set.allow_invalid_cert = !set->ssl_verify;
 		ssl_set.crypto_device = set->ssl_crypto_device;
 
-		if (ssl_iostream_context_init_client(&ssl_set, &client->ssl_ctx,
-						     &error) < 0) {
+		if (ssl_iostream_client_context_cache_get(&ssl_set,
+							  &client->ssl_ctx,
+							  &error) < 0) {
 			i_error("pop3c(%s:%u): Couldn't initialize SSL context: %s",
 				set->host, set->port, error);
 		}
@@ -199,21 +200,13 @@ static void pop3c_client_disconnect(struct pop3c_client *client)
 
 	if (client->dns_lookup != NULL)
 		dns_lookup_abort(&client->dns_lookup);
-	if (client->to != NULL)
-		timeout_remove(&client->to);
-	if (client->io != NULL)
-		io_remove(&client->io);
-	if (client->input != NULL)
-		i_stream_destroy(&client->input);
-	if (client->output != NULL)
-		o_stream_destroy(&client->output);
+	timeout_remove(&client->to);
+	io_remove(&client->io);
+	i_stream_destroy(&client->input);
+	o_stream_destroy(&client->output);
 	if (client->ssl_iostream != NULL)
 		ssl_iostream_unref(&client->ssl_iostream);
-	if (client->fd != -1) {
-		if (close(client->fd) < 0)
-			i_error("close(pop3c) failed: %m");
-		client->fd = -1;
-	}
+	i_close_fd(&client->fd);
 	while (array_count(&client->commands) > 0)
 		pop3c_client_async_callback_disconnected(client);
 	client_login_callback(client, POP3C_COMMAND_STATE_DISCONNECTED,
@@ -226,7 +219,7 @@ void pop3c_client_deinit(struct pop3c_client **_client)
 
 	pop3c_client_disconnect(client);
 	if (client->ssl_ctx != NULL)
-		ssl_iostream_context_deinit(&client->ssl_ctx);
+		ssl_iostream_context_unref(&client->ssl_ctx);
 	pool_unref(&client->pool);
 }
 
@@ -577,8 +570,8 @@ static int pop3c_client_ssl_init(struct pop3c_client *client)
 	i_zero(&ssl_set);
 	if (client->set.ssl_verify) {
 		ssl_set.verbose_invalid_cert = TRUE;
-		ssl_set.verify_remote_cert = TRUE;
-		ssl_set.require_valid_cert = TRUE;
+	} else {
+		ssl_set.allow_invalid_cert = TRUE;
 	}
 
 	if (client->set.debug)
@@ -648,9 +641,9 @@ static void pop3c_client_connect_ip(struct pop3c_client *client)
 	}
 
 	client->input = client->raw_input =
-		i_stream_create_fd(client->fd, POP3C_MAX_INBUF_SIZE, FALSE);
+		i_stream_create_fd(client->fd, POP3C_MAX_INBUF_SIZE);
 	client->output = client->raw_output =
-		o_stream_create_fd(client->fd, (size_t)-1, FALSE);
+		o_stream_create_fd(client->fd, (size_t)-1);
 	o_stream_set_no_error_handling(client->output, TRUE);
 
 	if (*client->set.rawlog_dir != '\0' &&

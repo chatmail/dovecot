@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "array.h"
@@ -164,7 +164,7 @@ static bool auth_passdb_list_have_lookup_credentials(const struct auth *auth)
 	return FALSE;
 }
 
-static int auth_passdb_list_have_set_credentials(const struct auth *auth)
+static bool auth_passdb_list_have_set_credentials(const struct auth *auth)
 {
 	const struct auth_passdb *passdb;
 

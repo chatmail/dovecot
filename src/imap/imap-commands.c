@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -160,7 +160,7 @@ void command_hook_unregister(command_hook_callback_t *pre,
 	i_panic("command_hook_unregister(): hook not registered");
 }
 
-static void command_stats_start(struct client_command_context *cmd)
+void command_stats_start(struct client_command_context *cmd)
 {
 	cmd->stats_start.timeval = ioloop_timeval;
 	cmd->stats_start.lock_wait_usecs = file_lock_wait_get_total_usecs();
@@ -194,6 +194,7 @@ bool command_exec(struct client_command_context *cmd)
 	io_loop_time_refresh();
 	command_stats_start(cmd);
 
+	event_push_global(cmd->event);
 	cmd->executing = TRUE;
 	array_foreach(&command_hooks, hook)
 		hook->pre(cmd);
@@ -201,6 +202,7 @@ bool command_exec(struct client_command_context *cmd)
 	array_foreach(&command_hooks, hook)
 		hook->post(cmd);
 	cmd->executing = FALSE;
+	event_pop_global(cmd->event);
 	if (cmd->state == CLIENT_COMMAND_STATE_DONE)
 		finished = TRUE;
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -76,8 +76,7 @@ static void auth_client_send(struct auth_client_connection *conn,
 	    OUTBUF_THROTTLE_SIZE) {
 		/* stop reading new requests until client has read the pending
 		   replies. */
-		if (conn->io != NULL)
-			io_remove(&conn->io);
+		io_remove(&conn->io);
 	}
 
 	if (conn->auth->set->debug) {
@@ -331,9 +330,8 @@ void auth_client_connection_create(struct auth *auth, int fd,
 	random_fill(conn->cookie, sizeof(conn->cookie));
 
 	conn->fd = fd;
-	conn->input = i_stream_create_fd(fd, AUTH_CLIENT_MAX_LINE_LENGTH,
-					 FALSE);
-	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(fd, AUTH_CLIENT_MAX_LINE_LENGTH);
+	conn->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	o_stream_set_flush_callback(conn->output, auth_client_output, conn);
 	conn->io = io_add(fd, IO_READ, auth_client_input, conn);
@@ -372,8 +370,7 @@ void auth_client_connection_destroy(struct auth_client_connection **_conn)
 	i_stream_close(conn->input);
 	o_stream_close(conn->output);
 
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	io_remove(&conn->io);
 
 	net_disconnect(conn->fd);
 	conn->fd = -1;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -21,9 +21,9 @@ struct acl_mailbox_list_iterate_context {
 	struct mailbox_info info;
 
 	char sep;
-	unsigned int hide_nonlistable_subscriptions:1;
-	unsigned int simple_star_glob:1;
-	unsigned int autocreate_acls_checked:1;
+	bool hide_nonlistable_subscriptions:1;
+	bool simple_star_glob:1;
+	bool autocreate_acls_checked:1;
 };
 
 static const char *acl_storage_right_names[ACL_STORAGE_RIGHT_COUNT] = {
@@ -95,7 +95,6 @@ acl_mailbox_try_list_fast(struct mailbox_list_iterate_context *_ctx)
 	struct mail_namespace *ns = _ctx->list->ns;
 	struct mailbox_list_iter_update_context update_ctx;
 	const char *name;
-	int ret;
 
 	if ((_ctx->flags & (MAILBOX_LIST_ITER_RAW_LIST |
 			       MAILBOX_LIST_ITER_SELECT_SUBSCRIBED)) != 0)
@@ -125,17 +124,16 @@ acl_mailbox_try_list_fast(struct mailbox_list_iterate_context *_ctx)
 	update_ctx.tree_ctx = mailbox_tree_init(ctx->sep);
 
 	nonowner_list_ctx = acl_backend_nonowner_lookups_iter_init(backend);
-	while ((ret = acl_backend_nonowner_lookups_iter_next(nonowner_list_ctx,
-							     &name)) > 0) {
+	while (acl_backend_nonowner_lookups_iter_next(nonowner_list_ctx,
+							     &name)) {
 		T_BEGIN {
 			const char *vname =
 				mailbox_list_get_vname(ns->list, name);
 			mailbox_list_iter_update(&update_ctx, vname);
 		} T_END;
 	}
-	acl_backend_nonowner_lookups_iter_deinit(&nonowner_list_ctx);
 
-	if (ret == 0)
+	if (acl_backend_nonowner_lookups_iter_deinit(&nonowner_list_ctx) >= 0)
 		ctx->lookup_boxes = update_ctx.tree_ctx;
 	else
 		mailbox_tree_deinit(&update_ctx.tree_ctx);

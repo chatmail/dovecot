@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
 #include "net.h"
@@ -133,7 +133,7 @@ static void io_callback(void *context ATTR_UNUSED)
 
 static void test_ioloop_find_fd_conditions(void)
 {
-	struct {
+	static struct {
 		enum io_condition condition;
 		int fd[2];
 		struct io *io;

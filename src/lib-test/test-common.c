@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "test-common.h"
@@ -20,11 +20,12 @@ static bool test_success;
 static unsigned int failure_count;
 static unsigned int total_count;
 static unsigned int expected_errors;
-static char *expected_error_str;
+static char *expected_error_str, *expected_fatal_str;
 
 void test_begin(const char *name)
 {
 	test_success = TRUE;
+	expected_errors = 0;
 	if (!expecting_fatal)
 		i_assert(test_prefix == NULL);
 	else
@@ -60,22 +61,6 @@ void test_assert_failed_strcmp(const char *code, const char *file, unsigned int 
 	test_success = FALSE;
 }
 
-static void
-test_dump_rand_state(void)
-{
-	static int seen_count = -1;
-	int count = rand_get_seed_count();
-	if (count == seen_count)
-		return;
-	seen_count = count;
-	if (count > 0)
-		printf("test: random seed #%i was %u\n", 
-		       rand_get_seed_count(),
-		       rand_get_last_seed());
-	else
-		printf("test: random seed unknown\n");
-}
-
 void test_end(void)
 {
 	if (!expecting_fatal)
@@ -84,8 +69,6 @@ void test_end(void)
 		test_assert(test_prefix != NULL);
 
 	test_out("", test_success);
-	if (!test_success)
-		test_dump_rand_state();
 	i_free_and_null(test_prefix);
 	test_success = FALSE;
 }
@@ -161,40 +144,48 @@ test_expect_no_more_errors(void)
 	expected_errors = 0;
 }
 
+static bool ATTR_FORMAT(2, 0)
+expect_error_check(char **error_strp, const char *format, va_list args)
+{
+	if (*error_strp == NULL)
+		return TRUE;
+
+	bool suppress;
+	T_BEGIN {
+		/* test_assert() will reset test_success if need be. */
+		const char *str = t_strdup_vprintf(format, args);
+		suppress = strstr(str, *error_strp) != NULL;
+		test_assert(suppress == TRUE);
+		i_free_and_null(*error_strp);
+	} T_END;
+	return suppress;
+}
+
 static void ATTR_FORMAT(2, 0)
 test_error_handler(const struct failure_context *ctx,
 		   const char *format, va_list args)
 {
 	bool suppress = FALSE;
 
-#ifdef DEBUG
-	if (ctx->type == LOG_TYPE_WARNING &&
-	    strstr(format, "Growing") != NULL) {
-		/* ignore "Growing memory pool" and "Growing data stack"
-		   warnings */
-		return;
-	}
-#endif
 	if (expected_errors > 0) {
-		if (expected_error_str != NULL) T_BEGIN {
-			/* test_assert() will reset test_success if need be. */
-			va_list args2;
-			VA_COPY(args2, args);
-			const char *str = t_strdup_vprintf(format, args2);
-			suppress = strstr(str, expected_error_str) != NULL;
-			test_assert(suppress == TRUE);
-			i_free_and_null(expected_error_str);
-			va_end(args2);
-		} T_END;
+		va_list args2;
+		VA_COPY(args2, args);
+		suppress = expect_error_check(&expected_error_str, format, args2);
 		expected_errors--;
+		va_end(args2);
 	} else {
 		test_success = FALSE;
 	}
 
 	if (!suppress) {
-		test_dump_rand_state();
 		default_error_handler(ctx, format, args);
 	}
+}
+
+void test_expect_fatal_string(const char *substr)
+{
+	i_free(expected_fatal_str);
+	expected_fatal_str = i_strdup(substr);
 }
 
 static void ATTR_FORMAT(2, 0) ATTR_NORETURN
@@ -204,10 +195,19 @@ test_fatal_handler(const struct failure_context *ctx,
 	/* Prevent recursion, we can't handle our own errors */
 	i_set_fatal_handler(default_fatal_handler);
 	i_assert(expecting_fatal); /* if not at the right time, bail */
-	i_set_fatal_handler(test_fatal_handler);
-	longjmp(fatal_jmpbuf, 1);
-	/* we simply can't get here - will the compiler complain? */
-	default_fatal_handler(ctx, format, args);
+
+	va_list args2;
+	VA_COPY(args2, args);
+	bool suppress = expect_error_check(&expected_fatal_str, format, args2);
+	va_end(args);
+
+	if (suppress) {
+		i_set_fatal_handler(test_fatal_handler);
+		longjmp(fatal_jmpbuf, 1);
+	} else {
+		default_fatal_handler(ctx, format, args);
+	}
+	i_unreached(); /* we simply can't get here */
 }
 
 static void test_init(void)
@@ -235,7 +235,7 @@ static int test_deinit(void)
 	return failure_count == 0 ? 0 : 1;
 }
 
-static void test_run_funcs(void (*test_functions[])(void))
+static void test_run_funcs(void (*const test_functions[])(void))
 {
 	unsigned int i;
 
@@ -245,7 +245,8 @@ static void test_run_funcs(void (*test_functions[])(void))
 		} T_END;
 	}
 }
-static void test_run_named_funcs(struct named_test tests[], const char *match)
+static void test_run_named_funcs(const struct named_test tests[],
+				 const char *match)
 {
 	unsigned int i;
 
@@ -308,19 +309,19 @@ static void test_run_named_fatals(const struct named_fatal fatals[], const char 
 	}
 }
 
-int test_run(void (*test_functions[])(void))
+int test_run(void (*const test_functions[])(void))
 {
 	test_init();
 	test_run_funcs(test_functions);
 	return test_deinit();
 }
-int test_run_named(struct named_test tests[], const char *match)
+int test_run_named(const struct named_test tests[], const char *match)
 {
 	test_init();
 	test_run_named_funcs(tests, match);
 	return test_deinit();
 }
-int test_run_with_fatals(void (*test_functions[])(void),
+int test_run_with_fatals(void (*const test_functions[])(void),
 			 test_fatal_func_t *const fatal_functions[])
 {
 	test_init();
@@ -329,8 +330,8 @@ int test_run_with_fatals(void (*test_functions[])(void),
 	test_run_fatals(fatal_functions);
 	return test_deinit();
 }
-int test_run_named_with_fatals(const char *match, struct named_test tests[],
-			       struct named_fatal fatals[])
+int test_run_named_with_fatals(const char *match, const struct named_test tests[],
+			       const struct named_fatal fatals[])
 {
 	test_init();
 	test_run_named_funcs(tests, match);
@@ -343,8 +344,9 @@ void ATTR_NORETURN
 test_exit(int status)
 {
 	i_free_and_null(expected_error_str);
+	i_free_and_null(expected_fatal_str);
 	i_free_and_null(test_prefix);
-	(void)t_pop(); /* as we were within a T_BEGIN { tests[i].func(); } T_END */
+	t_pop_last_unsafe(); /* as we were within a T_BEGIN { tests[i].func(); } T_END */
 	lib_deinit();
 	_exit(status);
 }

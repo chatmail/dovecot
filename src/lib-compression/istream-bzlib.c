@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 
@@ -18,9 +18,9 @@ struct bzlib_istream {
 	size_t high_pos;
 	struct stat last_parent_statbuf;
 
-	unsigned int log_errors:1;
-	unsigned int marked:1;
-	unsigned int zs_closed:1;
+	bool log_errors:1;
+	bool marked:1;
+	bool zs_closed:1;
 };
 
 static void i_stream_bzlib_close(struct iostream_private *stream,
@@ -41,8 +41,7 @@ static void bzlib_read_error(struct bzlib_istream *zstream, const char *error)
 	io_stream_set_error(&zstream->istream.iostream,
 			    "bzlib.read(%s): %s at %"PRIuUOFF_T,
 			    i_stream_get_name(&zstream->istream.istream), error,
-			    zstream->istream.abs_start_offset +
-			    zstream->istream.istream.v_offset);
+			    i_stream_get_absolute_offset(&zstream->istream.istream));
 	if (zstream->log_errors)
 		i_error("%s", zstream->istream.iostream.error);
 }
@@ -79,35 +78,23 @@ static ssize_t i_stream_bzlib_read(struct istream_private *stream)
 	}
 	zstream->high_pos = 0;
 
-	if (stream->pos + CHUNK_SIZE > stream->buffer_size) {
-		/* try to keep at least CHUNK_SIZE available */
-		if (!zstream->marked && stream->skip > 0) {
-			/* don't try to keep anything cached if we don't
-			   have a seek mark. */
-			i_stream_compress(stream);
-		}
-		if (stream->buffer_size < i_stream_get_max_buffer_size(&stream->istream))
-			i_stream_grow_buffer(stream, CHUNK_SIZE);
-
-		if (stream->pos == stream->buffer_size) {
-			if (stream->skip > 0) {
-				/* lose our buffer cache */
-				i_stream_compress(stream);
-			}
-
-			if (stream->pos == stream->buffer_size)
-				return -2; /* buffer full */
-		}
+	if (!zstream->marked) {
+		if (!i_stream_try_alloc(stream, CHUNK_SIZE, &out_size))
+			return -2; /* buffer full */
+	} else {
+		/* try to avoid compressing, so we can quickly seek backwards */
+		if (!i_stream_try_alloc_avoid_compress(stream, CHUNK_SIZE, &out_size))
+			return -2; /* buffer full */
 	}
 
-	if (i_stream_read_data(stream->parent, &data, &size, 0) < 0) {
+	if (i_stream_read_more(stream->parent, &data, &size) < 0) {
 		if (stream->parent->stream_errno != 0) {
 			stream->istream.stream_errno =
 				stream->parent->stream_errno;
 		} else {
 			i_assert(stream->parent->eof);
 			bzlib_read_error(zstream, "unexpected EOF");
-			stream->istream.stream_errno = EINVAL;
+			stream->istream.stream_errno = EPIPE;
 		}
 		return -1;
 	}
@@ -120,7 +107,6 @@ static ssize_t i_stream_bzlib_read(struct istream_private *stream)
 	zstream->zs.next_in = (char *)data;
 	zstream->zs.avail_in = size;
 
-	out_size = stream->buffer_size - stream->pos;
 	zstream->zs.next_out = (char *)stream->w_buffer + stream->pos;
 	zstream->zs.avail_out = out_size;
 	ret = BZ2_bzDecompress(&zstream->zs);
@@ -340,6 +326,6 @@ struct istream *i_stream_create_bz2(struct istream *input, bool log_errors)
 	zstream->istream.istream.seekable = input->seekable;
 
 	return i_stream_create(&zstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }
 #endif

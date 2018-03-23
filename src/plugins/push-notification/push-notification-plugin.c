@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -165,7 +165,7 @@ static void push_notification_mail_save(void *txn, struct mail *mail)
     push_notification_transaction_init(ptxn);
 
     /* POST_SESSION means MTA delivery. */
-    if (mail->box->flags & MAILBOX_FLAG_POST_SESSION) {
+    if ((mail->box->flags & MAILBOX_FLAG_POST_SESSION) != 0) {
         push_notification_trigger_msg_save_new(ptxn, mail, NULL);
     } else {
         push_notification_trigger_msg_save_append(ptxn, mail, NULL);

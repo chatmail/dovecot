@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -35,7 +35,7 @@ static bool is_compressed_zlib(struct istream *input)
 	   (based on its header). This also means that users can try to exploit
 	   security holes in the uncompression library by APPENDing a specially
 	   crafted mail. So let's hope zlib is free of holes. */
-	if (i_stream_read_data(input, &data, &size, 1) <= 0)
+	if (i_stream_read_bytes(input, &data, &size, 2) <= 0)
 		return FALSE;
 	i_assert(size >= 2);
 
@@ -47,7 +47,7 @@ static bool is_compressed_bzlib(struct istream *input)
 	const unsigned char *data;
 	size_t size;
 
-	if (i_stream_read_data(input, &data, &size, 4+6 - 1) <= 0)
+	if (i_stream_read_bytes(input, &data, &size, 4+6) <= 0)
 		return FALSE;
 	if (data[0] != 'B' || data[1] != 'Z')
 		return FALSE;
@@ -63,7 +63,7 @@ static bool is_compressed_xz(struct istream *input)
 	const unsigned char *data;
 	size_t size;
 
-	if (i_stream_read_data(input, &data, &size, 6 - 1) <= 0)
+	if (i_stream_read_bytes(input, &data, &size, 6) <= 0)
 		return FALSE;
 	return memcmp(data, "\xfd\x37\x7a\x58\x5a", 6) == 0;
 }
@@ -73,8 +73,7 @@ static bool is_compressed_lz4(struct istream *input)
 	const unsigned char *data;
 	size_t size;
 
-	if (i_stream_read_data(input, &data, &size,
-			       IOSTREAM_LZ4_MAGIC_LEN - 1) <= 0)
+	if (i_stream_read_bytes(input, &data, &size, IOSTREAM_LZ4_MAGIC_LEN) <= 0)
 		return FALSE;
 	/* there is no standard LZ4 header, so we've created our own */
 	return memcmp(data, IOSTREAM_LZ4_MAGIC, IOSTREAM_LZ4_MAGIC_LEN) == 0;

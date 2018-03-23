@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ioloop.h"
@@ -46,8 +46,8 @@ cmd_setmetadata_parse_entryvalue(struct imap_setmetadata_context *ctx,
 {
 	const struct imap_arg *args;
 	const char *name, *error;
+	enum imap_parser_error parse_error;
 	int ret;
-	bool fatal;
 
 	/* parse the entry name */
 	ret = imap_parser_read_args(ctx->parser, 1,
@@ -72,12 +72,17 @@ cmd_setmetadata_parse_entryvalue(struct imap_setmetadata_context *ctx,
 	if (ret < 0) {
 		if (ret == -2)
 			return 0;
-		error = imap_parser_get_error(ctx->parser, &fatal);
-		if (fatal) {
+		error = imap_parser_get_error(ctx->parser, &parse_error);
+		switch (parse_error) {
+		case IMAP_PARSE_ERROR_NONE:
+			i_unreached();
+		case IMAP_PARSE_ERROR_LITERAL_TOO_BIG:
 			client_disconnect_with_error(ctx->cmd->client, error);
-			return -1;
+			break;
+		default:
+			client_send_command_error(ctx->cmd, error);
+			break;
 		}
-		client_send_command_error(ctx->cmd, error);
 		return -1;
 	}
 	if (args[1].type == IMAP_ARG_EOL) {
@@ -121,7 +126,7 @@ cmd_setmetadata_entry_read_stream(struct imap_setmetadata_context *ctx)
 	struct mail_attribute_value value;
 	int ret;
 
-	while ((ret = i_stream_read_data(ctx->input, &data, &size, 0)) > 0)
+	while ((ret = i_stream_read_more(ctx->input, &data, &size)) > 0)
 		i_stream_skip(ctx->input, size);
 	if (ctx->input->v_offset == ctx->entry_value_len) {
 		/* finished reading the value */
@@ -179,7 +184,6 @@ cmd_setmetadata_entry(struct imap_setmetadata_context *ctx,
 		return 1;
 	case IMAP_ARG_LITERAL_SIZE:
 		o_stream_nsend(ctx->cmd->client->output, "+ OK\r\n", 6);
-		o_stream_nflush(ctx->cmd->client->output);
 		o_stream_uncork(ctx->cmd->client->output);
 		o_stream_cork(ctx->cmd->client->output);
 		/* fall through */
@@ -273,6 +277,8 @@ cmd_setmetadata_start(struct imap_setmetadata_context *ctx)
 	client->input_lock = cmd;
 	ctx->parser = imap_parser_create(client->input, client->output,
 					 client->set->imap_max_line_length);
+	if (client->set->imap_literal_minus)
+		imap_parser_enable_literal_minus(ctx->parser);
 	o_stream_unset_flush_callback(client->output);
 
 	cmd->func = cmd_setmetadata_continue;

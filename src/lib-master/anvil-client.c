@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -144,12 +144,11 @@ int anvil_client_connect(struct anvil_client *client, bool retry)
 		return -1;
 	}
 
-	if (client->to_reconnect != NULL)
-		timeout_remove(&client->to_reconnect);
+	timeout_remove(&client->to_reconnect);
 
 	client->fd = fd;
-	client->input = i_stream_create_fd(fd, ANVIL_INBUF_SIZE, FALSE);
-	client->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	client->input = i_stream_create_fd(fd, ANVIL_INBUF_SIZE);
+	client->output = o_stream_create_fd(fd, (size_t)-1);
 	client->io = io_add(fd, IO_READ, anvil_input, client);
 	if (o_stream_send_str(client->output, ANVIL_HANDSHAKE) < 0) {
 		i_error("write(%s) failed: %s", client->path,
@@ -173,8 +172,7 @@ static void anvil_client_cancel_queries(struct anvil_client *client)
 		i_free(query);
 		aqueue_delete_tail(client->queries);
 	}
-	if (client->to_query != NULL)
-		timeout_remove(&client->to_query);
+	timeout_remove(&client->to_query);
 }
 
 static void anvil_client_disconnect(struct anvil_client *client)
@@ -187,8 +185,7 @@ static void anvil_client_disconnect(struct anvil_client *client)
 		net_disconnect(client->fd);
 		client->fd = -1;
 	}
-	if (client->to_reconnect != NULL)
-		timeout_remove(&client->to_reconnect);
+	timeout_remove(&client->to_reconnect);
 }
 
 static void anvil_client_timeout(struct anvil_client *client)
@@ -229,16 +226,18 @@ anvil_client_query(struct anvil_client *client, const char *query,
 {
 	struct anvil_query *anvil_query;
 
-	if (anvil_client_send(client, query) < 0) {
-		callback(NULL, context);
-		return NULL;
-	}
-
 	anvil_query = i_new(struct anvil_query, 1);
 	anvil_query->callback = callback;
 	anvil_query->context = context;
 	aqueue_append(client->queries, &anvil_query);
-	if (client->to_query == NULL) {
+	if (anvil_client_send(client, query) < 0) {
+		/* connection failure. add a delayed failure callback.
+		   the caller may not expect the callback to be called
+		   immediately. */
+		timeout_remove(&client->to_query);
+		client->to_query =
+			timeout_add_short(0, anvil_client_cancel_queries, client);
+	} else if (client->to_query == NULL) {
 		client->to_query = timeout_add(ANVIL_QUERY_TIMEOUT_MSECS,
 					       anvil_client_timeout, client);
 	}

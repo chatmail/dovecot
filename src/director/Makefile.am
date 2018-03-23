@@ -10,9 +10,12 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-mail \
-	-I$(top_srcdir)/src/lib-program-client
+	-I$(top_srcdir)/src/lib-program-client \
+	$(BINARY_CFLAGS)
 
-director_LDADD = $(LIBDOVECOT)
+director_LDADD = $(LIBDOVECOT) \
+	$(BINARY_LDFLAGS)
+
 director_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 
 director_SOURCES = \
@@ -61,8 +64,7 @@ test_user_directory_SOURCES = test-user-directory.c
 test_user_directory_LDADD = user-directory.o $(test_libs)
 test_user_directory_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 
-check: check-am check-test
-check-test: all-am
+check-local:
 	for bin in $(test_programs); do \
 	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
 	done

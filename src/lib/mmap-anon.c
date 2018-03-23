@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -16,8 +16,6 @@
 #endif
 
 #ifndef HAVE_LINUX_MREMAP
-
-#include "fd-close-on-exec.h"
 
 #include <sys/mman.h>
 

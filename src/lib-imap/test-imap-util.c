@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mail-types.h"
@@ -23,7 +23,7 @@ static void test_imap_parse_system_flag(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_imap_parse_system_flag,
 		NULL
 	};

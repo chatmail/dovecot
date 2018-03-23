@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -87,8 +87,7 @@ void sql_deinit(struct sql_db **_db)
 
 	*_db = NULL;
 
-	if (db->to_reconnect != NULL)
-		timeout_remove(&db->to_reconnect);
+	timeout_remove(&db->to_reconnect);
 	db->v.deinit(db);
 }
 
@@ -121,8 +120,7 @@ int sql_connect(struct sql_db *db)
 
 void sql_disconnect(struct sql_db *db)
 {
-	if (db->to_reconnect != NULL)
-		timeout_remove(&db->to_reconnect);
+	timeout_remove(&db->to_reconnect);
 	db->v.disconnect(db);
 }
 
@@ -342,8 +340,7 @@ void sql_statement_bind_binary(struct sql_statement *stmt,
 void sql_statement_bind_int64(struct sql_statement *stmt,
 			      unsigned int column_idx, int64_t value)
 {
-	const char *value_str = p_strdup_printf(stmt->pool, "%lld",
-						(long long)value);
+	const char *value_str = p_strdup_printf(stmt->pool, "%"PRId64, value);
 	array_idx_set(&stmt->args, column_idx, &value_str);
 
 	if (stmt->db->v.statement_bind_int64 != NULL)
@@ -602,20 +599,6 @@ struct sql_transaction_context *sql_transaction_begin(struct sql_db *db)
 	return db->v.transaction_begin(db);
 }
 
-struct sql_commit1_wrap_ctx {
-	sql_commit_callback_t *callback;
-	void *context;
-};
-
-static void sql_commit1_wrap(const struct sql_commit_result *result,
-			     void *context)
-{
-	struct sql_commit1_wrap_ctx *ctx = context;
-
-	ctx->callback(result->error, ctx->context);
-	i_free(ctx);
-}
-
 #undef sql_transaction_commit
 void sql_transaction_commit(struct sql_transaction_context **_ctx,
 			    sql_commit_callback_t *callback, void *context)
@@ -623,49 +606,7 @@ void sql_transaction_commit(struct sql_transaction_context **_ctx,
 	struct sql_transaction_context *ctx = *_ctx;
 
 	*_ctx = NULL;
-	if (ctx->db->v.transaction_commit != NULL)
-		ctx->db->v.transaction_commit(ctx, callback, context);
-	else {
-		struct sql_commit1_wrap_ctx *wrap;
-
-		wrap = i_new(struct sql_commit1_wrap_ctx, 1);
-		wrap->callback = callback;
-		wrap->context = context;
-		ctx->db->v.transaction_commit2(ctx, sql_commit1_wrap, wrap);
-	}
-}
-
-struct sql_commit2_wrap_ctx {
-	sql_commit2_callback_t *callback;
-	void *context;
-};
-
-static void sql_commit2_wrap(const char *error, void *context)
-{
-	struct sql_commit2_wrap_ctx *ctx = context;
-	struct sql_commit_result result = { .error = error };
-
-	ctx->callback(&result, ctx->context);
-	i_free(ctx);
-}
-
-#undef sql_transaction_commit2
-void sql_transaction_commit2(struct sql_transaction_context **_ctx,
-			     sql_commit2_callback_t *callback, void *context)
-{
-	struct sql_transaction_context *ctx = *_ctx;
-
-	*_ctx = NULL;
-	if (ctx->db->v.transaction_commit2 != NULL)
-		ctx->db->v.transaction_commit2(ctx, callback, context);
-	else {
-		struct sql_commit2_wrap_ctx *wrap;
-
-		wrap = i_new(struct sql_commit2_wrap_ctx, 1);
-		wrap->callback = callback;
-		wrap->context = context;
-		ctx->db->v.transaction_commit(ctx, sql_commit2_wrap, wrap);
-	}
+	ctx->db->v.transaction_commit(ctx, callback, context);
 }
 
 int sql_transaction_commit_s(struct sql_transaction_context **_ctx,

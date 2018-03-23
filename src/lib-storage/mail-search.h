@@ -72,7 +72,7 @@ enum mail_search_arg_flag {
 	   searching for mails within precise time interval. Since imap-dates
 	   don't allow specifying timezone this isn't really possible with IMAP
 	   protocol, except using OLDER/YOUNGER searches. */
-	MAIL_SEARCH_ARG_FLAG_USE_TZ	= 0x01,
+	MAIL_SEARCH_ARG_FLAG_UTC_TIMES	= 0x01,
 };
 
 enum mail_search_modseq_type {
@@ -117,11 +117,11 @@ struct mail_search_arg {
 
         void *context;
 	const char *hdr_field_name; /* for SEARCH_HEADER* */
-	unsigned int match_not:1; /* result = !result */
-	unsigned int match_always:1; /* result = 1 always */
-	unsigned int nonmatch_always:1; /* result = 0 always */
-	unsigned int fuzzy:1; /* use fuzzy matching for this arg */
-	unsigned int no_fts:1; /* do NOT call FTS */
+	bool match_not:1; /* result = !result */
+	bool match_always:1; /* result = 1 always */
+	bool nonmatch_always:1; /* result = 0 always */
+	bool fuzzy:1; /* use fuzzy matching for this arg */
+	bool no_fts:1; /* do NOT call FTS */
 
 	int result; /* -1 = unknown, 0 = unmatched, 1 = matched */
 };
@@ -133,20 +133,20 @@ struct mail_search_args {
 	struct mailbox *box;
 	struct mail_search_arg *args;
 
-	unsigned int simplified:1;
-	unsigned int have_inthreads:1;
+	bool simplified:1;
+	bool have_inthreads:1;
 	/* Stop mail_search_next() when finding a non-matching mail.
 	   (Could be useful when wanting to find only the oldest mails.) */
-	unsigned int stop_on_nonmatch:1;
+	bool stop_on_nonmatch:1;
 	/* fts plugin has already expanded the search args - no need to do
 	   it again. */
-	unsigned int fts_expanded:1;
+	bool fts_expanded:1;
 };
 
 #define ARG_SET_RESULT(arg, res) \
 	STMT_START { \
 		(arg)->result = !(arg)->match_not ? (res) : \
-			(res) == -1 ? -1 : !(res); \
+			((res) == -1 ? -1 : ((res) == 0 ? 1 : 0)); \
 	} STMT_END
 
 typedef void mail_search_foreach_callback_t(struct mail_search_arg *arg,

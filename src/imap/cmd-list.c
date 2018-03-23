@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "array.h"
@@ -21,10 +21,10 @@ struct cmd_list_context {
 
 	struct mailbox_list_iterate_context *list_iter;
 
-	unsigned int lsub:1;
-	unsigned int lsub_no_unsubscribed:1;
-	unsigned int used_listext:1;
-	unsigned int used_status:1;
+	bool lsub:1;
+	bool lsub_no_unsubscribed:1;
+	bool used_listext:1;
+	bool used_status:1;
 };
 
 static void

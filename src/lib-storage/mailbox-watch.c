@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -15,14 +15,13 @@ struct mailbox_notify_file {
 	struct mailbox_notify_file *next;
 
 	char *path;
-	time_t last_stamp;
+	struct stat last_st;
 	struct io *io_notify;
 };
 
 static void notify_delay_callback(struct mailbox *box)
 {
-	if (box->to_notify_delay != NULL)
-		timeout_remove(&box->to_notify_delay);
+	timeout_remove(&box->to_notify_delay);
 	box->notify_callback(box, box->notify_context);
 }
 
@@ -34,8 +33,8 @@ static void notify_timeout(struct mailbox *box)
 
 	for (file = box->notify_files; file != NULL; file = file->next) {
 		if (stat(file->path, &st) == 0 &&
-		    file->last_stamp != st.st_mtime) {
-			file->last_stamp = st.st_mtime;
+		    ST_CHANGED(file->last_st, st)) {
+			file->last_st = st;
 			notify = TRUE;
 		}
 	}
@@ -68,7 +67,8 @@ void mailbox_watch_add(struct mailbox *box, const char *path)
 
 	file = i_new(struct mailbox_notify_file, 1);
 	file->path = i_strdup(path);
-	file->last_stamp = stat(path, &st) < 0 ? 0 : st.st_mtime;
+	if (stat(path, &st) == 0)
+		file->last_st = st;
 	file->io_notify = io;
 
 	file->next = box->notify_files;
@@ -92,16 +92,13 @@ void mailbox_watch_remove_all(struct mailbox *box)
 		file = box->notify_files;
 		box->notify_files = file->next;
 
-		if (file->io_notify != NULL)
-			io_remove(&file->io_notify);
+		io_remove(&file->io_notify);
                 i_free(file->path);
 		i_free(file);
 	}
 
-	if (box->to_notify_delay != NULL)
-		timeout_remove(&box->to_notify_delay);
-	if (box->to_notify != NULL)
-		timeout_remove(&box->to_notify);
+	timeout_remove(&box->to_notify_delay);
+	timeout_remove(&box->to_notify);
 }
 
 static void notify_extract_callback(struct mailbox *box ATTR_UNUSED)

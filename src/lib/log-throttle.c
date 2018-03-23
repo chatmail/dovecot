@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2016-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -40,8 +40,7 @@ void log_throttle_deinit(struct log_throttle **_throttle)
 	struct log_throttle *throttle = *_throttle;
 
 	*_throttle = NULL;
-	if (throttle->to_throttled != NULL)
-		timeout_remove(&throttle->to_throttled);
+	timeout_remove(&throttle->to_throttled);
 	i_free(throttle);
 }
 

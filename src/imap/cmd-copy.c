@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "str.h"
@@ -23,7 +23,9 @@ static void client_send_sendalive_if_needed(struct client *client)
 	last_io = I_MAX(client->last_input, client->last_output);
 	if (now - last_io > MAIL_STORAGE_STAYALIVE_SECS) {
 		o_stream_nsend_str(client->output, "* OK Hang in there..\r\n");
-		o_stream_nflush(client->output);
+		/* make sure it doesn't get stuck on the corked stream */
+		o_stream_uncork(client->output);
+		o_stream_cork(client->output);
 		client->last_output = now;
 	}
 }
@@ -45,11 +47,13 @@ static int fetch_and_copy(struct client_command_context *cmd, bool move,
 	string_t *src_uidset;
 	int ret;
 
+	i_assert(o_stream_is_corked(client->output));
+
 	src_uidset = t_str_new(256);
 	msgset_generator_init(&srcset_ctx, src_uidset);
 
-	src_trans = mailbox_transaction_begin(client->mailbox, 0);
-	imap_transaction_set_cmd_reason(src_trans, cmd);
+	src_trans = mailbox_transaction_begin(client->mailbox, 0,
+					      imap_client_command_get_reason(cmd));
 	search_ctx = mailbox_search_init(src_trans, search_args, NULL, 0, NULL);
 
 	ret = 1;
@@ -134,8 +138,8 @@ static bool cmd_copy_full(struct client_command_context *cmd, bool move)
 
 	t = mailbox_transaction_begin(destbox,
 				      MAILBOX_TRANSACTION_FLAG_EXTERNAL |
-				      MAILBOX_TRANSACTION_FLAG_ASSIGN_UIDS);
-	imap_transaction_set_cmd_reason(t, cmd);
+				      MAILBOX_TRANSACTION_FLAG_ASSIGN_UIDS,
+				      imap_client_command_get_reason(cmd));
 	ret = fetch_and_copy(cmd, move, t, &src_trans, search_args,
 			     &src_uidset, &copy_count);
 	mail_search_args_unref(&search_args);

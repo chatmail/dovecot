@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 
@@ -31,7 +31,7 @@
 #ifdef LDAP_OPT_X_TLS
 #  define OPENLDAP_TLS_OPTIONS
 #endif
-#if SASL_VERSION_MAJOR < 2
+#if !defined(SASL_VERSION_MAJOR) || SASL_VERSION_MAJOR < 2
 #  undef HAVE_LDAP_SASL
 #endif
 
@@ -64,7 +64,7 @@ struct db_ldap_value {
 struct db_ldap_result_iterate_context {
 	pool_t pool;
 
-	struct auth_request *auth_request;
+	struct ldap_request *ldap_request;
 	const ARRAY_TYPE(ldap_field) *attr_map;
 	unsigned int attr_idx;
 
@@ -425,8 +425,8 @@ static bool db_ldap_request_queue_next(struct ldap_connection *conn)
 	}
 }
 
-static bool
-db_ldap_check_limits(struct ldap_connection *conn, struct ldap_request *request)
+static void
+db_ldap_check_hanging(struct ldap_connection *conn, struct ldap_request *request)
 {
 	struct ldap_request *const *first_requestp;
 	unsigned int count;
@@ -434,7 +434,7 @@ db_ldap_check_limits(struct ldap_connection *conn, struct ldap_request *request)
 
 	count = aqueue_count(conn->request_queue);
 	if (count == 0)
-		return TRUE;
+		return;
 
 	first_requestp = array_idx(&conn->request_array,
 				   aqueue_idx(conn->request_queue, 0));
@@ -443,9 +443,7 @@ db_ldap_check_limits(struct ldap_connection *conn, struct ldap_request *request)
 		auth_request_log_error(request->auth_request, AUTH_SUBSYS_DB,
 			"Connection appears to be hanging, reconnecting");
 		ldap_conn_reconnect(conn);
-		return TRUE;
 	}
-	return TRUE;
 }
 
 void db_ldap_request(struct ldap_connection *conn,
@@ -456,10 +454,7 @@ void db_ldap_request(struct ldap_connection *conn,
 	request->msgid = -1;
 	request->create_time = ioloop_time;
 
-	if (!db_ldap_check_limits(conn, request)) {
-		request->callback(conn, request, NULL);
-		return;
-	}
+	db_ldap_check_hanging(conn, request);
 
 	aqueue_append(conn->request_queue, &request);
 	(void)db_ldap_request_queue_next(conn);
@@ -480,8 +475,7 @@ static int db_ldap_connect_finish(struct ldap_connection *conn, int ret)
 		return -1;
 	}
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 	conn->conn_state = LDAP_CONN_STATE_BOUND_DEFAULT;
 	while (db_ldap_request_queue_next(conn))
 		;
@@ -597,8 +591,10 @@ struct ldap_field_find_subquery_context {
 	const char *name;
 };
 
-static const char *
-db_ldap_field_subquery_find(const char *data, void *context)
+static int
+db_ldap_field_subquery_find(const char *data, void *context,
+			    const char **value_r,
+			    const char **error_r ATTR_UNUSED)
 {
 	struct ldap_field_find_subquery_context *ctx = context;
 	char *ldap_attr;
@@ -613,9 +609,9 @@ db_ldap_field_subquery_find(const char *data, void *context)
 			array_append(&ctx->attr_names, &ldap_attr, 1);
 		}
 	}
-	return NULL;
+	*value_r = NULL;
+	return 1;
 }
-
 
 static int
 ldap_request_send_subquery(struct ldap_connection *conn,
@@ -628,7 +624,7 @@ ldap_request_send_subquery(struct ldap_connection *conn,
 		{ NULL, NULL }
 	};
 	const struct ldap_field *field;
-	const char *p;
+	const char *p, *error;
 	char *name;
 	struct ldap_field_find_subquery_context ctx;
 	string_t *tmp_str = t_str_new(64);
@@ -641,8 +637,14 @@ ldap_request_send_subquery(struct ldap_connection *conn,
 	array_foreach(request->attr_map, field) {
 		if (field->ldap_attr_name[0] == '\0') {
 			str_truncate(tmp_str, 0);
-			var_expand_with_funcs(tmp_str, field->value, NULL,
-					      var_funcs_table, &ctx);
+			if (var_expand_with_funcs(tmp_str, field->value, NULL,
+						  var_funcs_table, &ctx, &error) <= 0) {
+				auth_request_log_error(request->request.auth_request,
+					AUTH_SUBSYS_DB,
+					"Failed to expand subquery %s: %s",
+					field->value, error);
+				return -1;
+			}
 		} else {
 			p = strchr(field->ldap_attr_name, '@');
 			if (p != NULL &&
@@ -1053,8 +1055,7 @@ static int db_ldap_bind_simple(struct ldap_connection *conn)
 	conn->conn_state = LDAP_CONN_STATE_BINDING;
 	conn->default_bind_msgid = msgid;
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 	conn->to = timeout_add(DB_LDAP_REQUEST_LOST_TIMEOUT_SECS*1000,
 			       ldap_connection_timeout, conn);
 	return 0;
@@ -1279,8 +1280,7 @@ void db_ldap_connect_delayed(struct ldap_connection *conn)
 void db_ldap_enable_input(struct ldap_connection *conn, bool enable)
 {
 	if (!enable) {
-		if (conn->io != NULL)
-			io_remove(&conn->io);
+		io_remove(&conn->io);
 	} else {
 		if (conn->io == NULL && conn->fd != -1) {
 			conn->io = io_add(conn->fd, IO_READ, ldap_input, conn);
@@ -1310,8 +1310,7 @@ static void db_ldap_conn_close(struct ldap_connection *conn)
 	conn->delayed_connect = FALSE;
 	conn->default_bind_msgid = -1;
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 
 	if (conn->pending_count != 0) {
 		requests = array_idx(&conn->request_array, 0);
@@ -1330,11 +1329,9 @@ static void db_ldap_conn_close(struct ldap_connection *conn)
 	}
 	conn->fd = -1;
 
-	if (conn->io != NULL) {
-		/* the fd may have already been closed before ldap_unbind(),
-		   so we'll have to use io_remove_closed(). */
-		io_remove_closed(&conn->io);
-	}
+	/* the fd may have already been closed before ldap_unbind(),
+	   so we'll have to use io_remove_closed(). */
+	io_remove_closed(&conn->io);
 
 	if (aqueue_count(conn->request_queue) > 0) {
 		conn->to = timeout_add(DB_LDAP_REQUEST_DISCONNECT_TIMEOUT_SECS *
@@ -1347,8 +1344,10 @@ struct ldap_field_find_context {
 	pool_t pool;
 };
 
-static const char *
-db_ldap_field_find(const char *data, void *context)
+static int
+db_ldap_field_find(const char *data, void *context,
+		   const char **value_r,
+		   const char **error_r ATTR_UNUSED)
 {
 	struct ldap_field_find_context *ctx = context;
 	char *ldap_attr;
@@ -1358,7 +1357,8 @@ db_ldap_field_find(const char *data, void *context)
 		if (strchr(ldap_attr, '@') == NULL)
 			array_append(&ctx->attr_names, &ldap_attr, 1);
 	}
-	return NULL;
+	*value_r = NULL;
+	return 1;
 }
 
 void db_ldap_set_attrs(struct ldap_connection *conn, const char *attrlist,
@@ -1373,7 +1373,7 @@ void db_ldap_set_attrs(struct ldap_connection *conn, const char *attrlist,
 	struct ldap_field_find_context ctx;
 	struct ldap_field *field;
 	string_t *tmp_str;
-	const char *const *attr, *attr_data, *p;
+	const char *const *attr, *attr_data, *p, *error;
 	char *ldap_attr, *name, *templ;
 	unsigned int i;
 
@@ -1410,8 +1410,15 @@ void db_ldap_set_attrs(struct ldap_connection *conn, const char *attrlist,
 		} else {
 			*templ++ = '\0';
 			str_truncate(tmp_str, 0);
-			var_expand_with_funcs(tmp_str, templ, NULL,
-					      var_funcs_table, &ctx);
+			if (var_expand_with_funcs(tmp_str, templ, NULL,
+						  var_funcs_table, &ctx, &error) <= 0) {
+				/* This var_expand_with_funcs call fills the
+				 * ldap_field_find_context in ctx, but the
+				 * resulting string_t is not used, and the
+				 * return value or error_r is not checked since
+				 * it gives errors for non-ldap variable
+				 * expansions. */
+			}
 			if (strchr(templ, '%') == NULL) {
 				/* backwards compatibility:
 				   attr=name=prefix means same as
@@ -1492,7 +1499,7 @@ ldap_field_hide_password(struct db_ldap_result_iterate_context *ctx,
 {
 	const struct ldap_field *field;
 
-	if (ctx->auth_request->set->debug_passwords)
+	if (ctx->ldap_request->auth_request->set->debug_passwords)
 		return FALSE;
 
 	array_foreach(ctx->attr_map, field) {
@@ -1570,13 +1577,13 @@ db_ldap_result_iterate_init_full(struct ldap_connection *conn,
 	pool = pool_alloconly_create(MEMPOOL_GROWING"ldap result iter", 1024);
 	ctx = p_new(pool, struct db_ldap_result_iterate_context, 1);
 	ctx->pool = pool;
-	ctx->auth_request = ldap_request->request.auth_request;
+	ctx->ldap_request = &ldap_request->request;
 	ctx->attr_map = ldap_request->attr_map;
 	ctx->skip_null_values = skip_null_values;
 	ctx->iter_dn_values = iter_dn_values;
 	hash_table_create(&ctx->ldap_attrs, pool, 0, strcase_hash, strcasecmp);
 	ctx->var = str_new(ctx->pool, 256);
-	if (ctx->auth_request->debug)
+	if (ctx->ldap_request->auth_request->debug)
 		ctx->debug = t_str_new(256);
 	ctx->ldap_msg = res;
 	ctx->ld = conn->ld;
@@ -1607,16 +1614,18 @@ static const char *db_ldap_field_get_default(const char *data)
 {
 	const char *p;
 
-	p = strchr(data, ':');
+	p = i_strchr_to_next(data, ':');
 	if (p == NULL)
 		return "";
 	else {
 		/* default value given */
-		return p+1;
+		return p;
 	}
 }
 
-static const char *db_ldap_field_expand(const char *data, void *context)
+static int
+db_ldap_field_expand(const char *data, void *context,
+		     const char **value_r, const char **error_r ATTR_UNUSED)
 {
 	struct db_ldap_result_iterate_context *ctx = context;
 	struct db_ldap_value *ldap_value;
@@ -1625,45 +1634,56 @@ static const char *db_ldap_field_expand(const char *data, void *context)
 	ldap_value = hash_table_lookup(ctx->ldap_attrs, field_name);
 	if (ldap_value == NULL) {
 		/* requested ldap attribute wasn't returned at all */
-		if (ctx->debug)
+		if (ctx->debug != NULL)
 			str_printfa(ctx->debug, "; %s missing", field_name);
-		return db_ldap_field_get_default(data);
+		*value_r = db_ldap_field_get_default(data);
+		return 1;
 	}
 	ldap_value->used = TRUE;
 
 	if (ldap_value->values[0] == NULL) {
 		/* no value for ldap attribute */
-		return db_ldap_field_get_default(data);
+		*value_r = db_ldap_field_get_default(data);
+		return 1;
 	}
 	if (ldap_value->values[1] != NULL) {
-		auth_request_log_warning(ctx->auth_request, AUTH_SUBSYS_DB,
+		auth_request_log_warning(ctx->ldap_request->auth_request,
+			AUTH_SUBSYS_DB,
 			"Multiple values found for '%s', using value '%s'",
 			field_name, ldap_value->values[0]);
 	}
-	return ldap_value->values[0];
+	*value_r = ldap_value->values[0];
+	return 1;
 }
 
-static const char *db_ldap_field_ptr_expand(const char *data, void *context)
+static int
+db_ldap_field_ptr_expand(const char *data, void *context,
+			 const char **value_r, const char **error_r)
 {
 	struct db_ldap_result_iterate_context *ctx = context;
 	const char *field_name, *suffix;
+	int ret;
 
 	suffix = strchr(t_strcut(data, ':'), '@');
-	field_name = db_ldap_field_expand(data, ctx);
-	if (field_name[0] == '\0')
-		return "";
+	if ((ret = db_ldap_field_expand(data, ctx, &field_name, error_r)) <= 0)
+		i_unreached();
+	if (field_name[0] == '\0') {
+		*value_r = "";
+		return 1;
+	}
 	field_name = t_strconcat(field_name, suffix, NULL);
-	return db_ldap_field_expand(field_name, ctx);
+	return db_ldap_field_expand(field_name, ctx, value_r, error_r);
 }
 
-static const char *
-db_ldap_field_dn_expand(const char *data ATTR_UNUSED, void *context ATTR_UNUSED)
+static int
+db_ldap_field_dn_expand(const char *data ATTR_UNUSED, void *context ATTR_UNUSED,
+			 const char **value_r, const char **error_r ATTR_UNUSED)
 {
 	struct db_ldap_result_iterate_context *ctx = context;
 	char *dn = ldap_get_dn(ctx->ld, ctx->ldap_msg);
-	const char *dn_dup = t_strdup(dn);
+	*value_r = t_strdup(dn);
 	ldap_memfree(dn);
-	return dn_dup;
+	return 1;
 }
 
 static struct var_expand_func_table ldap_var_funcs_table[] = {
@@ -1679,7 +1699,7 @@ db_ldap_result_return_value(struct db_ldap_result_iterate_context *ctx,
 			    struct db_ldap_value *ldap_value)
 {
 	const struct var_expand_table *var_table;
-	const char *const *values;
+	const char *const *values, *error;
 
 	if (ldap_value != NULL)
 		values = ldap_value->values;
@@ -1699,7 +1719,8 @@ db_ldap_result_return_value(struct db_ldap_result_iterate_context *ctx,
 			return values;
 		}
 		if (values[0] != NULL && values[1] != NULL) {
-			auth_request_log_warning(ctx->auth_request, AUTH_SUBSYS_DB,
+			auth_request_log_warning(ctx->ldap_request->auth_request,
+				AUTH_SUBSYS_DB,
 				"Multiple values found for '%s', "
 				"using value '%s'",
 				field->name, values[0]);
@@ -1709,10 +1730,15 @@ db_ldap_result_return_value(struct db_ldap_result_iterate_context *ctx,
 		   1) the values are allocated from data stack
 		   2) if "user" field is updated, we want %u/%n/%d updated
 		      (and less importantly the same for other variables) */
-		var_table = db_ldap_value_get_var_expand_table(ctx->auth_request,
-							       values[0]);
-		var_expand_with_funcs(ctx->var, field->value, var_table,
-				      ldap_var_funcs_table, ctx);
+		var_table = db_ldap_value_get_var_expand_table(
+			ctx->ldap_request->auth_request, values[0]);
+		if (var_expand_with_funcs(ctx->var, field->value, var_table,
+					  ldap_var_funcs_table, ctx, &error) <= 0) {
+			auth_request_log_warning(ctx->ldap_request->auth_request,
+				AUTH_SUBSYS_DB,
+				"Failed to expand template %s: %s",
+				field->value, error);
+		}
 		ctx->val_1_arr[0] = str_c(ctx->var);
 		values = ctx->val_1_arr;
 	}
@@ -1723,9 +1749,11 @@ bool db_ldap_result_iterate_next(struct db_ldap_result_iterate_context *ctx,
 				 const char **name_r,
 				 const char *const **values_r)
 {
+	const struct var_expand_table *tab;
 	const struct ldap_field *field;
 	struct db_ldap_value *ldap_value;
 	unsigned int pos;
+	const char *error;
 
 	do {
 		if (ctx->attr_idx == array_count(ctx->attr_map))
@@ -1738,7 +1766,7 @@ bool db_ldap_result_iterate_next(struct db_ldap_result_iterate_context *ctx,
 		hash_table_lookup(ctx->ldap_attrs, field->ldap_attr_name);
 	if (ldap_value != NULL)
 		ldap_value->used = TRUE;
-	else if (ctx->debug && *field->ldap_attr_name != '\0')
+	else if (ctx->debug != NULL && *field->ldap_attr_name != '\0')
 		str_printfa(ctx->debug, "; %s missing", field->ldap_attr_name);
 
 	str_truncate(ctx->var, 0);
@@ -1752,9 +1780,14 @@ bool db_ldap_result_iterate_next(struct db_ldap_result_iterate_context *ctx,
 		str_append_c(ctx->var, '\0');
 		pos = str_len(ctx->var);
 
-		var_expand_with_funcs(ctx->var, field->name,
-			auth_request_get_var_expand_table(ctx->auth_request, NULL),
-			ldap_var_funcs_table, ctx);
+		tab = auth_request_get_var_expand_table(
+			ctx->ldap_request->auth_request, NULL);
+		if (var_expand_with_funcs(ctx->var, field->name, tab,
+					  ldap_var_funcs_table, ctx, &error) <= 0) {
+			auth_request_log_warning(ctx->ldap_request->auth_request,
+				AUTH_SUBSYS_DB,
+				"Failed to expand %s: %s", field->name, error);
+		}
 		*name_r = str_c(ctx->var) + pos;
 	}
 
@@ -1774,9 +1807,13 @@ db_ldap_result_finish_debug(struct db_ldap_result_iterate_context *ctx)
 	unsigned int unused_count = 0;
 	size_t orig_len;
 
+	if (ctx->ldap_request->result_logged)
+		return;
+
 	orig_len = str_len(ctx->debug);
 	if (orig_len == 0) {
-		auth_request_log_debug(ctx->auth_request, AUTH_SUBSYS_DB,
+		auth_request_log_debug(ctx->ldap_request->auth_request,
+				       AUTH_SUBSYS_DB,
 				       "no fields returned by the server");
 		return;
 	}
@@ -1798,8 +1835,10 @@ db_ldap_result_finish_debug(struct db_ldap_result_iterate_context *ctx)
 		str_truncate(ctx->debug, str_len(ctx->debug)-1);
 		str_append(ctx->debug, " unused");
 	}
-	auth_request_log_debug(ctx->auth_request, AUTH_SUBSYS_DB,
+	auth_request_log_debug(ctx->ldap_request->auth_request, AUTH_SUBSYS_DB,
 			       "result: %s", str_c(ctx->debug) + 1);
+
+	ctx->ldap_request->result_logged = TRUE;
 }
 
 void db_ldap_result_iterate_deinit(struct db_ldap_result_iterate_context **_ctx)

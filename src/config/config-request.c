@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -10,6 +10,7 @@
 #include "all-settings.h"
 #include "config-parser.h"
 #include "config-request.h"
+#include "old-set-parser.h"
 
 struct config_export_context {
 	pool_t pool;
@@ -44,7 +45,7 @@ static void config_export_size(string_t *str, uoff_t size)
 		suffix = suffixes[i];
 		size /= 1024;
 	}
-	str_printfa(str, "%llu %c", (unsigned long long)size, suffix);
+	str_printfa(str, "%"PRIuUOFF_T" %c", size, suffix);
 }
 
 static void config_export_time(string_t *str, unsigned int stamp)
@@ -76,6 +77,14 @@ static void config_export_time(string_t *str, unsigned int stamp)
 	str_printfa(str, "%u %s", stamp, suffix);
 }
 
+static void config_export_time_msecs(string_t *str, unsigned int stamp_msecs)
+{
+	if ((stamp_msecs % 1000) == 0)
+		config_export_time(str, stamp_msecs/1000);
+	else
+		str_printfa(str, "%u ms", stamp_msecs);
+}
+
 bool config_export_type(string_t *str, const void *value,
 			const void *default_value,
 			enum setting_type type, bool dump_default,
@@ -98,7 +107,8 @@ bool config_export_type(string_t *str, const void *value,
 	}
 	case SET_UINT:
 	case SET_UINT_OCT:
-	case SET_TIME: {
+	case SET_TIME:
+	case SET_TIME_MSECS: {
 		const unsigned int *val = value, *dval = default_value;
 
 		if (dump_default || dval == NULL || *val != *dval) {
@@ -108,6 +118,9 @@ bool config_export_type(string_t *str, const void *value,
 				break;
 			case SET_TIME:
 				config_export_time(str, *val);
+				break;
+			case SET_TIME_MSECS:
+				config_export_time_msecs(str, *val);
 				break;
 			default:
 				str_printfa(str, "%u", *val);
@@ -253,6 +266,7 @@ settings_export(struct config_export_context *ctx,
 		case SET_UINT:
 		case SET_UINT_OCT:
 		case SET_TIME:
+		case SET_TIME_MSECS:
 		case SET_IN_PORT:
 		case SET_STR_VARS:
 		case SET_STR:
@@ -448,6 +462,26 @@ int config_export_finish(struct config_export_context **_ctx)
 			continue;
 
 		T_BEGIN {
+			enum setting_type stype;
+			const char *const *value = settings_parse_get_value(parser->parser, "ssl", &stype);
+
+			if ((ctx->flags & CONFIG_DUMP_FLAG_IN_SECTION) == 0 &&
+			    value != NULL && strcmp(*value, "no") != 0 &&
+			    settings_parse_is_valid_key(parser->parser, "ssl_dh")) {
+				value = settings_parse_get_value(parser->parser,
+					"ssl_dh", &stype);
+
+				if (value == NULL || **value == '\0') {
+					const char *newval;
+					if (old_settings_ssl_dh_load(&newval, &error)) {
+						if (newval != NULL)
+							settings_parse_line(parser->parser, t_strdup_printf("%s=%s", "ssl_dh", newval));
+					} else {
+						i_error("%s", error);
+						ret = -1;
+					}
+				}
+			}
 			settings_export(ctx, parser->root, FALSE,
 					settings_parser_get(parser->parser),
 					settings_parser_get_changes(parser->parser));

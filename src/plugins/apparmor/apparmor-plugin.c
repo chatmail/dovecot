@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -49,8 +49,7 @@ static void apparmor_mail_user_deinit(struct mail_user *user)
 {
 	struct apparmor_mail_user *auser = APPARMOR_USER_CONTEXT(user);
 
-	if (user == NULL)
-		return;
+	auser->module_ctx.super.deinit(user);
 
 	if (aa_change_hat(NULL, auser->token)<0)
 		i_fatal("aa_change_hat(NULL) failed: %m");
@@ -104,12 +103,10 @@ static const struct mail_storage_hooks apparmor_hooks = {
 
 void apparmor_plugin_init(struct module *module)
 {
-	random_init();
 	mail_storage_hooks_add(module, &apparmor_hooks);
 }
 
 void apparmor_plugin_deinit(void)
 {
-	random_deinit();
 	mail_storage_hooks_remove(&apparmor_hooks);
 }

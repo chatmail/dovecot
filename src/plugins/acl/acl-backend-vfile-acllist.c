@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2007-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -132,7 +132,7 @@ static int acl_backend_vfile_acllist_read(struct acl_backend_vfile *backend)
 	backend->acllist_mtime = st.st_mtime;
 	acllist_clear(backend, st.st_size);
 
-	input = i_stream_create_fd(fd, (size_t)-1, FALSE);
+	input = i_stream_create_fd(fd, (size_t)-1);
 	while ((line = i_stream_read_next_line(input)) != NULL) {
 		acllist.mtime = 0;
 		for (p = line; *p >= '0' && *p <= '9'; p++)
@@ -187,11 +187,11 @@ acllist_append(struct acl_backend_vfile *backend, struct ostream *output,
 	aclobj = acl_object_init_from_name(&backend->backend, name);
 
 	iter = acl_object_list_init(aclobj);
-	while ((ret = acl_object_list_next(iter, &rights)) > 0) {
+	while (acl_object_list_next(iter, &rights)) {
 		if (acl_rights_has_nonowner_lookup_changes(&rights))
 			break;
 	}
-	acl_object_list_deinit(&iter);
+	ret = acl_object_list_deinit(&iter);
 
 	if (acl_backend_vfile_object_get_mtime(aclobj, &acllist.mtime) < 0)
 		ret = -1;
@@ -281,7 +281,7 @@ acl_backend_vfile_acllist_try_rebuild(struct acl_backend_vfile *backend)
 		}
 	}
 
-	if (o_stream_nfinish(output) < 0) {
+	if (o_stream_finish(output) < 0) {
 		i_error("write(%s) failed: %s", str_c(path),
 			o_stream_get_error(output));
 		ret = -1;
@@ -315,7 +315,7 @@ acl_backend_vfile_acllist_try_rebuild(struct acl_backend_vfile *backend)
 
 		backend->acllist_mtime = st.st_mtime;
 		backend->acllist_last_check = ioloop_time;
-		/* FIXME: dict reubild is expensive, try to avoid it */
+		/* FIXME: dict rebuild is expensive, try to avoid it */
 		(void)acl_lookup_dict_rebuild(auser->acl_lookup_dict);
 	} else {
 		acllist_clear(backend, 0);
@@ -382,7 +382,7 @@ acl_backend_vfile_nonowner_iter_init(struct acl_backend *_backend)
 	return &ctx->ctx;
 }
 
-int acl_backend_vfile_nonowner_iter_next(struct acl_mailbox_list_context *_ctx,
+bool acl_backend_vfile_nonowner_iter_next(struct acl_mailbox_list_context *_ctx,
 					 const char **name_r)
 {
 	struct acl_mailbox_list_context_vfile *ctx =
@@ -392,22 +392,35 @@ int acl_backend_vfile_nonowner_iter_next(struct acl_mailbox_list_context *_ctx,
 	const struct acl_backend_vfile_acllist *acllist;
 	unsigned int count;
 
+	if (_ctx->failed)
+		return FALSE;
+
 	acllist = array_get(&backend->acllist, &count);
+	if (count == 0)
+		_ctx->empty = TRUE;
 	if (ctx->idx == count)
-		return 0;
+		return FALSE;
 
 	*name_r = acllist[ctx->idx++].name;
-	return 1;
+	return TRUE;
 }
 
-void
+int
 acl_backend_vfile_nonowner_iter_deinit(struct acl_mailbox_list_context *ctx)
 {
 	struct acl_backend_vfile *backend =
 		(struct acl_backend_vfile *)ctx->backend;
+	int ret;
 
 	backend->iterating_acllist = FALSE;
+	if (ctx->failed)
+		ret = -1;
+	else if (ctx->empty)
+		ret = 0;
+	else
+		ret = 1;
 	i_free(ctx);
+	return ret;
 }
 
 int acl_backend_vfile_nonowner_lookups_rebuild(struct acl_backend *_backend)

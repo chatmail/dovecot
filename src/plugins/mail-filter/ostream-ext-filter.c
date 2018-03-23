@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -17,7 +17,7 @@ struct mail_filter_ostream {
 	int fd;
 	struct istream *ext_in;
 	struct ostream *ext_out;
-	bool flushed;
+	bool finished;
 };
 
 static void
@@ -26,15 +26,9 @@ o_stream_mail_filter_close(struct iostream_private *stream, bool close_parent)
 	struct mail_filter_ostream *mstream =
 		(struct mail_filter_ostream *)stream;
 
-	if (mstream->ext_in != NULL)
-		i_stream_destroy(&mstream->ext_in);
-	if (mstream->ext_out != NULL)
-		o_stream_destroy(&mstream->ext_out);
-	if (mstream->fd != -1) {
-		if (close(mstream->fd) < 0)
-			i_error("ext-filter: close() failed: %m");
-		mstream->fd = -1;
-	}
+	i_stream_destroy(&mstream->ext_in);
+	o_stream_destroy(&mstream->ext_out);
+	i_close_fd(&mstream->fd);
 	if (close_parent)
 		o_stream_close(mstream->ostream.parent);
 }
@@ -67,7 +61,7 @@ o_stream_mail_filter_sendv(struct ostream_private *stream,
 	return ret;
 }
 
-static int o_stream_mail_filter_flush(struct ostream_private *stream)
+static int o_stream_mail_filter_finish(struct ostream_private *stream)
 {
 	struct mail_filter_ostream *mstream =
 		(struct mail_filter_ostream *)stream;
@@ -79,13 +73,13 @@ static int o_stream_mail_filter_flush(struct ostream_private *stream)
 		/* connect failed */
 		return -1;
 	}
-	if (mstream->flushed)
+	if (mstream->finished)
 		return 0;
 
 	if (shutdown(mstream->fd, SHUT_WR) < 0)
 		i_error("ext-filter: shutdown() failed: %m");
 
-	while ((ret = i_stream_read_data(mstream->ext_in, &data, &size, 0)) > 0) {
+	while ((ret = i_stream_read_more(mstream->ext_in, &data, &size)) > 0) {
 		ret = o_stream_send(stream->parent, data, size);
 		if (ret != (ssize_t)size) {
 			i_assert(ret < 0);
@@ -98,7 +92,7 @@ static int o_stream_mail_filter_flush(struct ostream_private *stream)
 
 	if (!i_stream_have_bytes_left(mstream->ext_in) &&
 	    mstream->ext_in->v_offset == 0) {
-		/* EOF without any input -> assume the script is repoting
+		/* EOF without any input -> assume the script is reporting
 		   failure. pretty ugly way, but currently there's no error
 		   reporting channel. */
 		io_stream_set_error(&stream->iostream, "EOF without input");
@@ -112,12 +106,19 @@ static int o_stream_mail_filter_flush(struct ostream_private *stream)
 		return -1;
 	}
 
-	ret = o_stream_flush(stream->parent);
-	if (ret < 0)
-		o_stream_copy_error_from_parent(stream);
-	else
-		mstream->flushed = TRUE;
+	mstream->finished = TRUE;
 	return ret;
+}
+
+static int o_stream_mail_filter_flush(struct ostream_private *stream)
+{
+	int ret;
+
+	if (stream->finished) {
+		if ((ret = o_stream_mail_filter_finish(stream)) <= 0)
+			return ret;
+	}
+	return o_stream_flush_parent(stream);
 }
 
 static int filter_connect(struct mail_filter_ostream *mstream,
@@ -143,8 +144,8 @@ static int filter_connect(struct mail_filter_ostream *mstream,
 	net_set_nonblock(fd, FALSE);
 
 	mstream->fd = fd;
-	mstream->ext_in = i_stream_create_fd(fd, IO_BLOCK_SIZE, FALSE);
-	mstream->ext_out = o_stream_create_fd(fd, 0, FALSE);
+	mstream->ext_in = i_stream_create_fd(fd, IO_BLOCK_SIZE);
+	mstream->ext_out = o_stream_create_fd(fd, 0);
 
 	str = t_str_new(256);
 	str_append(str, "VERSION\tscript\t4\t0\nnoreply\n");

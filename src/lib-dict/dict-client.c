@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -314,8 +314,7 @@ client_dict_cmd_send(struct client_dict *dict, struct client_dict_cmd **_cmd,
 
 	/* we're no longer idling. even with no_replies=TRUE we're going to
 	   wait for COMMIT/ROLLBACK. */
-	if (dict->to_idle != NULL)
-		timeout_remove(&dict->to_idle);
+	timeout_remove(&dict->to_idle);
 
 	if (client_dict_connect(dict, &error) < 0) {
 		retry = FALSE;
@@ -441,14 +440,12 @@ static void client_dict_add_timeout(struct client_dict *dict)
 	} else if (client_dict_is_finished(dict)) {
 		dict->to_idle = timeout_add(dict->idle_msecs,
 					    client_dict_timeout, dict);
-		if (dict->to_requests != NULL)
-			timeout_remove(&dict->to_requests);
+		timeout_remove(&dict->to_requests);
 	} else if (dict->transactions == NULL &&
 		   !client_dict_have_nonbackground_cmds(dict)) {
 		/* we had non-background commands, but now we're back to
 		   having only background commands. remove timeouts. */
-		if (dict->to_requests != NULL)
-			timeout_remove(&dict->to_requests);
+		timeout_remove(&dict->to_requests);
 	}
 }
 
@@ -633,10 +630,8 @@ static void client_dict_disconnect(struct client_dict *dict, const char *reason)
 			ctx->error = i_strdup(reason);
 	}
 
-	if (dict->to_idle != NULL)
-		timeout_remove(&dict->to_idle);
-	if (dict->to_requests != NULL)
-		timeout_remove(&dict->to_requests);
+	timeout_remove(&dict->to_idle);
+	timeout_remove(&dict->to_requests);
 	connection_disconnect(&dict->conn.conn);
 }
 
@@ -820,12 +815,12 @@ static void client_dict_deinit(struct dict *_dict)
 		connection_list_deinit(&dict_connections);
 }
 
-static int client_dict_wait(struct dict *_dict)
+static void client_dict_wait(struct dict *_dict)
 {
 	struct client_dict *dict = (struct client_dict *)_dict;
 
 	if (array_count(&dict->cmds) == 0)
-		return 0;
+		return;
 
 	dict->prev_ioloop = current_ioloop;
 	io_loop_set_current(dict->ioloop);
@@ -837,7 +832,6 @@ static int client_dict_wait(struct dict *_dict)
 	dict->prev_ioloop = NULL;
 
 	dict_switch_ioloop(_dict);
-	return 0;
 }
 
 static bool client_dict_switch_ioloop(struct dict *_dict)
@@ -1017,7 +1011,7 @@ static void client_dict_lookup_callback(const struct dict_lookup_result *result,
 }
 
 static int client_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
-			      const char **value_r)
+			      const char **value_r, const char **error_r)
 {
 	struct client_dict_sync_lookup lookup;
 
@@ -1030,7 +1024,7 @@ static int client_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
 
 	switch (lookup.ret) {
 	case -1:
-		i_error("dict-client: Lookup '%s' failed: %s", key, lookup.error);
+		*error_r = t_strdup(lookup.error);
 		i_free(lookup.error);
 		return -1;
 	case 0:
@@ -1182,8 +1176,8 @@ client_dict_iterate_cmd_send(struct client_dict_iterate_context *ctx)
 
 	/* we can't do this query in _iterate_init(), because
 	   _set_limit() hasn't been called yet at that point. */
-	str_printfa(query, "%c%d\t%llu", DICT_PROTOCOL_CMD_ITERATE, ctx->flags,
-		    (unsigned long long)ctx->ctx.max_rows);
+	str_printfa(query, "%c%d\t%"PRIu64, DICT_PROTOCOL_CMD_ITERATE,
+		    ctx->flags, ctx->ctx.max_rows);
 	for (i = 0; ctx->paths[i] != NULL; i++) {
 		str_append_c(query, '\t');
 		str_append(query, str_tabescape(ctx->paths[i]));
@@ -1236,7 +1230,8 @@ static bool client_dict_iterate(struct dict_iterate_context *_ctx,
 	return FALSE;
 }
 
-static int client_dict_iterate_deinit(struct dict_iterate_context *_ctx)
+static int client_dict_iterate_deinit(struct dict_iterate_context *_ctx,
+				      const char **error_r)
 {
 	struct client_dict *dict = (struct client_dict *)_ctx->dict;
 	struct client_dict_iterate_context *ctx =
@@ -1245,8 +1240,7 @@ static int client_dict_iterate_deinit(struct dict_iterate_context *_ctx)
 
 	ctx->deinit = TRUE;
 
-	if (ret < 0)
-		i_error("dict-client: Iteration failed: %s", ctx->error);
+	*error_r = t_strdup(ctx->error);
 	array_free(&ctx->results);
 	pool_unref(&ctx->results_pool);
 	i_free(ctx->paths);
@@ -1289,54 +1283,53 @@ client_dict_transaction_commit_callback(struct client_dict_cmd *cmd,
 					const char *error, bool disconnected)
 {
 	struct client_dict *dict = cmd->dict;
-	int ret = -1;
+	struct dict_commit_result result = {
+		.ret = DICT_COMMIT_RET_FAILED, .error = NULL
+	};
 
 	i_assert(cmd->trans != NULL);
 
-	int diff = timeval_diff_msecs(&ioloop_timeval, &cmd->start_time);
 	if (error != NULL) {
 		/* failed */
-		i_error("dict-client: Commit %sfailed: %s "
-			"(reply took %u.%03u secs)",
-			disconnected ? "may have " : "",
-			error, diff/1000, diff%1000);
 		if (disconnected)
-			ret = DICT_COMMIT_RET_WRITE_UNCERTAIN;
+			result.ret = DICT_COMMIT_RET_WRITE_UNCERTAIN;
+		result.error = error;
 	} else switch (reply) {
 	case DICT_PROTOCOL_REPLY_OK:
-		ret = 1;
+		result.ret = DICT_COMMIT_RET_OK;
 		break;
 	case DICT_PROTOCOL_REPLY_NOTFOUND:
-		ret = 0;
+		result.ret = DICT_COMMIT_RET_NOTFOUND;
 		break;
 	case DICT_PROTOCOL_REPLY_WRITE_UNCERTAIN:
-		ret = DICT_COMMIT_RET_WRITE_UNCERTAIN;
+		result.ret = DICT_COMMIT_RET_WRITE_UNCERTAIN;
 		/* fallthrough */
 	case DICT_PROTOCOL_REPLY_FAIL: {
 		/* value contains the obsolete trans_id */
 		const char *error = extra_args[0];
 
-		i_error("dict-client: server returned %sfailure: %s "
-			"(reply took %u.%03u secs)",
-			ret == DICT_COMMIT_RET_WRITE_UNCERTAIN ? "uncertain " : "",
-			error != NULL ? error : "",
-			diff/1000, diff%1000);
+		result.error = t_strdup_printf("dict-server returned failure: %s",
+			error != NULL ? t_str_tabunescape(error) : "");
 		if (error != NULL)
 			extra_args++;
 		break;
 	}
 	default:
-		ret = -1;
-		error = t_strdup_printf("dict-client: Invalid commit reply: %c%s "
-			"(reply took %u.%03u secs)", reply, value, diff/1000, diff%1000);
-		i_error("%s", error);
-		client_dict_disconnect(dict, error);
+		result.ret = DICT_COMMIT_RET_FAILED;
+		result.error = t_strdup_printf(
+			"dict-client: Invalid commit reply: %c%s",
+			reply, value);
+		client_dict_disconnect(dict, result.error);
 		break;
 	}
 
-	if (ret >= 0 && !cmd->background &&
-	    !cmd->trans->ctx.no_slowness_warning &&
-	    diff >= (int)dict->warn_slow_msecs) {
+	int diff = timeval_diff_msecs(&ioloop_timeval, &cmd->start_time);
+	if (result.error != NULL) {
+		/* include timing info always in error messages */
+		result.error = t_strdup_printf("%s (reply took %s)",
+			result.error, dict_warnings_sec(cmd, diff, extra_args));
+	} else if (!cmd->background && !cmd->trans->ctx.no_slowness_warning &&
+		   diff >= (int)dict->warn_slow_msecs) {
 		i_warning("read(%s): dict commit took %s: "
 			  "%s (%u commands, first: %s)",
 			  dict->conn.conn.name, dict_warnings_sec(cmd, diff, extra_args),
@@ -1346,19 +1339,12 @@ client_dict_transaction_commit_callback(struct client_dict_cmd *cmd,
 	client_dict_transaction_free(&cmd->trans);
 
 	dict_pre_api_callback(dict);
-	cmd->api_callback.commit(ret, cmd->api_callback.context);
+	cmd->api_callback.commit(&result, cmd->api_callback.context);
 	dict_post_api_callback(dict);
 }
 
-static void commit_sync_callback(int ret, void *context)
-{
-	if (context != NULL) {
-		int *ret_p = context;
-		*ret_p = ret;
-	}
-}
 
-static int
+static void
 client_dict_transaction_commit(struct dict_transaction_context *_ctx,
 			       bool async,
 			       dict_transaction_commit_callback_t *callback,
@@ -1369,7 +1355,6 @@ client_dict_transaction_commit(struct dict_transaction_context *_ctx,
 	struct client_dict *dict = (struct client_dict *)_ctx->dict;
 	struct client_dict_cmd *cmd;
 	const char *query;
-	int ret = -1;
 
 	DLLIST_REMOVE(&dict->transactions, ctx);
 
@@ -1379,35 +1364,31 @@ client_dict_transaction_commit(struct dict_transaction_context *_ctx,
 		cmd->trans = ctx;
 
 		cmd->callback = client_dict_transaction_commit_callback;
-		if (callback != NULL) {
-			cmd->api_callback.commit = callback;
-			cmd->api_callback.context = context;
-		} else {
-			cmd->api_callback.commit = commit_sync_callback;
-			cmd->api_callback.context = (async ? NULL : &ret);
-			if (async)
-				cmd->background = TRUE;
-		}
+		cmd->api_callback.commit = callback;
+		cmd->api_callback.context = context;
+		if (callback == dict_transaction_commit_async_noop_callback)
+			cmd->background = TRUE;
 		if (client_dict_cmd_send(dict, &cmd, NULL)) {
 			if (!async)
 				client_dict_wait(_ctx->dict);
 		}
 	} else if (ctx->error != NULL) {
 		/* already failed */
-		if (callback != NULL)
-			callback(-1, context);
+		struct dict_commit_result result = {
+			.ret = DICT_COMMIT_RET_FAILED, .error = ctx->error
+		};
+		callback(&result, context);
 		client_dict_transaction_free(&ctx);
-		ret = -1;
 	} else {
 		/* nothing changed */
-		if (callback != NULL)
-			callback(1, context);
+		struct dict_commit_result result = {
+			.ret = DICT_COMMIT_RET_OK, .error = NULL
+		};
+		callback(&result, context);
 		client_dict_transaction_free(&ctx);
-		ret = 1;
 	}
 
 	client_dict_add_timeout(dict);
-	return ret;
 }
 
 static void

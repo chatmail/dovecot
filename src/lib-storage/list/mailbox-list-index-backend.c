@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "hostpid.h"
@@ -70,7 +70,7 @@ static void index_list_deinit(struct mailbox_list *_list)
 static char index_list_get_hierarchy_sep(struct mailbox_list *list)
 {
 	return *list->ns->set->separator != '\0' ? *list->ns->set->separator :
-		MAILBOX_LIST_INDEX_HIERARHCY_SEP;
+		MAILBOX_LIST_INDEX_HIERARCHY_SEP;
 }
 
 static int
@@ -323,6 +323,17 @@ index_list_mailbox_create_selectable(struct mailbox *box,
 	mail_index_update_flags(sync_ctx->trans, seq, MODIFY_REPLACE,
 				(enum mail_flags)node->flags);
 
+	/* set UIDVALIDITY if was set by the storage */
+	if (box->index != NULL) {
+		struct mail_index_view *view;
+
+		view = mail_index_view_open(box->index);
+		if (mail_index_get_header(view)->uid_validity != 0)
+			rec.uid_validity = mail_index_get_header(view)->uid_validity;
+		mail_index_view_close(&view);
+	}
+
+	/* set GUID */
 	memcpy(rec.guid, mailbox_guid, sizeof(rec.guid));
 	mail_index_update_ext(sync_ctx->trans, seq, ilist->ext_id, &rec, NULL);
 
@@ -448,9 +459,8 @@ index_list_mailbox_update(struct mailbox *box,
 				T_MAIL_ERR_MAILBOX_NOT_FOUND(box->name));
 			return -1;
 		} else {
-			mail_storage_set_critical(box->storage,
-						  "rename(%s, %s) failed: %m",
-						  old_path, new_path);
+			mailbox_set_critical(box, "rename(%s, %s) failed: %m",
+					     old_path, new_path);
 			return -1;
 		}
 	}
@@ -580,10 +590,11 @@ void mailbox_list_index_backend_sync_init(struct mailbox *box,
 
 	if ((flags & MAILBOX_SYNC_FLAG_FORCE_RESYNC) != 0 &&
 	    !ilist->force_resynced) {
-		box->storage->list_index_rebuild_reason =
+		enum mail_storage_list_index_rebuild_reason reason =
 			MAIL_STORAGE_LIST_INDEX_REBUILD_REASON_FORCE_RESYNC;
-		if (box->storage->v.list_index_corrupted != NULL &&
-		    box->storage->v.list_index_corrupted(box->storage) < 0)
+
+		if (box->storage->v.list_index_rebuild != NULL &&
+		    box->storage->v.list_index_rebuild(box->storage, reason) < 0)
 			ilist->force_resync_failed = TRUE;
 		/* try to rebuild list index only once - even if it failed */
 		ilist->force_resynced = TRUE;
@@ -606,7 +617,7 @@ static void
 index_list_try_delete(struct mailbox_list *_list, const char *name,
 		      enum mailbox_list_path_type type)
 {
-	const char *mailbox_path, *path;
+	const char *mailbox_path, *path, *error;
 
 	if (mailbox_list_get_path(_list, name, MAILBOX_LIST_PATH_TYPE_MAILBOX,
 				  &mailbox_path) <= 0 ||
@@ -623,10 +634,10 @@ index_list_try_delete(struct mailbox_list *_list, const char *name,
 							     rmdir_path) < 0)
 			return;
 	} else {
-		if (mailbox_list_delete_trash(path) < 0 &&
-		    errno != ENOENT && errno != ENOTEMPTY) {
+		if (mailbox_list_delete_trash(path, &error) < 0 &&
+		    errno != ENOTEMPTY) {
 			mailbox_list_set_critical(_list,
-				"unlink_directory(%s) failed: %m", path);
+				"unlink_directory(%s) failed: %s", path, error);
 		}
 	}
 
@@ -651,7 +662,7 @@ index_list_delete_entry(struct index_mailbox_list *list, const char *name,
 
 	if (list->create_mailbox_name != NULL &&
 	    strcmp(name, list->create_mailbox_name) == 0) {
-		/* we're rollbacking a failed create. if the name exists in the
+		/* we're rolling back a failed create. if the name exists in the
 		   list, it was done by somebody else so we don't want to
 		   remove it. */
 		return 0;

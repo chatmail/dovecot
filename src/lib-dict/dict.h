@@ -60,11 +60,17 @@ enum dict_commit_ret {
 	DICT_COMMIT_RET_WRITE_UNCERTAIN = -2,
 };
 
+struct dict_commit_result {
+	enum dict_commit_ret ret;
+	const char *error;
+};
+
 typedef void dict_lookup_callback_t(const struct dict_lookup_result *result,
 				    void *context);
 typedef void dict_iterate_callback_t(void *context);
-/* ret = enum dict_commit_ret */
-typedef void dict_transaction_commit_callback_t(int ret, void *context);
+typedef void
+dict_transaction_commit_callback_t(const struct dict_commit_result *result,
+				   void *context);
 
 void dict_driver_register(struct dict *driver);
 void dict_driver_unregister(struct dict *driver);
@@ -77,16 +83,12 @@ void dict_drivers_unregister_all(void);
 
 /* Open dictionary with given URI (type:data).
    Returns 0 if ok, -1 if URI is invalid. */
-int dict_init(const char *uri, enum dict_data_type value_type,
-	      const char *username, const char *base_dir, struct dict **dict_r,
-	      const char **error_r);
-int dict_init_full(const char *uri, const struct dict_settings *set,
-		   struct dict **dict_r, const char **error_r);
+int dict_init(const char *uri, const struct dict_settings *set,
+	      struct dict **dict_r, const char **error_r);
 /* Close dictionary. */
 void dict_deinit(struct dict **dict);
-/* Wait for all pending asynchronous operations to finish.
-   Returns 0 if ok, -1 if error. */
-int dict_wait(struct dict *dict);
+/* Wait for all pending asynchronous operations to finish. */
+void dict_wait(struct dict *dict);
 /* Switch the dict to the current ioloop. This can be used to do dict_wait()
    among other IO work. Returns TRUE if there is actually some work that can
    be waited on. */
@@ -95,7 +97,7 @@ bool dict_switch_ioloop(struct dict *dict) ATTR_NOWARN_UNUSED_RESULT;
 /* Lookup value for key. Set it to NULL if it's not found.
    Returns 1 if found, 0 if not found and -1 if lookup failed. */
 int dict_lookup(struct dict *dict, pool_t pool,
-		const char *key, const char **value_r);
+		const char *key, const char **value_r, const char **error_r);
 void dict_lookup_async(struct dict *dict, const char *key,
 		       dict_lookup_callback_t *callback, void *context);
 
@@ -125,7 +127,7 @@ bool dict_iterate_has_more(struct dict_iterate_context *ctx);
 bool dict_iterate(struct dict_iterate_context *ctx,
 		  const char **key_r, const char **value_r);
 /* Returns 0 = ok, -1 = iteration failed */
-int dict_iterate_deinit(struct dict_iterate_context **ctx);
+int dict_iterate_deinit(struct dict_iterate_context **ctx, const char **error_r);
 
 /* Start a new dictionary transaction. */
 struct dict_transaction_context *dict_transaction_begin(struct dict *dict);
@@ -141,7 +143,8 @@ void dict_transaction_set_timestamp(struct dict_transaction_context *ctx,
 				    const struct timespec *ts);
 /* Commit the transaction. Returns 1 if ok, 0 if dict_atomic_inc() was used
    on a nonexistent key, -1 if failed. */
-int dict_transaction_commit(struct dict_transaction_context **ctx);
+int dict_transaction_commit(struct dict_transaction_context **ctx,
+			    const char **error_r);
 /* Commit the transaction, but don't wait to see if it finishes successfully.
    If callback isn't NULL, it's called eventually. If it's not called by the
    time you want to deinitialize dict, call dict_flush() to wait for the
@@ -158,9 +161,6 @@ void dict_set(struct dict_transaction_context *ctx,
 /* Unset a record in dictionary, identified by key*/
 void dict_unset(struct dict_transaction_context *ctx,
 		const char *key);
-/* Append to an existing key in dictionary. Preferably an atomic operation. */
-void dict_append(struct dict_transaction_context *ctx,
-		 const char *key, const char *value);
 /* Increase/decrease a numeric value in dictionary. Note that the value is
    changed when transaction is being committed, so you can't know beforehand
    what the value will become. The value is updated only if it already exists,

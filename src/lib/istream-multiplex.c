@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -82,7 +82,7 @@ i_stream_multiplex_read(struct multiplex_istream *mstream,
 		return -1;
 	}
 
-	data = i_stream_get_data(mstream->parent, &len);
+	(void)i_stream_get_data(mstream->parent, &len);
 
 	if (len == 0 && mstream->parent->closed) {
 		req_channel->istream.istream.eof = TRUE;
@@ -91,7 +91,7 @@ i_stream_multiplex_read(struct multiplex_istream *mstream,
 
 	if (((mstream->remain > 0 && len == 0) ||
 	     (mstream->remain == 0 && len < 5)) &&
-	    (ret = i_stream_read(mstream->parent)) <= 0) {
+	    (ret = i_stream_read_memarea(mstream->parent)) <= 0) {
 		propagate_error(mstream, mstream->parent->stream_errno);
 		if (mstream->parent->eof)
 			propagate_eof(mstream);
@@ -227,7 +227,7 @@ static void i_stream_multiplex_ichannel_destroy(struct iostream_private *stream)
 	struct multiplex_ichannel **channelp;
 	struct multiplex_ichannel *channel = (struct multiplex_ichannel*)stream;
 	i_stream_multiplex_ichannel_close(stream, TRUE);
-	i_free(channel->istream.w_buffer);
+	i_stream_free_buffer(&channel->istream);
 	array_foreach_modifiable(&channel->mstream->channels, channelp) {
 		if (*channelp == channel) {
 			*channelp = NULL;
@@ -255,7 +255,7 @@ i_stream_add_channel_real(struct multiplex_istream *mstream, uint8_t cid)
 		channel->istream.fd = -1;
 	array_append(&channel->mstream->channels, &channel, 1);
 
-	return i_stream_create(&channel->istream, NULL, channel->istream.fd);
+	return i_stream_create(&channel->istream, NULL, channel->istream.fd, 0);
 }
 
 struct istream *i_stream_multiplex_add_channel(struct istream *stream, uint8_t cid)

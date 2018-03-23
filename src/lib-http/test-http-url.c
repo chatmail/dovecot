@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -19,57 +19,59 @@ static struct valid_http_url_test valid_url_tests[] = {
 	{
 		.url = "http://localhost",
 		.url_parsed = {
-			.host_name = "localhost" }
+			.host = { .name = "localhost" } }
 	},{
 		.url = "http://www.%65%78%61%6d%70%6c%65.com",
 		.url_parsed = {
-			.host_name = "www.example.com" }
+			.host = { .name = "www.example.com" } }
 	},{
 		.url = "http://www.dovecot.org:8080",
 		.url_parsed = {
-			.host_name = "www.dovecot.org",
-			.port = 8080, .have_port = TRUE }
+			.host = { .name = "www.dovecot.org" },
+			.port = 8080 }
 	},{
 		.url = "http://127.0.0.1",
 		.url_parsed = {
-			.host_name = "127.0.0.1",
-			.have_host_ip = TRUE }
-#ifdef HAVE_IPV6
+			.host = {
+				.name = "127.0.0.1",
+				.ip = { .family = AF_INET } } }
 	},{
 		.url = "http://[::1]",
 		.url_parsed = {
-			.host_name = "[::1]",
-			.have_host_ip = TRUE }
+			.host = {
+				.name = "[::1]",
+				.ip = { .family = AF_INET6 } } }
 	},{
 		.url = "http://[::1]:8080",
 		.url_parsed = {
-			.host_name = "[::1]",
-			.have_host_ip = TRUE,
-			.port = 8080, .have_port = TRUE }
-#endif
+			.host = {
+				.name = "[::1]",
+				.ip = { .family = AF_INET6 } },
+			.port = 8080 }
 	},{
 		.url = "http://user@api.dovecot.org",
 		.flags = HTTP_URL_ALLOW_USERINFO_PART,
 		.url_parsed = {
-			.host_name = "api.dovecot.org", .user = "user" }
+			.host = { .name = "api.dovecot.org" },
+			.user = "user" }
 	},{
 		.url = "http://userid:secret@api.dovecot.org",
 		.flags = HTTP_URL_ALLOW_USERINFO_PART,
 		.url_parsed = {
-			.host_name = "api.dovecot.org",
+			.host = { .name = "api.dovecot.org" },
 			.user = "userid", .password = "secret" }
 	},{
 		.url = "http://su%3auserid:secret@api.dovecot.org",
 		.flags = HTTP_URL_ALLOW_USERINFO_PART,
 		.url_parsed = {
-			.host_name = "api.dovecot.org",
+			.host = { .name = "api.dovecot.org" },
 			.user = "su:userid", .password = "secret" }
 	},{
 		.url = "http://www.example.com/"
 			"?question=What%20are%20you%20doing%3f&answer=Nothing.",
 		.url_parsed = {
 			.path = "/",
-			.host_name = "www.example.com",
+			.host = { .name = "www.example.com" },
 			.enc_query = "question=What%20are%20you%20doing%3f&answer=Nothing." }
 	},{
 		/* These next 2 URLs don't follow the recommendations in
@@ -83,20 +85,20 @@ static struct valid_http_url_test valid_url_tests[] = {
 		.url = "http://256.0.0.1/that/reverts/to/DNS",
 		.url_parsed = {
 			.path = "/that/reverts/to/DNS",
-			.host_name = "256.0.0.1"
+			.host = { .name = "256.0.0.1" }
 		}
 	},{
 		.url = "http://127.0.0.284/this/also/reverts/to/DNS",
 		.url_parsed = {
 			.path = "/this/also/reverts/to/DNS",
-			.host_name = "127.0.0.284"
+			.host = { .name = "127.0.0.284" }
 		}
 	},{
 		.url = "http://www.example.com/#Status%20of%20development",
 		.flags = HTTP_URL_ALLOW_FRAGMENT_PART,
 		.url_parsed = {
 			.path = "/",
-			.host_name = "www.example.com",
+			.host = { .name = "www.example.com" },
 			.enc_fragment = "Status%20of%20development" }
 
 	
@@ -112,180 +114,180 @@ static struct valid_http_url_test valid_url_tests[] = {
 	 */
 	},{ // "g"             =  "http://a/b/c/g"
 		.url = "g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g" }
 	},{ // "./g"           =  "http://a/b/c/g"
 		.url = "./g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g" }
 	},{ // "g/"            =  "http://a/b/c/g/"
 		.url = "g/",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g/" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g/" }
 	},{ // "/g"            =  "http://a/g"
 		.url = "/g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/g" }
 	},{ // "//g"           =  "http://g"
 		.url = "//g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "g"} }
 	},{ // "?y"            =  "http://a/b/c/d;p?y"
 		.url = "?y",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "y" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "y" }
 	},{ // "g?y"           =  "http://a/b/c/g?y"
 		.url = "g?y",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g", .enc_query = "y" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g", .enc_query = "y" }
 	},{ // "#s"            =  "http://a/b/c/d;p?q#s"
 		.url = "#s",
 		.flags = HTTP_URL_ALLOW_FRAGMENT_PART,
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q",
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q",
 			.enc_fragment = "s" }
 	},{ // "g#s"           =  "http://a/b/c/g#s"
 		.url = "g#s",
 		.flags = HTTP_URL_ALLOW_FRAGMENT_PART,
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g", .enc_fragment = "s" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g", .enc_fragment = "s" }
 
 	},{ // "g?y#s"         =  "http://a/b/c/g?y#s"
 		.url = "g?y#s",
 		.flags = HTTP_URL_ALLOW_FRAGMENT_PART,
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g", .enc_query = "y",
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g", .enc_query = "y",
 			.enc_fragment = "s" }
 	},{ // ";x"            =  "http://a/b/c/;x"
 		.url = ";x",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/;x" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/;x" }
 	},{ // "g;x"           =  "http://a/b/c/g;x"
 		.url = "g;x",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g;x" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g;x" }
 
 	},{ // "g;x?y#s"       =  "http://a/b/c/g;x?y#s"
 		.url = "g;x?y#s",
 		.flags = HTTP_URL_ALLOW_FRAGMENT_PART,
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g;x", .enc_query = "y",
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g;x", .enc_query = "y",
 			.enc_fragment = "s" }
 	},{ // ""              =  "http://a/b/c/d;p?q"
 		.url = "",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" }
 	},{ // "."             =  "http://a/b/c/"
 		.url = ".",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/" }
 	},{ // "./"            =  "http://a/b/c/"
 		.url = "./",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/" }
 	},{ // ".."            =  "http://a/b/"
 		.url = "..",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/" }
 	},{ // "../"           =  "http://a/b/"
 		.url = "../",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/" }
 	},{ // "../g"          =  "http://a/b/g"
 		.url = "../g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/g" }
 	},{ // "../.."         =  "http://a/"
 		.url = "../..",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/" }
 	},{ // "../../"        =  "http://a/"
 		.url = "../../",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/" }
 	},{ // "../../g"       =  "http://a/g"
 		.url = "../../g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/g" }
 
 	/* 5.4.2. Abnormal Examples
 	 */
 	},{ // "../../../g"    =  "http://a/g"
 		.url = "../../../g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/g" }
 	},{ // "../../../../g" =  "http://a/g"
 		.url = "../../../../g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/g" }
 	},{ // "/./g"          =  "http://a/g"
 		.url = "/./g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/g" }
 	},{ // "/../g"         =  "http://a/g"
 		.url = "/../g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/g" }
 	},{ // "g."            =  "http://a/b/c/g."
 		.url = "g.",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g." }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g." }
 	},{ // ".g"            =  "http://a/b/c/.g"
 		.url = ".g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/.g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/.g" }
 	},{ // "g.."           =  "http://a/b/c/g.."
 		.url = "g..",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g.." }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g.." }
 	},{ // "..g"           =  "http://a/b/c/..g"
 		.url = "..g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/..g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/..g" }
 	},{ // "./../g"        =  "http://a/b/g"
 		.url = "./../g",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/g" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/g" }
 	},{ // "./g/."         =  "http://a/b/c/g/"
 		.url = "./g/.",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g/" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g/" }
 	},{ // "g/./h"         =  "http://a/b/c/g/h"
 		.url = "g/./h",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g/h" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g/h" }
 	},{ // "g/../h"        =  "http://a/b/c/h"
 		.url = "g/../h",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/h" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/h" }
 	},{ // "g;x=1/./y"     =  "http://a/b/c/g;x=1/y"
 		.url = "g;x=1/./y",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g;x=1/y" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g;x=1/y" }
 	},{ // "g;x=1/../y"    =  "http://a/b/c/y"
 		.url = "g;x=1/../y",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/y" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/y" }
 	},{ // "g?y/./x"       =  "http://a/b/c/g?y/./x"
 		.url = "g?y/./x",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g", .enc_query = "y/./x" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g", .enc_query = "y/./x" }
 	},{ // "g?y/../x"      =  "http://a/b/c/g?y/../x"
 		.url = "g?y/../x",
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
-		.url_parsed = { .host_name = "a", .path = "/b/c/g", .enc_query = "y/../x" }
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
+		.url_parsed = { .host = {.name = "a"}, .path = "/b/c/g", .enc_query = "y/../x" }
 	},{ // "g#s/./x"       =  "http://a/b/c/g#s/./x"
 		.url = "g#s/./x",
 		.flags = HTTP_URL_ALLOW_FRAGMENT_PART,
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
 		.url_parsed =
-			{ .host_name = "a", .path = "/b/c/g", .enc_fragment = "s/./x" }
+			{ .host = {.name = "a"}, .path = "/b/c/g", .enc_fragment = "s/./x" }
 	},{ // "g#s/../x"      =  "http://a/b/c/g#s/../x"	
 		.url = "g#s/../x",
 		.flags = HTTP_URL_ALLOW_FRAGMENT_PART,
-		.url_base = { .host_name = "a", .path = "/b/c/d;p", .enc_query = "q" },
+		.url_base = { .host = {.name = "a"}, .path = "/b/c/d;p", .enc_query = "q" },
 		.url_parsed =
-			{ .host_name = "a", .path = "/b/c/g", .enc_fragment = "s/../x" }
+			{ .host = {.name = "a"}, .path = "/b/c/g", .enc_fragment = "s/../x" }
 	}
 };
 
@@ -305,28 +307,20 @@ static void test_http_url_valid(void)
 
 		test_begin(t_strdup_printf("http url valid [%d]", i));
 
-		if (urlb->host_name == NULL) urlb = NULL;
+		if (urlb->host.name == NULL) urlb = NULL;
 		if (http_url_parse(url, urlb, flags, pool_datastack_create(), &urlp, &error) < 0)
 			urlp = NULL;
 
 		test_out_reason(t_strdup_printf("http_url_parse(%s)",
 			valid_url_tests[i].url), urlp != NULL, error);
 		if (urlp != NULL) {
-			if (urlp->host_name == NULL || urlt->host_name == NULL) {
-				test_assert(urlp->host_name == urlt->host_name);
+			if (urlp->host.name == NULL || urlt->host.name == NULL) {
+				test_assert(urlp->host.name == urlt->host.name);
 			} else {
-				test_assert(strcmp(urlp->host_name, urlt->host_name) == 0);
+				test_assert(strcmp(urlp->host.name, urlt->host.name) == 0);
 			}
-			if (!urlp->have_port) {
-				test_assert(urlp->have_port == urlt->have_port);
-			} else {
-				test_assert(urlp->have_port == urlt->have_port && urlp->port == urlt->port);
-			}
-			if (!urlp->have_host_ip) {
-				test_assert(urlp->have_host_ip == urlt->have_host_ip);
-			} else {
-				test_assert(urlp->have_host_ip == urlt->have_host_ip);
-			}
+			test_assert(urlp->port == urlt->port);
+			test_assert(urlp->host.ip.family == urlt->host.ip.family);
 			if (urlp->user == NULL || urlt->user == NULL) {
 				test_assert(urlp->user == urlt->user);
 			} else {
@@ -381,10 +375,8 @@ static struct invalid_http_url_test invalid_url_tests[] = {
 		.url = "http://[]/index.html"
 	},{
 		.url = "http://[v08.234:232:234:234:2221]/index.html"
-#ifdef HAVE_IPV6
 	},{
 		.url = "http://[1::34a:34:234::6]/index.html"
-#endif
 	},{
 		.url = "http://example%a.com/index.html"
 	},{
@@ -424,7 +416,7 @@ static void test_http_url_invalid(void)
 		struct http_url *urlp;
 		const char *error = NULL;
 
-		if (urlb->host_name == NULL)
+		if (urlb->host.name == NULL)
 			urlb = NULL;
 
 		test_begin(t_strdup_printf("http url invalid [%d]", i));
@@ -442,13 +434,10 @@ static void test_http_url_invalid(void)
 static const char *parse_create_url_tests[] = {
 	"http://www.example.com/",
 	"http://10.0.0.1/",
-#ifdef HAVE_IPV6
 	"http://[::1]/",
-#endif
 	"http://www.example.com:993/",
 	"http://www.example.com/index.html",
 	"http://www.example.com/settings/index.html",
-	"http://ww.%23example.com/",
 	"http://www.example.com/%23shared/news",
 	"http://www.example.com/query.php?name=Hendrik%20Visser",
 	"http://www.example.com/network.html#IMAP%20Server",
@@ -486,7 +475,7 @@ static void test_http_url_parse_create(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_http_url_valid,
 		test_http_url_invalid,
 		test_http_url_parse_create,

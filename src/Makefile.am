@@ -1,6 +1,9 @@
 if HAVE_LDAP
 LIB_LDAP=lib-ldap
 endif
+if HAVE_LUA
+LIB_LUA=lib-lua
+endif
 
 LIBDOVECOT_SUBDIRS = \
 	lib-test \
@@ -14,14 +17,14 @@ LIBDOVECOT_SUBDIRS = \
 	lib-dcrypt \
 	lib-dict \
 	lib-sasl \
-	lib-stats \
+	lib-old-stats \
 	lib-http \
 	lib-fs \
 	lib-mail \
+	lib-program-client \
 	lib-smtp \
 	lib-imap \
 	lib-imap-storage \
-	lib-program-client \
 	lib-oauth2
 
 SUBDIRS = \
@@ -29,6 +32,7 @@ SUBDIRS = \
 	lib-dict-extra \
 	lib-dovecot \
 	$(LIB_LDAP) \
+	$(LIB_LUA) \
 	lib-fts \
 	lib-imap-client \
 	lib-imap-urlauth \
@@ -39,6 +43,7 @@ SUBDIRS = \
 	lib-ntlm \
 	lib-otp \
 	lib-lda \
+	lib-dict-backend \
 	anvil \
 	auth \
 	dict \
@@ -53,6 +58,8 @@ SUBDIRS = \
 	imap-urlauth \
 	pop3-login \
 	pop3 \
+	submission-login \
+	submission \
 	lda \
 	lmtp \
 	log \
@@ -61,6 +68,6 @@ SUBDIRS = \
 	replication \
 	util \
 	doveadm \
-	ssl-params \
 	stats \
+	old-stats \
 	plugins

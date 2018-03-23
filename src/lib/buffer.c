@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
 
 /* @UNSAFE: whole file */
 
@@ -16,8 +16,8 @@ struct real_buffer {
 
 	pool_t pool;
 
-	unsigned int alloced:1;
-	unsigned int dynamic:1;
+	bool alloced:1;
+	bool dynamic:1;
 };
 typedef int buffer_check_sizes[COMPILE_ERROR_IF_TRUE(sizeof(struct real_buffer) > sizeof(buffer_t)) ?1:1];
 
@@ -148,6 +148,9 @@ void buffer_free(buffer_t **_buf)
 {
 	struct real_buffer *buf = (struct real_buffer *)*_buf;
 
+	if (buf == NULL)
+		return;
+
 	*_buf = NULL;
 	if (buf->alloced)
 		p_free(buf->pool, buf->w_buffer);
@@ -172,11 +175,6 @@ pool_t buffer_get_pool(const buffer_t *_buf)
 	const struct real_buffer *buf = (const struct real_buffer *)_buf;
 
 	return buf->pool;
-}
-
-void buffer_reset(buffer_t *buf)
-{
-	buffer_set_used_size(buf, 0);
 }
 
 void buffer_write(buffer_t *_buf, size_t pos,
@@ -373,7 +371,7 @@ void buffer_truncate_rshift_bits(buffer_t *buf, size_t bits)
 	if (bits > 0) {
 		/* truncate it to closest byte boundary */
 		size_t bytes = ((bits + 7) & -8U)/8;
-		/* remainding bits */
+		/* remaining bits */
 		bits = bits % 8;
 		buffer_set_used_size(buf, I_MIN(bytes, buf->used));
 		unsigned char *ptr = buffer_get_modifiable_data(buf, &bytes);

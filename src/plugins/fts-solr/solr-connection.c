@@ -1,4 +1,4 @@
-/* Copyright (c) 2006-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2006-2017 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -52,7 +52,7 @@ struct solr_connection_post {
 
 	struct http_client_request *http_req;
 
-	unsigned int failed:1;
+	bool failed:1;
 };
 
 struct solr_connection {
@@ -70,10 +70,10 @@ struct solr_connection {
 	struct istream *payload;
 	struct io *io;
 
-	unsigned int debug:1;
-	unsigned int posting:1;
-	unsigned int xml_failed:1;
-	unsigned int http_ssl:1;
+	bool debug:1;
+	bool posting:1;
+	bool xml_failed:1;
+	bool http_ssl:1;
 };
 
 static int solr_xml_parse(struct solr_connection *conn,
@@ -85,7 +85,7 @@ static int solr_xml_parse(struct solr_connection *conn,
 	if (conn->xml_failed)
 		return -1;
 
-	if (XML_Parse(conn->xml_parser, data, size, done))
+	if (XML_Parse(conn->xml_parser, data, size, done ? 1 : 0) != 0)
 		return 0;
 
 	err = XML_GetErrorCode(conn->xml_parser);
@@ -101,8 +101,10 @@ static int solr_xml_parse(struct solr_connection *conn,
 	return 0;
 }
 
-int solr_connection_init(const char *url, bool debug,
-			 struct solr_connection **conn_r, const char **error_r)
+int solr_connection_init(const char *url,
+			 const struct ssl_iostream_settings *ssl_client_set,
+			 bool debug, struct solr_connection **conn_r,
+			 const char **error_r)
 {
 	struct http_client_settings http_set;
 	struct solr_connection *conn;
@@ -117,7 +119,7 @@ int solr_connection_init(const char *url, bool debug,
 	}
 
 	conn = i_new(struct solr_connection, 1);
-	conn->http_host = i_strdup(http_url->host_name);
+	conn->http_host = i_strdup(http_url->host.name);
 	conn->http_port = http_url->port;
 	conn->http_base_url = i_strconcat(http_url->path, http_url->enc_query, NULL);
 	conn->http_ssl = http_url->have_ssl;
@@ -136,9 +138,10 @@ int solr_connection_init(const char *url, bool debug,
 		http_set.max_pipelined_requests = 1;
 		http_set.max_redirects = 1;
 		http_set.max_attempts = 3;
-		http_set.debug = debug;
 		http_set.connect_timeout_msecs = 5*1000;
 		http_set.request_timeout_msecs = 60*1000;
+		http_set.ssl = ssl_client_set;
+		http_set.debug = debug;
 		solr_http_client = http_client_init(&http_set);
 	}
 
@@ -386,7 +389,7 @@ static void solr_connection_payload_input(struct solr_connection *conn)
 	int ret;
 
 	/* read payload */
-	while ((ret = i_stream_read_data(conn->payload, &data, &size, 0)) > 0) {
+	while ((ret = i_stream_read_more(conn->payload, &data, &size)) > 0) {
 		(void)solr_xml_parse(conn, data, size, FALSE);
 		i_stream_skip(conn->payload, size);
 	}
