@@ -64,6 +64,9 @@ sieve_files = usr/bin/sieve* \
 
 solr_files = usr/lib/dovecot/modules/lib??_fts_solr_*
 
+submission_files = usr/lib/dovecot/submission* \
+	           usr/share/dovecot/conf.d/??-submission.conf
+
 lucene_files = usr/lib/dovecot/modules/lib??_fts_lucene_*
 
 dev_files = usr/include/* \
