@@ -265,12 +265,12 @@ Depends: dovecot-core (= ${binary:Version}),
          ucf (>= 2.0020),
          ${misc:Depends},
          ${shlibs:Depends}
-Description: secure POP3/IMAP server - mail submission support
+Description: secure POP3/IMAP server - mail submission agent
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
  that all data is valid, making it nearly impossible to crash. It supports
  mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
  fast, extensible, and portable.
  .
- This package contains the Dovecot Submission server, implementing a basic SMTP
- submission service with BURL support.
+ This package contains the Dovecot Mail Submission Agent which implements a
+ basic SMTP submission service with BURL support.
