@@ -1,3 +1,24 @@
+dovecot (1:2.3.0.1-1) experimental; urgency=medium
+
+  * [e32a10f] New upstream stable series; see NEWS.Debian for more
+    information
+  * [64283fd] d/watch: bump upstream series to 2.3
+  * [a09dca8] Drop patches no longer needed
+     - libnss_location.patch: NSS support removed upstream
+     - systemd-service-fixes.patch: merged upstream
+     - handle-sslv23-gracefully.patch: upstream refactored SSL support, no
+       longer necessary
+  * [3698015] Refresh remaining patches
+  * [354998c] Update pigeonhole to 0.5.0.1
+  * [4a6dc2d] Set ssl_dh and ship RFC3526 4096-bit DH parameters
+  * [ae700a0] Document breaking configuration changes in dovecot-core.NEWS
+  * [0f4e6c4] New dovecot-submission package
+  * [dc553a9] d/rules: let $(MOVE) auto-create destination directories
+  * [3b8b56e] Do not rely on dh_installdirs for directories populated via
+    $(MOVE)
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Sat, 24 Mar 2018 22:25:51 +0200
+
 dovecot (1:2.2.35-2) unstable; urgency=medium
 
   * [7665652] Use git-subtree to generate pigeonhole patch from git; add
