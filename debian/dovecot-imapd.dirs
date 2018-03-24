@@ -1,4 +1,0 @@
-usr/lib/dovecot
-usr/lib/dovecot/modules
-usr/share/dovecot/conf.d
-etc/ufw/applications.d
