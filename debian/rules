@@ -16,7 +16,7 @@ endif
 # Macros to help move files to the module packages
 CORE_DIR=$(CURDIR)/debian/dovecot-core
 PKG_DIR=$(CURDIR)/debian/dovecot-PKG
-MOVE=mv $(CORE_DIR)/$(1) $(PKG_DIR:PKG=$(2))/$(dir $(1));
+MOVE=install -d $(PKG_DIR:PKG=$(2))/$(dir $(1)); mv $(CORE_DIR)/$(1) $(PKG_DIR:PKG=$(2))/$(dir $(1));
 
 # Files to move from dovecot-core to the individual packages. Files added to
 # <addon>_files will be automatically moved from dovecot's tree to the
