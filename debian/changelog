@@ -1,3 +1,22 @@
+dovecot (1:2.3.1-1) experimental; urgency=medium
+
+  * [d07381b] New upstream version 2.3.1
+  * [0be1513] Update pigeonhole to 0.5.1
+  * [b3d1e17] Enable AppArmor support, see
+    https://wiki2.dovecot.org/Plugins/Apparmor
+    - B-D on libapparmor-dev
+  * [c0c55bd] Enable Lua scripting support for authdb/passdb.
+    - B-D on liblua5.3-dev
+    - New binary package, dovecot-auth-lua
+  * [4f6792e] Build with sodium support, enabling the ARGON2I and ARGON2ID
+    password schemes.
+    - B-D on libsodium-dev
+  * [54347e7] Build with ICU support enabling FTS unicode normalization
+    - B-D on libicu-dev
+  * [779908e] dovecot-submission: activate dovecot-core's triggers
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 27 Mar 2018 20:52:14 +0300
+
 dovecot (1:2.3.0.1-2) experimental; urgency=medium
 
   * [f567eb4] Fix murmur3 hash on big-endian architectures, causing FTBFS.
