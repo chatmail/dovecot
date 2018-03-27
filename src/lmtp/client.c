@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -150,7 +150,9 @@ struct client *client_create(int fd_in, int fd_out,
 		SMTP_CAPABILITY_PIPELINING |
 		SMTP_CAPABILITY_ENHANCEDSTATUSCODES |
 		SMTP_CAPABILITY_8BITMIME |
-		SMTP_CAPABILITY_CHUNKING;
+		SMTP_CAPABILITY_CHUNKING |
+		SMTP_CAPABILITY_XCLIENT |
+		SMTP_CAPABILITY__ORCPT;
 	if (!conn->ssl && master_service_ssl_is_enabled(master_service))
 		lmtp_set.capabilities |= SMTP_CAPABILITY_STARTTLS;
 	lmtp_set.hostname = client->unexpanded_lda_set->hostname;
@@ -160,12 +162,12 @@ struct client *client_create(int fd_in, int fd_out,
 	client->conn = smtp_server_connection_create
 		(lmtp_server, fd_in, fd_out,
 			&conn->remote_ip, conn->remote_port,
-			&lmtp_set, &lmtp_callbacks, client);
+			conn->ssl, &lmtp_set, &lmtp_callbacks, client);
 
 	DLLIST_PREPEND(&clients, client);
 	clients_count++;
 
-	smtp_server_connection_start(client->conn, conn->ssl);
+	smtp_server_connection_start(client->conn);
 	i_info("Connect from %s", client_remote_id(client));
 	refresh_proctitle();
 	return client;

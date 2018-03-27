@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -129,7 +129,7 @@ bool old_settings_ssl_dh_load(const char **value, const char **error_r)
 
 		if (!seen_ssl_parameters_dat) {
 			i_warning("please set ssl_dh=<%s", SYSCONFDIR"/dh.pem");
-			i_warning("You can generate it with: dd if=%s bs=1 skip=%u | openssl dh -inform der > %s", fn, off, SYSCONFDIR"/dh.pem");
+			i_warning("You can generate it with: dd if=%s bs=1 skip=%u | openssl dhparam -inform der > %s", fn, off, SYSCONFDIR"/dh.pem");
 			seen_ssl_parameters_dat = TRUE;
 		}
 	} else if (is->stream_errno == ENOENT) {

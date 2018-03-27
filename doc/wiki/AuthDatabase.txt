@@ -14,6 +14,5 @@ and <user databases> [UserDatabase.txt]:
    etc.)
  * <VPopMail> [AuthDatabase.VPopMail.txt]: External software used to handle
    virtual domains
- * <Lua> [AuthDatabase.Lua.txt]: Lua script for authentication (v2.3.0+)
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

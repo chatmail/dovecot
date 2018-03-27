@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -32,6 +32,9 @@ struct smtp_client *smtp_client_init(const struct smtp_client_settings *set)
 	client->pool = pool;
 
 	client->set.my_hostname = p_strdup(pool, set->my_hostname);
+
+	client->set.forced_capabilities = set->forced_capabilities;
+
 	client->set.dns_client = set->dns_client;
 	client->set.dns_client_socket_path =
 		p_strdup(pool, set->dns_client_socket_path);

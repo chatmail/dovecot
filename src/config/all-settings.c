@@ -85,12 +85,18 @@ struct mail_storage_settings {
 	const char *ssl_client_ca_dir;
 	const char *ssl_client_ca_file;
 	const char *ssl_crypto_device;
+	const char *mail_attachment_detection_options;
 
 	enum file_lock_method parsed_lock_method;
 	enum fsync_mode parsed_fsync_mode;
 	/* May be NULL - use mail_storage_get_postmaster_address() instead of
 	   directly accessing this. */
 	const struct message_address *_parsed_postmaster_address;
+
+	const char *const *parsed_mail_attachment_content_type_filter;
+	bool parsed_mail_attachment_exclude_inlined;
+	bool parsed_mail_attachment_detection_add_flags_on_save;
+	bool parsed_mail_attachment_detection_add_flags_on_fetch;
 };
 struct mail_namespace_settings {
 	const char *name;
@@ -204,6 +210,7 @@ enum imapc_features {
 	IMAPC_FEATURE_FETCH_BODYSTRUCTURE	= 0x1000,
 	IMAPC_FEATURE_SEND_ID			= 0x2000,
 	IMAPC_FEATURE_FETCH_EMPTY_IS_EXPUNGED	= 0x4000,
+	IMAPC_FEATURE_NO_MSN_UPDATES		= 0x8000,
 };
 /* </settings checks> */
 struct imapc_settings {
@@ -424,7 +431,7 @@ struct dict_ldap_settings {
 extern const struct setting_parser_info mailbox_setting_parser_info;
 extern const struct setting_parser_info mail_namespace_setting_parser_info;
 /* <settings checks> */
-static bool mail_storage_settings_check(void *_set, pool_t pool ATTR_UNUSED,
+static bool mail_storage_settings_check(void *_set, pool_t pool,
 					const char **error_r)
 {
 	struct mail_storage_settings *set = _set;
@@ -543,6 +550,34 @@ static bool mail_storage_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 				    "postmaster@", set->hostname, NULL);
 	}
 #endif
+
+	/* parse mail_attachment_indicator_options */
+	if (*set->mail_attachment_detection_options != '\0') {
+		ARRAY_TYPE(const_string) content_types;
+		p_array_init(&content_types, pool, 2);
+
+		const char *const *options =
+			t_strsplit_spaces(set->mail_attachment_detection_options, " ");
+
+		while(*options != NULL) {
+			const char *opt = *options;
+
+			if (strcmp(opt, "add-flags-on-save") == 0) {
+				set->parsed_mail_attachment_detection_add_flags_on_save = TRUE;
+			} else if (strcmp(opt, "add-flags-on-fetch") == 0) {
+				set->parsed_mail_attachment_detection_add_flags_on_fetch = TRUE;
+			} else if (strcmp(opt, "exclude-inlined") == 0) {
+				set->parsed_mail_attachment_exclude_inlined = TRUE;
+			} else if (strncmp(opt, "content-type=", 13) == 0) {
+				const char *value = p_strdup(pool, opt+13);
+				array_append(&content_types, &value, 1);
+			}
+			options++;
+		}
+
+		array_append_zero(&content_types);
+		set->parsed_mail_attachment_content_type_filter = array_idx(&content_types, 0);
+	}
 
 	return TRUE;
 }
@@ -731,6 +766,7 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_STR_VARS, mail_attachment_dir),
 	DEF(SET_STR, mail_attachment_hash),
 	DEF(SET_SIZE, mail_attachment_min_size),
+	DEF(SET_STR, mail_attachment_detection_options),
 	DEF(SET_STR_VARS, mail_attribute_dict),
 	DEF(SET_UINT, mail_prefetch_count),
 	DEF(SET_STR, mail_cache_fields),
@@ -789,6 +825,7 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mail_attachment_dir = "",
 	.mail_attachment_hash = "%{sha1}",
 	.mail_attachment_min_size = 1024*128,
+	.mail_attachment_detection_options = "",
 	.mail_attribute_dict = "",
 	.mail_prefetch_count = 0,
 	.mail_cache_fields = "flags",
@@ -1214,6 +1251,7 @@ static const struct imapc_feature_list imapc_feature_list[] = {
 	{ "fetch-bodystructure", IMAPC_FEATURE_FETCH_BODYSTRUCTURE },
 	{ "send-id", IMAPC_FEATURE_SEND_ID },
 	{ "fetch-empty-is-expunged", IMAPC_FEATURE_FETCH_EMPTY_IS_EXPUNGED },
+	{ "no-msn-updates", IMAPC_FEATURE_NO_MSN_UPDATES },
 	{ NULL, 0 }
 };
 
@@ -1463,6 +1501,9 @@ struct submission_settings {
 	const char *submission_relay_rawlog_dir;
 	unsigned int submission_relay_max_idle_time;
 
+	unsigned int submission_relay_connect_timeout;
+	unsigned int submission_relay_command_timeout;
+
 	/* imap urlauth: */
 	const char *imap_urlauth_host;
 	in_port_t imap_urlauth_port;
@@ -1576,6 +1617,7 @@ struct master_settings {
 	const char *listen;
 	const char *ssl;
 	const char *default_internal_user;
+	const char *default_internal_group;
 	const char *default_login_user;
 	unsigned int default_process_limit;
 	unsigned int default_client_limit;
@@ -1816,6 +1858,7 @@ struct auth_settings {
 	uoff_t cache_size;
 	unsigned int cache_ttl;
 	unsigned int cache_negative_ttl;
+	bool cache_verify_password_with_worker;
 	const char *username_chars;
 	const char *username_translation;
 	const char *username_format;
@@ -1834,6 +1877,9 @@ struct auth_settings {
 	const char *policy_hash_nonce;
 	const char *policy_request_attributes;
 	bool policy_reject_on_fail;
+	bool policy_check_before_auth;
+	bool policy_check_after_auth;
+	bool policy_report_after_auth;
 	unsigned int policy_hash_truncate;
 
 	bool stats;
@@ -1912,7 +1958,7 @@ struct service_settings submission_service_settings = {
 	.user = "",
 	.group = "",
 	.privileged_group = "",
-	.extra_groups = "",
+	.extra_groups = "$default_internal_group",
 	.chroot = "",
 
 	.drop_priv_before_exec = FALSE,
@@ -1958,6 +2004,9 @@ static const struct setting_define submission_setting_defines[] = {
 	DEF(SET_STR, submission_relay_rawlog_dir),
 	DEF(SET_TIME, submission_relay_max_idle_time),
 
+	DEF(SET_TIME_MSECS, submission_relay_connect_timeout),
+	DEF(SET_TIME_MSECS, submission_relay_command_timeout),
+
 	DEF(SET_STR, imap_urlauth_host),
 	DEF(SET_IN_PORT, imap_urlauth_port),
 
@@ -1988,6 +2037,9 @@ static const struct submission_settings submission_default_settings = {
 
 	.submission_relay_rawlog_dir = "",
 	.submission_relay_max_idle_time = 60*29,
+
+	.submission_relay_connect_timeout = 30*1000,
+	.submission_relay_command_timeout = 60*5*1000,
 
 	.imap_urlauth_host = "",
 	.imap_urlauth_port = 143,
@@ -2093,7 +2145,7 @@ extern const struct setting_parser_info stats_metric_setting_parser_info;
 /* <settings checks> */
 static struct file_listener_settings stats_unix_listeners_array[] = {
 	{ "stats-reader", 0600, "", "" },
-	{ "stats-writer", 0600, "", "" },
+	{ "stats-writer", 0660, "", "$default_internal_group" },
 };
 static struct file_listener_settings *stats_unix_listeners[] = {
 	&stats_unix_listeners_array[0],
@@ -2432,7 +2484,7 @@ struct service_settings pop3_service_settings = {
 	.user = "",
 	.group = "",
 	.privileged_group = "",
-	.extra_groups = "",
+	.extra_groups = "$default_internal_group",
 	.chroot = "",
 
 	.drop_priv_before_exec = FALSE,
@@ -2731,6 +2783,16 @@ expand_user(const char **user, enum service_user_default *default_r,
 	}
 }
 
+static void
+expand_group(const char **group, const struct master_settings *set)
+{
+	/* $variable expansion is typically done by doveconf, but these
+	   variables can come from built-in settings, so we need to expand
+	   them here */
+	if (strcmp(*group, "$default_internal_group") == 0)
+		*group = set->default_internal_group;
+}
+
 static bool
 fix_file_listener_paths(ARRAY_TYPE(file_listener_settings) *l,
 			pool_t pool, const struct master_settings *master_set,
@@ -2753,6 +2815,7 @@ fix_file_listener_paths(ARRAY_TYPE(file_listener_settings) *l,
 		}
 
 		expand_user(&set->user, &user_default, master_set);
+		expand_group(&set->group, master_set);
 		if (*set->path != '/') {
 			set->path = p_strconcat(pool, master_set->base_dir, "/",
 						set->path, NULL);
@@ -2947,6 +3010,7 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 			}
 		}
 		expand_user(&service->user, &service->user_default, set);
+		expand_group(&service->extra_groups, set);
 		service_set_login_dump_core(service);
 	}
 	set->protocols_split = p_strsplit_spaces(pool, set->protocols, " ");
@@ -3237,6 +3301,7 @@ static const struct setting_define master_setting_defines[] = {
 	DEF(SET_STR, listen),
 	DEF(SET_ENUM, ssl),
 	DEF(SET_STR, default_internal_user),
+	DEF(SET_STR, default_internal_group),
 	DEF(SET_STR, default_login_user),
 	DEF(SET_UINT, default_process_limit),
 	DEF(SET_UINT, default_client_limit),
@@ -3263,6 +3328,7 @@ struct master_settings master_default_settings = {
 	.listen = "*, ::",
 	.ssl = "yes:no:required",
 	.default_internal_user = "dovecot",
+	.default_internal_group = "dovecot",
 	.default_login_user = "dovenull",
 	.default_process_limit = 100,
 	.default_client_limit = 1000,
@@ -3464,7 +3530,7 @@ struct service_settings lmtp_service_settings = {
 	.user = "",
 	.group = "",
 	.privileged_group = "",
-	.extra_groups = "",
+	.extra_groups = "$default_internal_group",
 	.chroot = "",
 
 	.drop_priv_before_exec = FALSE,
@@ -3524,7 +3590,7 @@ const struct setting_parser_info lmtp_setting_parser_info = {
 /* ../../src/ipc/ipc-settings.c */
 /* <settings checks> */
 static struct file_listener_settings ipc_unix_listeners_array[] = {
-	{ "ipc", 0600, "", "" },
+	{ "ipc", 0600, "$default_internal_user", "" },
 	{ "login/ipc-proxy", 0600, "$default_login_user", "" }
 };
 static struct file_listener_settings *ipc_unix_listeners[] = {
@@ -3582,7 +3648,7 @@ struct service_settings indexer_worker_service_settings = {
 	.user = "",
 	.group = "",
 	.privileged_group = "",
-	.extra_groups = "",
+	.extra_groups = "$default_internal_group",
 	.chroot = "",
 
 	.drop_priv_before_exec = FALSE,
@@ -3724,7 +3790,7 @@ struct service_settings imap_service_settings = {
 	.user = "",
 	.group = "",
 	.privileged_group = "",
-	.extra_groups = "",
+	.extra_groups = "$default_internal_group",
 	.chroot = "",
 
 	.drop_priv_before_exec = FALSE,
@@ -3831,7 +3897,7 @@ struct service_settings imap_urlauth_worker_service_settings = {
 	.user = "",
 	.group = "",
 	.privileged_group = "",
-	.extra_groups = "",
+	.extra_groups = "$default_internal_group",
 	.chroot = "",
 
 	.drop_priv_before_exec = FALSE,
@@ -4100,7 +4166,7 @@ const struct setting_parser_info *imap_login_setting_roots[] = {
 /* ../../src/imap-hibernate/imap-hibernate-settings.c */
 /* <settings checks> */
 static struct file_listener_settings imap_hibernate_unix_listeners_array[] = {
-	{ "imap-hibernate", 0600, "", "" }
+	{ "imap-hibernate", 0660, "", "$default_internal_group" }
 };
 static struct file_listener_settings *imap_hibernate_unix_listeners[] = {
 	&imap_hibernate_unix_listeners_array[0]
@@ -4214,7 +4280,7 @@ struct service_settings doveadm_service_settings = {
 	.user = "",
 	.group = "",
 	.privileged_group = "",
-	.extra_groups = "",
+	.extra_groups = "$default_internal_group",
 	.chroot = "",
 
 	.drop_priv_before_exec = FALSE,
@@ -4460,7 +4526,7 @@ const struct setting_parser_info director_setting_parser_info = {
 /* ../../src/dict/dict-settings.c */
 /* <settings checks> */
 static struct file_listener_settings dict_unix_listeners_array[] = {
-	{ "dict", 0600, "", "" }
+	{ "dict", 0660, "", "$default_internal_group" }
 };
 static struct file_listener_settings *dict_unix_listeners[] = {
 	&dict_unix_listeners_array[0]
@@ -4470,7 +4536,7 @@ static buffer_t dict_unix_listeners_buf = {
 };
 
 static struct file_listener_settings dict_async_unix_listeners_array[] = {
-	{ "dict-async", 0600, "", "" }
+	{ "dict-async", 0660, "", "$default_internal_group" }
 };
 static struct file_listener_settings *dict_async_unix_listeners[] = {
 	&dict_async_unix_listeners_array[0]
@@ -4962,6 +5028,7 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF(SET_SIZE, cache_size),
 	DEF(SET_TIME, cache_ttl),
 	DEF(SET_TIME, cache_negative_ttl),
+	DEF(SET_BOOL, cache_verify_password_with_worker),
 	DEF(SET_STR, username_chars),
 	DEF(SET_STR, username_translation),
 	DEF(SET_STR, username_format),
@@ -4980,6 +5047,9 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF(SET_STR, policy_hash_nonce),
 	DEF(SET_STR, policy_request_attributes),
 	DEF(SET_BOOL, policy_reject_on_fail),
+	DEF(SET_BOOL, policy_check_before_auth),
+	DEF(SET_BOOL, policy_check_after_auth),
+	DEF(SET_BOOL, policy_report_after_auth),
 	DEF(SET_UINT, policy_hash_truncate),
 
 	DEF(SET_BOOL, stats),
@@ -5015,6 +5085,7 @@ static const struct auth_settings auth_default_settings = {
 	.cache_size = 0,
 	.cache_ttl = 60*60,
 	.cache_negative_ttl = 60*60,
+	.cache_verify_password_with_worker = FALSE,
 	.username_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890.-_@",
 	.username_translation = "",
 	.username_format = "%Lu",
@@ -5031,8 +5102,11 @@ static const struct auth_settings auth_default_settings = {
 	.policy_server_timeout_msecs = 2000,
 	.policy_hash_mech = "sha256",
 	.policy_hash_nonce = "",
-	.policy_request_attributes = "login=%{orig_username} pwhash=%{hashed_password} remote=%{real_rip} device_id=%{client_id} protocol=%s",
+	.policy_request_attributes = "login=%{requested_username} pwhash=%{hashed_password} remote=%{rip} device_id=%{client_id} protocol=%s",
 	.policy_reject_on_fail = FALSE,
+	.policy_check_before_auth = TRUE,
+	.policy_check_after_auth = TRUE,
+	.policy_report_after_auth = TRUE,
 	.policy_hash_truncate = 12,
 
 	.stats = FALSE,
@@ -5152,36 +5226,36 @@ const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
 	&smtp_submit_setting_parser_info,
-	&login_setting_parser_info, 
+	&master_setting_parser_info, 
 	&stats_setting_parser_info, 
-	&submission_login_setting_parser_info, 
-	&imap_login_setting_parser_info, 
 	&imapc_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&lmtp_setting_parser_info, 
 	&doveadm_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&aggregator_setting_parser_info, 
 	&old_stats_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&auth_setting_parser_info, 
 	&director_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&mail_user_setting_parser_info, 
 	&mdbox_setting_parser_info, 
+	&maildir_setting_parser_info, 
 	&imap_urlauth_worker_setting_parser_info, 
 	&submission_setting_parser_info, 
 	&imap_setting_parser_info, 
-	&dict_setting_parser_info, 
-	&quota_status_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&maildir_setting_parser_info, 
-	&fs_crypt_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&master_setting_parser_info, 
-	&lmtp_setting_parser_info, 
+	&pop3_setting_parser_info, 
 	&pop3c_setting_parser_info, 
+	&login_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&submission_login_setting_parser_info, 
+	&quota_status_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&fs_crypt_setting_parser_info, 
+	&mbox_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

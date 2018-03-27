@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -13,6 +13,8 @@
 
 #define STATS_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, stats_storage_module)
+#define STATS_CONTEXT_REQUIRE(obj) \
+	MODULE_CONTEXT_REQUIRE(obj, stats_storage_module)
 
 /* If session isn't refreshed every 15 minutes, it's dropped.
    Must be smaller than MAIL_SESSION_IDLE_TIMEOUT_MSECS in stats server */
@@ -47,7 +49,7 @@ static void session_stats_refresh_timeout(struct mail_user *user);
 
 static void stats_io_activate(struct mail_user *user)
 {
-	struct stats_user *suser = STATS_USER_CONTEXT(user);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(user);
 	struct mail_stats *mail_stats;
 
 	if (stats_user_count == 1) {
@@ -67,7 +69,7 @@ static void stats_io_activate(struct mail_user *user)
 
 static void stats_add_session(struct mail_user *user)
 {
-	struct stats_user *suser = STATS_USER_CONTEXT(user);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(user);
 	struct stats *new_stats, *diff_stats;
 	const char *error;
 
@@ -120,7 +122,7 @@ session_stats_need_send(struct stats_user *suser, time_t now,
 
 static void session_stats_refresh(struct mail_user *user)
 {
-	struct stats_user *suser = STATS_USER_CONTEXT(user);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(user);
 	unsigned int to_next_secs;
 	time_t now = time(NULL);
 	bool changed;
@@ -149,8 +151,8 @@ stats_transaction_begin(struct mailbox *box,
 			enum mailbox_transaction_flags flags,
 			const char *reason)
 {
-	struct stats_user *suser = STATS_USER_CONTEXT(box->storage->user);
-	struct stats_mailbox *sbox = STATS_CONTEXT(box);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(box->storage->user);
+	struct stats_mailbox *sbox = STATS_CONTEXT_REQUIRE(box);
 	struct mailbox_transaction_context *trans;
 	struct stats_transaction_context *strans;
 
@@ -187,9 +189,9 @@ static int
 stats_transaction_commit(struct mailbox_transaction_context *ctx,
 			 struct mail_transaction_commit_changes *changes_r)
 {
-	struct stats_transaction_context *strans = STATS_CONTEXT(ctx);
-	struct stats_mailbox *sbox = STATS_CONTEXT(ctx->box);
-	struct stats_user *suser = STATS_USER_CONTEXT(ctx->box->storage->user);
+	struct stats_transaction_context *strans = STATS_CONTEXT_REQUIRE(ctx);
+	struct stats_mailbox *sbox = STATS_CONTEXT_REQUIRE(ctx->box);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(ctx->box->storage->user);
 
 	stats_transaction_free(suser, strans);
 	return sbox->module_ctx.super.transaction_commit(ctx, changes_r);
@@ -198,9 +200,9 @@ stats_transaction_commit(struct mailbox_transaction_context *ctx,
 static void
 stats_transaction_rollback(struct mailbox_transaction_context *ctx)
 {
-	struct stats_transaction_context *strans = STATS_CONTEXT(ctx);
-	struct stats_mailbox *sbox = STATS_CONTEXT(ctx->box);
-	struct stats_user *suser = STATS_USER_CONTEXT(ctx->box->storage->user);
+	struct stats_transaction_context *strans = STATS_CONTEXT_REQUIRE(ctx);
+	struct stats_mailbox *sbox = STATS_CONTEXT_REQUIRE(ctx->box);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(ctx->box->storage->user);
 
 	stats_transaction_free(suser, strans);
 	sbox->module_ctx.super.transaction_rollback(ctx);
@@ -209,9 +211,9 @@ stats_transaction_rollback(struct mailbox_transaction_context *ctx)
 static bool stats_search_next_nonblock(struct mail_search_context *ctx,
 				       struct mail **mail_r, bool *tryagain_r)
 {
-	struct stats_mailbox *sbox = STATS_CONTEXT(ctx->transaction->box);
+	struct stats_mailbox *sbox = STATS_CONTEXT_REQUIRE(ctx->transaction->box);
 	struct mail_user *user = ctx->transaction->box->storage->user;
-	struct stats_user *suser = STATS_USER_CONTEXT(user);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(user);
 	bool ret;
 
 	ret = sbox->module_ctx.super.
@@ -234,7 +236,7 @@ static bool stats_search_next_nonblock(struct mail_search_context *ctx,
 static void
 stats_notify_ok(struct mailbox *box, const char *text, void *context)
 {
-	struct stats_storage *sstorage = STATS_CONTEXT(box->storage);
+	struct stats_storage *sstorage = STATS_CONTEXT_REQUIRE(box->storage);
 
 	/* most importantly we want to refresh stats for very long running
 	   mailbox syncs */
@@ -289,7 +291,7 @@ static void session_stats_refresh_timeout(struct mail_user *user)
 
 static void stats_io_deactivate(struct mail_user *user)
 {
-	struct stats_user *suser = STATS_USER_CONTEXT(user);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(user);
 	unsigned int last_update_secs;
 
 	if (stats_global_user == NULL)
@@ -309,7 +311,7 @@ static void stats_io_deactivate(struct mail_user *user)
 
 static void stats_user_stats_fill(struct mail_user *user, struct stats *stats)
 {
-	struct stats_user *suser = STATS_USER_CONTEXT(user);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(user);
 	struct mail_stats *mail_stats;
 
 	mail_stats = stats_fill_ptr(stats, mail_stats_item);
@@ -320,7 +322,7 @@ static void stats_user_stats_fill(struct mail_user *user, struct stats *stats)
 
 static void stats_user_deinit(struct mail_user *user)
 {
-	struct stats_user *suser = STATS_USER_CONTEXT(user);
+	struct stats_user *suser = STATS_USER_CONTEXT_REQUIRE(user);
 	struct stats_connection *stats_conn = suser->stats_conn;
 
 	i_assert(stats_user_count > 0);

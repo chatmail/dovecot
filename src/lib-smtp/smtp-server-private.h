@@ -43,15 +43,20 @@ enum smtp_server_command_state {
 	SMTP_SERVER_COMMAND_STATE_ABORTED
 };
 
-struct smtp_server_reply {
-	struct smtp_server_command *command;
-	unsigned int index;
-
+struct smtp_server_reply_content {
 	unsigned int status;
 	const char *status_prefix;
 
 	string_t *text;
 	size_t last_line;
+};
+
+struct smtp_server_reply {
+	struct smtp_server_command *command;
+	unsigned int index;
+
+	/* replies may share content */
+	struct smtp_server_reply_content *content;
 
 	bool submitted:1;
 	bool sent:1;
@@ -149,6 +154,8 @@ struct smtp_server_connection {
 
 	struct smtp_server_stats stats;
 
+	bool started:1;
+	bool halted:1;
 	bool ssl_start:1;
 	bool ssl_secured:1;
 	bool authenticated:1;
@@ -201,10 +208,7 @@ bool smtp_server_connection_pending_command_data(
 
 void smtp_server_reply_free(struct smtp_server_command *cmd);
 
-int smtp_server_reply_send(struct smtp_server_reply *resp,
-			     const char **error_r);
-int smtp_server_reply_send_more(struct smtp_server_reply *resp,
-				  const char **error_r);
+int smtp_server_reply_send(struct smtp_server_reply *resp);
 
 const char *smtp_server_reply_get_one_line(struct smtp_server_reply *reply);
 
@@ -289,6 +293,9 @@ void smtp_server_connection_error(struct smtp_server_connection *conn,
 struct connection_list *smtp_server_connection_list_init(void);
 
 void smtp_server_connection_switch_ioloop(struct smtp_server_connection *conn);
+
+void smtp_server_connection_handle_output_error(
+	struct smtp_server_connection *conn);
 void smtp_server_connection_trigger_output(struct smtp_server_connection *conn);
 bool smtp_server_connection_pending_payload(struct smtp_server_connection *conn);
 
@@ -342,7 +349,8 @@ void smtp_server_transaction_free(struct smtp_server_transaction **_trans);
 
 struct smtp_server_recipient *
 smtp_server_transaction_add_rcpt(struct smtp_server_transaction *trans,
-	const struct smtp_address *rcpt_to);
+	const struct smtp_address *rcpt_to,
+	const struct smtp_params_rcpt *params);
 bool smtp_server_transaction_has_rcpt(struct smtp_server_transaction *trans);
 unsigned int
 smtp_server_transaction_rcpt_count(struct smtp_server_transaction *trans);

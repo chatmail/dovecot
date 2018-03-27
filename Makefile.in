@@ -86,8 +86,8 @@ DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(srcdir)/config.h.in $(srcdir)/stamp.h.in \
 	$(srcdir)/dovecot-config.in.in $(dist_pkginclude_HEADERS) \
 	AUTHORS COPYING ChangeLog INSTALL NEWS README TODO compile \
-	config.guess config.rpath config.sub install-sh missing \
-	ltmain.sh
+	config.guess config.rpath config.sub depcomp install-sh \
+	missing ltmain.sh
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \

@@ -8,19 +8,16 @@ Input streams actually reading data:
 
  * file: Read data from fd using 'pread()' for files and 'read()' for
    non-files.
- * unix: Read data from UNIX socket. Similar to file, but supports receiving
-   file descriptors.
  * mmap: Read data from file using 'mmap()'. This usually seems to be slower
    than just using it with 'read()', so this input stream is probably quite
    unnecessary.
  * data: Read data from memory.
+ * plugins/zlib/zlib, bzlib: Read zlib/bzlib compressed data from fd. Some day
+   this should be changed to become a filter instead.
 
 Input stream filters:
 
  * concat: Concatenate multiple input streams together
- * chain: Chain multiple input streams together. Similar to istream-concat, but
-   more istreams can be added after initialization and EOF needs to be
-   explicitly added.
  * seekable: Make a number of (possibly non-seekable) input streams into a
    single seekable input stream. If all of the input streams are already
    seekable, a concat stream is created instead.
@@ -30,24 +27,11 @@ Input stream filters:
    as necessary.
  * limit: Limit input stream's length, so after reading a given number of bytes
    it returns EOF.
- * sized: Require istream's length to be exactly the given size, or the last
-   read returns error.
- * timeout: Fail the read when given timeout is reached.
- * try: Read from the first input stream that doesn't fail with EINVAL.
  * tee: Fork an input stream to multiple streams that can be read
    independently.
- * multiplex: Multiplex-iostreams support multiple iostream channels inside a
-   single parent istream.
- * callback: Build an input stream by calling callback functions that return
-   the data.
- * base64-encoder, base64-decoder: Encode/decode base64.
- * failure-at: Insert a failure at the specified offset. This can be useful for
-   testing.
- * hash: Calculate hash of the istream while it's being read.
  * lib-mail/dot: Read SMTP-style DATA input where the input ends with an empty
    "." line.
  * lib-mail/header-filter: Add/remove/modify email headers.
- * lib-compression/*: Read zlib/bzlib/lz4/lzma compressed data.
 
 Reading
 -------
@@ -83,11 +67,6 @@ set. In this situation it's important to remember that there may still be data
 available in the buffer. If 'i_stream_have_bytes_left()' returns FALSE, there
 really isn't anything left to read.
 
-Whenever i_stream_read() returns >0, all the existing pointers are potentially
-invalidated. v2.3+: When i_stream_read() returns<= 0, the data previously
-returned by i_stream_get_data() are still valid, preserved in "snapshots".
-(<v2.3 may or may not have invalidated them.)
-
 Example:
 
 ---%<-------------------------------------------------------------------------
@@ -114,9 +93,7 @@ implement. The methods that need to be implemented are:
  * 'read()' is the most important function. It can also be tricky to get it
    completely bug-free. See the existing unit tests for other istreams and try
    to test the edge cases as well (such as ability to read one byte at a time
-   and also with max buffer size of 1). When it needs to read from parent
-   streams, try to use 'i_stream_read_memarea(parent)' if possible so a new
-   snapshot isn't unnecessarily created (see the snapshot discussion below).
+   and also with max buffer size of 1).
  * 'seek(v_offset, mark)' seeks to given offset. The 'mark' parameter is
    necessary only when it's difficult to seek backwards in the stream, such as
    when reading compressed input.
@@ -130,9 +107,6 @@ implement. The methods that need to be implemented are:
  * 'stat(exact)' stats the file, filling as much of the fields as makes sense.
    'st_size' field is filled the same way as with 'get_size()', or set to -1 if
    it's unknown.
- * 'snapshot(prev_snapshot)' creates a snapshot of the data that is currently
-   available via i_stream_get_data(), merges it with prev_snapshot (if any) and
-   returns the merged snapshot (see below more more details).
 
 There are some variables available:
 
@@ -150,58 +124,9 @@ helper functions and variables:
    in sync with 'buffer'.
  * 'buffer_size' specifies the buffer's size, and 'max_buffer_size' the max.
    size the buffer can be grown to.
- * 'i_stream_try_alloc(wanted_size, size_r)' can be used when you want to store
-   'wanted_bytes' into 'w_buffer'. If the buffer isn't large enough for it,
-   it's grown if possible. The buffer isn't grown above the stream's max buffer
-   size. The returned 'size_r' specifies how many bytes are actually available
-   for writing at 'stream->w_buffer + stream->pos'.
- * 'i_stream_alloc(size) is like 'i_stream_try_alloc()', except it always
-   succeeds allocating'size` bytes, even if it has to grow the buffer larger
-   then the stream's max buffer size.
- * Lower-level memory allocation functions:
-    * 'i_stream_w_buffer_realloc(old_size)' reallocates 'w_buffer' to the
-      current 'buffer_size'. If memarea's refcount is 1, this can be done with
-      'i_realloc()', otherwise new memory is allocated.
-    * 'i_stream_grow_buffer(bytes)' grows the 'w_buffer' by the given number of
-      bytes, if possible. It won't reach the stream's current max buffer size.
-      The caller must verify from 'buffer_size' how large the buffer became as
-      a result of this call.
-    * 'i_stream_compress()' attempts to compress the current 'w_buffer' by
-      removing already-skipped data with 'memmove()'. If 'skip' is 0, it does
-      nothing. Note that this function must not be called if 'memarea' has
-      refcount>1. Otherwise that could be modifying a snapshotted memarea.
+ * 'i_stream_get_buffer_space(wanted_bytes)' can be used to request wanted
+   number of bytes from the buffer. The returned available buffer size may be
+   less (or more), and calling the function again may or may not return a
+   larger size.
 
-The snapshots have made implementing slightly more complicated than earlier.
-There are a few different ways to implement istreams:
-
- * Always point 'buffer=w_buffer' and use 'i_stream_try_alloc()' and/or
-   'i_stream_alloc()' to allocate the 'w_buffer'. The generic code will handle
-   all the snapshotting. Use 'i_stream_read_memarea()' to read data from parent
-   stream so multiple snapshots aren't unnecessarily created.
- * Guarantee that if 'read()' returns <=0, the existing 'buffer' will stay
-   valid. Use 'ISTREAM_CREATE_FLAG_NOOP_SNAPSHOT' flag in 'i_stream_create()'
-   so your filter stream isn't unnecessarily snapshotted (or causing a panic
-   due to missing 'snapshot()' implementation).
-    * One way of doing this with filter streams is to read from the parent
-      stream via 'i_stream_read(parent)' and always use
-      'buffer=i_stream_get_data(parent)'. The parent's snapshotting guarantees
-      that the buffer will stay valid.
- * Implement the 'snapshot()' yourself in the stream. You'll need to create a
-   new memarea of the current data available via 'i_stream_get_data()' and it
-   must not change, i.e. most likely you'll need to duplicate the allocated
-   memory. Create a new 'struct istream_snapshot' and assign the allocated
-   memarea to its 'old_memarea'. Fill 'prev_snapshot' field and return your new
-   snapshot. The snapshot will be freed by the generic istream code either when
-   the next 'read()' returns >0 or when the istream is destroyed.
- * Filter streams that only pass through parent stream's contents without
-   changes can just point to the parent stream. The default snapshotting causes
-   the parent to be snapshotted, so the filter stream can simply use
-   'i_stream_read_memarea()' and point to the parent's buffer.
-
-When Dovecot is configured with '--enable-devel-checks', 'i_stream_read()' will
-verify that the first and the last two bytes of the buffer didn't unexpectedly
-change due to a 'read()'. While developing istream changes you should use this
-to make sure the istream is working properly. Running the istream unit test
-also via valgrind can also be used to verify that the buffer wasn't freed.
-
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

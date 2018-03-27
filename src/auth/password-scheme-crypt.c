@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "mycrypt.h"
@@ -150,8 +150,6 @@ static const struct {
 	const char *expected;
 } sample[] = {
 	{ "08/15!test~4711", "JB", "JBOZ0DgmtucwE" },
-	{ "08/15!test~4711", "$2a$04$0123456789abcdefABCDEF",
-	  "$2a$04$0123456789abcdefABCDE.N.drYX5yIAL1LkTaaZotW3yI0hQhZru" },
 	{ "08/15!test~4711", "$5$rounds=1000$0123456789abcdef",
 	  "$5$rounds=1000$0123456789abcdef$K/DksR0DT01hGc8g/kt"
 	  "9McEgrbFMKi9qrb1jehe7hn4" },
@@ -184,6 +182,8 @@ void password_scheme_register_crypt(void)
 {
 	unsigned int i;
 	const char *crypted;
+
+	i_assert(N_ELEMENTS(crypt_schemes) == N_ELEMENTS(sample));
 
 	for (i = 0; i < N_ELEMENTS(crypt_schemes); i++) {
 		crypted = mycrypt(sample[i].key, sample[i].salt);

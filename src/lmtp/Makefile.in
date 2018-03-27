@@ -146,8 +146,8 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(pkglibexecdir)"
 PROGRAMS = $(pkglibexec_PROGRAMS)
 am_lmtp_OBJECTS = main.$(OBJEXT) client.$(OBJEXT) commands.$(OBJEXT) \
-	lmtp-local.$(OBJEXT) lmtp-proxy.$(OBJEXT) \
-	lmtp-settings.$(OBJEXT)
+	lmtp-common.$(OBJEXT) lmtp-local.$(OBJEXT) \
+	lmtp-proxy.$(OBJEXT) lmtp-settings.$(OBJEXT)
 lmtp_OBJECTS = $(am_lmtp_OBJECTS)
 am__DEPENDENCIES_1 =
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -453,6 +453,7 @@ lmtp_SOURCES = \
 	main.c \
 	client.c \
 	commands.c \
+	lmtp-common.c \
 	lmtp-local.c \
 	lmtp-proxy.c \
 	lmtp-settings.c
@@ -461,6 +462,7 @@ noinst_HEADERS = \
 	main.h \
 	client.h \
 	commands.h \
+	lmtp-common.h \
 	lmtp-local.h \
 	lmtp-proxy.h \
 	lmtp-settings.h
@@ -561,6 +563,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/commands.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lmtp-common.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lmtp-local.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lmtp-proxy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lmtp-settings.Po@am__quote@

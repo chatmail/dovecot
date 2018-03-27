@@ -15,7 +15,8 @@ struct ostream_private {
 				   stream_flush_callback_t *callback,
 				   void *context);
 	void (*flush_pending)(struct ostream_private *stream, bool set);
-	size_t (*get_used_size)(const struct ostream_private *stream);
+	size_t (*get_buffer_used_size)(const struct ostream_private *stream);
+	size_t (*get_buffer_avail_size)(const struct ostream_private *stream);
 	int (*seek)(struct ostream_private *stream, uoff_t offset);
 	ssize_t (*sendv)(struct ostream_private *stream,
 			 const struct const_iovec *iov,
@@ -25,7 +26,8 @@ struct ostream_private {
 	enum ostream_send_istream_result
 		(*send_istream)(struct ostream_private *outstream,
 				struct istream *instream);
-	void (*switch_ioloop)(struct ostream_private *stream);
+	void (*switch_ioloop_to)(struct ostream_private *stream,
+				 struct ioloop *ioloop);
 
 /* data: */
 	struct ostream ostream;

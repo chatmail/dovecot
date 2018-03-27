@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream-private.h"
@@ -12,14 +12,21 @@ static void openssl_iostream_free(struct ssl_iostream *ssl_io);
 
 void openssl_iostream_set_error(struct ssl_iostream *ssl_io, const char *str)
 {
+	char *new_str;
+
+	/* i_debug() may sometimes be overriden, making it write to this very
+	   same SSL stream, in which case the provided str may be invalidated
+	   before it is even used. Therefore, we duplicate it immediately. */
+	new_str = i_strdup(str);
+
 	if (ssl_io->verbose) {
 		/* This error should normally be logged by lib-ssl-iostream's
 		   caller. But if verbose=TRUE, log it here as well to make
 		   sure that the error is always logged. */
-		i_debug("%sSSL error: %s", ssl_io->log_prefix, str);
+		i_debug("%sSSL error: %s", ssl_io->log_prefix, new_str);
 	}
 	i_free(ssl_io->last_error);
-	ssl_io->last_error = i_strdup(str);
+	ssl_io->last_error = new_str;
 }
 
 static void openssl_info_callback(const SSL *ssl, int where, int ret)
@@ -246,6 +253,10 @@ openssl_iostream_create(struct ssl_iostream_context *ctx, const char *host,
 	struct ssl_iostream *ssl_io;
 	SSL *ssl;
 	BIO *bio_int, *bio_ext;
+
+	/* Don't allow an existing io_add_istream() to be use on the input.
+	   It would seem to work, but it would also cause hangs. */
+	i_assert(i_stream_get_root_io(*input)->real_stream->io == NULL);
 
 	ssl = SSL_new(ctx->ssl_ctx);
 	if (ssl == NULL) {
@@ -811,6 +822,46 @@ openssl_iostream_get_last_error(struct ssl_iostream *ssl_io)
 	return ssl_io->last_error;
 }
 
+static const char *
+openssl_iostream_get_cipher(struct ssl_iostream *ssl_io, unsigned int *bits_r)
+{
+	if (!ssl_io->handshaked)
+		return NULL;
+
+	const SSL_CIPHER *cipher = SSL_get_current_cipher(ssl_io->ssl);
+	*bits_r = SSL_CIPHER_get_bits(cipher, NULL);
+	return SSL_CIPHER_get_name(cipher);
+}
+
+static const char *
+openssl_iostream_get_pfs(struct ssl_iostream *ssl_io)
+{
+	if (!ssl_io->handshaked)
+		return NULL;
+
+	const SSL_CIPHER *cipher = SSL_get_current_cipher(ssl_io->ssl);
+#if defined(HAVE_SSL_CIPHER_get_kx_nid)
+	int nid = SSL_CIPHER_get_kx_nid(cipher);
+	return OBJ_nid2sn(nid);
+#else
+	char buf[128];
+	const char *desc, *ptr;
+	if ((desc = SSL_CIPHER_description(cipher, buf, sizeof(buf)))==NULL ||
+	    (ptr = strstr(desc, "Kx=")) == NULL)
+		return "";
+	return t_strcut(ptr+3, ' ');
+#endif
+}
+
+static const char *
+openssl_iostream_get_protocol_name(struct ssl_iostream *ssl_io)
+{
+	if (!ssl_io->handshaked)
+		return NULL;
+	return SSL_get_version(ssl_io->ssl);
+}
+
+
 static const struct iostream_ssl_vfuncs ssl_vfuncs = {
 	.global_init = openssl_iostream_global_init,
 	.context_init_client = openssl_iostream_context_init_client,
@@ -838,6 +889,9 @@ static const struct iostream_ssl_vfuncs ssl_vfuncs = {
 	.get_compression = openssl_iostream_get_compression,
 	.get_security_string = openssl_iostream_get_security_string,
 	.get_last_error = openssl_iostream_get_last_error,
+	.get_cipher = openssl_iostream_get_cipher,
+	.get_pfs = openssl_iostream_get_pfs,
+	.get_protocol_name = openssl_iostream_get_protocol_name,
 };
 
 void ssl_iostream_openssl_init(void)

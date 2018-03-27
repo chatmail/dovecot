@@ -41,6 +41,8 @@ struct smtp_client_settings {
 	const char *my_hostname;
 	const char *temp_path_prefix;
 
+	enum smtp_capability forced_capabilities;
+
 	struct dns_client *dns_client;
 	const char *dns_client_socket_path;
 
@@ -94,6 +96,5 @@ struct smtp_client *smtp_client_init(const struct smtp_client_settings *set);
 void smtp_client_deinit(struct smtp_client **_client);
 
 void smtp_client_switch_ioloop(struct smtp_client *client);
-int smtp_client_init_ssl_ctx(struct smtp_client *client, const char **error_r);
 
 #endif

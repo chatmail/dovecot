@@ -58,4 +58,4 @@ IMAP & POP3 proxies
    CLIENT_LOGIN_TIMEOUT_MSECS = MASTER_LOGIN_TIMEOUT_SECS*1000 = 3 minutes
    (login-common/client-common.h and lib-master/master-interface.h)
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

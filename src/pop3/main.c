@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "pop3-common.h"
 #include "ioloop.h"
@@ -338,8 +338,6 @@ int main(int argc, char *argv[])
 			MASTER_SERVICE_FLAG_STD_CLIENT;
 	} else {
 		service_flags |= MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
-		storage_service_flags |=
-			MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT;
 	}
 
 	/*

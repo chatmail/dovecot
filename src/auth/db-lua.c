@@ -1,4 +1,4 @@
-/* Copyright (c) 2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #if defined(BUILTIN_LUA) || defined(PLUGIN_BUILD)
@@ -58,7 +58,7 @@ static int auth_request_lua_var_expand(lua_State *L)
 	const char *value, *error;
 
 	if (auth_request_lua_do_var_expand(req, tpl, &value, &error) < 0) {
-		luaL_error(L, error);
+		return luaL_error(L, error);
 	} else {
 		lua_pushstring(L, value);
 	}
@@ -109,8 +109,7 @@ static int auth_request_lua_response_from_template(lua_State *L)
 		if (value == NULL) {
 			lua_pushnil(L);
 		} else if (auth_request_lua_do_var_expand(req, value, &expanded, &error) < 0) {
-			luaL_error(L, error);
-			break;
+			return luaL_error(L, error);
 		} else {
 			lua_pushstring(L, expanded);
 		}
@@ -276,7 +275,11 @@ static void auth_lua_push_auth_request(struct dlua_script *script, struct auth_r
 static struct auth_request *
 auth_lua_check_auth_request(struct dlua_script *script, int arg)
 {
-	i_assert(lua_istable(script->L, arg));
+	if (!lua_istable(script->L, arg)) {
+		(void)luaL_error(script->L, "Bad argument #%d, expected %s got %s",
+				 arg, "auth_request",
+				 lua_typename(script->L, lua_type(script->L, arg)));
+	}
 	lua_pushstring(script->L, "item");
 	lua_rawget(script->L, arg);
 	void *bp = (void*)lua_touserdata(script->L, -1);

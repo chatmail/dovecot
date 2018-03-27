@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file
  */
 
 #ifndef PROGRAM_CLIENT_PRIVATE_H
@@ -12,6 +12,12 @@ enum program_client_error {
 	PROGRAM_CLIENT_ERROR_RUN_TIMEOUT,
 	PROGRAM_CLIENT_ERROR_IO,
 	PROGRAM_CLIENT_ERROR_OTHER
+};
+
+enum program_client_exit_code {
+	PROGRAM_CLIENT_EXIT_INTERNAL_FAILURE = -1,
+	PROGRAM_CLIENT_EXIT_FAILURE = 0,
+	PROGRAM_CLIENT_EXIT_SUCCESS = 1,
 };
 
 struct program_client_extra_fd {
@@ -50,7 +56,7 @@ struct program_client {
 
 	bool other_error;
 	enum program_client_error error;
-	int exit_code;
+	enum program_client_exit_code exit_code;
 
 	int (*connect) (struct program_client * pclient);
 	int (*close_output) (struct program_client * pclient);

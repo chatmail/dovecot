@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "restrict-access.h"
@@ -64,7 +64,7 @@ void help_ver2(const struct doveadm_cmd_ver2 *cmd)
 
 static void main_preinit(void)
 {
-	restrict_access_by_env(NULL, FALSE);
+	restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 	restrict_access_allow_coredumps(TRUE);
 }
 

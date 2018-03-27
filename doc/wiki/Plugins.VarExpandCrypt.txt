@@ -14,15 +14,12 @@ args=decrypted_value=%{decrypt;key=value,iv=value,noiv=yes,algo=algorithm,format
 ---%<-------------------------------------------------------------------------
 
  * key - hex-encoded value
- * iv  - hex-encoded value
+ * iv  - same as key
  * noiv - whether iv is included in return value
  * algo - algorithm name (defaults to aes-256-cbc)
  * format - return format
 
 decrypt expects input in base64 or hex format.
-
-NOTE: It is usually best to leave iv management to dovecot, and not use iv and
-noiv options at all.
 
 Return formats
 --------------
@@ -42,4 +39,4 @@ Example
 = pass
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

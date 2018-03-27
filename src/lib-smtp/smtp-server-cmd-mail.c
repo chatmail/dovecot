@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -35,6 +35,7 @@ static void cmd_mail_replied(struct smtp_server_cmd_ctx *cmd)
 	struct smtp_server_cmd_mail *data =
 		(struct smtp_server_cmd_mail *)command->data;
 
+	i_assert(conn->state.pending_mail_cmds > 0);
 	conn->state.pending_mail_cmds--;
 
 	i_assert(smtp_server_command_is_replied(command));
@@ -52,8 +53,6 @@ static void cmd_mail_replied(struct smtp_server_cmd_ctx *cmd)
 static void cmd_mail_recheck(struct smtp_server_cmd_ctx *cmd)
 {
 	struct smtp_server_connection *conn = cmd->conn;
-
-	i_assert(conn->state.pending_rcpt_cmds == 0);
 
 	/* all preceeding commands have finished and now the transaction state
 	   is clear. This provides the opportunity to re-check the transaction
@@ -106,11 +105,13 @@ void smtp_server_cmd_mail(struct smtp_server_cmd_ctx *cmd,
 		return;
 	}
 
-	if (conn->pending_helo == NULL && conn->helo.domain == NULL) {
+	if (conn->pending_helo == NULL && conn->helo.domain == NULL &&
+	    conn->helo_login != NULL && *conn->helo_login != '\0') {
 		/* no EHLO executed post-login, use pre-login value instead */
 		conn->helo_domain = conn->helo_login;
-		conn->helo_login = NULL;
 		conn->helo.domain = conn->helo_domain;
+		conn->helo.domain_valid = TRUE;
+		conn->helo_login = NULL;
 	}
 
 	mail_data = p_new(cmd->pool, struct smtp_server_cmd_mail, 1);

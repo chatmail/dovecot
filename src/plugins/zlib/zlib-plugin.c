@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -17,11 +17,11 @@
 #define ZLIB_PLUGIN_DEFAULT_LEVEL 6
 
 #define ZLIB_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, zlib_storage_module)
+	MODULE_CONTEXT_REQUIRE(obj, zlib_storage_module)
 #define ZLIB_MAIL_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, zlib_mail_module)
+	MODULE_CONTEXT_REQUIRE(obj, zlib_mail_module)
 #define ZLIB_USER_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, zlib_user_module)
+	MODULE_CONTEXT_REQUIRE(obj, zlib_user_module)
 
 #define MAX_INBUF_SIZE (1024*1024)
 #define ZLIB_MAIL_CACHE_EXPIRE_MSECS (60*1000)

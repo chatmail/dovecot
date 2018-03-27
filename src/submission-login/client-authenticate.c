@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -141,8 +141,20 @@ void submission_client_auth_result(struct client *client,
 		   SHOULD be 5.7.0. */
 		smtp_server_reply(cmd, 530, "5.7.0", "%s", text);
 		break;
-	case CLIENT_AUTH_RESULT_MECH_INVALID:
 	case CLIENT_AUTH_RESULT_MECH_SSL_REQUIRED:
+		/* RFC5248, Section 2.4:
+
+		   523 X.7.10 Encryption Needed
+
+		   This indicates that an external strong privacy layer is
+		   needed in order to use the requested authentication
+		   mechanism. This is primarily intended for use with clear text
+		   authentication mechanisms. A client that receives this may
+		   activate a security layer such as TLS prior to
+		   authenticating, or attempt to use a stronger mechanism. */
+		smtp_server_reply(cmd, 523, "5.7.10", "%s", text);
+		break;
+	case CLIENT_AUTH_RESULT_MECH_INVALID:
 		/* RFC4954, Section 4:
 
 		   If the requested authentication mechanism is invalid (e.g.,
@@ -243,18 +255,20 @@ int cmd_auth(void *conn_ctx, struct smtp_server_cmd_ctx *cmd,
 	struct submission_client *subm_client = conn_ctx;
 	struct client *client = &subm_client->common;
 	struct smtp_server_helo_data *helo;
-	char *prefix;
+	const char *prefix = "";
 
 	i_assert(subm_client->pending_auth == NULL);
 
 	helo = smtp_server_connection_get_helo_data(subm_client->conn);
-
-	prefix = i_strdup(helo->domain == NULL ? "" : helo->domain);
+	if (helo->domain_valid) {
+		i_assert(helo->domain != NULL);
+		prefix = helo->domain;
+	}
 
 	/* pass ehlo parameter to post-login service upon successful login */
 	i_free(client->master_data_prefix);
-	client->master_data_prefix = (void *)prefix;
-	client->master_data_prefix_len = strlen(prefix);
+	client->master_data_prefix = (void *)i_strdup(prefix);
+	client->master_data_prefix_len = strlen(prefix) + 1;
 
 	subm_client->pending_auth = cmd;
 

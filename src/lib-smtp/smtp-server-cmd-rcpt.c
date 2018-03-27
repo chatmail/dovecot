@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -16,14 +16,9 @@ static bool
 cmd_rcpt_check_state(struct smtp_server_cmd_ctx *cmd)
 {
 	struct smtp_server_connection *conn = cmd->conn;
-	struct smtp_server_command *command = cmd->cmd;
 	struct smtp_server_transaction *trans = conn->state.trans;
 
 	if (conn->state.pending_mail_cmds == 0 && trans == NULL) {
-		if (command->hook_replied != NULL) {
-			conn->state.pending_rcpt_cmds--;
-			command->hook_replied = NULL;
-		}
 		smtp_server_reply(cmd,
 			503, "5.5.0", "MAIL needed first");
 		return FALSE;
@@ -47,8 +42,8 @@ static void cmd_rcpt_completed(struct smtp_server_cmd_ctx *cmd)
 		(struct smtp_server_cmd_rcpt *)command->data;
 	struct smtp_server_transaction *trans = conn->state.trans;
 	struct smtp_server_recipient *rcpt;
-	pool_t pool;
 
+	i_assert(conn->state.pending_rcpt_cmds > 0);
 	conn->state.pending_rcpt_cmds--;
 
 	i_assert(smtp_server_command_is_replied(command));
@@ -56,10 +51,9 @@ static void cmd_rcpt_completed(struct smtp_server_cmd_ctx *cmd)
 		return;
 
 	/* success */
-	pool = trans->pool;
-	rcpt = smtp_server_transaction_add_rcpt(trans, data->path);
+	rcpt = smtp_server_transaction_add_rcpt(trans, data->path,
+						&data->params);
 	rcpt->context = data->trans_context;
-	smtp_params_rcpt_copy(pool, &rcpt->params, &data->params);
 
 	if (data->hook_finished != NULL) {
 		data->hook_finished(cmd, trans, rcpt,

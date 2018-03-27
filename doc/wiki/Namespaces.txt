@@ -1,35 +1,6 @@
 Namespaces
 ==========
 
-Contents
-
-
- 1. Namespaces
-
-     1. Configuration
-
-         1. Namespace types
-
-         2. Hierarchy separators
-
-         3. Namespace settings
-
-         4. From userdb
-
-     2. Shared Mailboxes
-
-     3. Examples
-
-         1. Mixed mbox and Maildir
-
-         2. Backwards Compatibility: UW-IMAP
-
-         3. Backwards Compatibility: Courier IMAP
-
-         4. Per-user Namespace Location From SQL
-
-         5. Hidden subscription namespace
-
 Dovecot supports fully configurable namespaces. Their original and primary
 purpose is to provide Namespace IMAP extension (RFC 2342
 [http://www.faqs.org/rfcs/rfc2342.html]) support, which allows giving IMAP
@@ -150,24 +121,6 @@ Namespace settings
    primary has 'prefix=INBOX/', use 'alias_for=INBOX/'.
  * mailbox { .. } settings can be used to autocreate/autosubscribe mailboxes
    and set their SPECIAL-USE flags.
-
-From userdb
------------
-
-To change namespace settings from userdb, you need to return
-"namespace/<name>/setting=value". To create a namespace, make sure you first
-return "namespace=<name>[,<name>,...]" and settings after this. Note that the
-"namespace" setting must list all the namespaces that are used - there's
-currently no way to simply "add" a namespace.
-
----%<-------------------------------------------------------------------------
-userdb {
-   driver = static
-   args = namespace=inbox,special
-namespace/special/location=sdbox:/var/special/%u
-namespace/special/prefix=special/
-}
----%<-------------------------------------------------------------------------
 
 Shared Mailboxes
 ----------------
@@ -390,4 +343,4 @@ namespace {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

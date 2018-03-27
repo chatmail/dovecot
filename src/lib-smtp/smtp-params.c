@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -596,6 +596,24 @@ void smtp_params_mail_write(string_t *buffer,
 		str_truncate(buffer, str_len(buffer)-1);
 }
 
+/* evaluate */
+
+const struct smtp_param *
+smtp_params_mail_get_extra(const struct smtp_params_mail *params,
+			   const char *keyword)
+{
+	const struct smtp_param *param;
+
+	if (!array_is_created(&params->extra_params))
+		return NULL;
+
+	array_foreach(&params->extra_params, param) {
+		if (strcasecmp(param->keyword, keyword) == 0)
+			return param;
+	}
+	return NULL;
+}
+
 /*
  * RCPT parameters
  */
@@ -836,8 +854,9 @@ int smtp_params_rcpt_parse(pool_t pool, const char *args,
 				ret = -1;
 				break;
 			}
-		} else if ((caps & SMTP_CAPABILITY_DSN) != 0 &&
-			strcmp(param.keyword, "ORCPT") == 0) {
+		} else if (((caps & SMTP_CAPABILITY_DSN) != 0 ||
+			    (caps & SMTP_CAPABILITY__ORCPT) != 0) &&
+			   strcmp(param.keyword, "ORCPT") == 0) {
 			if (smtp_params_rcpt_parse_orcpt
 				(&prparser, param.value) < 0) {
 				ret = -1;
@@ -949,7 +968,8 @@ smtp_params_rcpt_write_orcpt(string_t *buffer,
 {
 	if (params->orcpt.addr_type == NULL)
 		return;
-	if ((caps & SMTP_CAPABILITY_DSN) == 0)
+	if ((caps & SMTP_CAPABILITY_DSN) == 0 &&
+	    (caps & SMTP_CAPABILITY__ORCPT) == 0)
 		return;
 
 	/* ORCPT=<address>: RFC 3461 */
@@ -985,4 +1005,67 @@ void smtp_params_rcpt_write(string_t *buffer,
 
 	if (str_len(buffer) > init_len)
 		str_truncate(buffer, str_len(buffer)-1);
+}
+
+/* evaluate */
+
+const struct smtp_param *
+smtp_params_rcpt_get_extra(const struct smtp_params_rcpt *params,
+			   const char *keyword)
+{
+	const struct smtp_param *param;
+
+	if (!array_is_created(&params->extra_params))
+		return NULL;
+
+	array_foreach(&params->extra_params, param) {
+		if (strcasecmp(param->keyword, keyword) == 0)
+			return param;
+	}
+	return NULL;
+}
+
+bool smtp_params_rcpt_equals(const struct smtp_params_rcpt *params1,
+			     const struct smtp_params_rcpt *params2)
+{
+	if (params1 == NULL || params2 == NULL)
+		return (params1 == params2);
+
+	/* NOTIFY: RFC 3461, Section 4.1 */
+	if (params1->notify != params2->notify)
+		return FALSE;
+
+	/* ORCPT: RFC 3461, Section 4.2 */
+	if (null_strcasecmp(params1->orcpt.addr_type,
+			    params2->orcpt.addr_type) != 0)
+		return FALSE;
+	if (null_strcasecmp(params1->orcpt.addr_type, "rfc822") == 0) {
+		if (!smtp_address_equals(params1->orcpt.addr,
+					 params2->orcpt.addr))
+			return FALSE;
+	} else {
+		if (null_strcmp(params1->orcpt.addr_raw,
+				params2->orcpt.addr_raw) != 0)
+			return FALSE;
+	}
+
+	/* extra parameters */
+	if (array_is_created(&params1->extra_params) !=
+	    array_is_created(&params2->extra_params))
+		return FALSE;
+	if (array_is_created(&params1->extra_params)) {
+		const struct smtp_param *param1, *param2;
+	
+		if (array_count(&params1->extra_params) !=
+		    array_count(&params2->extra_params))
+			return FALSE;
+		array_foreach(&params1->extra_params, param1) {
+			param2 = smtp_params_rcpt_get_extra(params2, param1->keyword);
+			if (param2 == NULL)
+				return FALSE;
+			if (null_strcmp(param1->value, param2->value) != 0)
+				return FALSE;
+		}
+	}
+	return TRUE;
 }

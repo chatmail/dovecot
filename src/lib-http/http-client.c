@@ -1,9 +1,10 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
 #include "str.h"
 #include "hash.h"
+#include "llist.h"
 #include "array.h"
 #include "ioloop.h"
 #include "istream.h"
@@ -15,9 +16,6 @@
 #include "http-url.h"
 
 #include "http-client-private.h"
-
-#define HTTP_DEFAULT_PORT 80
-#define HTTPS_DEFAULT_PORT 443
 
 /* Structure:
 
@@ -89,6 +87,13 @@
 
 static struct http_client_context *http_client_global_context = NULL;
 
+static void
+http_client_context_add_client(struct http_client_context *cctx,
+			       struct http_client *client);
+static void
+http_client_context_remove_client(struct http_client_context *cctx,
+				  struct http_client *client);
+
 /*
  * Client
  */
@@ -105,6 +110,7 @@ http_client_init_shared(struct http_client_context *cctx,
 	pool = pool_alloconly_create("http client", 1024);
 	client = p_new(pool, struct http_client, 1);
 	client->pool = pool;
+	client->ioloop = current_ioloop;
 
 	/* create private context if none is provided */
 	id++;
@@ -136,6 +142,11 @@ http_client_init_shared(struct http_client_context *cctx,
 	/* merge provided settings with context defaults */
 	client->set = cctx->set;
 	if (set != NULL) {
+		client->set.dns_client = set->dns_client;
+		client->set.dns_client_socket_path =
+			p_strdup_empty(pool, set->dns_client_socket_path);
+		client->set.dns_ttl_msecs = set->dns_ttl_msecs;
+
 		if (set->user_agent != NULL && *set->user_agent != '\0')
 			client->set.user_agent = p_strdup_empty(pool, set->user_agent);
 		if (set->rawlog_dir != NULL && *set->rawlog_dir != '\0')
@@ -162,6 +173,8 @@ http_client_init_shared(struct http_client_context *cctx,
 				p_strdup(pool, set->proxy_url->password);
 		}
 
+		if (set->max_idle_time_msecs > 0)
+			client->set.max_idle_time_msecs = set->max_idle_time_msecs;
 		if (set->max_parallel_connections > 0)
 			client->set.max_parallel_connections = set->max_parallel_connections;
 		if (set->max_pipelined_requests > 0)
@@ -196,12 +209,18 @@ http_client_init_shared(struct http_client_context *cctx,
 			client->set.connect_timeout_msecs = set->connect_timeout_msecs;
 		if (set->soft_connect_timeout_msecs > 0)
 			client->set.soft_connect_timeout_msecs = set->soft_connect_timeout_msecs;
+		if (set->socket_send_buffer_size > 0)
+			client->set.socket_send_buffer_size = set->socket_send_buffer_size;
+		if (set->socket_recv_buffer_size > 0)
+			client->set.socket_recv_buffer_size = set->socket_recv_buffer_size;
 		if (set->max_auto_retry_delay > 0)
 			client->set.max_auto_retry_delay = set->max_auto_retry_delay;
 		client->set.debug = client->set.debug || set->debug;
 	}
 
 	i_array_init(&client->delayed_failing_requests, 1);
+
+	http_client_context_add_client(cctx, client);
 
 	return client;
 }
@@ -253,14 +272,14 @@ void http_client_deinit(struct http_client **_client)
 
 	if (client->ssl_ctx != NULL)
 		ssl_iostream_context_unref(&client->ssl_ctx);
+	http_client_context_remove_client(client->cctx, client);
 	http_client_context_unref(&client->cctx);
 	event_unref(&client->event);
 	pool_unref(&client->pool);
 }
 
-struct ioloop *http_client_switch_ioloop(struct http_client *client)
+static void http_client_do_switch_ioloop(struct http_client *client)
 {
-	struct ioloop *prev_ioloop = client->ioloop;
 	struct http_client_peer *peer;
 	struct http_client_host *host;
 
@@ -279,10 +298,17 @@ struct ioloop *http_client_switch_ioloop(struct http_client *client)
 		client->to_failing_requests =
 			io_loop_move_timeout(&client->to_failing_requests);
 	}
+}
 
-	http_client_context_switch_ioloop(client->cctx);
+struct ioloop *http_client_switch_ioloop(struct http_client *client)
+{
+	struct ioloop *prev_ioloop = client->ioloop;
 
 	client->ioloop = current_ioloop;
+
+	http_client_do_switch_ioloop(client);
+	http_client_context_switch_ioloop(client->cctx);
+
 	return prev_ioloop;
 }
 
@@ -372,8 +398,9 @@ void http_client_delay_request_error(struct http_client *client,
 	struct http_client_request *req)
 {
 	if (client->to_failing_requests == NULL) {
-		client->to_failing_requests = timeout_add_short(0,
-			http_client_handle_request_errors, client);
+		client->to_failing_requests =
+			timeout_add_short_to(client->ioloop, 0,
+				http_client_handle_request_errors, client);
 	}
 	array_append(&client->delayed_failing_requests, &req, 1);
 }
@@ -407,6 +434,7 @@ http_client_context_create(const struct http_client_settings *set)
 	cctx = p_new(pool, struct http_client_context, 1);
 	cctx->pool = pool;
 	cctx->refcount = 1;
+	cctx->ioloop = current_ioloop;
 
 	cctx->event = event_create(set->event);
 	if (set->debug)
@@ -520,10 +548,119 @@ void http_client_context_unref(struct http_client_context **_cctx)
 	pool_unref(&cctx->pool);
 }
 
-void http_client_context_switch_ioloop(struct http_client_context *cctx)
+static unsigned int
+http_client_get_dns_lookup_timeout_msecs(const struct http_client_settings *set)
+{
+	if (set->connect_timeout_msecs > 0)
+		return set->connect_timeout_msecs;
+	if (set->request_timeout_msecs > 0)
+		return set->request_timeout_msecs;
+	return HTTP_CLIENT_DEFAULT_DNS_LOOKUP_TIMEOUT_MSECS;
+}
+
+static void
+http_client_context_update_settings(struct http_client_context *cctx)
+{
+	struct http_client *client;
+	bool debug;
+
+	/* revert back to context settings */
+	cctx->dns_client = cctx->set.dns_client;
+	cctx->dns_client_socket_path = cctx->set.dns_client_socket_path;
+	cctx->dns_ttl_msecs = cctx->set.dns_ttl_msecs;
+	cctx->dns_lookup_timeout_msecs =
+		http_client_get_dns_lookup_timeout_msecs(&cctx->set);
+	debug = cctx->set.debug;
+
+	i_assert(cctx->dns_ttl_msecs > 0);
+	i_assert(cctx->dns_lookup_timeout_msecs > 0);
+
+	/* override with available client settings */
+	for (client = cctx->clients_list; client != NULL;
+	     client = client->next) {
+		unsigned dns_lookup_timeout_msecs =
+			http_client_get_dns_lookup_timeout_msecs(&client->set);
+
+		if (cctx->dns_client == NULL)
+			cctx->dns_client = client->set.dns_client;
+		if (cctx->dns_client_socket_path == NULL) {
+			cctx->dns_client_socket_path =
+				client->set.dns_client_socket_path;
+		}
+		if (client->set.dns_ttl_msecs != 0 &&
+		    cctx->dns_ttl_msecs > client->set.dns_ttl_msecs)
+			cctx->dns_ttl_msecs = client->set.dns_ttl_msecs;
+		if (dns_lookup_timeout_msecs != 0 &&
+		    cctx->dns_lookup_timeout_msecs > dns_lookup_timeout_msecs) {
+			cctx->dns_lookup_timeout_msecs =
+				dns_lookup_timeout_msecs;
+		}
+		debug = debug || client->set.debug;
+	}
+
+	event_set_forced_debug(cctx->event, debug);
+}
+
+static void
+http_client_context_add_client(struct http_client_context *cctx,
+			       struct http_client *client)
+{
+	DLLIST_PREPEND(&cctx->clients_list, client);
+	http_client_context_update_settings(cctx);
+}
+
+static void
+http_client_context_remove_client(struct http_client_context *cctx,
+				  struct http_client *client)
+{
+	DLLIST_REMOVE(&cctx->clients_list, client);
+	http_client_context_update_settings(cctx);
+
+	if (cctx->ioloop != current_ioloop &&
+	    cctx->ioloop == client->ioloop &&
+	    cctx->clients_list != NULL) {
+		struct ioloop *prev_ioloop = current_ioloop;
+
+		io_loop_set_current(cctx->clients_list->ioloop);
+		http_client_context_switch_ioloop(cctx);
+		io_loop_set_current(prev_ioloop);
+	}
+}
+
+static void http_client_context_close(struct http_client_context *cctx)
+{
+	struct connection *_conn, *_conn_next;
+	struct http_client_host_shared *hshared;
+	struct http_client_peer_shared *pshared;
+
+	/* Switching to NULL ioloop;
+	   close all hosts, peers, and connections */
+	i_assert(cctx->clients_list == NULL);
+
+	_conn = cctx->conn_list->connections;
+	while (_conn != NULL) {
+		struct http_client_connection *conn =
+			(struct http_client_connection *)_conn;
+		_conn_next = _conn->next;
+		http_client_connection_close(&conn);
+		_conn = _conn_next;
+	}
+	while (cctx->hosts_list != NULL) {
+		hshared = cctx->hosts_list;
+		http_client_host_shared_free(&hshared);
+	}
+	while (cctx->peers_list != NULL) {
+		pshared = cctx->peers_list;
+		http_client_peer_shared_close(&pshared);
+	}
+}
+
+static void
+http_client_context_do_switch_ioloop(struct http_client_context *cctx)
 {
 	struct connection *_conn = cctx->conn_list->connections;
 	struct http_client_host_shared *hshared;
+	struct http_client_peer_shared *pshared;
 
 	/* move connections */
 	/* FIXME: we wouldn't necessarily need to switch all of them
@@ -536,15 +673,44 @@ void http_client_context_switch_ioloop(struct http_client_context *cctx)
 		http_client_connection_switch_ioloop(conn);
 	}
 
+	/* move backoff timeouts */
+	for (pshared = cctx->peers_list; pshared != NULL;
+		pshared = pshared->next)
+		http_client_peer_shared_switch_ioloop(pshared);
+
 	/* move dns lookups and delayed requests */
 	for (hshared = cctx->hosts_list; hshared != NULL;
 		hshared = hshared->next)
 		http_client_host_shared_switch_ioloop(hshared);
 }
 
+void http_client_context_switch_ioloop(struct http_client_context *cctx)
+{
+	cctx->ioloop = current_ioloop;
+
+	http_client_context_do_switch_ioloop(cctx);
+}
+
 static void http_client_global_context_free(void)
 {
 	http_client_context_unref(&http_client_global_context);
+}
+
+static void
+http_client_global_context_ioloop_switched(
+	struct ioloop *prev_ioloop ATTR_UNUSED)
+{
+	struct http_client_context *cctx = http_client_global_context;
+
+	i_assert(cctx != NULL);
+	if (current_ioloop == NULL) {
+		http_client_context_close(cctx);
+		return;
+	}
+	if (cctx->clients_list == NULL) {
+		/* follow the current ioloop if there is no client */
+		http_client_context_switch_ioloop(cctx);
+	}
 }
 
 struct http_client_context *http_client_get_global_context(void)
@@ -557,5 +723,6 @@ struct http_client_context *http_client_get_global_context(void)
 	http_client_global_context = http_client_context_create(&set);
 	/* keep this a bit higher than lib-ssl-iostream */
 	lib_atexit_priority(http_client_global_context_free, LIB_ATEXIT_PRIORITY_LOW-1);
+	io_loop_add_switch_callback(http_client_global_context_ioloop_switched);
 	return http_client_global_context;
 }

@@ -69,6 +69,11 @@ struct smtp_server_transaction {
 	void *context;
 };
 
+struct smtp_server_recipient *
+smtp_server_transaction_find_rcpt_duplicate(
+	struct smtp_server_transaction *trans,
+	struct smtp_server_recipient *rcpt);
+
 void smtp_server_transaction_fail_data(
 	struct smtp_server_transaction *trans,
 	struct smtp_server_cmd_ctx *data_cmd,
@@ -281,7 +286,7 @@ struct smtp_server_connection *
 smtp_server_connection_create(struct smtp_server *server,
 	int fd_in, int fd_out,
 	const struct ip_addr *remote_ip, in_port_t remote_port,
-	const struct smtp_server_settings *set,
+	bool ssl_start, const struct smtp_server_settings *set,
 	const struct smtp_server_callbacks *callbacks, void *context)
 	ATTR_NULL(4, 6, 8);
 struct smtp_server_connection *
@@ -295,15 +300,24 @@ smtp_server_connection_create_from_streams(struct smtp_server *server,
 void smtp_server_connection_ref(struct smtp_server_connection *conn);
 bool smtp_server_connection_unref(struct smtp_server_connection **_conn);
 
-/* Start the connection. Establishes SSL layer immediately if instructed,
-	and sends the greeting once the connection is ready for commands. */
-void smtp_server_connection_start(struct smtp_server_connection *conn,
-	bool ssl_start);
-/* Start the connection with state and data from login service */
+/* Initialize the connection with state and data from login service */
 void smtp_server_connection_login(struct smtp_server_connection *conn,
 				  const char *username, const char *helo,
 				  const unsigned char *pdata,
 				  unsigned int pdata_len, bool ssl_secured);
+
+/* Start the connection. Establishes SSL layer immediately if instructed,
+   and sends the greeting once the connection is ready for commands. */
+void smtp_server_connection_start(struct smtp_server_connection *conn);
+/* Start the connection, but only establish SSL layer and send greeting;
+   handling command input is held off until smtp_server_connection_resume() is
+   called. */
+void smtp_server_connection_start_pending(struct smtp_server_connection *conn);
+
+/* Halt connection command input and idle timeout entirely. */
+void smtp_server_connection_halt(struct smtp_server_connection *conn);
+/* Resume connection command input and idle timeout. */
+void smtp_server_connection_resume(struct smtp_server_connection *conn);
 
 void smtp_server_connection_input_lock(struct smtp_server_connection *conn);
 void smtp_server_connection_input_unlock(struct smtp_server_connection *conn);
@@ -452,6 +466,9 @@ smtp_server_reply_create_forward(struct smtp_server_command *cmd,
 void smtp_server_reply_add_text(struct smtp_server_reply *reply,
 	const char *line);
 void smtp_server_reply_submit(struct smtp_server_reply *reply);
+void smtp_server_reply_submit_duplicate(struct smtp_server_cmd_ctx *_cmd,
+					unsigned int index,
+					unsigned int from_index);
 
 /* Submit a reply for the command at the specified index (> 0 only if more than
    a single reply is expected). */

@@ -81,6 +81,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 noinst_PROGRAMS = $(am__EXEEXT_1) $(am__EXEEXT_2)
+@BUILD_OPENSSL_TRUE@am__append_1 = ../lib-ssl-iostream/libssl_iostream_openssl.la
 subdir = src/lib-http
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/depcomp $(pkginc_lib_HEADERS)
@@ -567,6 +568,7 @@ libhttp_la_SOURCES = \
 	http-server.c
 
 headers = \
+	http-common.h \
 	http-date.h \
 	http-url.h \
 	http-parser.h \
@@ -678,6 +680,7 @@ test_http_deps = \
 	../lib-settings/libsettings.la \
 	$(test_deps)
 
+test_http_libs_ssl = $(am__append_1)
 test_http_payload_SOURCES = test-http-payload.c
 test_http_payload_LDFLAGS = -export-dynamic
 test_http_payload_LDADD = \
@@ -690,7 +693,7 @@ test_http_client_SOURCES = test-http-client.c
 test_http_client_LDFLAGS = -export-dynamic
 test_http_client_LDADD = \
 	$(test_http_libs) \
-	../lib-ssl-iostream/libssl_iostream_openssl.la
+	$(test_http_libs_ssl)
 
 test_http_client_DEPENDENCIES = \
 	$(test_http_deps)

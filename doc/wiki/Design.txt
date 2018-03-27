@@ -28,7 +28,6 @@ liblib:
  * <String handling> [Design.Strings.txt]
  * <Input streams> [Design.InputStreams.txt]
  * <Output streams> [Design.OutputStreams.txt]
- * <Events> [Design.Events.txt]
  * <Plugins> [Design.Plugins.txt]
 
 lib-dcrypt:
@@ -56,4 +55,4 @@ lib-storage:
  * <Plugins> [Design.Storage.Plugins.txt] - how to hook into lib-storage
    functions.
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)
