@@ -1,3 +1,10 @@
+dovecot (1:2.3.0.1-2) experimental; urgency=medium
+
+  * [f567eb4] Fix murmur3 hash on big-endian architectures, causing FTBFS.
+    Thanks to Josef 'Jeff' Sipek.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 27 Mar 2018 13:11:40 +0300
+
 dovecot (1:2.3.0.1-1) experimental; urgency=medium
 
   * [e32a10f] New upstream stable series; see NEWS.Debian for more
