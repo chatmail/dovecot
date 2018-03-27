@@ -92,6 +92,7 @@ override_dh_auto_configure:
 	            --with-ioloop=best \
 	            --with-libwrap \
 	            --with-lucene \
+		    --with-apparmor \
 		    --with-lz4 \
 		    --libdir=\$${prefix}/lib \
 	            --libexecdir=\$${prefix}/lib \
