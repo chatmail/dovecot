@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -185,6 +185,7 @@ static void imapc_search_callback(const struct imapc_command_reply *reply,
 	struct mail_search_context *ctx = context;
 	struct imapc_mailbox *mbox = IMAPC_MAILBOX(ctx->transaction->box);
 	struct imapc_search_context *ictx = IMAPC_SEARCHCTX(ctx);
+	i_assert(ictx != NULL);
 
 	ictx->finished = TRUE;
 	if (reply->state == IMAPC_COMMAND_STATE_OK) {

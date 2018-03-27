@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -356,9 +356,16 @@ void smtp_client_transaction_fail_reply(struct smtp_client_transaction *trans,
 		}
 	}
 
-	if (trans->cmd_data != NULL)
+	if (!trans->data_provided) {
+		/* smtp_client_transaction_send() was not called yet
+		 */
+	} else if (trans->cmd_data != NULL) {
+		/* the DATA command is still pending; handle the failure by
+		   failing the DATA command. */
 		smtp_client_command_fail_reply(&trans->cmd_data, reply);
-	else {
+	} else {
+		/* the DATA command was not sent yet; call all DATA callbacks
+		   for the recipients that were previously accepted. */
 		rcpts = array_get_modifiable(&trans->rcpts, &count);
 		for (i = trans->rcpt_next_data_idx; i < count; i++) {
 			if (rcpts[i]->data_callback != NULL) {
@@ -379,9 +386,9 @@ void smtp_client_transaction_fail_reply(struct smtp_client_transaction *trans,
 		smtp_client_command_abort(&trans->cmd_plug);
 	trans->cmd_plug = NULL;
 
-	if (trans->data_input != NULL) {
-		/* abort the transaction if it is complete
-		   (if it is not aborted already) */
+	if (trans->data_provided) {
+		/* abort the transaction only if smtp_client_transaction_send()
+		   was called (and if it is not aborted already) */
 		smtp_client_transaction_abort(trans);
 	}
 
@@ -685,6 +692,8 @@ smtp_client_transaction_send_data(struct smtp_client_transaction *trans)
 
 	timeout_remove(&trans->to_send);
 
+	trans->state = SMTP_CLIENT_TRANSACTION_STATE_DATA;
+
 	if (trans->failure != NULL) {
 		smtp_client_transaction_fail_reply(trans, trans->failure);
 		finished = TRUE;
@@ -730,6 +739,8 @@ void smtp_client_transaction_send(
 
 	smtp_client_transaction_debug(trans, "Send");
 
+	trans->data_provided = TRUE;
+
 	i_assert(trans->data_input == NULL);
 	trans->data_input = data_input;
 	i_stream_ref(data_input);
@@ -744,7 +755,7 @@ void smtp_client_transaction_send(
 	if (trans->finish_timeout_msecs > 0) {
 		i_assert(trans->to_finish == NULL);
 		trans->to_finish = timeout_add(trans->finish_timeout_msecs,
-			smtp_client_transaction_send_rcpts, trans);
+			smtp_client_transaction_timeout, trans);
 	}
 }
 

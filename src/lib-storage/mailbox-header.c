@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "sort.h"
@@ -78,6 +78,9 @@ void mailbox_header_lookup_ref(struct mailbox_header_lookup_ctx *ctx)
 void mailbox_header_lookup_unref(struct mailbox_header_lookup_ctx **_ctx)
 {
 	struct mailbox_header_lookup_ctx *ctx = *_ctx;
+
+	if (ctx == NULL)
+		return;
 
 	*_ctx = NULL;
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -218,15 +218,14 @@ size_t o_stream_get_buffer_used_size(const struct ostream *stream)
 {
 	const struct ostream_private *_stream = stream->real_stream;
 
-	return _stream->get_used_size(_stream);
+	return _stream->get_buffer_used_size(_stream);
 }
 
 size_t o_stream_get_buffer_avail_size(const struct ostream *stream)
 {
-	size_t used = o_stream_get_buffer_used_size(stream);
+	const struct ostream_private *_stream = stream->real_stream;
 
-	return stream->real_stream->max_buffer_size <= used ? 0 :
-		stream->real_stream->max_buffer_size - used;
+	return _stream->get_buffer_avail_size(_stream);
 }
 
 int o_stream_seek(struct ostream *stream, uoff_t offset)
@@ -499,11 +498,18 @@ io_stream_copy(struct ostream *outstream, struct istream *instream)
 	return OSTREAM_SEND_ISTREAM_RESULT_FINISHED;
 }
 
-void o_stream_switch_ioloop(struct ostream *stream)
+void o_stream_switch_ioloop_to(struct ostream *stream, struct ioloop *ioloop)
 {
 	struct ostream_private *_stream = stream->real_stream;
 
-	_stream->switch_ioloop(_stream);
+	io_stream_switch_ioloop_to(&_stream->iostream, ioloop);
+
+	_stream->switch_ioloop_to(_stream, ioloop);
+}
+
+void o_stream_switch_ioloop(struct ostream *stream)
+{
+	o_stream_switch_ioloop_to(stream, current_ioloop);
 }
 
 static void o_stream_default_close(struct iostream_private *stream,
@@ -621,12 +627,24 @@ o_stream_default_set_flush_pending(struct ostream_private *_stream, bool set)
 }
 
 static size_t
-o_stream_default_get_used_size(const struct ostream_private *_stream)
+o_stream_default_get_buffer_used_size(const struct ostream_private *_stream)
 {
 	if (_stream->parent == NULL)
 		return 0;
 	else
 		return o_stream_get_buffer_used_size(_stream->parent);
+}
+
+static size_t
+o_stream_default_get_buffer_avail_size(const struct ostream_private *_stream)
+{
+	/* This default implementation assumes that the returned buffer size is
+	   between 0..max_buffer_size. There's no assert though, in case the
+	   max_buffer_size changes. */
+	size_t used = o_stream_get_buffer_used_size(&_stream->ostream);
+
+	return _stream->max_buffer_size <= used ? 0 :
+		_stream->max_buffer_size - used;
 }
 
 static int
@@ -667,10 +685,12 @@ o_stream_default_send_istream(struct ostream_private *outstream,
 	return io_stream_copy(&outstream->ostream, instream);
 }
 
-static void o_stream_default_switch_ioloop(struct ostream_private *_stream)
+static void
+o_stream_default_switch_ioloop_to(struct ostream_private *_stream,
+				  struct ioloop *ioloop)
 {
 	if (_stream->parent != NULL)
-		o_stream_switch_ioloop(_stream->parent);
+		o_stream_switch_ioloop_to(_stream->parent, ioloop);
 }
 
 struct ostream *
@@ -711,8 +731,13 @@ o_stream_create(struct ostream_private *_stream, struct ostream *parent, int fd)
 	}
 	if (_stream->flush_pending == NULL)
 		_stream->flush_pending = o_stream_default_set_flush_pending;
-	if (_stream->get_used_size == NULL)
-		_stream->get_used_size = o_stream_default_get_used_size;
+	if (_stream->get_buffer_used_size == NULL)
+		_stream->get_buffer_used_size =
+			o_stream_default_get_buffer_used_size;
+	if (_stream->get_buffer_avail_size == NULL) {
+		_stream->get_buffer_avail_size =
+			o_stream_default_get_buffer_avail_size;
+	}
 	if (_stream->seek == NULL)
 		_stream->seek = o_stream_default_seek;
 	if (_stream->sendv == NULL)
@@ -721,8 +746,8 @@ o_stream_create(struct ostream_private *_stream, struct ostream *parent, int fd)
 		_stream->write_at = o_stream_default_write_at;
 	if (_stream->send_istream == NULL)
 		_stream->send_istream = o_stream_default_send_istream;
-	if (_stream->switch_ioloop == NULL)
-		_stream->switch_ioloop = o_stream_default_switch_ioloop;
+	if (_stream->switch_ioloop_to == NULL)
+		_stream->switch_ioloop_to = o_stream_default_switch_ioloop_to;
 
 	io_stream_init(&_stream->iostream);
 	return &_stream->ostream;

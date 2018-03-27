@@ -3,6 +3,7 @@
 
 #include "net.h"
 
+struct ioloop;
 struct connection;
 
 enum connection_behavior {
@@ -79,6 +80,7 @@ struct connection {
 
 	char *name;
 	int fd_in, fd_out;
+	struct ioloop *ioloop;
 	struct io *io;
 	struct istream *input;
 	struct ostream *output;
@@ -100,6 +102,7 @@ struct connection {
 
 	bool version_received:1;
 	bool unix_socket:1;
+	bool from_streams:1;
 };
 
 struct connection_list {
@@ -129,6 +132,10 @@ int connection_client_connect(struct connection *conn);
 void connection_disconnect(struct connection *conn);
 void connection_deinit(struct connection *conn);
 
+void connection_input_halt(struct connection *conn);
+void connection_input_resume(struct connection *conn);
+void connection_streams_changed(struct connection *conn);
+
 /* Returns -1 = disconnected, 0 = nothing new, 1 = something new.
    If input_full_behavior is ALLOW, may return also -2 = buffer full. */
 int connection_input_read(struct connection *conn);
@@ -141,6 +148,8 @@ const char *connection_disconnect_reason(struct connection *conn);
    e.g. "No input for 10.023 secs". */
 const char *connection_input_timeout_reason(struct connection *conn);
 
+void connection_switch_ioloop_to(struct connection *conn,
+				 struct ioloop *ioloop);
 void connection_switch_ioloop(struct connection *conn);
 
 struct connection_list *

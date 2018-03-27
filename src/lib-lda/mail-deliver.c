@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -20,9 +20,9 @@
 #define DUPLICATE_DB_NAME "lda-dupes"
 
 #define MAIL_DELIVER_USER_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_deliver_user_module)
+	MODULE_CONTEXT_REQUIRE(obj, mail_deliver_user_module)
 #define MAIL_DELIVER_STORAGE_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_deliver_storage_module)
+	MODULE_CONTEXT_REQUIRE(obj, mail_deliver_storage_module)
 
 struct mail_deliver_user {
 	union mail_user_module_context module_ctx;
@@ -65,8 +65,8 @@ static MODULE_CONTEXT_DEFINE_INIT(mail_deliver_user_module,
 static MODULE_CONTEXT_DEFINE_INIT(mail_deliver_storage_module,
 				  &mail_storage_module_register);
 
-const struct smtp_address *
-mail_deliver_get_address(struct mail *mail, const char *header)
+static struct message_address *
+mail_deliver_get_message_address(struct mail *mail, const char *header)
 {
 	struct message_address *addr;
 	const char *str;
@@ -76,9 +76,21 @@ mail_deliver_get_address(struct mail *mail, const char *header)
 	addr = message_address_parse(pool_datastack_create(),
 				     (const unsigned char *)str,
 				     strlen(str), 1, FALSE);
-	return addr == NULL || addr->mailbox == NULL || addr->domain == NULL ||
-		*addr->mailbox == '\0' || *addr->domain == '\0' ?
-		NULL : smtp_address_create_from_msg_temp(addr);
+	if (addr == NULL || addr->mailbox == NULL || addr->domain == NULL ||
+	    *addr->mailbox == '\0' || *addr->domain == '\0')
+		return NULL;
+	return addr;
+}
+
+const struct smtp_address *
+mail_deliver_get_address(struct mail *mail, const char *header)
+{
+	struct message_address *addr;
+
+	addr = mail_deliver_get_message_address(mail, header);
+	if (addr == NULL)
+		return NULL;
+	return smtp_address_create_from_msg_temp(addr);
 }
 
 static void update_cache(pool_t pool, const char **old_str, const char *new_str)
@@ -94,6 +106,7 @@ mail_deliver_log_update_cache(struct mail_deliver_cache *cache, pool_t pool,
 			      struct mail *mail)
 {
 	const char *message_id = NULL, *subject = NULL, *from_envelope = NULL;
+	static struct message_address *from_addr;
 	const char *from;
 
 	if (cache->filled)
@@ -108,7 +121,9 @@ mail_deliver_log_update_cache(struct mail_deliver_cache *cache, pool_t pool,
 		subject = str_sanitize(subject, 80);
 	update_cache(pool, &cache->subject, subject);
 
-	from = smtp_address_encode(mail_deliver_get_address(mail, "From"));
+	from_addr = mail_deliver_get_message_address(mail, "From");
+	from = (from_addr == NULL ? NULL :
+		t_strconcat(from_addr->mailbox, "@", from_addr->domain, NULL));
 	update_cache(pool, &cache->from, from);
 
 	if (mail_get_special(mail, MAIL_FETCH_FROM_ENVELOPE, &from_envelope) > 0)
@@ -405,8 +420,8 @@ int mail_deliver_save(struct mail_deliver_context *ctx, const char *mailbox,
 const struct smtp_address *
 mail_deliver_get_return_address(struct mail_deliver_context *ctx)
 {
-	struct smtp_address *address;
-	const char *path, *error;
+	struct message_address *addr;
+	const char *path;
 	int ret;
 
 	if (!smtp_address_isnull(ctx->mail_from))
@@ -421,13 +436,14 @@ mail_deliver_get_return_address(struct mail_deliver_context *ctx)
 		}
 		return NULL;
 	}
-	if (smtp_address_parse_path(ctx->pool, path,
-				    SMTP_ADDRESS_PARSE_FLAG_BRACKETS_OPTIONAL,
-				    &address, &error) < 0) {
-		i_warning("Failed to parse return-path header: %s", error);
+	if (message_address_parse_path(pool_datastack_create(),
+				       (const unsigned char *)path,
+				       strlen(path), &addr) < 0) {
+		i_warning("Failed to parse return-path header");
 		return NULL;
 	}
-	return address;
+
+	return smtp_address_create_from_msg(ctx->pool, addr);
 }
 
 const char *mail_deliver_get_new_message_id(struct mail_deliver_context *ctx)
@@ -598,7 +614,6 @@ mail_deliver_transaction_begin(struct mailbox *box,
 	struct mailbox_transaction_context *t;
 	struct mail_deliver_transaction *dt;
 
-	i_assert(muser != NULL);
 	i_assert(muser->deliver_ctx != NULL);
 
 	t = mbox->module_ctx.super.transaction_begin(box, flags, reason);
@@ -618,8 +633,6 @@ mail_deliver_transaction_commit(struct mailbox_transaction_context *ctx,
 	struct mail_deliver_user *muser =
 		MAIL_DELIVER_USER_CONTEXT(box->storage->user);
 
-	i_assert(dt != NULL);
-	i_assert(muser != NULL);
 	i_assert(muser->deliver_ctx != NULL);
 
 	/* sieve creates multiple transactions, saves the mails and

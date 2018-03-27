@@ -44,7 +44,6 @@ Currently supported user databases are:
    virtual domains
  * <Prefetch> [UserDatabase.Prefetch.txt]: This assumes that the passdb already
    returned also all the required user database information
- * <Lua> [AuthDatabase.Lua.txt]: Lua script for authentication (v2.3.0+)
 
 Userdb settings
 ---------------
@@ -123,4 +122,4 @@ The result values that can be used:
  * continue: Continue to the next userdb without changing the user existence
    state. The initial state is "not found".
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

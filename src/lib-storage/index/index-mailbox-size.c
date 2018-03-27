@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -33,7 +33,7 @@
    need to lock vsize updates before sync.
 */
 
-#define VSIZE_LOCK_SUFFIX ".vsize.lock"
+#define VSIZE_LOCK_SUFFIX "dovecot-vsize.lock"
 #define VSIZE_UPDATE_MAX_LOCK_SECS 10
 
 #define INDEXER_SOCKET_NAME "indexer"
@@ -225,8 +225,7 @@ void index_mailbox_vsize_update_deinit(struct mailbox_vsize_update **_update)
 
 	if (update->lock != NULL || update->rebuild)
 		index_mailbox_vsize_update_write(update);
-	if (update->lock != NULL)
-		file_lock_free(&update->lock);
+	file_lock_free(&update->lock);
 	if (update->finish_in_background)
 		index_mailbox_vsize_notify_indexer(update->box);
 

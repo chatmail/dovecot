@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -69,7 +69,8 @@ smtp_server_cmd_xclient_extra_field(struct smtp_server_connection *conn,
 {
 	struct smtp_proxy_data_field *field;
 
-	if (!str_array_icase_find(conn->set.xclient_extensions, param->keyword))
+	if (conn->set.xclient_extensions == NULL ||
+	    !str_array_icase_find(conn->set.xclient_extensions, param->keyword))
 		return;
 
 	if (!array_is_created(fields))
@@ -93,6 +94,12 @@ void smtp_server_cmd_xclient(struct smtp_server_cmd_ctx *cmd,
 	   attribute-name = ( NAME | ADDR | PORT | PROTO | HELO | LOGIN )
 	   attribute-value = xtext
 	 */
+
+	if ((conn->set.capabilities & SMTP_CAPABILITY_XCLIENT) == 0) {
+		smtp_server_reply(cmd,
+			502, "5.5.1", "Unsupported command");
+		return;
+	}
 
 	/* check transaction state as far as possible */
 	if (!cmd_xclient_check_state(cmd))

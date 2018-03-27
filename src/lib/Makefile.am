@@ -119,7 +119,6 @@ liblib_la_SOURCES = \
 	numpack.c \
 	ostream.c \
 	ostream-buffer.c \
-	ostream-escaped.c \
 	ostream-failure-at.c \
 	ostream-file.c \
 	ostream-hash.c \
@@ -147,6 +146,7 @@ liblib_la_SOURCES = \
 	sha2.c \
 	sha3.c \
 	sort.c \
+	stats-dist.c \
 	str.c \
 	str-find.c \
 	str-sanitize.c \
@@ -155,7 +155,6 @@ liblib_la_SOURCES = \
 	strfuncs.c \
 	strnum.c \
 	time-util.c \
-	timing.c \
 	unix-socket-create.c \
 	unlink-directory.c \
 	unlink-old-files.c \
@@ -272,7 +271,6 @@ headers = \
 	nfs-workarounds.h \
 	numpack.h \
 	ostream.h \
-	ostream-escaped.h \
 	ostream-failure-at.h \
 	ostream-file-private.h \
 	ostream-hash.h \
@@ -301,6 +299,7 @@ headers = \
 	sha2.h \
 	sha3.h \
 	sort.h \
+	stats-dist.h \
 	str.h \
 	str-find.h \
 	str-sanitize.h \
@@ -309,7 +308,6 @@ headers = \
 	strfuncs.h \
 	strnum.h \
 	time-util.h \
-	timing.h \
 	unix-socket-create.h \
 	unlink-directory.h \
 	unlink-old-files.h \
@@ -388,7 +386,6 @@ test_lib_SOURCES = \
 	test-net.c \
 	test-numpack.c \
 	test-ostream-buffer.c \
-	test-ostream-escaped.c \
 	test-ostream-failure-at.c \
 	test-ostream-file.c \
 	test-ostream-multiplex.c \
@@ -398,6 +395,7 @@ test_lib_SOURCES = \
 	test-printf-format-fix.c \
 	test-priorityq.c \
 	test-seq-range-array.c \
+	test-stats-dist.c \
 	test-str.c \
 	test-strescape.c \
 	test-strfuncs.c \
@@ -406,7 +404,6 @@ test_lib_SOURCES = \
 	test-str-sanitize.c \
 	test-str-table.c \
 	test-time-util.c \
-	test-timing.c \
 	test-unichar.c \
 	test-utc-mktime.c \
 	test-uri.c \

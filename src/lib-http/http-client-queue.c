@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -409,8 +409,8 @@ http_client_queue_connection_attempt(struct http_client_queue *queue)
 			msecs = client->set.soft_connect_timeout_msecs;
 			if (!http_client_queue_is_last_connect_ip(queue) && msecs > 0 &&
 			   	queue->to_connect == NULL) {
-				queue->to_connect =
-					timeout_add(msecs, http_client_queue_soft_connect_timeout, queue);
+				queue->to_connect = timeout_add_to(client->ioloop, msecs,
+					http_client_queue_soft_connect_timeout, queue);
 			}
 		}
 	}
@@ -653,7 +653,7 @@ http_client_queue_drop_request(struct http_client_queue *queue,
 					timeout_remove(&queue->to_delayed);
 					if (count > 1) {
 						i_assert(reqs[1]->release_time.tv_sec > 0);
-						http_client_queue_set_request_timer(queue, &reqs[1]->release_time);
+						http_client_queue_set_delay_timer(queue, reqs[1]->release_time);
 					}
 				}
 			}
@@ -761,8 +761,9 @@ http_client_queue_set_request_timer(struct http_client_queue *queue,
 		((unsigned long)ioloop_timeval.tv_usec)/1000);
 
 	/* set timer */
-	queue->to_request = timeout_add_absolute
-		(time, http_client_queue_request_timeout, queue);
+	queue->to_request = timeout_add_absolute_to(
+		queue->client->ioloop, time,
+		http_client_queue_request_timeout, queue);
 }
 
 static int
@@ -865,6 +866,7 @@ static void
 http_client_queue_set_delay_timer(struct http_client_queue *queue,
 	struct timeval time)
 {
+	struct http_client *client = queue->client;
 	int usecs = timeval_diff_usecs(&time, &ioloop_timeval);
 	int msecs;
 
@@ -873,8 +875,8 @@ http_client_queue_set_delay_timer(struct http_client_queue *queue,
 
 	/* set timer */
 	timeout_remove(&queue->to_delayed);	
-	queue->to_delayed = timeout_add
-		(msecs, http_client_queue_delay_timeout, queue);
+	queue->to_delayed = timeout_add_to(client->ioloop, msecs,
+		http_client_queue_delay_timeout, queue);
 }
 
 static int

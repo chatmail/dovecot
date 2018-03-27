@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "safe-memset.h"
@@ -446,6 +446,7 @@ int main(int argc, char *argv[])
 	dns_client_deinit(&dns_client);
 
 	io_loop_destroy(&ioloop);
+	ssl_iostream_context_cache_free();
 #ifdef HAVE_OPENSSL
 	ssl_iostream_openssl_deinit();
 #endif

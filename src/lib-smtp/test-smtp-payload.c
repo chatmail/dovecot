@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -388,8 +388,8 @@ static void client_init(int fd)
 	client->pool = pool;
 
 	client->smtp_conn = smtp_server_connection_create(smtp_server,
-		fd, fd, NULL, 0, NULL, &server_callbacks, client);
-	smtp_server_connection_start(client->smtp_conn, FALSE);
+		fd, fd, NULL, 0, FALSE, NULL, &server_callbacks, client);
+	smtp_server_connection_start(client->smtp_conn);
 	DLLIST_PREPEND(&clients, client);
 }
 

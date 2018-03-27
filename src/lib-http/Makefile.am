@@ -32,6 +32,7 @@ libhttp_la_SOURCES = \
 	http-server.c
 
 headers = \
+	http-common.h \
 	http-date.h \
 	http-url.h \
 	http-parser.h \
@@ -148,6 +149,11 @@ test_http_deps = \
 	../lib-settings/libsettings.la \
 	$(test_deps)
 
+test_http_libs_ssl=
+if BUILD_OPENSSL
+test_http_libs_ssl += ../lib-ssl-iostream/libssl_iostream_openssl.la
+endif
+
 test_http_payload_SOURCES = test-http-payload.c
 test_http_payload_LDFLAGS = -export-dynamic
 test_http_payload_LDADD = \
@@ -159,7 +165,8 @@ test_http_client_SOURCES = test-http-client.c
 test_http_client_LDFLAGS = -export-dynamic
 test_http_client_LDADD = \
 	$(test_http_libs) \
-	../lib-ssl-iostream/libssl_iostream_openssl.la
+	$(test_http_libs_ssl)
+
 test_http_client_DEPENDENCIES = \
 	$(test_http_deps)
 

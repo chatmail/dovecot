@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "base64.h"
@@ -62,7 +62,7 @@ static void stats_command_post(struct client_command_context *cmd)
 	string_t *str;
 	buffer_t *buf;
 
-	if (scmd == NULL)
+	if (suser == NULL || scmd == NULL)
 		return;
 
 	new_stats = stats_alloc(pool_datastack_create());

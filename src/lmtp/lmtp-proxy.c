@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -22,6 +22,7 @@
 #include "lda-settings.h"
 #include "client.h"
 #include "main.h"
+#include "lmtp-common.h"
 #include "lmtp-settings.h"
 #include "lmtp-proxy.h"
 
@@ -113,7 +114,6 @@ lmtp_proxy_init(struct client *client,
 		lmtp_set.proxy_data.ttl_plus_1 = LMTP_PROXY_DEFAULT_TTL + 1;
 	else
 		lmtp_set.proxy_data.ttl_plus_1--;
-	lmtp_set.peer_trusted = TRUE;
 
 	proxy->lmtp_client = smtp_client_init(&lmtp_set);
 
@@ -177,6 +177,7 @@ static struct lmtp_proxy_connection *
 lmtp_proxy_get_connection(struct lmtp_proxy *proxy,
 			  const struct lmtp_proxy_rcpt_settings *set)
 {
+	struct smtp_client_settings lmtp_set;
 	struct smtp_client_connection *lmtp_conn;
 	struct smtp_server_transaction *trans = proxy->trans;
 	struct lmtp_proxy_connection *const *conns, *conn;
@@ -204,9 +205,13 @@ lmtp_proxy_get_connection(struct lmtp_proxy *proxy,
 	conn->set.timeout_msecs = set->timeout_msecs;
 	array_append(&proxy->connections, &conn, 1);
 
+	i_zero(&lmtp_set);
+	lmtp_set.peer_trusted = TRUE;
+	lmtp_set.forced_capabilities = SMTP_CAPABILITY__ORCPT;
+
 	lmtp_conn = smtp_client_connection_create(proxy->lmtp_client,
 		set->protocol, conn->set.host, conn->set.port,
-		SMTP_CLIENT_SSL_MODE_NONE, NULL);
+		SMTP_CLIENT_SSL_MODE_NONE, &lmtp_set);
 	smtp_client_connection_connect(lmtp_conn, NULL, NULL);
 
 	conn->lmtp_trans = smtp_client_transaction_create(lmtp_conn,
@@ -229,7 +234,8 @@ lmtp_proxy_handle_reply(struct smtp_server_cmd_ctx *cmd,
 {
 	*reply_r = *reply;
 
-	if (!smtp_reply_is_remote(reply)) {
+	if (!smtp_reply_is_remote(reply) ||
+		reply->status == SMTP_CLIENT_COMMAND_ERROR_CONNECTION_CLOSED) {
 		const char *detail = "";
 
 		switch (reply->status) {
@@ -243,6 +249,7 @@ lmtp_proxy_handle_reply(struct smtp_server_cmd_ctx *cmd,
 			detail = " (connect)";
 			break;
 		case SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST:
+		case SMTP_CLIENT_COMMAND_ERROR_CONNECTION_CLOSED:
 			detail = " (connection lost)";
 			break;
 		case SMTP_CLIENT_COMMAND_ERROR_BAD_REPLY:
@@ -384,15 +391,10 @@ lmtp_proxy_rcpt_finished(struct smtp_server_cmd_ctx *cmd,
 
 	cmd->hook_destroy = NULL;
 
-	/* copy to transaction */
-	trcpt->context = (void *)rcpt;
+	lmtp_recipient_finish(&rcpt->rcpt, trcpt, index);
 
 	/* add to local recipients */
 	array_append(&client->proxy->rcpt_to, &rcpt, 1);
-
-	rcpt->rcpt.rcpt = trcpt;
-	rcpt->rcpt.index = index;
-	rcpt->rcpt.rcpt_cmd = NULL;
 }
 
 static void
@@ -526,9 +528,9 @@ int lmtp_proxy_rcpt(struct client *client,
 	pool_unref(&auth_pool);
 
 	rcpt = i_new(struct lmtp_proxy_recipient, 1);
-	rcpt->rcpt.client = client;
-	rcpt->rcpt.rcpt_cmd = cmd;
-	rcpt->rcpt.path = data->path;
+	lmtp_recipient_init(&rcpt->rcpt, client,
+			    LMTP_RECIPIENT_TYPE_PROXY, cmd, data);
+
 	rcpt->conn = conn;
 
 	cmd->context = (void*)rcpt;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "base64.h"
@@ -69,12 +69,14 @@ static void submission_client_create(struct client *client,
 
 	i_zero(&smtp_set);
 	smtp_set.capabilities = SMTP_CAPABILITY_SIZE |
-		SMTP_CAPABILITY_ENHANCEDSTATUSCODES | SMTP_CAPABILITY_AUTH;
+		SMTP_CAPABILITY_ENHANCEDSTATUSCODES | SMTP_CAPABILITY_AUTH |
+		SMTP_CAPABILITY_XCLIENT;
 	if (client_is_tls_enabled(client))
 		smtp_set.capabilities |= SMTP_CAPABILITY_STARTTLS;
 	smtp_set.hostname = subm_client->set->hostname;
 	smtp_set.login_greeting = client->set->login_greeting;
-	smtp_set.tls_required = (strcmp(client->ssl_set->ssl, "required") == 0);
+	smtp_set.tls_required = !client->secured &&
+		(strcmp(client->ssl_set->ssl, "required") == 0);
 	smtp_set.xclient_extensions = xclient_extensions;
 	smtp_set.debug = client->set->auth_debug;
 
@@ -99,7 +101,7 @@ static void submission_client_notify_auth_ready(struct client *client)
 	struct submission_client *subm_client =
 		container_of(client, struct submission_client, common);
 
-	smtp_server_connection_start(subm_client->conn, FALSE);
+	smtp_server_connection_start(subm_client->conn);
 }
 
 static void

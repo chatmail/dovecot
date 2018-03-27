@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -30,7 +30,8 @@ smtp_server_reply_debug(struct smtp_server_reply *reply,
 				smtp_protocol_name(set->protocol),
 				smtp_server_connection_label(conn),
 				smtp_server_command_label(command),
-				reply->status, reply->index+1, command->replies_expected,
+				reply->content->status,
+				reply->index+1, command->replies_expected,
 				t_strdup_vprintf(format, args));
 		} else {
 			i_debug("%s-server: conn %s: "
@@ -38,7 +39,8 @@ smtp_server_reply_debug(struct smtp_server_reply *reply,
 				smtp_protocol_name(set->protocol),
 				smtp_server_connection_label(conn),
 				smtp_server_command_label(command),
-				reply->status, t_strdup_vprintf(format, args));
+				reply->content->status,
+				t_strdup_vprintf(format, args));
 		}
 		va_end(args);
 	}
@@ -48,15 +50,45 @@ smtp_server_reply_debug(struct smtp_server_reply *reply,
  * Reply
  */
 
-static void smtp_server_reply_clear(struct smtp_server_reply *reply)
+static void smtp_server_reply_destroy(struct smtp_server_reply *reply)
 {
 	if (reply->command == NULL)
 		return;
 
 	smtp_server_reply_debug(reply, "Destroy");
 
-	if (reply->text != NULL)
-		str_free(&reply->text);
+	if (reply->content == NULL)
+		return;
+	str_free(&reply->content->text);
+}
+
+static void smtp_server_reply_clear(struct smtp_server_reply *reply)
+{
+	smtp_server_reply_destroy(reply);
+	if (reply->submitted) {
+		i_assert(reply->command->replies_submitted > 0);
+		reply->command->replies_submitted--;
+	}
+	reply->submitted = FALSE;
+}
+
+static struct smtp_server_reply *
+smtp_server_reply_alloc(struct smtp_server_command *cmd, unsigned int index)
+{
+	struct smtp_server_reply *reply;
+	pool_t pool = cmd->context.pool;
+
+	if (array_is_created(&cmd->replies)) {
+		reply = array_idx_modifiable(&cmd->replies, index);
+		/* get rid of any existing reply */
+		i_assert(!reply->sent);
+		smtp_server_reply_clear(reply);
+	} else {
+		p_array_init(&cmd->replies, pool, cmd->replies_expected);
+		array_idx_clear(&cmd->replies, cmd->replies_expected - 1);
+		reply = array_idx_modifiable(&cmd->replies, index);
+	}
+	return reply;
 }
 
 struct smtp_server_reply *
@@ -90,28 +122,21 @@ smtp_server_reply_create_index(struct smtp_server_command *cmd,
 		((unsigned int)(enh_code[0] - '0') == (status / 100)
 			&& enh_code[1] == '.'));
 
-	if (array_is_created(&cmd->replies)) {
-		reply = array_idx_modifiable(&cmd->replies, index);
-		/* get rid of any existing reply */
-		i_assert(!reply->sent);
-		smtp_server_reply_clear(reply);
-	} else {
-		p_array_init(&cmd->replies, pool, cmd->replies_expected);
-		array_idx_clear(&cmd->replies, cmd->replies_expected - 1);
-		reply = array_idx_modifiable(&cmd->replies, index);
-	}
-
+	reply = smtp_server_reply_alloc(cmd, index);
 	reply->index = index;
 	reply->command = cmd;
-	reply->status = status;
+
+	if (reply->content == NULL)
+		reply->content = p_new(pool, struct smtp_server_reply_content, 1);
+	reply->content->status = status;
 	if (enh_code == NULL || *enh_code == '\0') {
-		reply->status_prefix =
+		reply->content->status_prefix =
 			p_strdup_printf(pool, "%03u-", status);
 	} else {
-		reply->status_prefix =
+		reply->content->status_prefix =
 			p_strdup_printf(pool, "%03u-%s ", status, enh_code);
 	}
-	reply->text = str_new(default_pool, 256);
+	reply->content->text = str_new(default_pool, 256);
 	return reply;
 }
 
@@ -130,7 +155,7 @@ smtp_server_reply_create_forward(struct smtp_server_command *cmd,
 
 	reply = smtp_server_reply_create_index(cmd, index,
 		from->status, smtp_reply_get_enh_code(from));
-	smtp_reply_write(reply->text, from);
+	smtp_reply_write(reply->content->text, from);
 
 	return reply;
 }
@@ -145,13 +170,15 @@ void smtp_server_reply_free(struct smtp_server_command *cmd)
 	for (i = 0; i < cmd->replies_expected; i++) {
 		struct smtp_server_reply *reply =
 			array_idx_modifiable(&cmd->replies, i);
-		smtp_server_reply_clear(reply);
+		smtp_server_reply_destroy(reply);
 	}
 }
 
 void smtp_server_reply_add_text(struct smtp_server_reply *reply,
 				const char *text)
 {
+	string_t *textbuf = reply->content->text;
+
 	i_assert(!reply->submitted);
 
 	if (*text == '\0')
@@ -160,33 +187,58 @@ void smtp_server_reply_add_text(struct smtp_server_reply *reply,
 	do {
 		const char *p;
 
-		reply->last_line = str_len(reply->text);
+		reply->content->last_line = str_len(textbuf);
 
 		p = strchr(text, '\n');
-		str_append(reply->text, reply->status_prefix);
+		str_append(textbuf, reply->content->status_prefix);
 		if (p == NULL) {
-			str_append(reply->text, text);
+			str_append(textbuf, text);
 			text = NULL;
 		} else {
 			if (p > text && *(p-1) == '\r')
-				str_append_n(reply->text, text, p - text - 1);
+				str_append_n(textbuf, text, p - text - 1);
 			else
-				str_append_n(reply->text, text, p - text);
+				str_append_n(textbuf, text, p - text);
 			text = p + 1;
 		}
-		str_append(reply->text, "\r\n");
+		str_append(textbuf, "\r\n");
 	} while (text != NULL && *text != '\0');
 }
 
 void smtp_server_reply_submit(struct smtp_server_reply *reply)
 {
 	i_assert(!reply->submitted);
-	i_assert(str_len(reply->text) >= 5);
+	i_assert(reply->content != NULL);
+	i_assert(str_len(reply->content->text) >= 5);
 	smtp_server_reply_debug(reply, "Submitted");
 
 	reply->command->replies_submitted++;
 	reply->submitted = TRUE;
 	smtp_server_command_submit_reply(reply->command);
+}
+
+void smtp_server_reply_submit_duplicate(struct smtp_server_cmd_ctx *_cmd,
+					unsigned int index,
+					unsigned int from_index)
+{
+	struct smtp_server_command *cmd = _cmd->cmd;
+	struct smtp_server_reply *reply, *from_reply;
+
+	i_assert(cmd->replies_expected > 0);
+	i_assert(index < cmd->replies_expected);
+	i_assert(from_index < cmd->replies_expected);
+	i_assert(array_is_created(&cmd->replies));
+
+	from_reply = array_idx_modifiable(&cmd->replies, from_index);
+	i_assert(from_reply->content != NULL);
+	i_assert(from_reply->submitted);
+
+	reply = smtp_server_reply_alloc(cmd, index);
+	reply->index = index;
+	reply->command = cmd;
+	reply->content = from_reply->content;
+
+	smtp_server_reply_submit(reply);
 }
 
 void smtp_server_reply_indexv(struct smtp_server_cmd_ctx *_cmd,
@@ -251,16 +303,31 @@ smtp_server_reply_allv(struct smtp_server_cmd_ctx *_cmd,
 	struct smtp_server_command *cmd = _cmd->cmd;
 	struct smtp_server_reply *reply;
 	const char *text;
-	unsigned int i;
+	unsigned int first, i = 0;
 
+	/* find the first unsent reply */
+	if (array_is_created(&cmd->replies)) {
+		for (; i < cmd->replies_expected; i++) {
+			struct smtp_server_reply *reply =
+				array_idx_modifiable(&cmd->replies, i);
+			if (!reply->sent)
+				break;
+		}
+		i_assert (i < cmd->replies_expected);
+	}
+	first = i++;
+
+	/* compose the reply text */
 	text = t_strdup_vprintf(fmt, args);
 
-	for (i = 0; i < cmd->replies_expected; i++) {
-		reply = smtp_server_reply_create_index(cmd,
-			i, status, enh_code);
-		smtp_server_reply_add_text(reply, text);
-		smtp_server_reply_submit(reply);
-	}
+	/* submit the first remaining reply */
+	reply = smtp_server_reply_create_index(cmd, first, status, enh_code);
+	smtp_server_reply_add_text(reply, text);
+	smtp_server_reply_submit(reply);
+
+	/* duplicate the rest from it */
+	for (; i < cmd->replies_expected; i++)
+		smtp_server_reply_submit_duplicate(_cmd, i, first);
 }
 
 void smtp_server_reply_all(struct smtp_server_cmd_ctx *_cmd,
@@ -299,16 +366,18 @@ void smtp_server_reply_quit(struct smtp_server_cmd_ctx *_cmd)
 
 const char *smtp_server_reply_get_one_line(struct smtp_server_reply *reply)
 {
-	string_t *str;
+	string_t *textbuf, *str;
 	const char *text, *p;
 	size_t text_len, prefix_len, line_len;
 
-	i_assert(str_len(reply->text) > 0);
+	i_assert(reply->content != NULL);
+	textbuf = reply->content->text;
+	i_assert(str_len(textbuf) > 0);
 
-	prefix_len = strlen(reply->status_prefix);
+	prefix_len = strlen(reply->content->status_prefix);
 	str = t_str_new(256);
-	text = str_c(reply->text);
-	text_len = str_len(reply->text);
+	text = str_c(textbuf);
+	text_len = str_len(textbuf);
 
 	for (;;) {
 		p = strchr(text, '\n');
@@ -330,36 +399,31 @@ const char *smtp_server_reply_get_one_line(struct smtp_server_reply *reply)
 	return str_c(str);
 }
 
-static int smtp_server_reply_send_real(struct smtp_server_reply *reply,
-				       const char **error_r)
+static int smtp_server_reply_send_real(struct smtp_server_reply *reply)
 {
 	struct smtp_server_command *cmd = reply->command;
 	struct smtp_server_connection *conn = cmd->context.conn;
 	const struct smtp_server_settings *set = &conn->set;
 	struct ostream *output = conn->conn.output;
+	string_t *textbuf;
 	char *text;
 	int ret = 0;
 
-	*error_r = NULL;
-
-	i_assert(str_len(reply->text) > 0);
+	i_assert(reply->content != NULL);
+	textbuf = reply->content->text;
+	i_assert(str_len(textbuf) > 0);
 
 	/* substitute '-' with ' ' in last line */
-	text = str_c_modifiable(reply->text);
-	text = text + reply->last_line + 3;
+	text = str_c_modifiable(textbuf);
+	text = text + reply->content->last_line + 3;
 	if (text[0] != ' ') {
 		i_assert(text[0] == '-');
 		text[0] = ' ';
 	}
 
-	if (o_stream_send(output,
-		str_data(reply->text), str_len(reply->text)) < 0) {
-		if (errno != EPIPE && errno != ECONNRESET) {
-			*error_r = t_strdup_printf("write(%s) failed: %s",
-						   o_stream_get_name(output),
-						   o_stream_get_error(output));
-		}
-		ret = -1;
+	if (o_stream_send(output, str_data(textbuf), str_len(textbuf)) < 0) {
+		smtp_server_connection_handle_output_error(conn);
+		return -1;
 	}
 
 	if (set->debug) {
@@ -369,8 +433,7 @@ static int smtp_server_reply_send_real(struct smtp_server_reply *reply,
 	return ret;
 }
 
-int smtp_server_reply_send(struct smtp_server_reply *reply,
-			   const char **error_r)
+int smtp_server_reply_send(struct smtp_server_reply *reply)
 {
 	int ret;
 
@@ -378,7 +441,7 @@ int smtp_server_reply_send(struct smtp_server_reply *reply,
 		return 0;
 
 	T_BEGIN {
-		ret = smtp_server_reply_send_real(reply, error_r);
+		ret = smtp_server_reply_send_real(reply);
 	} T_END;
 
 	reply->sent = TRUE;
@@ -394,11 +457,13 @@ smtp_server_reply_create_ehlo(struct smtp_server_command *cmd)
 {
 	struct smtp_server_connection *conn = cmd->context.conn;
 	struct smtp_server_reply *reply;
+	string_t *textbuf;
 
 	reply = smtp_server_reply_create(cmd, 250, "");
-	str_append(reply->text, reply->status_prefix);
-	str_append(reply->text, conn->set.hostname);
-	str_append(reply->text, "\r\n");
+	textbuf = reply->content->text;
+	str_append(textbuf, reply->content->status_prefix);
+	str_append(textbuf, conn->set.hostname);
+	str_append(textbuf, "\r\n");
 
 	return reply;
 }
@@ -406,31 +471,38 @@ smtp_server_reply_create_ehlo(struct smtp_server_command *cmd)
 void smtp_server_reply_ehlo_add(struct smtp_server_reply *reply,
 				const char *keyword)
 {
-	i_assert(!reply->submitted);
+	string_t *textbuf;
 
-	reply->last_line = str_len(reply->text);
-	str_append(reply->text, reply->status_prefix);
-	str_append(reply->text, keyword);
-	str_append(reply->text, "\r\n");
+	i_assert(!reply->submitted);
+	i_assert(reply->content != NULL);
+	textbuf = reply->content->text;
+
+	reply->content->last_line = str_len(textbuf);
+	str_append(textbuf, reply->content->status_prefix);
+	str_append(textbuf, keyword);
+	str_append(textbuf, "\r\n");
 }
 
 void smtp_server_reply_ehlo_add_param(struct smtp_server_reply *reply,
 	const char *keyword, const char *param_fmt, ...)
 {
 	va_list args;
+	string_t *textbuf;
 
 	i_assert(!reply->submitted);
+	i_assert(reply->content != NULL);
+	textbuf = reply->content->text;
 
-	reply->last_line = str_len(reply->text);
-	str_append(reply->text, reply->status_prefix);
-	str_append(reply->text, keyword);
+	reply->content->last_line = str_len(textbuf);
+	str_append(textbuf, reply->content->status_prefix);
+	str_append(textbuf, keyword);
 	if (*param_fmt != '\0') {
 		va_start(args, param_fmt);
-		str_append_c(reply->text, ' ');
-		str_vprintfa(reply->text, param_fmt, args);
+		str_append_c(textbuf, ' ');
+		str_vprintfa(textbuf, param_fmt, args);
 		va_end(args);
 	}
-	str_append(reply->text, "\r\n");
+	str_append(textbuf, "\r\n");
 }
 
 void smtp_server_reply_ehlo_add_xclient(struct smtp_server_reply *reply)
@@ -440,7 +512,7 @@ void smtp_server_reply_ehlo_add_xclient(struct smtp_server_reply *reply)
 	struct smtp_server_cmd_ctx *cmd = &reply->command->context;
 	struct smtp_server_connection *conn = cmd->conn;
 
-	if (smtp_server_connection_is_trusted(conn))
+	if (!smtp_server_connection_is_trusted(conn))
 		return;
 	if (conn->set.xclient_extensions == NULL ||
 	    *conn->set.xclient_extensions == NULL) {

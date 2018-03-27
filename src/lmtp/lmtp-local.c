@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -28,6 +28,7 @@
 #include "lmtp-settings.h"
 #include "client.h"
 #include "main.h"
+#include "lmtp-common.h"
 #include "lmtp-settings.h"
 #include "lmtp-local.h"
 
@@ -39,6 +40,8 @@ struct lmtp_local_recipient {
 
 	struct mail_storage_service_user *service_user;
 	struct anvil_query *anvil_query;
+
+	struct lmtp_local_recipient *duplicate;
 
 	bool anvil_connect_sent:1;
 };
@@ -131,20 +134,22 @@ lmtp_local_rcpt_deinit(struct lmtp_local_recipient *rcpt)
 
 static void
 lmtp_local_rcpt_reply_overquota(struct lmtp_local_recipient *rcpt,
+				struct smtp_server_cmd_ctx *cmd,
 				const char *error)
 {
-	struct smtp_address *address = rcpt->rcpt.rcpt->path;
+	struct smtp_address *address = rcpt->rcpt.path;
+	unsigned int rcpt_idx = rcpt->rcpt.index;
 	struct lda_settings *lda_set =
 		mail_storage_service_user_get_set(rcpt->service_user)[2];
 
+	i_assert(rcpt_idx == 0 || rcpt->rcpt.rcpt_cmd == NULL);
+
 	if (lda_set->quota_full_tempfail) {
-		smtp_server_reply(rcpt->rcpt.rcpt_cmd,
-			452, "4.2.2", "<%s> %s",
-			smtp_address_encode(address), error);
+		smtp_server_reply_index(cmd, rcpt_idx, 452, "4.2.2", "<%s> %s",
+					smtp_address_encode(address), error);
 	} else {
-		smtp_server_reply(rcpt->rcpt.rcpt_cmd,
-			552, "5.2.2", "<%s> %s",
-			smtp_address_encode(address), error);
+		smtp_server_reply_index(cmd, rcpt_idx, 552, "5.2.2", "<%s> %s",
+					smtp_address_encode(address), error);
 	}
 }
 
@@ -192,6 +197,7 @@ static int
 lmtp_local_rcpt_check_quota(struct lmtp_local_recipient *rcpt)
 {
 	struct client *client = rcpt->rcpt.client;
+	struct smtp_server_cmd_ctx *cmd = rcpt->rcpt.rcpt_cmd;
 	struct smtp_address *address = rcpt->rcpt.path;
 	struct mail_user *user;
 	struct mail_namespace *ns;
@@ -228,7 +234,7 @@ lmtp_local_rcpt_check_quota(struct lmtp_local_recipient *rcpt)
 		if (ret < 0) {
 			error = mailbox_get_last_error(box, &mail_error);
 			if (mail_error == MAIL_ERROR_NOQUOTA) {
-				lmtp_local_rcpt_reply_overquota(rcpt, error);
+				lmtp_local_rcpt_reply_overquota(rcpt, cmd, error);
 			} else {
 				i_error("mailbox_get_status(%s, STATUS_CHECK_OVER_QUOTA) "
 					"failed: %s",
@@ -242,17 +248,17 @@ lmtp_local_rcpt_check_quota(struct lmtp_local_recipient *rcpt)
 	}
 
 	if (ret < 0 &&
-		!smtp_server_command_is_replied(rcpt->rcpt.rcpt_cmd->cmd)) {
-		smtp_server_reply(rcpt->rcpt.rcpt_cmd,
-			451, "4.3.0", "<%s> Temporary internal error",
-			smtp_address_encode(address));
+		!smtp_server_command_is_replied(cmd->cmd)) {
+		smtp_server_reply(cmd, 451, "4.3.0",
+				  "<%s> Temporary internal error",
+				  smtp_address_encode(address));
 	}
 	return ret;
 }
 
 static void lmtp_local_rcpt_finished(
 	struct smtp_server_cmd_ctx *cmd,
-	struct smtp_server_transaction *trans ATTR_UNUSED,
+	struct smtp_server_transaction *trans,
 	struct smtp_server_recipient *trcpt,
 	unsigned int index)
 {
@@ -268,14 +274,15 @@ static void lmtp_local_rcpt_finished(
 		return;
 	}
 
-	trcpt->context = (void *)rcpt;
+	lmtp_recipient_finish(&rcpt->rcpt, trcpt, index);
+
+	/* resolve duplicate recipient */
+	rcpt->duplicate = (struct lmtp_local_recipient *)
+		lmtp_recipient_find_duplicate(&rcpt->rcpt, trans);
+	i_assert(rcpt->duplicate == NULL || rcpt->duplicate->duplicate == NULL);
 
 	/* add to local recipients */
 	array_append(&client->local->rcpt_to, &rcpt, 1);
-
-	rcpt->rcpt.rcpt = trcpt;
-	rcpt->rcpt.index = index;
-	rcpt->rcpt.rcpt_cmd = NULL;
 }
 
 static bool
@@ -385,9 +392,9 @@ int lmtp_local_rcpt(struct client *client,
 		client->local = lmtp_local_init(client);
 
 	rcpt = i_new(struct lmtp_local_recipient, 1);
-	rcpt->rcpt.client = client;
-	rcpt->rcpt.path = data->path;
-	rcpt->rcpt.rcpt_cmd = cmd;
+	lmtp_recipient_init(&rcpt->rcpt, client,
+			    LMTP_RECIPIENT_TYPE_LOCAL, cmd, data);
+
 	rcpt->detail = i_strdup(detail);
 	rcpt->service_user = service_user;
 	rcpt->session_id = i_strdup(session_id);
@@ -618,7 +625,7 @@ lmtp_local_deliver(struct lmtp_local *local,
 	} else if (storage != NULL) {
 		error = mail_storage_get_last_error(storage, &mail_error);
 		if (mail_error == MAIL_ERROR_NOQUOTA) {
-			lmtp_local_rcpt_reply_overquota(rcpt, error);
+			lmtp_local_rcpt_reply_overquota(rcpt, cmd, error);
 		} else {
 			smtp_server_reply_index(cmd, rcpt_idx,
 				451, "4.2.0", "<%s> %s",
@@ -653,6 +660,13 @@ lmtp_local_deliver_to_rcpts(struct lmtp_local *local,
 	rcpts = array_get(&local->rcpt_to, &count);
 	for (i = 0; i < count; i++) {
 		struct lmtp_local_recipient *rcpt = rcpts[i];
+
+		if (rcpt->duplicate != NULL) {
+			/* don't deliver more than once to the same recipient */
+			smtp_server_reply_submit_duplicate(cmd,
+			    rcpt->rcpt.index, rcpt->duplicate->rcpt.index);
+			continue;
+		}
 
 		ret = lmtp_local_deliver(local, cmd,
 			trans, rcpt, src_mail, session);

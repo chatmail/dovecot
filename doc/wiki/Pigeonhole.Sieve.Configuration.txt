@@ -1,37 +1,6 @@
 Pigeonhole Sieve Configuration
 ==============================
 
-Contents
-
-
- 1. Pigeonhole Sieve Configuration
-
-     1. Script Locations
-
-     2. Basic Configuration
-
-     3. Configurable Limits
-
-     4. Extension-specific Configuration
-
-     5. Per-user Sieve script location
-
-     6. Executing Multiple Scripts Sequentially
-
-     7. Visible Default Script
-
-     8. Trace Debugging
-
-     9. Deprecated Settings
-
-     10. Migration
-
-          1. General Dovecot 2.0 changes
-
-          2. From CMUSieve (Dovecot v1.0/v1.1)
-
-          3. From Dovecot Sieve v0.1.x (Dovecot v1.2)
-
 Script Locations
 ----------------
 
@@ -639,4 +608,4 @@ From Dovecot Sieve v0.1.x (Dovecot v1.2)
    compatibility, it is recommended to update the setting to the new name,
    since the <LMTP.txt> service also uses the 'recipient_delimiter' setting.
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

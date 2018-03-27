@@ -1,83 +1,1757 @@
-2018-02-28 16:23:07 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (ffd8a29)
+2018-03-27 19:51:54 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (8e2f634)
 
-    Released v2.3.0.1.
+    Release 2.3.1
+
+
+M	configure.ac
+
+2018-03-20 10:59:34 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (df36024)
+
+    NEWS: Add v2.3.1
 
 
 M	NEWS
-M	configure.ac
 
-2018-02-26 12:53:19 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (ee0c09c)
+2018-03-19 11:34:49 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (5282175)
 
-    lib-master: Fix dns_match_wildcard result value check
+    NEWS: Update to 2.3.0.1
 
-    It returns 0, not TRUE.
+
+M	NEWS
+
+2018-03-15 22:36:45 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c5a5c0c)
+
+    lib-smtp: test-smtp-server-errors: Add test for DATA command erroneously
+    used with BODY=BINARYMIME.
+
+
+M	src/lib-smtp/test-smtp-server-errors.c
+
+2018-03-15 22:34:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b8acb2f)
+
+    lib-smtp: test-smtp-server-errors: Add tests for missing MAIL and RCPT
+    commands before DATA command.
+
+
+M	src/lib-smtp/test-smtp-server-errors.c
+
+2018-03-15 22:36:16 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (5cb6dc6)
+
+    lib-smtp: server: Check that BINARYMIME is not used without CHUNKING.
+
+
+M	src/lib-smtp/smtp-server-cmd-data.c
+
+2018-03-14 01:54:20 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f3192a7)
+
+    submission: Add 8BITMIME and BINARYMIME back to supported capabilities.
+
+    These are supported when the backend provides support. These were
+    erroneously disabled earlier by 3bf0c0e211ba1e4ee9977a9dfea32e14ebc50aab.
+
+M	src/submission/submission-common.h
+
+2018-03-21 11:29:26 +0200 Arkadiusz Miśkiewicz <arekm@maven.pl> (e87de88)
+
+    lib-master: Fix dns_wildcard_match usage
+
+    Broken by 446c0b02a7802b676e893ccc4934fc7318d950ea
 
 M	src/lib-master/master-service-settings-cache.c
 
-2018-02-23 15:31:11 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (5666456)
+2018-03-12 14:50:32 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (7cb9342)
 
-    lib-master: Check local_name only if both filter and input have it
+    lib-dcrypt: test-stream - Ensure more is read when buffer becomes empty
 
-    Broken in cedc777a1acf830af4cf0b6e9b0f343c81e20adc
+
+M	src/lib-dcrypt/test-stream.c
+
+2018-03-12 14:48:41 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (002702f)
+
+    lib-dcrypt: istream-decrypt - Read more if buffer is empty
+
+    If there is no more buffered data, try to decrypt more.
+
+    - Fixes Panic: file istream.c: line 192 (i_stream_read): assertion failed:
+    (!stream->blocking)
+    - Fixes infinite loop when stream is not blocking
+
+M	src/lib-dcrypt/istream-decrypt.c
+
+2018-03-15 13:19:53 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (5c6bae7)
+
+    imapc: Update mail size also when RFC822.SIZE is smaller than fetched header
+    size
+
+    If this isn't done, istream-mail will detect that the fetched header is 
+    larger than RFC822.SIZE and fail with "Cached message size smaller than 
+    expected"
+
+M	src/lib-storage/index/imapc/imapc-mail-fetch.c
+
+2018-03-15 12:20:14 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (44afc06)
+
+    imapc: Update mail size also when istream_opened() hook is called
+
+    When fetching a message body the cached message size was set. However, if
+    istream_opened() hook was used this wasn't done. If a client had fetched
+    both (RFC822.SIZE BODY.PEEK[]) and the server sent a wrong RFC822.SIZE, that
+    size was used for the message body size, which resulted in "Cached message
+    size larger than expected" errors.
+
+M	src/lib-storage/index/imapc/imapc-mail-fetch.c
+
+2018-03-01 12:17:16 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (3e65692)
+
+    sdbox: Delete .temp* files on when save/copy transaction is rolled back
+
+    For example when copying was aborted due to user being over quota, temp 
+    files were left behind.
+
+M	src/lib-storage/index/dbox-single/sdbox-save.c
+
+2018-03-07 11:24:30 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (6242cf5)
+
+    notify: Fix crash if NO_NOTIFY transaction is rolled back during commit
+
+    Fixes: Panic: no notify_mail_txn found
+
+M	src/plugins/notify/notify-storage.c
+
+2018-03-06 15:15:01 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (bed7043)
+
+    lib-master: Correctly match when local_name has multiple names
+
+    Reported by J. Nick Koston <nick@cpanel.net>
 
 M	src/lib-master/master-service-settings-cache.c
 
-2018-02-19 14:19:08 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (cd6517b)
+2018-03-06 10:33:27 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (45ba1f5)
 
-    lib-dns: Move before lib-master
+    lib-master: Reply from config process is tabescaped
 
+    Found by J. Nick Koston <nick@cpanel.net>
 
-M	src/Makefile.am
-
-2017-11-30 20:52:11 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (8960d1c)
-
-    login-common: Enable config filtering by local name
-
-    Prevents servername misuse.
-
-M	src/login-common/login-settings.c
-
-2017-11-30 15:47:25 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (3be6c1a)
-
-    lib-master: Support validating config filters against requests
-
-    Validation will sanitize the input request and drop any fields that have no
-    filter in config. E.g. if you have a local block with name, and nothing
-    else, then lip/rip will be dropped from the request.
-
-M	src/lib-master/Makefile.am
 M	src/lib-master/master-service-settings-cache.c
-M	src/lib-master/master-service-settings-cache.h
-M	src/lib-master/master-service-settings.c
-M	src/lib-master/master-service-settings.h
-M	src/lib-master/test-master-service-settings-cache.c
 
-2017-11-30 15:46:52 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (d89bdb7)
+2018-03-10 19:43:27 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (c1256ee)
 
-    config: Add command to request all filters
+    config: tabescape local name and service
 
 
 M	src/config/config-connection.c
 
-2017-11-30 15:46:40 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (014ac02)
+2018-03-06 10:31:51 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (a4a4bd2)
 
-    config: Add config_filter_get_all
+    config: Make local_name comparison faster
 
-    Returns all filters
+    Based on patch by J. Nick Koston <nick@cpanel.net>
 
 M	src/config/config-filter.c
-M	src/config/config-filter.h
 
-2018-01-11 13:38:14 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (811daa0)
+2018-03-12 15:06:13 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a28e082)
 
-    *-login: Fix clients linked list corruption with SSL connections
+    imapc: Don't try to add mails to index if they already exist there
 
-    This could have resulted in infinite loops or some of the clients being 
-    skipped for some operations.
+    Broken by 259a4ca5943123915a019799623d2e4a4ef7fd15 when imapc was used with
+    (not in-memory) index files.
+
+    This caused errors like "Append with UID 200, but next_uid = 201"
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+
+2018-03-09 16:09:16 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c4688bd)
+
+    lmtp: Provide hidden support for ORCPT RCPT parameter.
+
+    This is normally only available with the DSN capability, but we use it to 
+    forward the original recipient in proxy setups.
+
+    This feature was available in the original Dovecot v2.2 LMTP, but it got
+    lost in the new lib-smtp implementation.
+
+M	src/lmtp/client.c
+M	src/lmtp/lmtp-proxy.c
+
+2018-02-27 23:13:33 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (954d65a)
+
+    lmtp: proxy: Use per-connection SMTP client settings.
+
+    This is needed for setting source IP in later change. The peer_trusted
+    setting must me moved, since this setting is overriden by per-connection
+    settings, rather than merged.
+
+M	src/lmtp/lmtp-proxy.c
+
+2018-03-09 16:03:23 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (73654d4)
+
+    lib-smtp: client: Add support for forcibly enabling support for a
+    capability.
+
+    Then it is enabled even when the server does not list it in the EHLO
+    response.
+
+M	src/lib-smtp/smtp-client-connection.c
+M	src/lib-smtp/smtp-client.c
+M	src/lib-smtp/smtp-client.h
+
+2018-03-09 16:01:50 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (32b2ef2)
+
+    lib-smtp: params: Make ORCPT parameter available separately if hidden
+    capability is enabled.
+
+
+M	src/lib-smtp/smtp-common.h
+M	src/lib-smtp/smtp-params.c
+
+2018-03-09 15:47:06 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (8abbd4a)
+
+    lib-smtp: common: Use the BIT() macro for defining the capability flags.
+
+
+M	src/lib-smtp/smtp-common.h
+
+2017-12-24 14:35:15 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b4534c9)
+
+    lib-smtp: client: Fix rawlog input stream inconsistency by updating streams
+    right after initializing TLS.
+
+    Restructured the code to call a new function called
+    smtp_client_connection_streams_changed() which performs all the necessary
+    updates. Before, enabling rawlog could break the TLS handshake.
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2017-12-01 13:46:10 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (af014a8)
+
+    auth: Include tls=true/false in policy server request
+
+
+M	src/auth/auth-policy.c
+
+2017-12-01 13:30:43 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (b06ad24)
+
+    auth: Support secured=tls
+
+
+M	src/auth/auth-request-var-expand.c
+M	src/auth/auth-request.c
+M	src/auth/auth-request.h
+M	src/auth/test-auth-request-var-expand.c
+
+2017-12-11 11:16:02 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (b205e85)
+
+    login-common: Pass SSL protocol details to auth
+
+
+M	src/login-common/sasl-server.c
+
+2017-12-01 13:16:34 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (192a990)
+
+    login-common: Indicate TLS encryption if haproxy says it was
+
 
 M	src/login-common/client-common.c
+M	src/login-common/client-common.h
+M	src/login-common/sasl-server.c
 
-2017-12-22 18:58:11 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (9bc65e8)
+2017-12-11 11:08:08 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (b7fafd6)
+
+    lib-auth: Include ssl protocol details in request when present
+
+
+M	src/lib-auth/auth-client-request.c
+M	src/lib-auth/auth-client.h
+
+2017-12-01 13:16:07 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (3dffa06)
+
+    lib-auth: Add AUTH_REQUEST_FLAG_TLS
+
+    Indicates whether connection is over TLS encryption.
+
+M	src/lib-auth/auth-client-request.c
+M	src/lib-auth/auth-client.h
+
+2017-12-11 11:00:41 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (8230e3d)
+
+    lib-ssl-iostream: Add accessors for additional SSL protocol details
+
+    This is needed in order to send these details as fields to auth process
+
+M	src/lib-ssl-iostream/iostream-openssl.c
+M	src/lib-ssl-iostream/iostream-ssl-private.h
+M	src/lib-ssl-iostream/iostream-ssl.c
+M	src/lib-ssl-iostream/iostream-ssl.h
+
+2017-12-13 09:52:16 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (36b9d01)
+
+    m4: Check for SSL_CIPHER_get_kx_nid
+
+
+M	m4/ssl.m4
+
+2018-01-11 16:10:48 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (19ccc86)
+
+    auth: Ensure crypt schemes match with samples
+
+
+M	src/auth/password-scheme-crypt.c
+
+2018-01-11 15:22:30 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (50d398f)
+
+    auth: Fix crypt scheme detection
+
+    Broken by 1ebb6094e5105ba7ef521a0177c42d3ea81243f0
+
+M	src/auth/password-scheme-crypt.c
+
+2018-02-08 15:45:55 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (8b9b3d4)
+
+    auth: Support standard auth variables in LDAP subqueries
+
+
+M	src/auth/db-ldap.c
+
+2018-01-28 21:39:07 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (a61c327)
+
+    lib-http: client: Assert that req->client != NULL in
+    http_client_request_send_error().
+
+    Applies when blocking payload output API is being used. Addresses a report
+    by scan-build.
+
+M	src/lib-http/http-client-request.c
+
+2018-01-20 18:48:00 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (1ab6917)
+
+    lib-http: test-http-payload: Initialize http_context in
+    test_client_create_clients().
+
+    Fixes complaint from scan-build.
+
+M	src/lib-http/test-http-payload.c
+
+2018-01-20 16:48:03 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (1acfddc)
+
+    lib-smtp: address: Remove useless local variable initialization in
+    smtp_address_clone().
+
+    Fixes complaint from scan-build.
+
+M	src/lib-smtp/smtp-address.c
+
+2018-02-08 13:27:25 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (036defc)
+
+    lib-http: client: Fix using non-context SSL settings
+
+    The SSL settings were used for the SSL context, but they weren't used for 
+    individual SSL streams. This broke stream-only settings, like 
+    allow_invalid_cert=TRUE.
+
+M	src/lib-http/http-client-connection.c
+
+2018-03-08 14:10:42 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (dc030ea)
+
+    lib: Remove ostream.get_used_size()
+
+    Removes backwards compatibility.
+
+M	src/lib/ostream-private.h
+M	src/lib/ostream.c
+
+2018-03-08 14:08:50 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (1ea0f53)
+
+    lib-test: test-ostream - Implement the new ostream.get_buffer_used_size()
+    API
+
+    It's implemented the same way as the old get_used_size(). The default 
+    implementation for get_buffer_avail_size() also works with this.
+
+M	src/lib-test/test-ostream.c
+
+2018-03-08 14:08:43 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (f6a49ec)
+
+    lib: ostream-buffer - Implement the new ostream.get_buffer_used_size() API
+
+    It's implemented the same way as the old get_used_size(). The default 
+    implementation for get_buffer_avail_size() also works with this.
+
+M	src/lib/ostream-buffer.c
+
+2018-03-08 14:07:34 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (884e2a1)
+
+    lib: ostream-file - Implement the new ostream.get_buffer_used_size() API
+
+    It's implemented the same way as the old get_used_size(). The default 
+    implementation for get_buffer_avail_size() also works with this.
+
+M	src/lib/ostream-file.c
+
+2018-02-24 22:04:49 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (25c0f51)
+
+    lib-compression: Implement the new ostream.get_buffer_used/avail_size() APIs
+
+    The avail_size() implementation isn't fully correct for bzlib/zlib/lzma. 
+    Fixing it requires larger changes though.
+
+M	src/lib-compression/ostream-bzlib.c
+M	src/lib-compression/ostream-lz4.c
+M	src/lib-compression/ostream-lzma.c
+M	src/lib-compression/ostream-zlib.c
+
+2018-02-24 22:04:27 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (159d778)
+
+    lib-ssl-iostream: Implement the new ostream.get_buffer_used/avail_size()
+    APIs
+
+
+M	src/lib-ssl-iostream/ostream-openssl.c
+
+2018-02-24 22:04:11 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (7b4f32a)
+
+    lib: ostream-multiplex - Implement the new get_buffer_used/avail_size() APIs
+
+
+M	src/lib/ostream-multiplex.c
+
+2018-02-26 15:17:36 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (d941f9c)
+
+    lib: Remove ostream-escaped
+
+    It can't implement o_stream_get_buffer_avail_size() correctly with its 
+    current API. Nothing uses it currently, so easier to just remove it 
+    entirely.
+
+M	src/lib/Makefile.am
+D	src/lib/ostream-escaped.c
+D	src/lib/ostream-escaped.h
+M	src/lib/test-lib.inc
+D	src/lib/test-ostream-escaped.c
+
+2018-02-24 22:03:10 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (dafdbfd)
+
+    lib: Change/clarify o_stream_get_buffer_used/avail_size() APIs
+
+    ostream.get_used_size() is deprecated and replaced by get_buffer_used_size() 
+    and get_buffer_avail_size().
+
+M	src/lib/ostream-private.h
+M	src/lib/ostream.c
+M	src/lib/ostream.h
+
+2018-01-20 15:44:56 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (976105f)
+
+    auth: db-lua - Do not assert-crash if given parameter was not auth_request
+
+    Use luaL_error instead that will back out more gracefully.
+
+    Fixes Panic: file db-lua.c: line 279 (auth_lua_check_auth_request):
+    assertion failed: (lua_istable(script->L, arg))
+
+M	src/auth/db-lua.c
+
+2018-01-20 20:33:01 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (cca32a3)
+
+    auth: db-lua - Use luaL_error correctly
+
+
+M	src/auth/db-lua.c
+
+2017-06-08 12:18:30 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (5403eb2)
+
+    lib-auth: Require being connected before adding requests
+
+
+M	src/lib-auth/auth-server-connection.c
+M	src/lib-auth/auth-server-connection.h
+
+2017-06-05 12:44:06 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (6e1e25e)
+
+    lib-auth: Prevent double-disconnect
+
+    When disconnecting, it's possible that disconnect gets called twice by some
+    callback, so protect it with a boolean.
+
+    Fixes Panic: file hash.c: line 152 (hash_table_clear): assertion failed:
+    (table->frozen == 0)
+
+M	src/lib-auth/auth-server-connection.c
+M	src/lib-auth/auth-server-connection.h
+
+2018-03-06 22:11:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c3df1c9)
+
+    lib-lda: Do not convert "From:" message address to STMP address, just to
+    make a string for logging.
+
+    This leads to problems when the message address (RFC5322) has UTF-8 code
+    points in the local part, which is (currently) allowed for message
+    addresses, but not for SMTP addresses (RFC5321).
+
+M	src/lib-lda/mail-deliver.c
+
+2018-03-06 13:27:17 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (2677b2c)
+
+    master: Strip '\n' from suid_dumpable read buffer before str_to_uint()
+
+
+M	src/master/service-process.c
+
+2018-03-01 18:38:43 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (f6b8fa4)
+
+    master: Improve "core not dumped" error messages with Linux
+
+    Recommend setting /proc/fs/suid_dumpable to 2 and
+    /proc/sys/kernel/core_pattern to absolute path, if they already aren't.
+
+M	src/master/common.h
+M	src/master/main.c
+M	src/master/service-process.c
+
+2018-03-01 18:37:43 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (ab1b7f2)
+
+    master: Add explanation URL to "core dumps disabled" and "core not dumped"
+    errors
+
+
+M	src/master/service-process.c
+
+2018-02-19 19:22:42 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (b194576)
+
+    global: Use unix_socket capability in connection.c
+
+    This is more reliably way to correctly create input stream with unix socket
+    capability for passing fd's around
+
+M	src/imap-hibernate/imap-hibernate-client.c
+M	src/imap/imap-master-client.c
+
+2018-02-19 19:09:46 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (2a2cdd9)
+
+    lib: connection - only switch created iostreams
+
+    Fixes imap-hibernate: Fatal: master: service(imap-hibernate): child killed
+    with signal 11 (core dumps disabled)
+
+    Broken in 086b73efd1a5812a64acc951366a499d325509a6
+
+M	src/lib/connection.c
+
+2018-01-28 00:14:21 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (6899712)
+
+    submission: Properly handle omission of required authentication for relay
+    connection.
+
+    Particularly, do not forward the 530 error to the client. Instead, log the 
+    problem and close the client connection with an internal error.
+
+M	src/submission/submission-commands.c
+
+2018-01-28 00:10:11 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f199f59)
+
+    lib-smtp: server: Fix overwriting a previously submitted reply.
+
+    The submitted flag was not reset, nor was the replies_submitted counter 
+    decreased. This caused assertion failures.
+
+M	src/lib-smtp/smtp-server-reply.c
+
+2018-03-05 21:02:49 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e7482be)
+
+    submission: Limit the set of capabilities to those that are actually
+    supported.
+
+    Particularly, the XCLIENT capability was inappropriately enabled when the 
+    backend MTA announced support. XCLIENT is not supported by Dovecot
+    post-login.
+
+M	src/submission/submission-client.c
+M	src/submission/submission-common.h
+
+2018-03-01 14:53:11 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (46cae2d)
+
+    lib-smtp: server: Only accept XCLIENT command when the XCLIENT capability is
+    active.
+
+    Report "502 Unsupported command" otherwise. Before, it would complain about
+    the client not being trusted, which is confusing.
+
+M	src/lib-smtp/smtp-server-cmd-xclient.c
+M	src/lmtp/client.c
+M	src/submission-login/client.c
+
+2018-03-01 14:52:06 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (34f492a)
+
+    lib-smtp: client: Make clear that XCLIENT is not sent if the server has no
+    support.
+
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2017-12-23 22:51:37 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (57d3c49)
+
+    lib-smtp: client: Add assertion to smtp_client_command_write().
+
+    Makes sure it is not used after the command is submitted.
+
+M	src/lib-smtp/smtp-client-command.c
+
+2017-12-23 22:49:57 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (ee9ceaf)
+
+    lib-smtp: client: Fix smtp_client_command_name_equals() to work properly
+    after the command is submitted.
+
+    At command submission, CRLF is appended to command data. This messed up the
+    name comparison. This in turn caused a spurious QUIT command to be sent to
+    the server at connection close.
+
+M	src/lib-smtp/smtp-client-command.c
+
+2017-12-23 22:14:16 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (18f762e)
+
+    lib-smtp: client: Make smtp_client_connection_commands_abort() more reliable
+    by copying the command lists.
+
+    Copy the current lists of queued and waiting commands and reference each
+    command before calling smtp_client_command_abort(). Aborting one command can
+    cause other dependent commands to be aborted (in a transaction or from
+    submission service), which could have caused trouble in this function.
+
+M	src/lib-smtp/smtp-client-command.c
+M	src/lib-smtp/smtp-client-connection.c
+M	src/lib-smtp/smtp-client-private.h
+
+2017-12-23 22:04:13 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (0ac8caa)
+
+    lib-smtp: client: Make smtp_client_connection_commands_fail_reply() more
+    reliable by copying the command lists.
+
+    Copy the current lists of queued and waiting commands and reference each
+    command before calling smtp_client_command_fail_reply(). Failing one command
+    can cause other dependent commands to be aborted (in a transaction or from
+    submission service), which could have caused trouble in this function. 
+    Problems would likely occur at connection disconnect.
+
+M	src/lib-smtp/smtp-client-command.c
+M	src/lib-smtp/smtp-client-connection.c
+M	src/lib-smtp/smtp-client-private.h
+
+2018-02-01 23:04:12 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (3d61168)
+
+    dsync: Log a warning if copying a mail fails unexpectedly
+
+    Don't log a warning if it happens because the source message was expunged. 
+    That's an expected failure.
+
+M	src/doveadm/dsync/dsync-mailbox-import.c
+
+2018-03-07 15:14:52 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f431eff)
+
+    submission-login: Only send HELO domain to post-login service when it is
+    valid.
+
+
+M	src/submission-login/client-authenticate.c
+
+2018-03-07 15:03:42 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d70971d)
+
+    lib-smtp: server: Fix application of pre-login HELO domain when no
+    post-login HELO is issued.
+
+    The substituted domain was not marked as valid, which caused the HELO field
+    of the produced received line to be set to 'unknown'.
+
+M	src/lib-smtp/smtp-server-cmd-mail.c
+
+2018-03-04 23:43:55 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (ab4b3fd)
+
+    lib-smtp: server: RCPT command: Make sure conn->state.pending_rcpt_cmds
+    cannot decrement through zero.
+
+    Added assertion.
+
+M	src/lib-smtp/smtp-server-cmd-rcpt.c
+
+2018-03-04 23:42:45 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f0908f0)
+
+    lib-smtp: server: MAIL command: Make sure conn->state.pending_mail_cmds
+    cannot decrement through zero.
+
+    Added assertion.
+
+M	src/lib-smtp/smtp-server-cmd-mail.c
+
+2018-03-04 23:35:53 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (0f9b956)
+
+    lib-smtp: server: Fix double decrement of RCPT pending counter upon error.
+
+    The pending counter was sometimes decremented twice in specific error 
+    conditions, leading to an assert panic in the DATA command. This was caused
+    by some dead code. If the MAIL command failed in a pipeline before the RCPT
+    command, the assert was triggered.
+
+    Panic was:
+
+    Panic: file smtp-server-cmd-data.c: line 354 (cmd_data_start): assertion
+    failed: (conn->state.pending_mail_cmds == 0 && conn->state.pending_rcpt_cmds
+    == 0)
+
+M	src/lib-smtp/smtp-server-cmd-rcpt.c
+
+2018-02-01 00:14:55 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (61f6497)
+
+    lib-lda: Parse Return-Path header using RFC5322 (IMF) "path" syntax, rather
+    than RFC5321 (SMTP) "Path" syntax.
+
+    SMTP does not allow white space, which causes all kinds of trouble when the 
+    address is parsed from a header field.
+
+M	src/lib-lda/mail-deliver.c
+
+2018-02-01 00:08:40 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (435e4ff)
+
+    lib-mail: message-address: Add support for parsing RFC5322 "path" syntax.
+
+    This is either a single angle-addr or just <>. This path syntax differs from
+    the RFC5321 "Path" syntax in that it allows whitespace, which is very
+    important when it is parsed from a header.
+
+M	src/lib-mail/message-address.c
+M	src/lib-mail/message-address.h
+M	src/lib-mail/test-message-address.c
+
+2018-03-12 12:42:46 +0200 Ville Savolainen <ville.savolainen@dovecot.fi> (db0373b)
+
+    Fixup "lib-mail: message_address_write() - don't crash with NULL address"
+
+     Remove content that did not belong to
+    9f2fe2782224266bf2a403f430de011cf3b9da9d
+
+M	src/lib-mail/message-address.c
+
+2018-02-02 18:07:43 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (6418419)
+
+    lib-storage: Fix mailbox rename checking child mailbox name lengths
+
+    It was supposed to prevent allowing renames that would cause any child 
+    mailbox name to be too long. However, the check wasn't working.
+
+M	src/lib-storage/mail-storage.c
+
+2018-03-01 17:59:34 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (59eb3b6)
+
+    lib-storage: Fix memory leak when search accessed headers but found no mails
+
+    For example fetching headers with UID FETCH for a nonexistent UID.
+
+M	src/lib-storage/index/index-mail.c
+
+2018-03-01 17:55:50 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (5d3a81e)
+
+    lib-storage: Code cleanup - remove unnecessary temporary variable
+
+
+M	src/lib-storage/index/index-mail.c
+
+2018-01-29 08:43:05 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (8c6e305)
+
+    global: start relying on file_lock_free(NULL) being a no-op
+
+    Cleanup performed with the following semantic patch:
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    -       file_lock_free(&E);
+    - }
+    + file_lock_free(&E);
+
+M	src/lib-index/mail-cache.c
+M	src/lib-storage/index/index-mailbox-size.c
+M	src/lib-storage/mail-autoexpunge.c
+M	src/lib/file-lock.c
+M	src/plugins/fts-squat/squat-trie.c
+M	src/plugins/fts-squat/squat-uidlist.c
+
+2018-01-29 08:41:03 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (e1d3ec5)
+
+    global: start relying on mailbox_header_lookup_unref(NULL) being a no-op
+
+    Cleanup performed with the following semantic patch:
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    -       mailbox_header_lookup_unref(&E);
+    - }
+    + mailbox_header_lookup_unref(&E);
+
+M	src/doveadm/doveadm-mail-iter.c
+M	src/doveadm/dsync/dsync-mailbox-export.c
+M	src/imap/imap-fetch.c
+M	src/lib-imap-storage/imap-msgpart.c
+M	src/lib-storage/index/index-mail.c
+M	src/lib-storage/index/index-search.c
+M	src/plugins/mail-log/mail-log-plugin.c
+M	src/plugins/virtual/virtual-mail.c
+
+2018-01-29 08:40:27 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (4db31f1)
+
+    lib-storage: mailbox_header_lookup_unref(NULL) should be a no-op
+
+
+M	src/lib-storage/mailbox-header.c
+
+2018-01-29 08:38:45 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (27aed64)
+
+    lib-mail: start relying on mail_html2text_deinit(NULL) being a no-op
+
+    Cleanup performed with the following semantic patch:
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    -       mail_html2text_deinit(&E);
+    - }
+    + mail_html2text_deinit(&E);
+
+M	src/lib-mail/message-snippet.c
+
+2018-01-29 08:38:16 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (9c22e26)
+
+    lib-mail: mail_html2text_deinit(NULL) should be a no-op
+
+
+M	src/lib-mail/mail-html2text.c
+
+2017-11-09 10:37:34 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (f5ab340)
+
+    global: start relying on ssl_iostream_destroy(NULL) being a no-op
+
+    Cleanup performed with the following semantic patch:
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    - 	ssl_iostream_destroy(&E);
+    - }
+    + ssl_iostream_destroy(&E);
+
+M	src/doveadm/client-connection-tcp.c
+M	src/doveadm/doveadm-dsync.c
+M	src/lib-smtp/smtp-server-connection.c
+M	src/login-common/client-common.c
+M	src/login-common/login-proxy.c
+
+2017-11-09 10:39:25 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (ba110cd)
+
+    ssl-iostream: ssl_iostream_destroy(NULL) should be a no-op
+
+
+M	src/lib-ssl-iostream/iostream-ssl.c
+
+2017-11-09 10:34:21 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (90c5875)
+
+    global: start relying on iostream_proxy_unref(NULL) being a no-op
+
+    Cleanup performed with the following semantic patch:
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    - 	iostream_proxy_unref(&E);
+    - }
+    + iostream_proxy_unref(&E);
+
+M	src/login-common/client-common.c
+M	src/login-common/login-proxy.c
+
+2017-11-09 10:36:02 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (431971a)
+
+    lib: iostream_proxy_unref(NULL) should be a no-op
+
+
+M	src/lib/iostream-proxy.c
+
+2017-11-09 10:30:51 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (e741abe)
+
+    global: start relying on str_free(NULL) being a no-op
+
+    Cleanup performed with the following semantic patch:
+
+    	@@
+    expression E;
+    @@
+
+    	- if (E != NULL) {
+    - 	str_free(&E);
+    - }
+    + str_free(&E);
+
+M	src/imap/imap-fetch.c
+M	src/lib-fs/fs-metawrap.c
+M	src/lib-fts/fts-filter.c
+M	src/lib-http/http-client-request.c
+M	src/lib-storage/index/cydir/cydir-sync.c
+M	src/lib-storage/index/index-search-mime.c
+M	src/lib/istream.c
+M	src/login-common/client-common.c
+M	src/plugins/acl/acl-attributes.c
+M	src/plugins/fts-solr/fts-backend-solr.c
+
+2017-11-09 10:32:32 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (a7e32ba)
+
+    lib: str_free(NULL) should be a no-op
+
+
+M	src/lib/str.c
+
+2018-02-19 13:27:39 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f904b00)
+
+    lib-http: client: Add event fields for the number of bytes sent and received
+    for each request in the last attempt.
+
+
+M	src/lib-http/http-client-connection.c
+M	src/lib-http/http-client-private.h
+M	src/lib-http/http-client-request.c
+
+2018-02-19 13:24:57 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (bac5c58)
+
+    lib-http: response parser: Record input stream offset for the start of the
+    last parsed response.
+
+
+M	src/lib-http/http-response-parser.c
+M	src/lib-http/http-response-parser.h
+
+2018-02-19 13:20:11 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (074fb5a)
+
+    lib-http: message parsers: Record beginning of parsed data.
+
+
+M	src/lib-http/http-message-parser.h
+M	src/lib-http/http-request-parser.c
+M	src/lib-http/http-response-parser.c
+
+2018-01-21 15:46:49 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (457bd50)
+
+    lib-http: client: Trigger special events when a request is finished, retried
+    or redirected.
+
+
+M	src/lib-http/http-client-request.c
+
+2018-01-21 16:19:41 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (187dd20)
+
+    lib-http: client: Record last status code in the request object.
+
+
+M	src/lib-http/http-client-private.h
+M	src/lib-http/http-client-request.c
+
+2018-01-21 16:08:55 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (6d1afbe)
+
+    lib-http: client: Reset redirect counter when the request is retried.
+
+    The absence of this reset caused problems when there was a redirect limit
+    and the request was retried, in which case the limit is reached too soon.
+
+M	src/lib-http/http-client-request.c
+
+2018-01-21 16:06:19 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (0333014)
+
+    lib-http: client: Add "host" and "port" fields to request event.
+
+
+M	src/lib-http/http-client-request.c
+
+2018-01-21 16:00:31 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (ba02f29)
+
+    lib-http: client: Use the new  http_url_get_port*() functions.
+
+
+M	src/lib-http/http-client-request.c
+
+2018-01-21 15:54:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (71c28aa)
+
+    lib-http: url: Add functions that obtain the effective port for the URL.
+
+    When no port is set for the URL, it is set to 0. These functions substitute
+    the applicable default.
+
+M	src/lib-http/http-url.h
+
+2018-01-21 15:50:37 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (fb954a8)
+
+    lib-http: Create http-common.h, which contains global definitions shared by
+    client and server.
+
+    Currently contains only the default HTTP port definitions that used to be 
+    private to the client.
+
+M	src/lib-http/Makefile.am
+M	src/lib-http/http-client-private.h
+M	src/lib-http/http-client.c
+M	src/lib-http/http-client.h
+A	src/lib-http/http-common.h
+M	src/lib-http/http-server.h
+
+2018-02-23 21:09:42 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c2de719)
+
+    lmtp: proxy: Do not forward 421 reply (server shutdown) from backend.
+
+    This closes the LMTP connection implicitly. Instead, translate it into a 451 
+    4.4.0 response, just like all the other connection-related failures.
+
+M	src/lmtp/lmtp-proxy.c
+
+2018-02-23 20:49:48 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (6fb1946)
+
+    lib-smtp: client: transaction: Better document the failure handling for
+    incomplete transactions.
+
+
+M	src/lib-smtp/smtp-client-transaction.h
+
+2018-02-23 20:43:50 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (82dd7ce)
+
+    lib-smtp: client: transaction: Don't call the DATA callbacks upon failure
+    until the transaction is complete.
+
+    The transaction is not complete until smtp_client_transaction_send() is
+    called.
+
+M	src/lib-smtp/smtp-client-private.h
+M	src/lib-smtp/smtp-client-transaction.c
+
+2018-02-23 18:21:49 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f9ef860)
+
+    lib-smtp: client: transaction: Properly advance the transaction to the DATA
+    state once the DATA command is to be sent.
+
+
+M	src/lib-smtp/smtp-client-transaction.c
+
+2018-02-23 18:16:57 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d3334ed)
+
+    lib-smtp: client: transaction: Use the correct callback for finish timeout.
+
+
+M	src/lib-smtp/smtp-client-transaction.c
+
+2018-02-07 16:31:12 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (3d2dd93)
+
+    global: Set extra_groups=$default_internal_group for various services
+
+    Services with user=$default_internal_user are expected to already set the 
+    group properly. This change is adding the group for mail processes.
+
+M	src/doveadm/doveadm-settings.c
+M	src/imap-urlauth/imap-urlauth-worker-settings.c
+M	src/imap/imap-settings.c
+M	src/indexer/indexer-worker-settings.c
+M	src/lmtp/lmtp-settings.c
+M	src/pop3/pop3-settings.c
+M	src/submission/submission-settings.c
+
+2018-02-07 16:00:46 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (12896fa)
+
+    lib: restrict_access_by_env() - Preserve RESTRICT_SETEXTRAGROUPS if root
+    isn't dropped
+
+    This way service { extra_groups } is preserved for the whole duration of the 
+    process lifetime (e.g. lmtp, doveadm)
+
+M	src/lib/restrict-access.c
+
+2018-02-07 13:06:06 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (86e7483)
+
+    imap-hibernate: Change imap-hibernate default socket permissions to allow
+    default_internal_group
+
+    It would be enough to allow only imap processes access to it, but it 
+    shouldn't really harm to allow other processes access to it also.
+
+M	src/imap-hibernate/imap-hibernate-settings.c
+
+2018-02-07 13:05:09 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (cc84498)
+
+    stats: Change stats-writer default socket permissions to allow
+    default_internal_group
+
+    It's important that all dovecot processes can send statistics to the stats 
+    process.
+
+M	src/stats/stats-settings.c
+
+2018-02-07 13:04:03 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (51cc5e2)
+
+    dict: Change dict and dict-async default socket permissions to allow
+    default_internal_group
+
+    Many mail processes need to talk to dict. This makes it easier to enable 
+    dict without having to configure permissions.
+
+M	src/dict/dict-settings.c
+
+2018-02-07 13:03:23 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (5cf6951)
+
+    master: Add default_internal_group setting, defaulting to "dovecot"
+
+    It's expected that this is the primary group of the default_internal_user.
+
+    This group will be used to provide access to sockets that are generally 
+    required by all Dovecot processes, but aren't safe enough to be allowed 
+    completely open access from untrusted processes.
+
+M	src/master/master-settings.c
+M	src/master/master-settings.h
+
+2018-02-16 00:44:07 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (eaff427)
+
+    lib-smtp: server: Remove inappropriate assert from MAIL command.
+
+    When the MAIL command is next to reply, it is possible to have RCPT commands 
+    that are still pending.
+
+M	src/lib-smtp/smtp-server-cmd-mail.c
+
+2018-02-17 15:02:53 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2164b0f)
+
+    lib-http: client: Simplified return code handling in
+    http_client_request_send_real().
+
+
+M	src/lib-http/http-client-request.c
+
+2018-02-17 14:54:47 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (42d59cb)
+
+    lib-http: client: Make sure output is used only when valid in
+    http_client_request_send_real().
+
+
+M	src/lib-http/http-client-request.c
+
+2018-02-17 12:03:41 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (9872824)
+
+    lib-http: client: Uncork and flush the output stream explicitly after
+    continuing request payload.
+
+    This allows detecting any output stream errors.
+
+M	src/lib-http/http-client-connection.c
+
+2018-02-17 15:17:06 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e1c3c71)
+
+    lib-http: client: Hold reference to the connection while continuing request
+    payload.
+
+    Subsequent changes may cause the connection to be destroyed while sending.
+
+M	src/lib-http/http-client-connection.c
+
+2018-02-17 12:01:47 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c742c97)
+
+    lib-http: client: Continue sending request payload in a separate function.
+
+
+M	src/lib-http/http-client-connection.c
+
+2018-02-17 15:08:44 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c13f150)
+
+    lib-http: client: Hold reference to the connection while sending the next
+    request.
+
+    Subsequent changes may cause the connection to be destroyed while sending.
+
+M	src/lib-http/http-client-connection.c
+
+2018-02-17 11:32:37 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (38d87d0)
+
+    lib-http: client: Perform output stream error handling in one place.
+
+
+M	src/lib-http/http-client-connection.c
+M	src/lib-http/http-client-private.h
+M	src/lib-http/http-client-request.c
+
+2018-02-17 11:10:05 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (1aa3d38)
+
+    lib-http: client: Make http_client_connection_lost() available outside
+    http-client-connection.c.
+
+
+M	src/lib-http/http-client-connection.c
+M	src/lib-http/http-client-private.h
+
+2018-02-17 11:08:20 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (a3bf9c8)
+
+    lib-http: client: Handle output stream errors in a separate function.
+
+
+M	src/lib-http/http-client-connection.c
+M	src/lib-http/http-client-private.h
+
+2018-02-17 01:25:50 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (979d0f2)
+
+    lib-http: client: Flush and check output for errors after uncorking.
+
+    Otherwise, a disconnection event may be missed.
+
+M	src/lib-http/http-client-request.c
+
+2018-02-17 15:37:20 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (0c89791)
+
+    lib-http: server: Simplified return code handling in
+    http_server_response_send_real().
+
+
+M	src/lib-http/http-server-response.c
+
+2018-02-17 15:29:20 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e688857)
+
+    lib-http: server: Make sure output is used only when valid in
+    http_server_response_send_real().
+
+    This avoids the need to hold a reference to it.
+
+M	src/lib-http/http-server-response.c
+
+2018-02-17 01:26:02 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (8acedb0)
+
+    lib-http: server: Perform output stream error handling in one place.
+
+
+M	src/lib-http/http-server-connection.c
+M	src/lib-http/http-server-private.h
+M	src/lib-http/http-server-response.c
+
+2018-02-17 14:44:49 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (5bf01fc)
+
+    lib-http: server: Flush and check output for errors after uncorking.
+
+    Otherwise, a disconnection event may be missed.
+
+M	src/lib-http/http-server-response.c
+
+2018-02-17 14:28:36 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (aeadb8e)
+
+    lib-http: server: Handle output stream errors in a separate function.
+
+
+M	src/lib-http/http-server-connection.c
+M	src/lib-http/http-server-private.h
+
+2018-02-17 10:26:30 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (27d3781)
+
+    lib-smtp: client: Uncork and flush the output stream explicitly after
+    sending commands.
+
+    This allows detecting any output stream errors.
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2018-02-17 01:46:15 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (3fd43b0)
+
+    lib-smtp: client: Perform output stream error handling in one place.
+
+
+M	src/lib-smtp/smtp-client-command.c
+M	src/lib-smtp/smtp-client-connection.c
+M	src/lib-smtp/smtp-client-private.h
+
+2018-02-16 23:49:31 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d6f83e1)
+
+    lib-smtp: client: Flush and check output for errors after uncorking.
+
+    Otherwise, a disconnection event may be missed.
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2018-02-16 23:40:29 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (3a6c4f9)
+
+    lib-smtp: client: Handle output stream errors in a separate function.
+
+
+M	src/lib-smtp/smtp-client-connection.c
+M	src/lib-smtp/smtp-client-private.h
+
+2018-02-17 01:46:25 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (141e299)
+
+    lib-smtp: server: Perform output stream error handling in one place.
+
+
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server-private.h
+M	src/lib-smtp/smtp-server-reply.c
+
+2018-02-17 10:37:55 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c116e38)
+
+    lib-smtp: server: Remove undefined smtp_server_reply_send_more() from
+    smtp-server-private.h.
+
+
+M	src/lib-smtp/smtp-server-private.h
+
+2018-02-16 10:05:26 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (4a82326)
+
+    lib-smtp: server: Flush and check output for errors after uncorking.
+
+    Otherwise, a disconnection event may be missed.
+
+M	src/lib-smtp/smtp-server-connection.c
+
+2018-02-16 10:13:35 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (a7bff44)
+
+    lib-smtp: server: STARTTLS command: Properly handle output stream flush
+    error.
+
+
+M	src/lib-smtp/smtp-server-cmd-starttls.c
+
+2018-02-16 10:11:01 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (cc09ce4)
+
+    lib-smtp: server: Handle output stream errors in a separate function.
+
+
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server-private.h
+
+2018-02-16 09:34:48 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (9646fef)
+
+    lib-smtp: server: Use the stream_errno to evaluate output stream errors.
+
+    Code was using global errno.
+
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server-reply.c
+
+2018-02-16 14:26:11 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (b44d1a0)
+
+    lib: Add o_stream_uncork_flush() to both uncork and flush
+
+
+M	src/lib/ostream.h
+
+2018-02-07 16:48:28 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a062bf6)
+
+    ipc: Change ipc socket's owner to $default_internal_user
+
+    This is mainly used by director process, which runs as
+    $default_internal_user. This setting change is always required for director 
+    installations. Also the ipc process itself is already running as
+    $default_internal_user so this should be a rather safe change.
+
+M	src/ipc/ipc-settings.c
+
+2018-03-06 12:14:25 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (9f2fe27)
+
+    lib-mail: message_address_write() - don't crash with NULL address
+
+    message_address_parse() can return NULL on empty address, so writing it 
+    should produce empty address as well. Broken by 
+    15581297511b658a29c707c6031a258bab7bf1a5
+
+M	src/lib-mail/message-address.c
+M	src/lib-mail/test-message-address.c
+
+2018-01-06 21:22:11 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (d9846c9)
+
+    ostream-zlib: Ignore missing finish if parent stream is ignoring errors
+
+    This fixes panic with imap_zlib plugin when client enables the IMAP COMPRESS 
+    extension and disconnects:
+
+    Panic: file ostream-zlib.c: line 36 (o_stream_zlib_close): assertion failed:
+    (zstream->ostream.finished || zstream->ostream.ostream.stream_errno != 0)
+
+M	src/lib-compression/ostream-zlib.c
+
+2018-01-06 22:11:30 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (76838b8)
+
+    doveadm dump: Fix imapzlib to handle input traffic
+
+    This has been broken with newer Dovecot versions for a while now.
+
+M	src/doveadm/doveadm-zlib.c
+
+2018-01-24 14:48:36 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (dbc6de3)
+
+    lib-storage: Rename .vsize.lock file to dovecot-vsize.lock
+
+    .vsize.lock can break maildir++ because it looks like a maildir folder, so
+    rename it to dovecot-vsize.lock.
+
+    Introduced in 9963bef6
+
+M	src/lib-storage/index/index-mailbox-size.c
+M	src/plugins/quota/quota-storage.c
+
+2017-12-07 11:34:57 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (0fe4a1d)
+
+    lib: array_idx_modifiable changed not to allocate space.
+
+
+M	src/lib/array.c
+M	src/lib/array.h
+
+2017-12-07 11:00:50 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (053041e)
+
+    global: Change calls to array_idx_modifiable to array_idx_get_space.
+
+    Only calls that require space allocation are to be changed.
+
+M	src/auth/main.c
+M	src/lib-index/mail-cache-transaction.c
+M	src/lib-index/mail-index-modseq.c
+M	src/lib-index/mail-index-sync-ext.c
+M	src/lib-index/mail-index-transaction-update.c
+M	src/lib-storage/index/index-thread-finish.c
+M	src/lib-storage/index/index-thread-links.c
+M	src/lib-storage/index/maildir/maildir-keywords.c
+M	src/lib/hash2.c
+M	src/lib/ioloop-epoll.c
+M	src/lib/module-context.h
+
+2017-12-07 10:51:27 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (b3cd198)
+
+    lib: array_idx_get_space is defined as alias to array_idx_modifiable
+
+
+M	src/lib/array.h
+
+2018-02-09 23:57:29 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (9d91b7e)
+
+    lib-http: server: Recreate connection IO after streams change.
+
+
+M	src/lib-http/http-server-connection.c
+
+2018-02-09 23:56:55 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (eb35204)
+
+    lib-http: client: Recreate connection IO after streams change.
+
+
+M	src/lib-http/http-client-connection.c
+
+2018-02-10 00:07:37 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (4a17af3)
+
+    lib-smtp: server: Recreate connection IO after streams change.
+
+
+M	src/lib-smtp/smtp-server-connection.c
+
+2018-02-10 10:29:44 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (8df7b1f)
+
+    lib-http: server: Use the new connection_input_halt/resume() functions.
+
+
+M	src/lib-http/http-server-connection.c
+
+2018-02-10 10:27:19 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (a0b53dc)
+
+    lib-http: client: Use the new connection_input_halt/resume() functions.
+
+
+M	src/lib-http/http-client-connection.c
+
+2018-02-10 10:07:28 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c786a72)
+
+    lib-smtp: server: Use the new connection_input_halt/resume() functions.
+
+
+M	src/lib-smtp/smtp-server-connection.c
+
+2018-02-10 10:01:20 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (758b649)
+
+    lib-smtp: client: Use the new connection_input_halt/resume() functions.
+
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2018-02-09 17:24:28 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (6d4e1c7)
+
+    lib-ssl-iostream: ostream-openssl: Fix behavior of o_stream_flush() so that
+    1 is only returned when buffer is empty.
+
+
+M	src/lib-ssl-iostream/ostream-openssl.c
+
+2018-02-15 15:47:48 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7b652dc)
+
+    lib-ssl-iostream: ostream-openssl: Create local variable for
+    sstream->ssl_io->plain_output in o_stream_ssl_flush().
+
+
+M	src/lib-ssl-iostream/ostream-openssl.c
+
+2018-02-10 09:55:43 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f1d116e)
+
+    lib: connection: Add connection_input_halt() and connection_input_resume().
+
+    These are convenience functions that remove and add conn->io respectively.
+
+M	src/lib/connection.c
+M	src/lib/connection.h
+
+2018-02-10 09:37:32 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (99ef56d)
+
+    lib-smtp: client: Moved smtp_client_init_ssl_ctx() from smtp-client.h to
+    smtp-client-private.h.
+
+
+M	src/lib-smtp/smtp-client-private.h
+M	src/lib-smtp/smtp-client.h
+
+2018-02-10 10:46:45 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (de7ac2e)
+
+    lib-http: client: Use conn->conn.ioloop rather than cctx->ioloop in
+    connection.
+
+    This leads to somewhat simpler code, and makes having connections on
+    different ioloops easier in the future.
+
+M	src/lib-http/http-client-connection.c
+
+2018-02-10 10:20:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (241d935)
+
+    lib: connection: Record the ioloop the connection was last switched to.
+
+
+M	src/lib/connection.c
+M	src/lib/connection.h
+
+2018-02-10 10:53:00 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7372d2b)
+
+    lib-http: client: Move connection to shared context's ioloop, rather than
+    the current_ioloop.
+
+    This is an omission.
+
+M	src/lib-http/http-client-connection.c
+
+2018-01-29 19:10:38 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (648a823)
+
+    doveadm: dsync: Switch ioloop for input/output streams while making TCP
+    connection.
+
+    This task is performed in a sub-ioloop, and when returning from that ioloop,
+    the output stream would sometimes still have an object on the sub-ioloop
+    that was just destroyed.
+
+M	src/doveadm/doveadm-dsync.c
+
+2018-01-29 18:28:25 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (76f7e77)
+
+    lib-ssl-iostream: openssl: Make verbose logging robust against i_debug()
+    writing to stream itself.
+
+    In dsync, i_debug() is overridden to write to the SSL stream itself through
+    a multiplexed data stream. So, during the i_debug() call all kinds of things
+    can happen to the persisted error string in the stream, which caused
+    problems.
+
+M	src/lib-ssl-iostream/iostream-openssl.c
+
+2018-01-16 02:02:11 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (080415c)
+
+    lib-http: client: Make sure all ioloop objects are created on the ioloop
+    that the client/context is switched to.
+
+
+M	src/lib-http/http-client-connection.c
+M	src/lib-http/http-client-host.c
+M	src/lib-http/http-client-peer.c
+M	src/lib-http/http-client-private.h
+M	src/lib-http/http-client-queue.c
+M	src/lib-http/http-client-request.c
+M	src/lib-http/http-client.c
+
+2018-01-17 00:37:37 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (083d7e2)
+
+    lib-dns: Allow setting the ioloop that the dns_lookup/dns_client is started
+    on.
+
+
+M	src/lib-dns/dns-lookup.c
+M	src/lib-dns/dns-lookup.h
+
+2018-01-17 02:50:05 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (43b5745)
+
+    lib: connection: Allow switching to a specific ioloop.
+
+
+M	src/lib/connection.c
+M	src/lib/connection.h
+
+2018-01-17 02:49:44 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (860ba28)
+
+    lib: ostream: Allow switching to a specific ioloop.
+
+
+M	src/lib-ssl-iostream/ostream-openssl.c
+M	src/lib/ostream-file.c
+M	src/lib/ostream-private.h
+M	src/lib/ostream.c
+M	src/lib/ostream.h
+
+2018-01-17 02:48:43 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e364ae8)
+
+    lib: istream: Allow switching to a specific ioloop.
+
+
+M	src/lib-http/http-server-request.c
+M	src/lib/istream-multiplex.c
+M	src/lib/istream-private.h
+M	src/lib/istream-timeout.c
+M	src/lib/istream.c
+M	src/lib/istream.h
+
+2018-01-24 23:02:03 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (0cb6dc4)
+
+    lib: iostream: Record the ioloop that the iostream was last switched to.
+
+
+M	src/lib/iostream-private.h
+M	src/lib/iostream.c
+M	src/lib/istream.c
+M	src/lib/ostream.c
+
+2018-01-16 19:37:46 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f6ab416)
+
+    lib: ioloop: Add functions for adding/moving timeouts and ios to a specific
+    ioloop.
+
+
+M	src/lib/ioloop.c
+M	src/lib/ioloop.h
+
+2018-01-03 02:11:19 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (995c197)
+
+    lib-http: test-http-client: Free the ssl_iostream_context cache.
+
+
+M	src/lib-http/test-http-client.c
+
+2017-12-29 03:19:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (46f4635)
+
+    lib-http: test-http-payload: Added test with clients using shared global
+    context.
+
+
+M	src/lib-http/test-http-payload.c
+
+2017-12-29 01:17:15 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (08e7188)
+
+    lib-http: client: Implicitly switch ioloop for global shared client context.
+
+    If the new ioloop is NULL, close the shared client context. In that case all 
+    shared hosts, peers and idle connetions are closed and destroyed. The
+    context just remains as a container for settings and shared context. This is
+    only allowed when there are no clients left.
+
+M	src/lib-http/http-client.c
+
+2017-12-29 02:15:06 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (39b0a7b)
+
+    lib-http: client: Use merged DNS settings from all clients connected to a
+    shared context for DNS lookups.
+
+
+M	src/lib-http/http-client-host.c
+M	src/lib-http/http-client-private.h
+M	src/lib-http/http-client.c
+
+2017-12-29 01:47:16 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (56c77bb)
+
+    lib-http: client: Base forcing shared context debug logging on the settings
+    of the context itself and each associated client.
+
+
+M	src/lib-http/http-client.c
+
+2017-12-29 00:48:32 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (4307246)
+
+    lib-http: client: Register client objects in the associated client shared
+    context.
+
+
+M	src/lib-http/http-client-private.h
+M	src/lib-http/http-client.c
+
+2017-12-29 00:30:27 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (96215d6)
+
+    lib-http: client: Call switching ioloop for shared peer from shared client
+    context.
+
+    Before, it was called from the client peer.
+
+M	src/lib-http/http-client-peer.c
+M	src/lib-http/http-client.c
+
+2017-12-29 01:05:21 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (8570767)
+
+    lib-http: client: Set req->client to NULL once the request is destroyed.
+
+    The http_client_request_destroy() function does not free the request 
+    immediately, as long as it is still referenced. It can still be referenced
+    by a connection that has sent it and is waiting for a reply (payload). In
+    the mean time the actual client can be gone, so we want to make sure nothing
+    is pointing to that anymore.
+
+    This change adds a few extra assertions to make sure nothing tries to use a 
+    NULL client later on. Some direct references to req->client are replaced
+    with a local client variable if there is one.
+
+M	src/lib-http/http-client-request.c
+
+2017-12-29 00:21:01 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (f43229f)
+
+    lib-http: client: Merge socket buffer size settings with settings from
+    shared context.
+
+    While using the default global context, per-client socket buffer size
+    settings were ignored.
+
+M	src/lib-http/http-client.c
+
+2017-12-29 00:16:30 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (a267451)
+
+    lib-http: client: Merge max_idle_time_msecs setting with setting from shared
+    context.
+
+    While using the default global context, per-client max_idle_time_msecs
+    setting was ignored.
+
+M	src/lib-http/http-client.c
+
+2017-12-29 16:19:53 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (ff5d021)
+
+    doveadm: Unref header search context after use
+
+    Fixes memory leak, found by valgrind
+
+M	src/doveadm/doveadm-mail-iter.c
+
+2018-02-08 15:34:53 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (1e5e3a1)
+
+    config: Fix ssl_params.dat conversion warning
+
+    The command is dhparam, not dh.
+
+M	src/config/old-set-parser.c
+
+2017-12-22 18:58:11 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (3bad86a)
 
     global: Call rfc822_parser_deinit() wherever possible
 
@@ -95,7 +1769,7 @@ M	src/lib-mail/test-rfc822-parser.c
 M	src/plugins/fts/fts-build-mail.c
 M	src/plugins/fts/fts-parser-script.c
 
-2018-01-09 11:33:59 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (aa2c38f)
+2018-01-09 11:33:59 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (eb79653)
 
     lib-mail: Refactor code to make the next commit smaller
 
@@ -104,7 +1778,7 @@ M	src/lib-mail/message-address.c
 M	src/lib-mail/message-id.c
 M	src/lib-mail/message-parser.c
 
-2017-12-22 18:56:53 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (5f1a823)
+2017-12-22 18:56:53 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a845928)
 
     lib-mail: Add rfc822_parser_deinit()
 
@@ -113,7 +1787,7 @@ M	src/lib-mail/message-parser.c
 
 M	src/lib-mail/rfc822-parser.h
 
-2017-12-22 18:42:53 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a4e981c)
+2017-12-22 18:42:53 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (afc789b)
 
     lib-mail: Make sure parsers don't accidentally go much beyond end pointer
 
@@ -124,7 +1798,7 @@ M	src/lib-mail/message-part-data.c
 M	src/lib-mail/rfc2231-parser.c
 M	src/lib-mail/rfc822-parser.c
 
-2017-12-22 18:36:55 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (35eb25c)
+2017-12-22 18:36:55 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (497f356)
 
     lib-mail: Fix out-of-bounds read when parsing an invalid email address
 
@@ -138,7 +1812,7 @@ M	src/lib-mail/rfc822-parser.c
 M	src/lib-mail/message-address.c
 M	src/lib-mail/test-message-address.c
 
-2017-12-22 18:36:09 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (ccde1a8)
+2017-12-22 18:36:09 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (d297bf0)
 
     lib-mail: test-message-address - Add TEST_MESSAGE_ADDRESS_FLAG_SKIP_LIST
     flag
@@ -147,14 +1821,1871 @@ M	src/lib-mail/test-message-address.c
 
 M	src/lib-mail/test-message-address.c
 
-2017-12-22 18:31:52 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (3213a02)
+2017-12-22 18:31:52 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (8ef7b26)
 
     lib-mail: rfc822-parser - Add asserts to make sure parser state is correct
 
 
 M	src/lib-mail/rfc822-parser.c
 
-2018-01-26 10:55:54 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (b20c2a5)
+2018-02-19 14:19:08 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (f69c328)
+
+    lib-dns: Move before lib-master
+
+
+M	src/Makefile.am
+
+2018-02-26 12:53:19 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (1fa0faa)
+
+    lib-master: Fix dns_match_wildcard result value check
+
+    It returns 0, not TRUE.
+
+M	src/lib-master/master-service-settings-cache.c
+
+2018-02-23 15:31:11 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (807eadc)
+
+    lib-master: Check local_name only if both filter and input have it
+
+    Broken in cedc777a1acf830af4cf0b6e9b0f343c81e20adc
+
+M	src/lib-master/master-service-settings-cache.c
+
+2017-11-30 20:52:11 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (50bedd4)
+
+    login-common: Enable config filtering by local name
+
+    Prevents servername misuse.
+
+M	src/login-common/login-settings.c
+
+2017-11-30 15:47:25 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (d93e71a)
+
+    lib-master: Support validating config filters against requests
+
+    Validation will sanitize the input request and drop any fields that have no
+    filter in config. E.g. if you have a local block with name, and nothing
+    else, then lip/rip will be dropped from the request.
+
+M	src/lib-master/Makefile.am
+M	src/lib-master/master-service-settings-cache.c
+M	src/lib-master/master-service-settings-cache.h
+M	src/lib-master/master-service-settings.c
+M	src/lib-master/master-service-settings.h
+M	src/lib-master/test-master-service-settings-cache.c
+
+2017-11-30 15:46:52 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (424ca44)
+
+    config: Add command to request all filters
+
+
+M	src/config/config-connection.c
+
+2017-11-30 15:46:40 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (aea4efb)
+
+    config: Add config_filter_get_all
+
+    Returns all filters
+
+M	src/config/config-filter.c
+M	src/config/config-filter.h
+
+2018-03-05 14:55:04 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (9e1d3ab)
+
+    charset-alias: Don't return value from void functions
+
+
+M	src/plugins/charset-alias/charset-alias-plugin.c
+
+2018-02-14 01:30:14 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2d19ab1)
+
+    lib-smtp: server: Fix reporting of XCLIENT capability in EHLO response.
+
+    The trusted connection check logic was inverted.
+
+M	src/lib-smtp/smtp-server-reply.c
+
+2018-02-14 22:20:20 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (5062b18)
+
+    lib-smtp: server: Fix segfault occurring when XCLIENT command is handled.
+
+    Occurs only when the application (in this case LMTP) has a 
+    conn_proxy_data_updated() callback. The context parameter was the struct 
+    smtp_server_connection object itself, rather than the application context.
+    This caused the connection object to be overwritten.
+
+M	src/lib-smtp/smtp-server-connection.c
+
+2018-02-13 20:42:30 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b2177e0)
+
+    lib-smtp: server: Fix segfault occurring during XCLIENT when no extension
+    fields are configured.
+
+
+M	src/lib-smtp/smtp-server-cmd-xclient.c
+
+2018-02-13 21:19:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e3da840)
+
+    lib-imap-storage: imap-msgpart-url: Perform the check for a proper
+    messagepart URL in imap_msgpart_url_create().
+
+    Before, this was an assert in imap_msgpart_url_create(). The actual check
+    was performed only in imap_msgpart_url_parse(), meaning that 
+    imap_msgpart_url_create() would fail with an assertion when provided with an 
+    inappropriate URL.
+
+    This surfaced as a problem for the submission BURL command.
+
+M	src/lib-imap-storage/imap-msgpart-url.c
+
+2018-02-25 09:35:43 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (7c4fa81)
+
+    m4: Use -U and -D in cc_fortify
+
+    Not just -D. This is to test the same thing that gets used.
+
+M	m4/cc_fortify.m4
+
+2018-02-25 09:35:19 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (37b3c51)
+
+    m4: Remove pthread from tests
+
+
+M	m4/cc_fortify.m4
+M	m4/cc_pie.m4
+M	m4/cc_stack_protector.m4
+
+2018-02-08 17:19:24 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (6e2ea69)
+
+    replication: Don't trigger replication on changes not visible to dsync
+
+    For example if there's a write to .cache file, it doesn't require 
+    replication.
+
+M	src/plugins/replication/replication-plugin.c
+
+2018-02-08 17:17:59 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (3aa47de)
+
+    lib-storage: Replace mail_transaction_commit_changes.changed with
+    changes_mask
+
+    This allows better finding out what changed in the transaction.
+
+M	src/lib-storage/index/index-transaction.c
+M	src/lib-storage/list/mailbox-list-index-status.c
+M	src/lib-storage/mail-storage.h
+M	src/plugins/replication/replication-plugin.c
+
+2018-02-08 17:14:53 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (c837fee)
+
+    lib-storage: Include mail-index.h from mail-storage.h
+
+    This makes it a bit more acceptable to use mail-index.h API, without having 
+    to go through the lib-storage layer. This is also needed by the next patch 
+    to avoid duplicating the same enum in both lib-index and lib-storage layer.
+
+M	src/imap-urlauth/Makefile.am
+M	src/lib-imap-urlauth/Makefile.am
+M	src/lib-storage/mail-storage.h
+M	src/plugins/imap-quota/Makefile.am
+M	src/pop3/Makefile.am
+
+2018-02-08 17:00:38 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (ced0220)
+
+    lib-storage: Remove mailbox_transaction_context.nontransactional_changes
+
+    Nothing cares about them. It was only set for POP3 UIDL change with Maildir.
+    In theory dsync replication would want to replicate such a change, but it
+    doesn't actually support changing UIDLs for existing mails. Other mailbox
+    formats don't support it anyway.
+
+M	src/lib-storage/index/index-transaction.c
+M	src/lib-storage/index/maildir/maildir-mail.c
+M	src/lib-storage/mail-storage-private.h
+
+2018-02-08 16:53:15 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (d470660)
+
+    lib-index: Add mail_index_transaction_commit_result.changes_mask
+
+    This can be used to determine what type of changes were committed in a 
+    transaction.
+
+M	src/lib-index/mail-index-transaction-export.c
+M	src/lib-index/mail-index-transaction-private.h
+M	src/lib-index/mail-index-transaction.c
+M	src/lib-index/mail-index.h
+
+2018-02-08 16:50:58 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (c7eaa19)
+
+    lib-index: Cleanup - return bool in log_append_keyword_updates()
+
+    Simplifies the next commit.
+
+M	src/lib-index/mail-index-transaction-export.c
+
+2018-01-13 11:53:43 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (999789e)
+
+    lmtp: local: Don't deliver more than once to the same recipient.
+
+    Duplicate RCPT TO commands for local recipients are now mostly ignored, by
+    repeating the reply for the first instance of that RCPT TO command.
+
+M	src/lmtp/lmtp-common.c
+M	src/lmtp/lmtp-common.h
+M	src/lmtp/lmtp-local.c
+
+2018-01-13 13:34:47 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2374eae)
+
+    lmtp: Add recipient type to struct lmtp_recipient.
+
+
+M	src/lmtp/lmtp-common.c
+M	src/lmtp/lmtp-common.h
+M	src/lmtp/lmtp-local.c
+M	src/lmtp/lmtp-proxy.c
+
+2018-01-13 13:25:01 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e365ad4)
+
+    lmtp: Move common recipient handling code to separate file.
+
+
+M	src/lmtp/Makefile.am
+M	src/lmtp/client.h
+A	src/lmtp/lmtp-common.c
+A	src/lmtp/lmtp-common.h
+M	src/lmtp/lmtp-local.c
+M	src/lmtp/lmtp-proxy.c
+
+2018-01-13 13:10:53 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7a291da)
+
+    lib-smtp: server: Use smtp_server_reply_submit_duplicate() in
+    smtp_server_reply_allv().
+
+    This is more efficient, since it doesn't need to compose new content for
+    each reply.
+
+M	src/lib-smtp/smtp-server-reply.c
+
+2018-01-13 13:08:53 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (0ec0a3f)
+
+    lib-smtp: server: Add function that allows submitting duplicate replies.
+
+    The smtp_server_reply_submit_duplicate() function submits a new reply at the 
+    specified index with content duplicated from an existing earlier reply.
+
+M	src/lib-smtp/smtp-server-reply.c
+M	src/lib-smtp/smtp-server.h
+
+2018-01-13 13:03:48 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (62a8c37)
+
+    lib-smtp: server: Move allocation of command replies to a separate function.
+
+
+M	src/lib-smtp/smtp-server-reply.c
+
+2018-01-13 12:43:08 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (06d4b7a)
+
+    lib-smtp: server: Put reply content in a separate struct.
+
+    This allows duplicate replies to share content for a multi-reply command.
+
+M	src/lib-smtp/smtp-server-command.c
+M	src/lib-smtp/smtp-server-private.h
+M	src/lib-smtp/smtp-server-reply.c
+
+2018-01-13 12:56:59 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c6c10f2)
+
+    lib-smtp: server: Allow part of the replies to be already sent in
+    smtp_server_reply_allv().
+
+    This is not something observed to happen in existing code, but it is best to 
+    deal with this properly, as it could happen in the future.
+
+M	src/lib-smtp/smtp-server-reply.c
+
+2018-01-13 12:26:57 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7bab026)
+
+    lib-smtp: server: transaction: Add function that finds duplicate recipients.
+
+    Duplicate means that both the path and parameters are equal.
+
+M	src/lib-smtp/smtp-server-transaction.c
+M	src/lib-smtp/smtp-server.h
+
+2018-01-13 12:20:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e9afe28)
+
+    lib-smtp: server: Add RCPT parameters directly in
+    smtp_server_transaction_add_rcpt().
+
+    This makes more sense. Before, these were added to the recipient in 
+    smtp-server-cmd-rcpt.c, after the recipient was added.
+
+M	src/lib-smtp/smtp-server-cmd-rcpt.c
+M	src/lib-smtp/smtp-server-private.h
+M	src/lib-smtp/smtp-server-transaction.c
+
+2018-01-13 11:52:31 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (af7fec1)
+
+    lib-smtp: params: Add function that allows checking whether RCPT parameters
+    are equal.
+
+
+M	src/lib-smtp/smtp-params.c
+M	src/lib-smtp/smtp-params.h
+
+2018-01-13 12:07:46 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7eb098b)
+
+    lib-smtp: params: Add functions to evaluate any extra (non-standard) MAIL
+    and RCPT parameters.
+
+    These allow looking up the parameter based on its name.
+
+M	src/lib-smtp/smtp-params.c
+M	src/lib-smtp/smtp-params.h
+
+2018-01-13 11:51:24 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (52d9196)
+
+    lib-smtp: address: Consistently allow address values to be NULL.
+
+    If the address pointer is NULL or the localpart field is NULL or empty, it 
+    signifies that it is the NULL address "<>".
+
+    In the case of smtp_address_equals(), this also likely fixes crashes at
+    places where it may be used to compare "<>".
+
+M	src/lib-smtp/smtp-address.c
+M	src/lib-smtp/smtp-address.h
+M	src/lib-smtp/test-smtp-address.c
+
+2018-01-13 11:59:54 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (9d589f8)
+
+    lib-smtp: address: Rename 'poo' to 'pool' in declaration of
+    smtp_address_detail_parse().
+
+
+M	src/lib-smtp/smtp-address.h
+
+2017-12-14 11:44:52 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (8c077aa)
+
+    quota: Warn when quota check is blocked by background quota calculation
+
+    This was previously double logged as "Quota transaction has failed earlier"
+    error.
+
+M	src/plugins/quota/quota-storage.c
+M	src/plugins/quota/quota.c
+
+2018-01-10 15:45:51 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (185c907)
+
+    quota: Remove "Failed to set quota transaction limits" error
+
+    This error adds nothing that helps the user to debug a problem.
+
+M	src/plugins/quota/quota-storage.c
+M	src/plugins/quota/quota.c
+
+2017-12-14 12:47:00 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (f478857)
+
+    quota-count: Remove extra "quota-count failed:" from error_r
+
+
+M	src/plugins/quota/quota-count.c
+
+2018-02-28 15:09:02 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a5518a4)
+
+    example-config: Add mail_attachment_detection_options
+
+
+M	doc/example-config/conf.d/10-mail.conf
+
+2018-02-16 16:03:46 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (3087e07)
+
+    doveadm sync/backup: Don't override BROKENCHAR if it's already set
+
+    This allows migrating invalid mailbox names by specifying BROKENCHAR. 
+    Previously it would always try to use \003 control character, which isn't 
+    valid character in mailbox names so the mailbox creation would fail.
+
+M	src/doveadm/doveadm-dsync.c
+
+2018-02-26 18:20:30 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (481a6a1)
+
+    notify: Ignore flag and keywords update during saving
+
+    They are part of the saving event
+
+M	src/plugins/notify/notify-plugin.c
+
+2018-01-11 13:38:14 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (1c3b6f9)
+
+    *-login: Fix clients linked list corruption with SSL connections
+
+    This could have resulted in infinite loops or some of the clients being 
+    skipped for some operations.
+
+M	src/login-common/client-common.c
+
+2018-01-23 10:51:26 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (74ef850)
+
+    push-notification: PUSH_NOTIFICATION_USER_CONTEXT is now required
+
+    Satisfies static analyzers
+
+M	src/plugins/push-notification/push-notification-plugin.c
+
+2018-01-23 10:49:40 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (76f93fb)
+
+    fts-lucene: Add and use FTS_LUCENE_USER_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/plugins/fts-lucene/fts-backend-lucene.c
+M	src/plugins/fts-lucene/fts-lucene-plugin.c
+M	src/plugins/fts-lucene/fts-lucene-plugin.h
+
+2018-01-23 10:47:49 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (595bb86)
+
+    welcome: WELCOME_CONTEXT is now required
+
+    Satisfies static analyzers
+
+M	src/plugins/welcome/welcome-plugin.c
+
+2018-01-23 10:46:30 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (3ae3e7f)
+
+    expire: DOVEADM_EXPIRE_MAIL_CMD_CONTEXT is now required
+
+    Satisfied static analyzers
+
+M	src/plugins/expire/doveadm-expire.c
+
+2018-01-23 10:44:02 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (b230128)
+
+    virtual: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/virtual/virtual-search.c
+M	src/plugins/virtual/virtual-storage.c
+M	src/plugins/virtual/virtual-storage.h
+
+2018-01-23 10:41:35 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (fe1ec4b)
+
+    quota: Add and use QUOTA_USER_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/plugins/quota/quota-plugin.h
+M	src/plugins/quota/quota-storage.c
+
+2018-01-23 10:40:23 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (019febb)
+
+    imap-zlib: Context is now required
+
+    Satisfies static analyzers
+
+M	src/plugins/imap-zlib/imap-zlib-plugin.c
+
+2018-01-23 10:39:30 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (ae5c5ea)
+
+    lazy-expunge: Fix context checking
+
+    Was not done properly in 462a3d92adcde4bfa9a575875bd8ae740b89ce9e
+
+M	src/plugins/lazy-expunge/lazy-expunge-plugin.c
+
+2018-01-22 14:04:47 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (cc90fd9)
+
+    mail-crypt: Add and use MAIL_CRYPT_USER_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/plugins/mail-crypt/mail-crypt-plugin.c
+
+2018-01-22 14:02:39 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (358b663)
+
+    fts-solr: Add and use FTS_SOLR_USER_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/plugins/fts-solr/fts-backend-solr-old.c
+M	src/plugins/fts-solr/fts-solr-plugin.c
+M	src/plugins/fts-solr/fts-solr-plugin.h
+
+2018-01-23 11:37:41 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (11133c3)
+
+    acl: Fix ACL_CONTEXT check
+
+    Was incorrect in 3131b3878de3245db7552234e66d437e8fde9351
+
+M	src/plugins/acl/acl-mailbox.c
+
+2018-01-23 10:38:41 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (7536e28)
+
+    acl: Add and use ACL_USER_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/plugins/acl/acl-mailbox-list.c
+M	src/plugins/acl/acl-plugin.h
+M	src/plugins/acl/doveadm-acl.c
+
+2018-01-22 14:00:37 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (86f3bd9)
+
+    acl: Add and use ACL_LIST_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/plugins/acl/acl-mailbox-list.c
+M	src/plugins/acl/acl-mailbox.c
+M	src/plugins/acl/acl-plugin.h
+
+2018-01-22 13:57:12 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (75f6ed7)
+
+    lib-storage: imapc - Ensure search ctx is not NULL
+
+    Satisfies static analyzers
+
+M	src/lib-storage/index/imapc/imapc-search.c
+
+2018-01-22 13:54:58 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (603cac0)
+
+    lib-storage: Add and use MAIL_STORAGE_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/lib-storage/index/index-transaction.c
+M	src/lib-storage/mail-storage-private.h
+
+2018-01-22 13:52:37 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (f6a72b4)
+
+    lib-storage: Add and use MAIL_THREAD_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/lib-storage/index/index-thread.c
+
+2018-01-22 13:50:37 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (850a34d)
+
+    lib-index: Add and use CACHE_TRANS_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/lib-index/mail-cache-transaction.c
+
+2018-01-22 09:38:26 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (37aed1a)
+
+    lib-storage: Add and use INDEX_LIST_CONTEXT_REQUIRE
+
+    Satisfies static analyzers
+
+M	src/lib-storage/list/mailbox-list-index-backend.c
+M	src/lib-storage/list/mailbox-list-index-iter.c
+M	src/lib-storage/list/mailbox-list-index-notify.c
+M	src/lib-storage/list/mailbox-list-index-status.c
+M	src/lib-storage/list/mailbox-list-index-sync.c
+M	src/lib-storage/list/mailbox-list-index.c
+M	src/lib-storage/list/mailbox-list-index.h
+M	src/lib-storage/list/mailbox-list-notify-tree.c
+
+2018-01-20 20:42:02 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (8fc876d)
+
+    mail-log: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/mail-log/mail-log-plugin.c
+
+2018-01-19 10:27:09 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (511fba2)
+
+    old-stats-plugin: Fix context requirements
+
+    Fixes Panic: Module context stats_storage_module missing
+
+    Broken by 6afdf0b6fce26c5492d5e56f6f16fb8a4d869566
+
+M	src/plugins/old-stats/stats-plugin.c
+
+2018-01-18 15:29:42 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (6ff5704)
+
+    pop3-migration-plugin: Fix context requirements
+
+    Fixes Panic: Module context pop3_migration_storage_module missing
+
+    Broken by a8703ce24540b7efaa51a8c7d3c72e72727f9789
+
+M	src/plugins/pop3-migration/pop3-migration-plugin.c
+
+2018-01-17 12:15:16 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (bdf19e1)
+
+    last-login: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/last-login/last-login-plugin.c
+
+2018-01-17 12:14:22 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (19b6330)
+
+    mail-crypt: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/mail-crypt/mail-crypt-acl-plugin.c
+M	src/plugins/mail-crypt/mail-crypt-plugin.c
+
+2018-01-17 10:28:48 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (4efb529)
+
+    old-stats: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/old-stats/mail-stats-connection.c
+M	src/plugins/old-stats/stats-plugin.c
+M	src/plugins/old-stats/stats-plugin.h
+
+2018-01-17 10:23:05 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (afba4cf)
+
+    quota-clone: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/quota-clone/quota-clone-plugin.c
+
+2018-01-17 10:21:52 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (f81b662)
+
+    zlib: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/zlib/zlib-plugin.c
+
+2018-01-17 10:10:41 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (f96ddb3)
+
+    mailbox-alias: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/mailbox-alias/mailbox-alias-plugin.c
+
+2018-01-17 10:07:37 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (9cc36d0)
+
+    mail-filter: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/mail-filter/mail-filter-plugin.c
+
+2018-01-17 10:06:25 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (0333ab0)
+
+    notify: Contexts are now required or checked
+
+    Satisfied static analyzers
+
+M	src/plugins/notify/notify-storage.c
+
+2018-01-17 09:31:44 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (c0ffd52)
+
+    pop3-migration: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/pop3-migration/pop3-migration-plugin.c
+
+2018-01-14 20:40:11 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (3c18b20)
+
+    quota: Contexts are now required or checked
+
+    Satisfied static analyzers
+
+M	src/plugins/quota/quota-storage.c
+
+2018-01-14 20:33:48 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (86c9455)
+
+    apparmor: Ensure auser is not NULL
+
+    Satisfies static analyzers
+
+M	src/plugins/apparmor/apparmor-plugin.c
+
+2018-01-14 20:25:16 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (fc4557f)
+
+    lazy-expunge: Contexts are now required or checked
+
+    Satisfied static analyzers
+
+M	src/plugins/lazy-expunge/lazy-expunge-plugin.c
+
+2018-01-14 20:18:45 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (18e78d3)
+
+    fts: Contexts are now required or checked
+
+    Satisfied static analyzer
+
+M	src/plugins/fts/fts-parser-script.c
+M	src/plugins/fts/fts-storage.c
+M	src/plugins/fts/fts-user.c
+
+2018-01-14 20:08:11 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (a9c19bb)
+
+    snarf: If sstorage is NULL, do not allocate box
+
+    Old code would continue if sstorage was NULL.
+
+    Found by static analyzer
+
+M	src/plugins/snarf/snarf-plugin.c
+
+2018-01-14 20:07:31 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (5f6be61)
+
+    snarf: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/snarf/snarf-plugin.c
+
+2018-01-14 20:00:04 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (1e9fdc8)
+
+    expire: Contexts are now required or checked
+
+    Satisfied static analyzers
+
+M	src/plugins/expire/expire-plugin.c
+
+2018-01-14 19:57:16 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (e16d514)
+
+    trash: Ensure quser is not NULL
+
+    Satisfies static analyzers
+
+M	src/plugins/trash/trash-plugin.c
+
+2018-01-14 19:56:19 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (d5975da)
+
+    acl: Contexts are now required or checked
+
+    Satisfies static analyzers
+
+M	src/plugins/acl/acl-attributes.c
+M	src/plugins/acl/acl-backend-vfile-acllist.c
+M	src/plugins/acl/acl-lookup-dict.c
+M	src/plugins/acl/acl-mailbox-list.c
+M	src/plugins/acl/acl-mailbox.c
+M	src/plugins/acl/acl-plugin.h
+M	src/plugins/acl/acl-shared-storage.c
+M	src/plugins/acl/acl-storage.c
+
+2018-01-14 19:46:13 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (fa4ab39)
+
+    replication: Check ruser for NULL
+
+    Satisfies static analyzers
+
+M	src/plugins/replication/replication-plugin.c
+
+2018-01-14 19:43:39 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (6b49867)
+
+    imap-old-stats-plugins: Check suser for NULL
+
+    Satisfies static analyzers
+
+M	src/plugins/imap-old-stats/imap-stats-plugin.c
+
+2018-01-17 12:25:18 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (42f95f6)
+
+    lib-sql: SQL_DB_CACHE_CONTEXT now requires context
+
+    Satisfies static analyzers
+
+M	src/lib-sql/sql-db-cache.c
+
+2018-01-17 09:29:23 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (f553314)
+
+    lib-storage: MBOX_LIST_CONTEXT now requires context
+
+    Satisfies static analyzers
+
+M	src/lib-storage/index/mbox/mbox-storage.c
+
+2018-01-17 09:29:53 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (1fad1b8)
+
+    lib-storage: INDEX_LIST_STORAGE_CONTEXT now requires context
+
+    Satisfies static analyzers
+
+M	src/lib-storage/list/mailbox-list-index-storage.h
+
+2018-01-17 09:25:26 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (4adaae0)
+
+    lib-storage: INDEX_STORAGE_CONTEXT now requires context
+
+    Satisfies static analyzers
+
+M	src/lib-storage/index/index-storage.h
+
+2018-01-17 12:24:21 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (04bdefa)
+
+    lib-lda: Require context in mail-deliver
+
+    Satisfies static analyzers
+
+M	src/lib-lda/mail-deliver.c
+
+2018-01-12 15:10:48 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (bf055b4)
+
+    lib: Add MODULE_CONTEXT_REQUIRE
+
+    This will panic instead of return NULL. Should satisfy static analyzers when
+    used.
+
+M	src/lib/module-context.h
+
+2018-02-18 18:07:16 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (4d90f3f)
+
+    lib-storage: Generate snippet while saving new mails
+
+
+M	src/lib-storage/index/index-mail-headers.c
+
+2018-02-19 15:43:31 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a1e1240)
+
+    lib-storage: Make index_mail_want_cache() global
+
+
+M	src/lib-storage/index/index-mail.c
+M	src/lib-storage/index/index-mail.h
+
+2018-02-18 18:06:48 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (994ecfe)
+
+    lib-storage: move snippet generation to mail-save-finish
+
+    This is necessary because some storage backends (most notably sdbox) do not
+    allow getting the mail stream before the mail is fully written out.
+    (See written_to_disk in sdbox-file.h.)
+
+    If we could avoid getting the stream to generate a snippet we could leave
+    this where it is.
+
+M	src/lib-storage/index/index-mail.c
+
+2018-02-19 15:38:13 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (424753d)
+
+    doveadm dump: Show body.snippet in human-readable form
+
+
+M	src/doveadm/doveadm-dump-index.c
+
+2018-02-15 18:16:15 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (f30a85a)
+
+    imap: Don't set storage callbacks before namespaces are created
+
+    This fixes sending untagged OK/NO notifications from storage (e.g. lock 
+    waits/override notifications). It was broken by 
+    e031d9aaae59a9f79710dc1138b76b69272615a3
+
+M	src/imap/imap-client.c
+
+2018-02-15 18:15:16 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (4cf9cf9)
+
+    imap: Add client_create_finish() to finish namespace creation.
+
+
+M	src/imap/imap-client.c
+M	src/imap/imap-client.h
+M	src/imap/imap-master-client.c
+M	src/imap/main.c
+
+2018-02-15 18:13:20 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (084a6f8)
+
+    imap: When running standalone, delay initializing namespaces until PREAUTH
+    is sent
+
+    Most importantly this makes the code paths similar for standalone and 
+    non-standalone clients, which is needed by the following commits.
+
+M	src/imap/main.c
+
+2017-12-13 19:05:30 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (a9eca13)
+
+    global: Flip MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT to ..._ALLOW_ROOT
+
+
+M	src/imap-urlauth/imap-urlauth-worker.c
+M	src/imap/main.c
+M	src/indexer/indexer-worker.c
+M	src/lda/main.c
+M	src/lib-storage/mail-storage-service.c
+M	src/lib-storage/mail-storage-service.h
+M	src/lmtp/main.c
+M	src/plugins/quota/quota-status.c
+M	src/pop3/main.c
+M	src/submission/main.c
+M	src/util/script-login.c
+
+2017-09-29 14:16:52 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (9057b2f)
+
+    lib-storage: Flip disallow_root in service_drop_privileges()
+
+
+M	src/lib-storage/mail-storage-service.c
+
+2017-09-29 13:47:22 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (63ef067)
+
+    master: Flip disallow_root in drop_privileges()
+
+
+M	src/master/service-process.c
+
+2017-09-29 13:40:12 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (f6a3f3e)
+
+    lib: Add restrict_access_flags enum to use with restrict_access[_by_env]()
+
+    Swap parameter locations in the functions to make sure plugins are updated
+    to use the new api.
+
+M	src/anvil/main.c
+M	src/auth/main.c
+M	src/config/main.c
+M	src/dict/main.c
+M	src/director/main.c
+M	src/dns/dns-client.c
+M	src/doveadm/main.c
+M	src/imap-hibernate/main.c
+M	src/indexer/indexer-worker.c
+M	src/indexer/indexer.c
+M	src/ipc/main.c
+M	src/lib-program-client/program-client-local.c
+M	src/lib-storage/mail-storage-service.c
+M	src/lib/restrict-access.c
+M	src/lib/restrict-access.h
+M	src/lmtp/main.c
+M	src/log/main.c
+M	src/login-common/main.c
+M	src/master/service-process.c
+M	src/old-stats/main.c
+M	src/plugins/quota/quota-status.c
+M	src/replication/aggregator/aggregator.c
+M	src/replication/replicator/replicator.c
+M	src/stats/main.c
+M	src/util/rawlog.c
+M	src/util/script-login.c
+M	src/util/script.c
+M	src/util/tcpwrap.c
+
+2017-12-18 11:35:27 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (aeddc84)
+
+    lib: Flip drop_setuid_root in restrict_access_settings
+
+
+M	src/lib-storage/mail-storage-service.c
+M	src/lib/restrict-access.c
+M	src/lib/restrict-access.h
+
+2017-12-18 12:44:14 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (f7d2099)
+
+    lib-program-client: Remove extra drop_setuid_root flag copy
+
+
+M	src/lib-program-client/program-client-local.c
+
+2018-02-19 14:44:04 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (9a2898f)
+
+    lib-storage: Unless LAYOUT=index, don't rebuild list index on missing INBOX
+
+
+M	src/lib-storage/list/mailbox-list-index.c
+
+2018-02-19 12:54:53 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a82c0f0)
+
+    lib-storage: mailbox_list_index_handle_corruption() - Lock mailbox list
+    while rebuilding
+
+    This guards against simultaneous mailbox create/delete/rename.
+
+M	src/lib-storage/list/mailbox-list-index.c
+
+2018-02-19 12:53:46 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a8bd6c9)
+
+    lib-storage: mailbox_list_index_handle_corruption() - Move actual handling
+    to its own function
+
+
+M	src/lib-storage/list/mailbox-list-index.c
+
+2018-02-19 09:57:17 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (d9a1a7c)
+
+    lib-ssl-iostream: Use SSL_CTX_set_ecdh_auto macro
+
+    This macro is same for 1.0.2 and 1.1.0 and libressl.
+
+M	src/lib-ssl-iostream/iostream-openssl-context.c
+
+2018-02-18 18:11:18 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (0de7905)
+
+    imap: If snippet is not available return NIL
+
+
+M	src/imap/imap-fetch-body.c
+
+2018-02-18 00:53:12 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (9e1a3a7)
+
+    imap: Fix FETCH SNIPPET
+
+    1) _BUFFERED flag wasn't set, which caused a missing space before the
+    "SNIPPET". 2) It caused \Seen flag to be added to the mail
+
+M	src/imap/imap-fetch-body.c
+
+2018-02-16 14:49:59 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (2f81657)
+
+    imap: Don't enforce sending SNIPPET reply as literal
+
+    Also change it to use "cur_str" since the reply is never very long.
+
+M	src/imap/imap-fetch-body.c
+
+2018-02-16 14:46:36 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (bb80752)
+
+    imap: Add parenthesis to FETCH SNIPPET (FUZZY text) response
+
+    Otherwise it violates the RFC 3501 text about FETCH responses.
+
+M	src/imap/imap-fetch-body.c
+
+2018-02-16 16:59:35 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (96d1d2d)
+
+    charset-alias: Fix keyvalues iteration
+
+    charset-alias-plugin.c:113:27: error: comparison between pointer and zero 
+    character constant [-Werror=pointer-compare]
+     for (i = 0; keyvalues[i] != '\0'; i++) {
+                              ^~ charset-alias-plugin.c:113:14: note: did you
+    mean to dereference the pointer?
+     for (i = 0; keyvalues[i] != '\0'; i++) {
+
+M	src/plugins/charset-alias/charset-alias-plugin.c
+
+2018-02-16 16:53:04 +0200 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (c2a0b61)
+
+    charset-alias: Cleanup whitespace
+
+    Remove \r from end of lines and remove trailing whitespace.
+
+M	src/plugins/Makefile.am
+M	src/plugins/charset-alias/Makefile.am
+M	src/plugins/charset-alias/charset-alias-plugin.c
+M	src/plugins/charset-alias/charset-alias-plugin.h
+
+2018-01-24 19:36:22 -0500 Hideo Yoshizane <hideo.yoshizane@open-xchange.com> (6791b1e)
+
+    charset-alias-plugin
+
+
+M	configure.ac
+M	src/plugins/Makefile.am
+A	src/plugins/charset-alias/Makefile.am
+A	src/plugins/charset-alias/charset-alias-plugin.c
+A	src/plugins/charset-alias/charset-alias-plugin.h
+
+2018-01-31 10:27:54 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (254cae6)
+
+    lmtp: local: Use recipient index in lmtp_local_rcpt_reply_overquota().
+
+    When used during the DATA command, it should send a reply for the correct 
+    recipient. During the RCPT command there is only one reply due. Added assert 
+    that checks this.
+
+M	src/lmtp/lmtp-local.c
+
+2018-01-31 10:34:11 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c81bd71)
+
+    lmtp: local: Add explicit cmd parameter to
+    lmtp_local_rcpt_reply_overquota().
+
+    Using the RCPT cmd is only valid for the RCPT command and not when quota
+    excess is detected during DATA. That would cause a segmentation fault, since 
+    rcpt->rcpt.rcpt_cmd == NULL.
+
+M	src/lmtp/lmtp-local.c
+
+2018-01-31 10:30:23 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (a2c36f5)
+
+    lmtp: local: Make local variable for rcpt->rcpt.rcpt_cmd in
+    lmtp_local_rcpt_check_quota().
+
+
+M	src/lmtp/lmtp-local.c
+
+2018-01-17 21:26:44 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (abc7aab)
+
+    lmtp: local: Fix segfault occurring when quota is exceeded.
+
+
+M	src/lmtp/lmtp-local.c
+
+2018-01-25 22:24:05 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (e0285e5)
+
+    lib-smtp: client: Fix ignoring invalid certificate from server.
+
+    Although it initially allowed the invalid certificate, it would still fail
+    later on while reading/writing the SSL streams.
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2018-02-12 12:28:37 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (e15a37f)
+
+    auth: Set correct context type when bypassing reporting in auth_success
+
+    Broken in 41ff6e6a4a085786d4c15a58c7c50a28e2110c3f
+
+M	src/auth/auth-request.c
+
+2018-02-06 09:48:11 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (d3a3654)
+
+    auth: Add policy check configuration options
+
+    Allows disabling before/after auth checks, or reporting.
+
+M	src/auth/auth-request-handler.c
+M	src/auth/auth-request.c
+M	src/auth/auth-settings.c
+M	src/auth/auth-settings.h
+
+2018-02-05 14:26:15 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (e0b3e89)
+
+    auth: Use correct username is auth policy requests
+
+    When doing master authentication as first, use the username of the user, not
+    master user, for policy lookup.
+
+M	src/auth/auth-policy.c
+M	src/auth/auth-settings.c
+
+2018-02-08 02:26:23 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (4bbad8a)
+
+    lib-ssl-iostream: Assert-crash if input stream has IO already set
+
+
+M	src/lib-ssl-iostream/iostream-openssl.c
+
+2018-02-08 02:22:18 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (abf71b6)
+
+    lib: Add i_stream_get_root_io() and use it to deduplicate code
+
+
+M	src/lib/istream-private.h
+M	src/lib/istream.c
+
+2018-02-08 10:53:50 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (8bcd5e5)
+
+    lib-smtp: Recreate connection IO after streams change
+
+    This fixes hangs after STARTTLS.
+
+    Originally by Stephan Bosch
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2018-02-08 10:52:57 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (962e595)
+
+    lib: Add connection_streams_changed()
+
+    Originally by Stephan Bosch
+
+M	src/lib/connection.c
+M	src/lib/connection.h
+
+2018-02-08 02:38:23 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (186a331)
+
+    doveadm: client: Set IO only after enabling SSL
+
+    io_add_istream() needs to be used with the SSL istream, otherwise it can 
+    cause hangs.
+
+M	src/doveadm/server-connection.c
+
+2018-02-08 02:28:54 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (b4e076d)
+
+    lib-imap-client: Fix IO after enabling SSL
+
+    io_add_istream() needs to be used with the SSL istream, otherwise it can 
+    cause hangs.
+
+M	src/lib-imap-client/imapc-connection.c
+
+2018-02-06 15:12:26 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (0b2363a)
+
+    replication: Don't send notification for changes done by dsync transactions
+
+
+M	src/plugins/replication/replication-plugin.c
+
+2018-02-06 15:10:48 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (ea2dbaa)
+
+    lib-storage: Set mailbox_transaction_context.flags earlier
+
+    Set it in index_transaction_init() so plugins' transaction_begin() methods 
+    see it after calling super.transaction_begin().
+
+M	src/lib-storage/index/index-transaction.c
+M	src/lib-storage/mail-storage.c
+
+2018-02-08 13:04:48 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (977a292)
+
+    old-stats: Set process dumpable during stats gathering
+
+    /proc/self/io is not accessible otherwise
+
+M	src/plugins/old-stats/mail-stats-fill.c
+
+2018-02-08 13:03:37 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (07e1266)
+
+    lib: Add restrict_access_get/set_dumpable
+
+
+M	src/lib/restrict-access.c
+M	src/lib/restrict-access.h
+
+2018-02-08 13:01:50 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (52d6f2d)
+
+    lib: Clarify restrict_access_allow_coredumps
+
+
+M	src/lib/restrict-access.h
+
+2018-02-07 16:17:13 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (fbc2195)
+
+    lib-index: Fix assert-crash with lock_method=dotlock
+
+    The dotlock wasn't deleted in all code paths. Fix this by simplifying the
+    unlocking to be done the same way with and without dotlock.
+
+    Fixes: Panic: file mail-cache.c: line 624 (mail_cache_lock_file): assertion
+    failed: (cache->dotlock == NULL)
+
+M	src/lib-index/mail-cache-private.h
+M	src/lib-index/mail-cache.c
+
+2018-01-09 15:37:25 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (36c2a2f)
+
+    lib-storage: Lock mailbox_list for mailbox create/delete/rename
+
+    This is only required for mailbox creation to fix a race condition with 
+    LAYOUT=index: If INBOX doesn't exist it will rescan the mailboxes to find
+    out if there are any missing ones. If INBOX creation isn't locked, it's
+    possible that the first process hasn't finished creating INBOX before the
+    second process find it and attempts to open it.
+
+    The delete and rename locking are probably useful to guard against race 
+    conditions when clients intentionally issues create/delete/rename commands 
+    concurrently.
+
+M	src/lib-storage/mail-storage.c
+
+2018-01-09 15:36:58 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (72b239b)
+
+    lib-storage: Add mailbox_list_[un]lock()
+
+
+M	src/lib-storage/mailbox-list-private.h
+M	src/lib-storage/mailbox-list.c
+
+2018-01-09 15:35:13 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (1ccc5eb)
+
+    lib-storage: mailbox_delete() - Fix cleanup in error handling
+
+    If removing index deletion mark failed, box->deleting wasn't set to FALSE 
+    and the mailbox was left opened.
+
+M	src/lib-storage/mail-storage.c
+
+2018-01-09 15:33:26 -0500 Timo Sirainen <timo.sirainen@dovecot.fi> (3ce6458)
+
+    lib-storage: mailbox_rename() - Use source storage for errors
+
+    It was documented to use source storage for errors, but some of the errors 
+    were set to destination storage.
+
+M	src/lib-storage/mail-storage.c
+
+2018-02-06 18:01:04 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (0deeb85)
+
+    lib-storage: mail_storage_lock_create() - add support for dotlocks
+
+
+M	src/lib-storage/mail-storage-private.h
+M	src/lib-storage/mail-storage.c
+M	src/lib-storage/mail-user.c
+
+2018-02-06 17:49:15 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (e5b9914)
+
+    lib-storage: Change mail_user_lock_file_create() to use
+    mail_storage_lock_create()
+
+
+M	src/lib-storage/mail-user.c
+
+2018-02-06 17:47:37 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (f306527)
+
+    lib-storage: Add mail_storage_lock_create()
+
+    This is split off of mailbox_lock_file_create().
+
+M	src/lib-storage/mail-storage-private.h
+M	src/lib-storage/mail-storage.c
+
+2018-02-06 17:35:18 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (6b49608)
+
+    lib: Add file_lock_from_dotlock()
+
+    The dotlock creation requires various settings, so the file-lock.h API can't 
+    easily be used to create it. But once created, it's simpler to keep all lock 
+    types in the same struct file_lock, which can be unlocked/freed once 
+    finished.
+
+M	src/lib/file-lock.c
+M	src/lib/file-lock.h
+
+2017-12-26 00:38:58 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (4517f63)
+
+    lib-smtp: server: Fix assertion failure occurring for a second failed
+    BDAT/BURL command.
+
+    Assertion was:
+
+    Panic: file smtp-server-cmd-data.c: line 420
+    (smtp_server_connection_data_chunk_init): assertion failed:
+    (data_cmd->chunk_first)
+
+M	src/lib-smtp/smtp-server-cmd-data.c
+
+2017-12-27 14:38:41 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d5ed3c4)
+
+    submission: EHLO command: Remove obsolete pending_ehlo handling.
+
+    This was used to wait with sending an EHLO reply until the proxy connection
+    to the relay server completes. The previous commit made this functionality
+    obsolete, since command input handling is blocked entirely until the proxy
+    connection is ready.
+
+M	src/submission/cmd-helo.c
+M	src/submission/submission-client.h
+
+2017-12-27 14:36:10 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (ffd0514)
+
+    submission: Block server input handling until proxy connection to relay
+    server completes.
+
+    This makes sure we are aware of the full extent of the backend server's
+    capabilities, before we start handling commands. Before, only EHLO commands
+    were blocked this way, but this did not account for MAIL/RCPT parameters,
+    which are equally dependent. Fixes problems with clients that send no EHLO
+    after AUTH, like Thunderbird.
+
+M	src/submission/submission-client.c
+
+2017-12-27 17:02:12 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (8eb9c89)
+
+    lib-smtp: server: Add APIs for halting and resuming connection command
+    handling.
+
+    Also adds function to start the connection in a pending (halted) state. This
+    way the greeting can already be sent (over SSL if needed), while deferring
+    command handling until some external activity is completed.
+
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server-private.h
+M	src/lib-smtp/smtp-server.h
+
+2017-12-27 16:31:12 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (52bf7c5)
+
+    lib-smtp: server: Prevent calling smtp_server_connection_login() after
+    smtp_server_connection_start().
+
+    Added assertion.
+
+M	src/lib-smtp/smtp-server-connection.c
+
+2017-12-27 16:22:22 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2dc83a5)
+
+    lib-smtp: server: Protect smpt_server_connection_start() from being called
+    multiple times.
+
+
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server-private.h
+
+2017-12-27 16:18:16 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (67c8041)
+
+    lib-smtp: server: Delay handling initial input (from login service) until
+    after smtp_server_connection_start().
+
+    Instead, it is now handled in normal io callback.
+
+M	src/lib-smtp/smtp-server-connection.c
+
+2017-12-27 15:56:03 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (dbd3403)
+
+    lib-smtp: server: Remove implicit smtp_server_connection_start() from
+    smtp_server_connection_login().
+
+
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server.h
+M	src/submission/submission-client.c
+
+2017-12-27 15:59:23 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (04676af)
+
+    lib-smtp: server: Moved smtp_server_connection_start() after
+    smtp_server_connection_login().
+
+    Also fixes an indent problem in the header comment implicitly.
+
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server.h
+
+2017-12-27 15:52:13 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (4f97157)
+
+    lib-smtp: server: Moved ssl_start argument from
+    smtp_server_connection_start() to smtp_server_connection_create().
+
+    This frees smtp_server_connection_start() for general use.
+
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server.h
+M	src/lib-smtp/test-smtp-payload.c
+M	src/lib-smtp/test-smtp-server-errors.c
+M	src/lmtp/client.c
+M	src/submission-login/client.c
+M	src/submission/submission-client.c
+
+2018-02-06 12:37:34 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (20a8237)
+
+    fs-posix: Fix iterating directories when readdir() returns DT_UNKNOWN
+
+    Files were iterated correctly, but directories weren't. This mainly broke 
+    directory iteration with NFS when nordirplus mount option was used.
+
+M	src/lib-fs/fs-posix.c
+
+2018-02-05 22:21:13 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (4031a87)
+
+    fts: Don't reindex FTS mails if .cache file is deleted
+
+    This means that if fts is enabled, "doveadm index" no longer adds mails to
+    dovecot.index.cache if it's deleted. However, it was rarely used for that
+    purpose. More likely due to a corrupted cache file all the mails were 
+    unnecessarily being opened and reindexed.
+
+M	src/plugins/fts/fts-storage.c
+
+2018-02-07 15:28:45 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (f0abd01)
+
+    cassandra: Make sure timestamp is always logged (if set) with
+    debug_queries=y
+
+    It wasn't logged in some code paths.
+
+M	src/lib-sql/driver-cassandra.c
+
+2018-02-07 15:27:07 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (bf54fe6)
+
+    cassandra: Fix setting timestamp for transaction queries with v3 protocol
+
+    It was working for prepared statements, but not for non-prepared statements.
+
+M	src/lib-sql/driver-cassandra.c
+
+2018-02-05 23:54:33 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (abb1f86)
+
+    fts: Fix searching headers with TEXT/BODY
+
+    TEXT is searching headers and BODY is searching MIME headers. Those headers 
+    were indexed with data language, so search must also include data language 
+    when looking up words. We'll just include the data language for all searches
+    now, so it should always work correctly.
+
+M	src/plugins/fts/fts-user.c
+
+2018-02-05 23:51:51 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (2778da2)
+
+    fts: Fix searching SEARCH_HEADER_ADDRESS/COMPRESS_LWSP
+
+    These are "non-language" headers that are being searched, so they need to be 
+    searched using data language.
+
+M	src/plugins/fts/fts-search-args.c
+
+2018-01-12 21:03:41 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (6f13a90)
+
+    lib-http: queue: Update the correct timout while dropping a request from the
+    delay queue.
+
+    The absolute request timeout rather than the delay timeout was updated for
+    the removal of the request from the delay queue.
+
+M	src/lib-http/http-client-queue.c
+
+2018-02-06 15:50:19 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (a2577af)
+
+    lib: time-util: Fix timeval_cmp_margin() to correctly handle a margin
+    crossing the second boundary.
+
+    The timeval_cmp_margin() function incorrectly assumed that the margin is 
+    irrelevent when the tv_sec values are different.
+
+M	src/lib/test-time-util.c
+M	src/lib/time-util.c
+
+2018-02-06 16:51:23 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7dc18d3)
+
+    lib: test-time-util: Put all test data for timeval_cmp() test in a single
+    struct array.
+
+
+M	src/lib/test-time-util.c
+
+2018-01-27 23:20:08 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (daaf2a6)
+
+    submission: Add settings that configure the connect and command reply
+    timeouts.
+
+
+M	src/submission/submission-client.c
+M	src/submission/submission-settings.c
+M	src/submission/submission-settings.h
+
+2018-01-19 23:32:31 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (aab5da6)
+
+    lib-smtp: client: Assign only connection settings during connection
+    initialization.
+
+    Due to some copy-paste mistake, some global client settings were assigned 
+    instead.
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2018-01-19 23:31:05 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (520f546)
+
+    lib-smtp: client: Always use per-connection settings in connection.
+
+    Some part of the connection code referred to global client settings.
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2018-01-19 16:05:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b75ddaf)
+
+    lib-smtp: client: Properly allow per-connection SSL configuration.
+
+    Although this was already partially possible, the connection was still
+    always using the global client SSL context.
+
+M	src/lib-smtp/smtp-client-connection.c
+M	src/lib-smtp/smtp-client-private.h
+
+2018-01-19 14:44:50 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (046fc74)
+
+    lib-smtp: client: Fix segfault occurring in connection when SSL certificate
+    is invalid.
+
+    The connection is using its own local SSL settings to determine whether an 
+    invalid certificate is allowed. However, these local settings were not
+    properly initialized.
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2018-01-22 18:51:21 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (66f8ac5)
+
+    submission: Enable verbose reporting of relay server certificate problems.
+
+
+M	src/submission/submission-client.c
+
+2018-01-29 09:55:51 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (8830583)
+
+    imap: Iterate over ns settings when deciding to add SPECIAL-USE capability
+
+    To determine whether we should add the SPECIAL-USE capability to the OK
+    response to LOGIN, we have to iterate over namespace and mailbox
+    *settings* since the namespaces haven't been set up yet.
+
+M	src/imap/imap-client.c
+
+2018-01-25 12:27:41 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (5fe57f3)
+
+    lib-storage: Fix adding body.snippet to cache
+
+    Unless body.snippet was in mail_always_cache_fields, it didn't get added to 
+    the cache file.
+
+M	src/lib-storage/index/index-mail.c
+
+2018-01-25 12:35:51 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (587facb)
+
+    lib-storage: Add comment to how mail_cache_field_can/want_add() is used
+
+
+M	src/lib-storage/index/index-mail.c
+
+2018-01-25 12:35:35 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (97ccc47)
+
+    lib-index: Update comments for mail_cache_decision_*()
+
+
+M	src/lib-index/mail-cache-private.h
+
+2018-01-05 09:51:00 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (83b1300)
+
+    lib-mail: mail-html2text - Validate UCS4 codepoint
+
+    Fixes: Panic: file unichar.c: line 160 (uni_ucs4_to_utf8_c): assertion
+    failed: (uni_is_valid_ucs4(chr))
+
+M	src/lib-mail/mail-html2text.c
+M	src/lib-mail/test-mail-html2text.c
+
+2018-01-31 22:14:49 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (5b21699)
+
+    lib-imap-urlauth: Fix segfault occurring when userid part is missing for
+    "user+" or "submit+" URLAUTH access.
+
+
+M	src/lib-imap-urlauth/imap-urlauth.c
+
+2017-12-23 23:49:02 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (163ad61)
+
+    submission-login: Fail CLIENT_AUTH_RESULT_MECH_SSL_REQUIRED authentication
+    result with 523 5.7.10 error.
+
+    Defined in RFC5248, Section 2.4.
+
+M	src/submission-login/client-authenticate.c
+
+2017-12-27 15:18:14 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (028fa17)
+
+    submission: BURL command: Return more appropriate 554 5.7.14 error when
+    BURL/URLAUTH is not configured.
+
+    Defined in RFC5248, Section 2.4.
+
+M	src/submission/cmd-data.c
+
+2018-01-08 11:38:37 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (6dfadcd)
+
+    lib-imap-client: continue imapc operation on parsing errors.
+
+
+M	src/lib-imap-client/imapc-connection.c
+
+2017-11-11 10:07:42 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (39f339f)
+
+    lib-storage: Set keyword based on attachment presence when saving
+
+    If attachment is detected, use $HasAttachment, if not use $HasNoAttachment
+
+M	src/lib-storage/mail-storage-private.h
+M	src/lib-storage/mail-storage.c
+M	src/lib-storage/mail-storage.h
+M	src/lib-storage/mail.c
+
+2017-11-20 10:09:23 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (08a89a6)
+
+    lib-storage: Add attachment detection settings
+
+
+M	src/lib-storage/mail-storage-settings.c
+M	src/lib-storage/mail-storage-settings.h
+
+2017-11-10 14:32:44 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (ce0a94f)
+
+    lib-mail: Add message_part_has_attachment
+
+
+M	src/lib-mail/message-part-data.c
+M	src/lib-mail/message-part-data.h
+
+2018-01-28 11:44:26 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (79ed2b3)
+
+    lib-smtp: client: Fix timeout leak sometimes occurring at unexpected remote
+    disconnect.
+
+    While disconnected, newly submitted commands are queued, yet scheduled for 
+    immediate failure. The timeout used for that was not cleaned up.
+
+M	src/lib-smtp/smtp-client-connection.c
+
+2017-12-27 12:05:50 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (082a99e)
+
+    dovecot-config: Update lib-stats directory to lib-old-stats
+
+
+M	dovecot-config.in.in
+
+2017-12-23 19:40:09 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (16a1054)
+
+    submission-login: Fixed handling of ssl=required for trusted connections.
+
+    Normally, SSL is not required for trusted connections (e.g. localhost), but
+    submission-login did not follow this standard.
+
+M	src/submission-login/client.c
+
+2017-12-24 15:12:36 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (3d71010)
+
+    submission: Restructure handling of QUIT command.
+
+    - Avoid explicitly proxying QUIT command when the proxy connection is not
+    ready: in that case the SMTP client connection will just send QUIT if
+    appropriate, without waiting for reply.
+    - Add timeout for proxied QUIT command, so that there are no problems when
+    the relay server hangs after QUIT (addresses FIXME).
+
+M	src/submission/cmd-quit.c
+M	src/submission/submission-client.c
+M	src/submission/submission-client.h
+M	src/submission/submission-common.h
+
+2017-12-24 14:52:07 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d99860b)
+
+    submission: Dropped unused field from struct client.
+
+
+M	src/submission/submission-client.h
+
+2017-12-24 12:17:48 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7a1eb3d)
+
+    submission-login: Fix pipelining of commands beyond AUTH.
+
+    The master_data_prefix was initialized wrong; it omitted the expected '\0'
+    byte after the helo field.
+
+M	src/submission-login/client-authenticate.c
+
+2017-12-24 12:15:29 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (1ab2e30)
+
+    submission: Initialize proxy connection before starting the SMTP server
+    connection.
+
+    The smtp_server_connection_login() function gets pre-login connection data
+    from login service, which can contain commands. The execution of commands
+    expects the proxy connection object to be initialized.
+
+M	src/submission/submission-client.c
+
+2018-01-26 20:37:32 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (cdeb715)
+
+    lib-program-client: Make an explicit enum for the exit code.
+
+    Before, the meaning of the code was confusing, since the actual program
+    returns a different set of values.
+
+M	src/lib-program-client/program-client-local.c
+M	src/lib-program-client/program-client-private.h
+M	src/lib-program-client/program-client-remote.c
+M	src/lib-program-client/program-client.c
+
+2018-01-20 21:32:07 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c8f94f5)
+
+    lib-program-client: local: Add test for big data I/O.
+
+
+M	src/lib-program-client/test-program-client-local.c
+
+2018-01-24 01:17:59 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (009cc18)
+
+    lib-program-client: Document the purpose of the use_dotstream setting.
+
+
+M	src/lib-program-client/program-client.h
+
+2018-01-23 21:14:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b6f7d78)
+
+    lib-program-client: Add comments to program_input/program_output functions.
+
+
+M	src/lib-program-client/program-client.c
+
+2018-01-22 23:43:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (fcc204a)
+
+    lib-program-client: Flush/finish the output stream after
+    o_stream_send_istream().
+
+    There may still be data in the output stream buffer. Failing to flush this 
+    leads to truncated output. For the output towards the program
+    o_stream_finish() is used, since there may be an ostream_dot in between (or
+    something else for future features).
+
+M	src/lib-program-client/program-client.c
+
+2018-01-24 01:09:16 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (dd15704)
+
+    lib-program-client: remote: Don't change exit_code in
+    program_client_remote_disconnect() when program_input is already NULL.
+
+    When the program_input is NULL, the stream is finished, meaning that the 
+    exit_code is set based on the return code. There can be a program_input for 
+    remote streams, even when the program produces no output.
+
+M	src/lib-program-client/program-client-remote.c
+
+2018-01-23 21:38:27 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (c37e042)
+
+    lib-program-client: Simplify cleanup of dot input stream in
+    program_client_program_input().
+
+
+M	src/lib-program-client/program-client.c
+
+2018-01-23 21:24:35 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2c572e4)
+
+    lib-program-client: Restructure reading input from program to simplify
+    handling of dot input stream.
+
+
+M	src/lib-program-client/program-client.c
+
+2018-01-22 23:25:34 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (2bfc6ba)
+
+    lib-program-client: Use reliable means of checking for input stream EOF.
+
+
+M	src/lib-program-client/program-client-remote.c
+M	src/lib-program-client/program-client.c
+
+2018-01-24 21:48:07 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (4dc9b01)
+
+    lib-program-client: Remove check for -2 returned from i_stream_read_more().
+
+    The stream must have space for at least 1 byte.
+
+M	src/lib-program-client/program-client.c
+
+2018-01-23 22:16:26 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (505bb8d)
+
+    lib-program-client: Remove useless stream eof check.
+
+    It also looks to be problematic.
+
+M	src/lib-program-client/program-client.c
+
+2018-01-04 12:44:16 -0500 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (23a46b9)
+
+    imap: support for FETCH SNIPPET
+
+
+M	configure.ac
+M	src/imap/imap-fetch-body.c
+M	src/imap/imap-fetch.c
+M	src/imap/imap-fetch.h
+
+2018-01-22 13:33:29 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (bc78d9e)
+
+    imapc: Fix deleting mailbox
+
+    Broken by f8f30bd27e41e1041a8de0b97f35d7d75e0a412e
+
+M	src/lib-storage/index/imapc/imapc-sync.c
+
+2018-01-26 10:55:54 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (6910b69)
 
     lib-auth: Remove request after abort
 
@@ -169,7 +3700,7 @@ M	src/lib-auth/auth-client-request.c
 M	src/lib-auth/auth-server-connection.c
 M	src/lib-auth/auth-server-connection.h
 
-2017-12-18 16:50:51 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (b569776)
+2017-12-18 16:50:51 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (77fe384)
 
     lib-auth: Fix memory leak in auth_client_request_abort()
 
@@ -183,15 +3714,1711 @@ M	src/lib-auth/auth-server-connection.h
 
 M	src/lib-auth/auth-client-request.c
 
-2017-12-22 15:35:03 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (c8b89eb)
+2018-01-24 18:01:48 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (87dc9b6)
 
-    Released v2.3.0.
+    lib-index: Write forced cache decision changes immediately to cache file
+
+    When mail_always/never_cache_fields doesn't match the current caching 
+    decisions in the cache file, write the updated decisions to the file.
+
+M	src/lib-index/mail-cache-fields.c
+
+2018-01-24 18:01:23 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (d5a4d84)
+
+    lib-index: Code cleanup for reading caching decisions
+
+    No functional changes.
+
+M	src/lib-index/mail-cache-fields.c
+
+2018-01-24 17:58:57 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (865a749)
+
+    lib-index: Finish fixing removal of forced cache decisions from existing
+    cache files
+
+    6ef2504d020461b0f480766c41596595a4300023 didn't fix it for already known 
+    fields.
+
+M	src/lib-index/mail-cache-fields.c
+
+2018-01-23 00:04:28 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (1e06000)
+
+    lib-index: Fix removal of forced cache decisions from existing cache files
+
+    The forced-flags are written to the cache file when the file is created. 
+    They were also read back, and the force-flag was preserved even when the 
+    configuration was removed.
+
+M	src/lib-index/mail-cache-fields.c
+
+2018-01-22 17:38:32 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (faf4440)
+
+    lib-index: Fix adding forced cache decisions to existing cache files
+
+    If a field already existed in the cache file, the cache decision from the 
+    file was always used. This caused force-decisions to be ignored.
+
+M	src/lib-index/mail-cache-fields.c
+
+2018-01-08 15:08:10 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (7b5357e)
+
+    auth: passdb-cache - Verify credentials with worker when enabled
 
 
-M	NEWS
-M	configure.ac
+M	src/auth/auth-request.c
+M	src/auth/auth-settings.c
+M	src/auth/auth-settings.h
+M	src/auth/passdb-cache.c
 
-2017-12-22 15:12:30 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (dfc19b4)
+2018-01-08 15:00:17 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (6dddb57)
+
+    auth: Expose auth_request_verify_plain_callback_finish
+
+
+M	src/auth/auth-request.c
+M	src/auth/auth-request.h
+
+2018-01-08 15:09:28 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (c6efaa4)
+
+    auth-worker: Support PASSW request
+
+    This will attempt to verify given credentials.
+
+M	src/auth/auth-worker-client.c
+
+2018-01-08 14:52:10 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (ff17366)
+
+    auth-worker: Add auth_worker_auth_request_new
+
+    Replaces worker_auth_request_new, moves in check for username and service.
+    Simplifies code.
+
+M	src/auth/auth-worker-client.c
+M	src/auth/auth-worker-client.h
+
+2018-01-02 12:33:50 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (f6ff615)
+
+    auth: passdb-blocking - Expose passdb_blocking_auth_worker_reply_parse
+
+    Enables sharing code with passdb cache
+
+M	src/auth/passdb-blocking.c
+M	src/auth/passdb-blocking.h
+
+2018-01-16 18:17:00 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (1272b52)
+
+    imapc: Fix imap_features=no-msn-updates to not fail on SELECT
+
+    The initial EXISTS reply shouldn't be ignored, only the following ones.
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+
+2017-12-25 11:10:19 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (19dd64e)
+
+    imapc: Add imapc_features=no-msn-updates
+
+    This is a stricter version of fetch-msn-workarounds. The MSNs aren't trusted 
+    at all. This means any new untagged EXISTS and EXPUNGE replies are ignored, 
+    as well as untagged FETCH replies that don't include UID.
+
+    A potential downside with this feature is that UID FETCH/STORE commands sent
+    to expunged messages will likely fail without the IMAP client being notified
+    of the EXPUNGEs. New mails are also not noticed, so this should be used only
+    when it's known that the clients don't keep the connection open for long.
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+M	src/lib-storage/index/imapc/imapc-settings.c
+M	src/lib-storage/index/imapc/imapc-settings.h
+
+2017-12-25 16:11:26 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (9c7ec3f)
+
+    imapc: Fix sending initial FETCH after reconnection SELECTs mailbox
+
+    Move sending the FETCH when the SELECT returns tagged OK reply instead of 
+    delaying it until mailbox is next synced. Most importantly this allows 
+    sending the FETCH before any retried commands that are also sent after 
+    SELECT receives tagged reply.
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+M	src/lib-storage/index/imapc/imapc-storage.c
+M	src/lib-storage/index/imapc/imapc-storage.h
+M	src/lib-storage/index/imapc/imapc-sync.c
+M	src/lib-storage/index/imapc/imapc-sync.h
+
+2017-12-25 22:48:00 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (b5265b4)
+
+    imapc: gmail-migration: Fetch X-GM-MSGID for new mails as well
+
+    I'm not sure why it was originally restricted only for the initial FETCH. 
+    Fetching GUIDs for new mails can be just as useful.
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+
+2017-12-25 20:21:40 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (ddd79dd)
+
+    imapc: Move imapc_mailbox_fetch_state*() to imapc-mailbox.c
+
+    Mainly to make the next commit smaller.
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+M	src/lib-storage/index/imapc/imapc-storage.h
+M	src/lib-storage/index/imapc/imapc-sync.c
+
+2017-12-25 19:19:09 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (f3ccac7)
+
+    imapc: Handle untagged UIDVALIDITY immediately
+
+    This is part of the changes to fix mailbox resyncing after reconnect.
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+M	src/lib-storage/index/imapc/imapc-sync.c
+
+2017-12-25 19:34:31 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (33b25be)
+
+    imapc: If mailbox select fails, rollback any changes done to it
+
+    Required by the following changes that start adding changes immediately 
+    after SELECT. If the initial syncing doesn't finish successfully, these 
+    changes need to be reverted.
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+
+2017-12-25 19:33:33 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (ce651ec)
+
+    imapc: Keep "selected" state TRUE only while mailbox is successfully
+    SELECTed
+
+
+M	src/lib-storage/index/imapc/imapc-storage.c
+
+2018-01-17 15:05:38 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (88e551a)
+
+    imapc: Fix leaking mail_index_view on delayed expunge handling
+
+    Fixes: Panic: Leaked view for index (in-memory index): Opened in
+    imapc-mailbox.c:47
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+M	src/lib-storage/index/imapc/imapc-sync.c
+
+2018-01-17 15:03:06 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (41093d6)
+
+    lib-imap-client: Avoid "Unknown tag" errors for aborted commands
+
+    If mailbox is closed before all command replies were received, the commands 
+    were aborted but they'll still receive the replies from server. Remember the
+    aborted commands' tag numbers so they can be ignored.
+
+M	src/lib-imap-client/imapc-connection.c
+
+2018-01-17 15:02:09 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (f98b9b4)
+
+    lib-imap-client: Fix reason text when unselecting mailbox aborts commands
+
+
+M	src/lib-imap-client/imapc-connection.c
+
+2017-12-25 21:31:05 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (1421648)
+
+    lib-imap-client: Add asserts for reconnect_command_count
+
+
+M	src/lib-imap-client/imapc-connection.c
+
+2017-12-25 21:29:06 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (5044de0)
+
+    lib-imap-client: Delay sending more commands while SELECT is running
+
+
+M	src/lib-imap-client/imapc-connection.c
+
+2017-12-25 18:49:15 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (d405b02)
+
+    lib-imap-client: After reconnection send retried commands last
+
+    Previously only SELECT was sent before others. This allows sending more 
+    commands on reconnection before the retried commands.
+
+M	src/lib-imap-client/imapc-connection.c
+
+2018-01-03 19:46:58 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (bdfa226)
+
+    auth: client protocol: Recognize empty initial response field as an absent
+    initial response for older clients.
+
+    Particularly, Exim sends an empty initial response field in the AUTH request
+    for an authentication command that has no initial response. Originally,
+    Dovecot allowed this, but this was recently changed so that the EXTERNAL
+    SASL mechanism works properly from ManageSieve. This commit makes it allowed
+    again for older authentication clients to send an empty initial response
+    field for an authentication command that has no initial response part.
+    Sending '=' for an empty initial response is still allowed in general.
+
+M	src/auth/auth-request-handler.c
+
+2018-01-03 19:26:33 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (1bc0a20)
+
+    auth: client protocol: Record minor version for authentication client
+    connection.
+
+
+M	src/auth/auth-client-connection.c
+M	src/auth/auth-client-connection.h
+
+2017-12-18 15:21:44 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (e42d46d)
+
+    global: Rename timing API to stats-dist API
+
+    The API wasn't really about timings specifically, but about statistics in 
+    general. The new stats service was already using it for tracking statistics 
+    for non-timing related numbers.
+
+M	src/dict/dict-commands.c
+M	src/dict/dict-commands.h
+M	src/dict/main.c
+M	src/lib-fs/fs-api.c
+M	src/lib-fs/fs-api.h
+M	src/lib/Makefile.am
+A	src/lib/stats-dist.c
+A	src/lib/stats-dist.h
+M	src/lib/test-lib.inc
+A	src/lib/test-stats-dist.c
+D	src/lib/test-timing.c
+D	src/lib/timing.c
+D	src/lib/timing.h
+M	src/stats/client-reader.c
+M	src/stats/stats-metrics.c
+M	src/stats/stats-metrics.h
+
+2017-12-12 15:21:17 +0200 Phil Carmody <phil@dovecot.fi> (ccd2f7b)
+
+    lib/timing - helper for arbitrary percentiles
+
+    Replace fixed 95th %-ile helper with request for arbitrary percentiles, or
+    even arbitrary fractions of the range.
+
+    Signed-off-by: Phil Carmody <phil@dovecot.fi>
+
+M	src/lib/timing.c
+M	src/lib/timing.h
+
+2017-12-28 13:53:14 +0200 Jarkko Mourujärvi <jarkko.mourujarvi@dovecot.fi> (9e61bf4)
+
+    doveconf: add hostname to output
+
+
+M	src/config/doveconf.c
+
+2017-12-28 10:47:28 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (fce72ce)
+
+    lib-http: Only depend on iostream openssl lib if building with openssl
+
+    Fixes build without openssl
+
+M	src/lib-http/Makefile.am
+
+2017-12-25 18:24:35 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (5a69ecf)
+
+    lib-storage: mail_storage_set_index_error() - handle NULL index error
+
+    This avoids assert-crashing later on in mail*_get_last_internal_error().
+
+    This could potentially be an assert instead of setting it as "BUG", but it
+    looks like there are various code paths in lib-index that return -1 without
+    setting an error. (That's to avoid duplicate error logging, although it
+    could now be fixed with mail_index_set_error_nolog().)
+
+M	src/lib-storage/mail-storage.c
+
+2017-12-25 18:18:14 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (8e4c41c)
+
+    lib-storage: Set index error on transaction commit() callback
+
+    The commit callback is setting errors to storage. However, it's being called
+    from mail_index_transaction_commit() whose callers are expecting the error
+    to be in index. If that index error was attempted to be used, it could have
+    been wrong or NULL. Fix this by setting the same storage error also to the
+    index.
+
+M	src/lib-storage/index/index-transaction.c
+
+2017-12-25 18:17:57 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (46105d6)
+
+    lib-index: Add mail_index_set_error_nolog()
+
+
+M	src/lib-index/mail-index-private.h
+M	src/lib-index/mail-index.c
+
+2017-12-28 14:10:23 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (8fe22c9)
+
+    dsync: Add per-mailbox sync lock that is always used.
+
+    Both importing and exporting gets the lock before they even sync the 
+    mailbox. The lock is kept until the import/export finishes. This guarantees 
+    that no matter how dsync is run, two dsyncs can't be working on the same 
+    mailbox at the same time.
+
+    This lock is in addition to the optional per-user lock enabled by the -l 
+    parameter. If the -l parameter is used, the same lock timeout is used for 
+    the per-mailbox lock. Otherwise 30s timeout is used.
+
+    This should help to avoid email duplication when replication is enabled for 
+    public namespaces, and maybe in some other rare situations as well.
+
+M	src/doveadm/dsync/dsync-brain-mailbox.c
+M	src/doveadm/dsync/dsync-brain-private.h
+M	src/doveadm/dsync/dsync-brain.c
+M	src/doveadm/dsync/dsync-mailbox.c
+M	src/doveadm/dsync/dsync-mailbox.h
+
+2017-12-28 19:40:29 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (e35a625)
+
+    lib: Make file_lock_free(NULL) no-op
+
+
+M	src/lib/file-lock.c
+
+2017-12-28 10:27:27 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (478f253)
+
+    dsync: Add debug logging for .dovecot-sync.lock locking/unlocking
+
+
+M	src/doveadm/dsync/dsync-brain.c
+
+2018-01-01 20:57:51 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (393bfbe)
+
+    Updated copyright notices to include the year 2018.
+
+
+M	doc/man/doveadm-acl.1.in
+M	doc/man/doveadm-altmove.1.in
+M	doc/man/doveadm-auth.1.in
+M	doc/man/doveadm-batch.1.in
+M	doc/man/doveadm-deduplicate.1.in
+M	doc/man/doveadm-director.1.in
+M	doc/man/doveadm-dump.1.in
+M	doc/man/doveadm-exec.1.in
+M	doc/man/doveadm-expunge.1.in
+M	doc/man/doveadm-fetch.1.in
+M	doc/man/doveadm-flags.1.in
+M	doc/man/doveadm-force-resync.1.in
+M	doc/man/doveadm-fs.1.in
+M	doc/man/doveadm-fts.1.in
+M	doc/man/doveadm-help.1.in
+M	doc/man/doveadm-import.1.in
+M	doc/man/doveadm-index.1.in
+M	doc/man/doveadm-instance.1.in
+M	doc/man/doveadm-kick.1.in
+M	doc/man/doveadm-log.1.in
+M	doc/man/doveadm-mailbox-cryptokey.1.in
+M	doc/man/doveadm-mailbox.1.in
+M	doc/man/doveadm-move.1.in
+M	doc/man/doveadm-penalty.1.in
+M	doc/man/doveadm-proxy.1.in
+M	doc/man/doveadm-purge.1.in
+M	doc/man/doveadm-pw.1.in
+M	doc/man/doveadm-quota.1.in
+M	doc/man/doveadm-replicator.1.in
+M	doc/man/doveadm-save.1.in
+M	doc/man/doveadm-search-query.7
+M	doc/man/doveadm-search.1.in
+M	doc/man/doveadm-stats.1.in
+M	doc/man/doveadm-sync.1.in
+M	doc/man/doveadm-user.1.in
+M	doc/man/doveadm-who.1.in
+M	doc/man/doveadm.1.in
+M	doc/man/doveconf.1.in
+M	doc/man/dovecot-lda.1.in
+M	doc/man/dovecot.1.in
+M	src/anvil/anvil-connection.c
+M	src/anvil/anvil-settings.c
+M	src/anvil/connect-limit.c
+M	src/anvil/main.c
+M	src/anvil/penalty.c
+M	src/anvil/test-penalty.c
+M	src/auth/auth-cache.c
+M	src/auth/auth-client-connection.c
+M	src/auth/auth-fields.c
+M	src/auth/auth-master-connection.c
+M	src/auth/auth-penalty.c
+M	src/auth/auth-policy.c
+M	src/auth/auth-postfix-connection.c
+M	src/auth/auth-request-handler.c
+M	src/auth/auth-request-stats.c
+M	src/auth/auth-request-var-expand.c
+M	src/auth/auth-request.c
+M	src/auth/auth-settings.c
+M	src/auth/auth-stats.c
+M	src/auth/auth-token.c
+M	src/auth/auth-worker-client.c
+M	src/auth/auth-worker-server.c
+M	src/auth/auth.c
+M	src/auth/db-checkpassword.c
+M	src/auth/db-dict-cache-key.c
+M	src/auth/db-dict.c
+M	src/auth/db-ldap.c
+M	src/auth/db-lua.c
+M	src/auth/db-oauth2.c
+M	src/auth/db-passwd-file.c
+M	src/auth/db-sql.c
+M	src/auth/main.c
+M	src/auth/mech-anonymous.c
+M	src/auth/mech-cram-md5.c
+M	src/auth/mech-digest-md5.c
+M	src/auth/mech-dovecot-token.c
+M	src/auth/mech-external.c
+M	src/auth/mech-oauth2.c
+M	src/auth/mech-plain-common.c
+M	src/auth/mech-plain.c
+M	src/auth/mech.c
+M	src/auth/mycrypt.c
+M	src/auth/passdb-blocking.c
+M	src/auth/passdb-bsdauth.c
+M	src/auth/passdb-cache.c
+M	src/auth/passdb-checkpassword.c
+M	src/auth/passdb-dict.c
+M	src/auth/passdb-imap.c
+M	src/auth/passdb-ldap.c
+M	src/auth/passdb-lua.c
+M	src/auth/passdb-oauth2.c
+M	src/auth/passdb-passwd-file.c
+M	src/auth/passdb-passwd.c
+M	src/auth/passdb-shadow.c
+M	src/auth/passdb-sql.c
+M	src/auth/passdb-static.c
+M	src/auth/passdb-template.c
+M	src/auth/passdb-vpopmail.c
+M	src/auth/passdb.c
+M	src/auth/password-scheme-crypt.c
+M	src/auth/password-scheme-pbkdf2.c
+M	src/auth/password-scheme-rpa.c
+M	src/auth/password-scheme-sodium.c
+M	src/auth/password-scheme.c
+M	src/auth/test-auth-cache.c
+M	src/auth/test-auth-request-var-expand.c
+M	src/auth/test-auth.h
+M	src/auth/test-db-dict.c
+M	src/auth/test-libpassword.c
+M	src/auth/test-lua.c
+M	src/auth/test-main.c
+M	src/auth/test-mock.c
+M	src/auth/test-username-filter.c
+M	src/auth/userdb-blocking.c
+M	src/auth/userdb-checkpassword.c
+M	src/auth/userdb-dict.c
+M	src/auth/userdb-ldap.c
+M	src/auth/userdb-lua.c
+M	src/auth/userdb-passwd-file.c
+M	src/auth/userdb-passwd.c
+M	src/auth/userdb-prefetch.c
+M	src/auth/userdb-sql.c
+M	src/auth/userdb-static.c
+M	src/auth/userdb-template.c
+M	src/auth/userdb-vpopmail.c
+M	src/auth/userdb.c
+M	src/config/config-connection.c
+M	src/config/config-filter.c
+M	src/config/config-parser.c
+M	src/config/config-request.c
+M	src/config/config-settings.c
+M	src/config/doveconf.c
+M	src/config/main.c
+M	src/config/old-set-parser.c
+M	src/config/sysinfo-get.c
+M	src/dict/dict-commands.c
+M	src/dict/dict-connection.c
+M	src/dict/dict-settings.c
+M	src/dict/main.c
+M	src/director/auth-connection.c
+M	src/director/director-connection.c
+M	src/director/director-host.c
+M	src/director/director-request.c
+M	src/director/director-settings.c
+M	src/director/director-test.c
+M	src/director/director.c
+M	src/director/doveadm-connection.c
+M	src/director/login-connection.c
+M	src/director/mail-host.c
+M	src/director/main.c
+M	src/director/notify-connection.c
+M	src/director/test-user-directory.c
+M	src/director/user-directory.c
+M	src/dns/dns-client-settings.c
+M	src/dns/dns-client.c
+M	src/doveadm/client-connection-http.c
+M	src/doveadm/client-connection-tcp.c
+M	src/doveadm/client-connection.c
+M	src/doveadm/doveadm-auth-server.c
+M	src/doveadm/doveadm-auth.c
+M	src/doveadm/doveadm-dict.c
+M	src/doveadm/doveadm-director.c
+M	src/doveadm/doveadm-dsync.c
+M	src/doveadm/doveadm-dump-dbox.c
+M	src/doveadm/doveadm-dump-dcrypt-file.c
+M	src/doveadm/doveadm-dump-dcrypt-key.c
+M	src/doveadm/doveadm-dump-index.c
+M	src/doveadm/doveadm-dump-log.c
+M	src/doveadm/doveadm-dump-mailboxlog.c
+M	src/doveadm/doveadm-dump-thread.c
+M	src/doveadm/doveadm-dump.c
+M	src/doveadm/doveadm-fs.c
+M	src/doveadm/doveadm-instance.c
+M	src/doveadm/doveadm-kick.c
+M	src/doveadm/doveadm-log.c
+M	src/doveadm/doveadm-mail-altmove.c
+M	src/doveadm/doveadm-mail-batch.c
+M	src/doveadm/doveadm-mail-copymove.c
+M	src/doveadm/doveadm-mail-deduplicate.c
+M	src/doveadm/doveadm-mail-expunge.c
+M	src/doveadm/doveadm-mail-fetch.c
+M	src/doveadm/doveadm-mail-flags.c
+M	src/doveadm/doveadm-mail-import.c
+M	src/doveadm/doveadm-mail-index.c
+M	src/doveadm/doveadm-mail-iter.c
+M	src/doveadm/doveadm-mail-mailbox-metadata.c
+M	src/doveadm/doveadm-mail-mailbox-status.c
+M	src/doveadm/doveadm-mail-mailbox.c
+M	src/doveadm/doveadm-mail-save.c
+M	src/doveadm/doveadm-mail-search.c
+M	src/doveadm/doveadm-mail-server.c
+M	src/doveadm/doveadm-mail.c
+M	src/doveadm/doveadm-mailbox-list-iter.c
+M	src/doveadm/doveadm-master.c
+M	src/doveadm/doveadm-mutf7.c
+M	src/doveadm/doveadm-oldstats.c
+M	src/doveadm/doveadm-penalty.c
+M	src/doveadm/doveadm-print-flow.c
+M	src/doveadm/doveadm-print-formatted.c
+M	src/doveadm/doveadm-print-json.c
+M	src/doveadm/doveadm-print-pager.c
+M	src/doveadm/doveadm-print-server.c
+M	src/doveadm/doveadm-print-tab.c
+M	src/doveadm/doveadm-print-table.c
+M	src/doveadm/doveadm-print.c
+M	src/doveadm/doveadm-proxy.c
+M	src/doveadm/doveadm-pw.c
+M	src/doveadm/doveadm-replicator.c
+M	src/doveadm/doveadm-settings.c
+M	src/doveadm/doveadm-sis.c
+M	src/doveadm/doveadm-stats.c
+M	src/doveadm/doveadm-util.c
+M	src/doveadm/doveadm-who.c
+M	src/doveadm/doveadm-zlib.c
+M	src/doveadm/doveadm.c
+M	src/doveadm/dsync/dsync-brain-mailbox-tree-sync.c
+M	src/doveadm/dsync/dsync-brain-mailbox-tree.c
+M	src/doveadm/dsync/dsync-brain-mailbox.c
+M	src/doveadm/dsync/dsync-brain-mails.c
+M	src/doveadm/dsync/dsync-brain.c
+M	src/doveadm/dsync/dsync-deserializer.c
+M	src/doveadm/dsync/dsync-ibc-pipe.c
+M	src/doveadm/dsync/dsync-ibc-stream.c
+M	src/doveadm/dsync/dsync-ibc.c
+M	src/doveadm/dsync/dsync-mail.c
+M	src/doveadm/dsync/dsync-mailbox-export.c
+M	src/doveadm/dsync/dsync-mailbox-import.c
+M	src/doveadm/dsync/dsync-mailbox-state.c
+M	src/doveadm/dsync/dsync-mailbox-tree-fill.c
+M	src/doveadm/dsync/dsync-mailbox-tree-sync.c
+M	src/doveadm/dsync/dsync-mailbox-tree.c
+M	src/doveadm/dsync/dsync-mailbox.c
+M	src/doveadm/dsync/dsync-serializer.c
+M	src/doveadm/dsync/dsync-transaction-log-scan.c
+M	src/doveadm/dsync/test-dsync-mailbox-tree-sync.c
+M	src/doveadm/main.c
+M	src/doveadm/server-connection.c
+M	src/doveadm/test-doveadm-util.c
+M	src/imap-hibernate/imap-client.c
+M	src/imap-hibernate/imap-hibernate-client.c
+M	src/imap-hibernate/imap-hibernate-settings.c
+M	src/imap-hibernate/imap-master-connection.c
+M	src/imap-hibernate/main.c
+M	src/imap-login/client-authenticate.c
+M	src/imap-login/imap-login-client.c
+M	src/imap-login/imap-login-commands.c
+M	src/imap-login/imap-login-settings.c
+M	src/imap-login/imap-proxy.c
+M	src/imap-urlauth/imap-urlauth-client.c
+M	src/imap-urlauth/imap-urlauth-login-settings.c
+M	src/imap-urlauth/imap-urlauth-login.c
+M	src/imap-urlauth/imap-urlauth-settings.c
+M	src/imap-urlauth/imap-urlauth-worker-settings.c
+M	src/imap-urlauth/imap-urlauth-worker.c
+M	src/imap-urlauth/imap-urlauth.c
+M	src/imap/cmd-append.c
+M	src/imap/cmd-cancelupdate.c
+M	src/imap/cmd-capability.c
+M	src/imap/cmd-check.c
+M	src/imap/cmd-close.c
+M	src/imap/cmd-copy.c
+M	src/imap/cmd-create.c
+M	src/imap/cmd-delete.c
+M	src/imap/cmd-enable.c
+M	src/imap/cmd-examine.c
+M	src/imap/cmd-expunge.c
+M	src/imap/cmd-fetch.c
+M	src/imap/cmd-genurlauth.c
+M	src/imap/cmd-getmetadata.c
+M	src/imap/cmd-id.c
+M	src/imap/cmd-idle.c
+M	src/imap/cmd-list.c
+M	src/imap/cmd-logout.c
+M	src/imap/cmd-lsub.c
+M	src/imap/cmd-namespace.c
+M	src/imap/cmd-noop.c
+M	src/imap/cmd-notify.c
+M	src/imap/cmd-rename.c
+M	src/imap/cmd-resetkey.c
+M	src/imap/cmd-search.c
+M	src/imap/cmd-select.c
+M	src/imap/cmd-setmetadata.c
+M	src/imap/cmd-sort.c
+M	src/imap/cmd-status.c
+M	src/imap/cmd-store.c
+M	src/imap/cmd-subscribe.c
+M	src/imap/cmd-thread.c
+M	src/imap/cmd-unselect.c
+M	src/imap/cmd-unsubscribe.c
+M	src/imap/cmd-urlfetch.c
+M	src/imap/cmd-x-cancel.c
+M	src/imap/cmd-x-state.c
+M	src/imap/imap-client-hibernate.c
+M	src/imap/imap-client.c
+M	src/imap/imap-commands-util.c
+M	src/imap/imap-commands.c
+M	src/imap/imap-expunge.c
+M	src/imap/imap-fetch-body.c
+M	src/imap/imap-fetch.c
+M	src/imap/imap-list.c
+M	src/imap/imap-master-client.c
+M	src/imap/imap-notify.c
+M	src/imap/imap-search-args.c
+M	src/imap/imap-search.c
+M	src/imap/imap-settings.c
+M	src/imap/imap-state.c
+M	src/imap/imap-status.c
+M	src/imap/imap-sync.c
+M	src/imap/mail-storage-callbacks.c
+M	src/imap/main.c
+M	src/indexer/indexer-client.c
+M	src/indexer/indexer-queue.c
+M	src/indexer/indexer-settings.c
+M	src/indexer/indexer-worker-settings.c
+M	src/indexer/indexer-worker.c
+M	src/indexer/indexer.c
+M	src/indexer/master-connection.c
+M	src/indexer/worker-connection.c
+M	src/indexer/worker-pool.c
+M	src/ipc/client.c
+M	src/ipc/ipc-connection.c
+M	src/ipc/ipc-group.c
+M	src/ipc/ipc-settings.c
+M	src/ipc/main.c
+M	src/lda/main.c
+M	src/lib-auth/auth-client-request.c
+M	src/lib-auth/auth-client.c
+M	src/lib-auth/auth-master.c
+M	src/lib-auth/auth-server-connection.c
+M	src/lib-charset/charset-iconv.c
+M	src/lib-charset/charset-utf8-only.c
+M	src/lib-charset/charset-utf8.c
+M	src/lib-charset/test-charset.c
+M	src/lib-compression/compression.c
+M	src/lib-compression/istream-bzlib.c
+M	src/lib-compression/istream-lz4.c
+M	src/lib-compression/istream-lzma.c
+M	src/lib-compression/istream-zlib.c
+M	src/lib-compression/ostream-bzlib.c
+M	src/lib-compression/ostream-lz4.c
+M	src/lib-compression/ostream-lzma.c
+M	src/lib-compression/ostream-zlib.c
+M	src/lib-compression/test-compression.c
+M	src/lib-dcrypt/dcrypt-gnutls.c
+M	src/lib-dcrypt/dcrypt-openssl.c
+M	src/lib-dcrypt/dcrypt.c
+M	src/lib-dcrypt/istream-decrypt.c
+M	src/lib-dcrypt/test-crypto.c
+M	src/lib-dcrypt/test-stream.c
+M	src/lib-dict-backend/dict-cdb.c
+M	src/lib-dict-backend/dict-db.c
+M	src/lib-dict-backend/dict-ldap-settings.c
+M	src/lib-dict-backend/dict-ldap.c
+M	src/lib-dict-backend/dict-sql-settings.c
+M	src/lib-dict-backend/dict-sql.c
+M	src/lib-dict-backend/test-dict-sql.c
+M	src/lib-dict-extra/dict-fs.c
+M	src/lib-dict-extra/dict-register.c
+M	src/lib-dict/dict-client.c
+M	src/lib-dict/dict-fail.c
+M	src/lib-dict/dict-file.c
+M	src/lib-dict/dict-memcached-ascii.c
+M	src/lib-dict/dict-memcached.c
+M	src/lib-dict/dict-redis.c
+M	src/lib-dict/dict-transaction-memory.c
+M	src/lib-dict/dict.c
+M	src/lib-dict/test-dict-client.c
+M	src/lib-dict/test-dict.c
+M	src/lib-dns/dns-lookup.c
+M	src/lib-dns/dns-util.c
+M	src/lib-dns/test-dns-util.c
+M	src/lib-fs/fs-api.c
+M	src/lib-fs/fs-dict.c
+M	src/lib-fs/fs-metawrap.c
+M	src/lib-fs/fs-posix.c
+M	src/lib-fs/fs-randomfail.c
+M	src/lib-fs/fs-sis-common.c
+M	src/lib-fs/fs-sis-queue.c
+M	src/lib-fs/fs-sis.c
+M	src/lib-fs/fs-test-async.c
+M	src/lib-fs/fs-test.c
+M	src/lib-fs/fs-wrapper.c
+M	src/lib-fs/istream-fs-file.c
+M	src/lib-fs/istream-fs-stats.c
+M	src/lib-fs/istream-metawrap.c
+M	src/lib-fs/ostream-cmp.c
+M	src/lib-fs/ostream-metawrap.c
+M	src/lib-fs/test-fs-metawrap.c
+M	src/lib-fs/test-fs-posix.c
+M	src/lib-fts/fts-filter-common.c
+M	src/lib-fts/fts-filter-contractions.c
+M	src/lib-fts/fts-filter-english-possessive.c
+M	src/lib-fts/fts-filter-lowercase.c
+M	src/lib-fts/fts-filter-normalizer-icu.c
+M	src/lib-fts/fts-filter-stemmer-snowball.c
+M	src/lib-fts/fts-filter-stopwords.c
+M	src/lib-fts/fts-filter.c
+M	src/lib-fts/fts-icu.c
+M	src/lib-fts/fts-language.c
+M	src/lib-fts/fts-library.c
+M	src/lib-fts/fts-tokenizer-address.c
+M	src/lib-fts/fts-tokenizer-common.c
+M	src/lib-fts/fts-tokenizer-generic.c
+M	src/lib-fts/fts-tokenizer.c
+M	src/lib-fts/test-fts-filter.c
+M	src/lib-fts/test-fts-icu.c
+M	src/lib-fts/test-fts-language.c
+M	src/lib-fts/test-fts-tokenizer.c
+M	src/lib-http/http-auth.c
+M	src/lib-http/http-client-connection.c
+M	src/lib-http/http-client-host.c
+M	src/lib-http/http-client-peer.c
+M	src/lib-http/http-client-queue.c
+M	src/lib-http/http-client-request.c
+M	src/lib-http/http-client.c
+M	src/lib-http/http-date.c
+M	src/lib-http/http-header-parser.c
+M	src/lib-http/http-header.c
+M	src/lib-http/http-message-parser.c
+M	src/lib-http/http-parser.c
+M	src/lib-http/http-request-parser.c
+M	src/lib-http/http-request.c
+M	src/lib-http/http-response-parser.c
+M	src/lib-http/http-response.c
+M	src/lib-http/http-server-connection.c
+M	src/lib-http/http-server-request.c
+M	src/lib-http/http-server-response.c
+M	src/lib-http/http-server.c
+M	src/lib-http/http-transfer-chunked.c
+M	src/lib-http/http-url.c
+M	src/lib-http/test-http-auth.c
+M	src/lib-http/test-http-client-errors.c
+M	src/lib-http/test-http-client.c
+M	src/lib-http/test-http-date.c
+M	src/lib-http/test-http-header-parser.c
+M	src/lib-http/test-http-payload.c
+M	src/lib-http/test-http-request-parser.c
+M	src/lib-http/test-http-response-parser.c
+M	src/lib-http/test-http-server-errors.c
+M	src/lib-http/test-http-server.c
+M	src/lib-http/test-http-transfer.c
+M	src/lib-http/test-http-url.c
+M	src/lib-imap-client/imapc-client.c
+M	src/lib-imap-client/imapc-connection.c
+M	src/lib-imap-client/imapc-msgmap.c
+M	src/lib-imap-client/test-imapc-client.c
+M	src/lib-imap-storage/imap-metadata.c
+M	src/lib-imap-storage/imap-msgpart-url.c
+M	src/lib-imap-storage/imap-msgpart.c
+M	src/lib-imap-urlauth/imap-urlauth-backend.c
+M	src/lib-imap-urlauth/imap-urlauth-connection.c
+M	src/lib-imap-urlauth/imap-urlauth-fetch.c
+M	src/lib-imap-urlauth/imap-urlauth.c
+M	src/lib-imap/imap-arg.c
+M	src/lib-imap/imap-base-subject.c
+M	src/lib-imap/imap-bodystructure.c
+M	src/lib-imap/imap-date.c
+M	src/lib-imap/imap-envelope.c
+M	src/lib-imap/imap-id.c
+M	src/lib-imap/imap-keepalive.c
+M	src/lib-imap/imap-match.c
+M	src/lib-imap/imap-parser.c
+M	src/lib-imap/imap-quote.c
+M	src/lib-imap/imap-seqset.c
+M	src/lib-imap/imap-url.c
+M	src/lib-imap/imap-utf7.c
+M	src/lib-imap/imap-util.c
+M	src/lib-imap/test-imap-bodystructure.c
+M	src/lib-imap/test-imap-envelope.c
+M	src/lib-imap/test-imap-match.c
+M	src/lib-imap/test-imap-parser.c
+M	src/lib-imap/test-imap-quote.c
+M	src/lib-imap/test-imap-url.c
+M	src/lib-imap/test-imap-utf7.c
+M	src/lib-imap/test-imap-util.c
+M	src/lib-index/mail-cache-compress.c
+M	src/lib-index/mail-cache-decisions.c
+M	src/lib-index/mail-cache-fields.c
+M	src/lib-index/mail-cache-lookup.c
+M	src/lib-index/mail-cache-sync-update.c
+M	src/lib-index/mail-cache-transaction.c
+M	src/lib-index/mail-cache.c
+M	src/lib-index/mail-index-alloc-cache.c
+M	src/lib-index/mail-index-dummy-view.c
+M	src/lib-index/mail-index-fsck.c
+M	src/lib-index/mail-index-lock.c
+M	src/lib-index/mail-index-map-hdr.c
+M	src/lib-index/mail-index-map-read.c
+M	src/lib-index/mail-index-map.c
+M	src/lib-index/mail-index-modseq.c
+M	src/lib-index/mail-index-strmap.c
+M	src/lib-index/mail-index-sync-ext.c
+M	src/lib-index/mail-index-sync-keywords.c
+M	src/lib-index/mail-index-sync-update.c
+M	src/lib-index/mail-index-sync.c
+M	src/lib-index/mail-index-transaction-export.c
+M	src/lib-index/mail-index-transaction-finish.c
+M	src/lib-index/mail-index-transaction-sort-appends.c
+M	src/lib-index/mail-index-transaction-update.c
+M	src/lib-index/mail-index-transaction-view.c
+M	src/lib-index/mail-index-transaction.c
+M	src/lib-index/mail-index-util.c
+M	src/lib-index/mail-index-view-sync.c
+M	src/lib-index/mail-index-view.c
+M	src/lib-index/mail-index-write.c
+M	src/lib-index/mail-index.c
+M	src/lib-index/mail-transaction-log-append.c
+M	src/lib-index/mail-transaction-log-file.c
+M	src/lib-index/mail-transaction-log-view.c
+M	src/lib-index/mail-transaction-log.c
+M	src/lib-index/mailbox-log.c
+M	src/lib-index/test-mail-index-map.c
+M	src/lib-index/test-mail-index-modseq.c
+M	src/lib-index/test-mail-index-sync-ext.c
+M	src/lib-index/test-mail-index-transaction-finish.c
+M	src/lib-index/test-mail-index-transaction-update.c
+M	src/lib-index/test-mail-transaction-log-append.c
+M	src/lib-index/test-mail-transaction-log-file.c
+M	src/lib-index/test-mail-transaction-log-view.c
+M	src/lib-lda/lda-settings.c
+M	src/lib-lda/mail-deliver.c
+M	src/lib-lda/mail-send.c
+M	src/lib-ldap/ldap-client.c
+M	src/lib-ldap/ldap-compare.c
+M	src/lib-ldap/ldap-connection-pool.c
+M	src/lib-ldap/ldap-connection.c
+M	src/lib-ldap/ldap-entry.c
+M	src/lib-ldap/ldap-iterator.c
+M	src/lib-ldap/ldap-search.c
+M	src/lib-lua/dlua-compat.c
+M	src/lib-lua/dlua-dovecot.c
+M	src/lib-lua/dlua-script.c
+M	src/lib-lua/test-lua.c
+M	src/lib-mail/istream-attachment-connector.c
+M	src/lib-mail/istream-attachment-extractor.c
+M	src/lib-mail/istream-binary-converter.c
+M	src/lib-mail/istream-dot.c
+M	src/lib-mail/istream-header-filter.c
+M	src/lib-mail/istream-nonuls.c
+M	src/lib-mail/istream-qp-decoder.c
+M	src/lib-mail/istream-qp-encoder.c
+M	src/lib-mail/mail-html2text.c
+M	src/lib-mail/mail-user-hash.c
+M	src/lib-mail/mbox-from.c
+M	src/lib-mail/message-address.c
+M	src/lib-mail/message-binary-part.c
+M	src/lib-mail/message-date.c
+M	src/lib-mail/message-decoder.c
+M	src/lib-mail/message-header-decode.c
+M	src/lib-mail/message-header-encode.c
+M	src/lib-mail/message-header-hash.c
+M	src/lib-mail/message-header-parser.c
+M	src/lib-mail/message-id.c
+M	src/lib-mail/message-parser.c
+M	src/lib-mail/message-part-data.c
+M	src/lib-mail/message-part-serialize.c
+M	src/lib-mail/message-part.c
+M	src/lib-mail/message-search.c
+M	src/lib-mail/message-size.c
+M	src/lib-mail/message-snippet.c
+M	src/lib-mail/ostream-dot.c
+M	src/lib-mail/qp-decoder.c
+M	src/lib-mail/qp-encoder.c
+M	src/lib-mail/quoted-printable.c
+M	src/lib-mail/rfc2231-parser.c
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/test-istream-attachment.c
+M	src/lib-mail/test-istream-binary-converter.c
+M	src/lib-mail/test-istream-dot.c
+M	src/lib-mail/test-istream-header-filter.c
+M	src/lib-mail/test-istream-qp-decoder.c
+M	src/lib-mail/test-istream-qp-encoder.c
+M	src/lib-mail/test-mail-html2text.c
+M	src/lib-mail/test-mbox-from.c
+M	src/lib-mail/test-message-address.c
+M	src/lib-mail/test-message-date.c
+M	src/lib-mail/test-message-decoder.c
+M	src/lib-mail/test-message-header-decode.c
+M	src/lib-mail/test-message-header-encode.c
+M	src/lib-mail/test-message-header-hash.c
+M	src/lib-mail/test-message-header-parser.c
+M	src/lib-mail/test-message-id.c
+M	src/lib-mail/test-message-parser.c
+M	src/lib-mail/test-message-part.c
+M	src/lib-mail/test-message-search.c
+M	src/lib-mail/test-message-snippet.c
+M	src/lib-mail/test-ostream-dot.c
+M	src/lib-mail/test-qp-decoder.c
+M	src/lib-mail/test-qp-encoder.c
+M	src/lib-mail/test-quoted-printable.c
+M	src/lib-mail/test-rfc2231-parser.c
+M	src/lib-mail/test-rfc822-parser.c
+M	src/lib-master/anvil-client.c
+M	src/lib-master/ipc-client.c
+M	src/lib-master/ipc-server.c
+M	src/lib-master/master-auth.c
+M	src/lib-master/master-instance.c
+M	src/lib-master/master-login-auth.c
+M	src/lib-master/master-login.c
+M	src/lib-master/master-service-haproxy.c
+M	src/lib-master/master-service-settings-cache.c
+M	src/lib-master/master-service-settings.c
+M	src/lib-master/master-service-ssl-settings.c
+M	src/lib-master/master-service-ssl.c
+M	src/lib-master/master-service.c
+M	src/lib-master/stats-client.c
+M	src/lib-master/syslog-util.c
+M	src/lib-master/test-master-service-settings-cache.c
+M	src/lib-oauth2/oauth2-introspect.c
+M	src/lib-oauth2/oauth2-private.h
+M	src/lib-oauth2/oauth2-refresh.c
+M	src/lib-oauth2/oauth2-token-validate.c
+M	src/lib-oauth2/oauth2.c
+M	src/lib-oauth2/oauth2.h
+M	src/lib-old-stats/stats-connection.c
+M	src/lib-old-stats/stats-parser.c
+M	src/lib-old-stats/stats.c
+M	src/lib-program-client/program-client-local.c
+M	src/lib-program-client/program-client-private.h
+M	src/lib-program-client/program-client-remote.c
+M	src/lib-program-client/program-client.c
+M	src/lib-program-client/program-client.h
+M	src/lib-program-client/test-program-client-local.c
+M	src/lib-program-client/test-program-client-net.c
+M	src/lib-program-client/test-program-client-unix.c
+M	src/lib-sasl/dsasl-client.c
+M	src/lib-sasl/mech-external.c
+M	src/lib-sasl/mech-login.c
+M	src/lib-sasl/mech-oauthbearer.c
+M	src/lib-sasl/mech-plain.c
+M	src/lib-settings/settings-parser.c
+M	src/lib-settings/settings.c
+M	src/lib-settings/test-settings-parser.c
+M	src/lib-smtp/smtp-address.c
+M	src/lib-smtp/smtp-client-command.c
+M	src/lib-smtp/smtp-client-connection.c
+M	src/lib-smtp/smtp-client-transaction.c
+M	src/lib-smtp/smtp-client.c
+M	src/lib-smtp/smtp-command-parser.c
+M	src/lib-smtp/smtp-common.c
+M	src/lib-smtp/smtp-params.c
+M	src/lib-smtp/smtp-parser.c
+M	src/lib-smtp/smtp-reply-parser.c
+M	src/lib-smtp/smtp-reply.c
+M	src/lib-smtp/smtp-server-cmd-auth.c
+M	src/lib-smtp/smtp-server-cmd-data.c
+M	src/lib-smtp/smtp-server-cmd-helo.c
+M	src/lib-smtp/smtp-server-cmd-mail.c
+M	src/lib-smtp/smtp-server-cmd-noop.c
+M	src/lib-smtp/smtp-server-cmd-quit.c
+M	src/lib-smtp/smtp-server-cmd-rcpt.c
+M	src/lib-smtp/smtp-server-cmd-rset.c
+M	src/lib-smtp/smtp-server-cmd-starttls.c
+M	src/lib-smtp/smtp-server-cmd-vrfy.c
+M	src/lib-smtp/smtp-server-cmd-xclient.c
+M	src/lib-smtp/smtp-server-command.c
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server-reply.c
+M	src/lib-smtp/smtp-server-transaction.c
+M	src/lib-smtp/smtp-server.c
+M	src/lib-smtp/smtp-submit-settings.c
+M	src/lib-smtp/smtp-submit.c
+M	src/lib-smtp/smtp-syntax.c
+M	src/lib-smtp/test-smtp-address.c
+M	src/lib-smtp/test-smtp-client-errors.c
+M	src/lib-smtp/test-smtp-command-parser.c
+M	src/lib-smtp/test-smtp-params.c
+M	src/lib-smtp/test-smtp-payload.c
+M	src/lib-smtp/test-smtp-reply-parser.c
+M	src/lib-smtp/test-smtp-server-errors.c
+M	src/lib-smtp/test-smtp-submit.c
+M	src/lib-sql/driver-cassandra.c
+M	src/lib-sql/driver-mysql.c
+M	src/lib-sql/driver-pgsql.c
+M	src/lib-sql/driver-sqlite.c
+M	src/lib-sql/driver-sqlpool.c
+M	src/lib-sql/driver-test.c
+M	src/lib-sql/sql-api.c
+M	src/lib-sql/sql-db-cache.c
+M	src/lib-ssl-iostream/dovecot-openssl-common.c
+M	src/lib-ssl-iostream/iostream-openssl-common.c
+M	src/lib-ssl-iostream/iostream-openssl-context.c
+M	src/lib-ssl-iostream/iostream-openssl.c
+M	src/lib-ssl-iostream/iostream-ssl-context-cache.c
+M	src/lib-ssl-iostream/iostream-ssl.c
+M	src/lib-ssl-iostream/istream-openssl.c
+M	src/lib-ssl-iostream/ostream-openssl.c
+M	src/lib-storage/fail-mail-storage.c
+M	src/lib-storage/fail-mail.c
+M	src/lib-storage/fail-mailbox.c
+M	src/lib-storage/index/cydir/cydir-mail.c
+M	src/lib-storage/index/cydir/cydir-save.c
+M	src/lib-storage/index/cydir/cydir-storage.c
+M	src/lib-storage/index/cydir/cydir-sync.c
+M	src/lib-storage/index/dbox-common/dbox-attachment.c
+M	src/lib-storage/index/dbox-common/dbox-file-fix.c
+M	src/lib-storage/index/dbox-common/dbox-file.c
+M	src/lib-storage/index/dbox-common/dbox-mail.c
+M	src/lib-storage/index/dbox-common/dbox-save.c
+M	src/lib-storage/index/dbox-common/dbox-storage.c
+M	src/lib-storage/index/dbox-multi/mdbox-deleted-storage.c
+M	src/lib-storage/index/dbox-multi/mdbox-file.c
+M	src/lib-storage/index/dbox-multi/mdbox-mail.c
+M	src/lib-storage/index/dbox-multi/mdbox-map.c
+M	src/lib-storage/index/dbox-multi/mdbox-purge.c
+M	src/lib-storage/index/dbox-multi/mdbox-save.c
+M	src/lib-storage/index/dbox-multi/mdbox-settings.c
+M	src/lib-storage/index/dbox-multi/mdbox-storage-rebuild.c
+M	src/lib-storage/index/dbox-multi/mdbox-storage.c
+M	src/lib-storage/index/dbox-multi/mdbox-sync.c
+M	src/lib-storage/index/dbox-single/sdbox-copy.c
+M	src/lib-storage/index/dbox-single/sdbox-file.c
+M	src/lib-storage/index/dbox-single/sdbox-mail.c
+M	src/lib-storage/index/dbox-single/sdbox-save.c
+M	src/lib-storage/index/dbox-single/sdbox-storage.c
+M	src/lib-storage/index/dbox-single/sdbox-sync-rebuild.c
+M	src/lib-storage/index/dbox-single/sdbox-sync.c
+M	src/lib-storage/index/imapc/imapc-list.c
+M	src/lib-storage/index/imapc/imapc-mail-fetch.c
+M	src/lib-storage/index/imapc/imapc-mail.c
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+M	src/lib-storage/index/imapc/imapc-save.c
+M	src/lib-storage/index/imapc/imapc-search.c
+M	src/lib-storage/index/imapc/imapc-settings.c
+M	src/lib-storage/index/imapc/imapc-storage.c
+M	src/lib-storage/index/imapc/imapc-sync.c
+M	src/lib-storage/index/index-attachment.c
+M	src/lib-storage/index/index-attribute.c
+M	src/lib-storage/index/index-mail-binary.c
+M	src/lib-storage/index/index-mail-headers.c
+M	src/lib-storage/index/index-mail.c
+M	src/lib-storage/index/index-mailbox-size.c
+M	src/lib-storage/index/index-pop3-uidl.c
+M	src/lib-storage/index/index-rebuild.c
+M	src/lib-storage/index/index-search-mime.c
+M	src/lib-storage/index/index-search-result.c
+M	src/lib-storage/index/index-search.c
+M	src/lib-storage/index/index-sort-string.c
+M	src/lib-storage/index/index-sort.c
+M	src/lib-storage/index/index-status.c
+M	src/lib-storage/index/index-storage.c
+M	src/lib-storage/index/index-sync-changes.c
+M	src/lib-storage/index/index-sync-pvt.c
+M	src/lib-storage/index/index-sync-search.c
+M	src/lib-storage/index/index-sync.c
+M	src/lib-storage/index/index-thread-finish.c
+M	src/lib-storage/index/index-thread-links.c
+M	src/lib-storage/index/index-thread.c
+M	src/lib-storage/index/index-transaction.c
+M	src/lib-storage/index/istream-mail.c
+M	src/lib-storage/index/maildir/maildir-copy.c
+M	src/lib-storage/index/maildir/maildir-filename-flags.c
+M	src/lib-storage/index/maildir/maildir-filename.c
+M	src/lib-storage/index/maildir/maildir-keywords.c
+M	src/lib-storage/index/maildir/maildir-mail.c
+M	src/lib-storage/index/maildir/maildir-save.c
+M	src/lib-storage/index/maildir/maildir-settings.c
+M	src/lib-storage/index/maildir/maildir-storage.c
+M	src/lib-storage/index/maildir/maildir-sync-index.c
+M	src/lib-storage/index/maildir/maildir-sync.c
+M	src/lib-storage/index/maildir/maildir-uidlist.c
+M	src/lib-storage/index/maildir/maildir-util.c
+M	src/lib-storage/index/mbox/istream-raw-mbox.c
+M	src/lib-storage/index/mbox/mbox-file.c
+M	src/lib-storage/index/mbox/mbox-lock.c
+M	src/lib-storage/index/mbox/mbox-mail.c
+M	src/lib-storage/index/mbox/mbox-md5-all.c
+M	src/lib-storage/index/mbox/mbox-md5-apop3d.c
+M	src/lib-storage/index/mbox/mbox-save.c
+M	src/lib-storage/index/mbox/mbox-settings.c
+M	src/lib-storage/index/mbox/mbox-storage.c
+M	src/lib-storage/index/mbox/mbox-sync-list-index.c
+M	src/lib-storage/index/mbox/mbox-sync-parse.c
+M	src/lib-storage/index/mbox/mbox-sync-rewrite.c
+M	src/lib-storage/index/mbox/mbox-sync-update.c
+M	src/lib-storage/index/mbox/mbox-sync.c
+M	src/lib-storage/index/pop3c/pop3c-client.c
+M	src/lib-storage/index/pop3c/pop3c-mail.c
+M	src/lib-storage/index/pop3c/pop3c-settings.c
+M	src/lib-storage/index/pop3c/pop3c-storage.c
+M	src/lib-storage/index/pop3c/pop3c-sync.c
+M	src/lib-storage/index/raw/raw-mail.c
+M	src/lib-storage/index/raw/raw-storage.c
+M	src/lib-storage/index/raw/raw-sync.c
+M	src/lib-storage/index/shared/shared-list.c
+M	src/lib-storage/index/shared/shared-storage.c
+M	src/lib-storage/list/mailbox-list-delete.c
+M	src/lib-storage/list/mailbox-list-fs-flags.c
+M	src/lib-storage/list/mailbox-list-fs-iter.c
+M	src/lib-storage/list/mailbox-list-fs.c
+M	src/lib-storage/list/mailbox-list-index-backend.c
+M	src/lib-storage/list/mailbox-list-index-iter.c
+M	src/lib-storage/list/mailbox-list-index-notify.c
+M	src/lib-storage/list/mailbox-list-index-status.c
+M	src/lib-storage/list/mailbox-list-index-sync.c
+M	src/lib-storage/list/mailbox-list-index.c
+M	src/lib-storage/list/mailbox-list-iter.c
+M	src/lib-storage/list/mailbox-list-maildir-iter.c
+M	src/lib-storage/list/mailbox-list-maildir.c
+M	src/lib-storage/list/mailbox-list-none.c
+M	src/lib-storage/list/mailbox-list-notify-tree.c
+M	src/lib-storage/list/mailbox-list-subscriptions.c
+M	src/lib-storage/list/subscription-file.c
+M	src/lib-storage/mail-autoexpunge.c
+M	src/lib-storage/mail-copy.c
+M	src/lib-storage/mail-duplicate.c
+M	src/lib-storage/mail-error.c
+M	src/lib-storage/mail-namespace.c
+M	src/lib-storage/mail-search-args-cmdline.c
+M	src/lib-storage/mail-search-args-imap.c
+M	src/lib-storage/mail-search-args-simplify.c
+M	src/lib-storage/mail-search-build.c
+M	src/lib-storage/mail-search-mime-build.c
+M	src/lib-storage/mail-search-mime-register.c
+M	src/lib-storage/mail-search-mime.c
+M	src/lib-storage/mail-search-parser-cmdline.c
+M	src/lib-storage/mail-search-parser-imap.c
+M	src/lib-storage/mail-search-parser.c
+M	src/lib-storage/mail-search-register-human.c
+M	src/lib-storage/mail-search-register-imap.c
+M	src/lib-storage/mail-search-register.c
+M	src/lib-storage/mail-search.c
+M	src/lib-storage/mail-storage-hooks.c
+M	src/lib-storage/mail-storage-register.c
+M	src/lib-storage/mail-storage-service.c
+M	src/lib-storage/mail-storage-settings.c
+M	src/lib-storage/mail-storage.c
+M	src/lib-storage/mail-thread.c
+M	src/lib-storage/mail-user.c
+M	src/lib-storage/mail.c
+M	src/lib-storage/mailbox-attribute-internal.c
+M	src/lib-storage/mailbox-attribute.c
+M	src/lib-storage/mailbox-get.c
+M	src/lib-storage/mailbox-guid-cache.c
+M	src/lib-storage/mailbox-header.c
+M	src/lib-storage/mailbox-keywords.c
+M	src/lib-storage/mailbox-list-notify.c
+M	src/lib-storage/mailbox-list-register.c
+M	src/lib-storage/mailbox-list.c
+M	src/lib-storage/mailbox-recent-flags.c
+M	src/lib-storage/mailbox-search-result.c
+M	src/lib-storage/mailbox-tree.c
+M	src/lib-storage/mailbox-uidvalidity.c
+M	src/lib-storage/mailbox-watch.c
+M	src/lib-storage/test-mail-search-args-imap.c
+M	src/lib-storage/test-mail-search-args-simplify.c
+M	src/lib-storage/test-mail-storage.c
+M	src/lib-storage/test-mailbox-get.c
+M	src/lib-test/test-common.c
+M	src/lib-test/test-istream.c
+M	src/lib-test/test-ostream.c
+M	src/lib/aqueue.c
+M	src/lib/array.c
+M	src/lib/askpass.c
+M	src/lib/backtrace-string.c
+M	src/lib/base32.c
+M	src/lib/base64.c
+M	src/lib/bits.c
+M	src/lib/bloomfilter.c
+M	src/lib/bsearch-insert-pos.c
+M	src/lib/buffer.c
+M	src/lib/child-wait.c
+M	src/lib/compat.c
+M	src/lib/connection.c
+M	src/lib/crc32.c
+M	src/lib/data-stack.c
+M	src/lib/eacces-error.c
+M	src/lib/env-util.c
+M	src/lib/event-filter.c
+M	src/lib/event-log.c
+M	src/lib/execv-const.c
+M	src/lib/failures.c
+M	src/lib/fd-util.c
+M	src/lib/fdatasync-path.c
+M	src/lib/fdpass.c
+M	src/lib/file-cache.c
+M	src/lib/file-copy.c
+M	src/lib/file-create-locked.c
+M	src/lib/file-dotlock.c
+M	src/lib/file-lock.c
+M	src/lib/file-set-size.c
+M	src/lib/guid.c
+M	src/lib/hash-format.c
+M	src/lib/hash-method.c
+M	src/lib/hash.c
+M	src/lib/hash2.c
+M	src/lib/hex-binary.c
+M	src/lib/hex-dec.c
+M	src/lib/home-expand.c
+M	src/lib/hook-build.c
+M	src/lib/hook-build.h
+M	src/lib/hostpid.c
+M	src/lib/imem.c
+M	src/lib/ioloop-epoll.c
+M	src/lib/ioloop-notify-fd.c
+M	src/lib/ioloop-notify-inotify.c
+M	src/lib/ioloop-notify-none.c
+M	src/lib/ioloop-poll.c
+M	src/lib/ioloop-select.c
+M	src/lib/ioloop.c
+M	src/lib/iostream-proxy.c
+M	src/lib/iostream-proxy.h
+M	src/lib/iostream-pump.c
+M	src/lib/iostream-pump.h
+M	src/lib/iostream-rawlog.c
+M	src/lib/iostream-temp.c
+M	src/lib/iostream.c
+M	src/lib/ipwd.c
+M	src/lib/iso8601-date.c
+M	src/lib/istream-base64-decoder.c
+M	src/lib/istream-base64-encoder.c
+M	src/lib/istream-callback.c
+M	src/lib/istream-chain.c
+M	src/lib/istream-concat.c
+M	src/lib/istream-crlf.c
+M	src/lib/istream-data.c
+M	src/lib/istream-failure-at.c
+M	src/lib/istream-file.c
+M	src/lib/istream-hash.c
+M	src/lib/istream-jsonstr.c
+M	src/lib/istream-limit.c
+M	src/lib/istream-mmap.c
+M	src/lib/istream-multiplex.c
+M	src/lib/istream-rawlog.c
+M	src/lib/istream-seekable.c
+M	src/lib/istream-sized.c
+M	src/lib/istream-tee.c
+M	src/lib/istream-timeout.c
+M	src/lib/istream-try.c
+M	src/lib/istream-unix.c
+M	src/lib/istream.c
+M	src/lib/json-parser.c
+M	src/lib/json-tree.c
+M	src/lib/lib-event.c
+M	src/lib/lib-signals.c
+M	src/lib/lib.c
+M	src/lib/log-throttle.c
+M	src/lib/memarea.c
+M	src/lib/mempool-allocfree.c
+M	src/lib/mempool-alloconly.c
+M	src/lib/mempool-datastack.c
+M	src/lib/mempool-system.c
+M	src/lib/mempool-unsafe-datastack.c
+M	src/lib/mempool.c
+M	src/lib/mkdir-parents.c
+M	src/lib/mmap-anon.c
+M	src/lib/mmap-util.c
+M	src/lib/module-dir.c
+M	src/lib/mountpoint.c
+M	src/lib/net.c
+M	src/lib/nfs-workarounds.c
+M	src/lib/numpack.c
+M	src/lib/ostream-buffer.c
+M	src/lib/ostream-escaped.c
+M	src/lib/ostream-failure-at.c
+M	src/lib/ostream-file.c
+M	src/lib/ostream-hash.c
+M	src/lib/ostream-multiplex.c
+M	src/lib/ostream-null.c
+M	src/lib/ostream-rawlog.c
+M	src/lib/ostream-unix.c
+M	src/lib/ostream.c
+M	src/lib/path-util.c
+M	src/lib/pkcs5.c
+M	src/lib/primes.c
+M	src/lib/printf-format-fix.c
+M	src/lib/priorityq.c
+M	src/lib/process-title.c
+M	src/lib/rand.c
+M	src/lib/randgen.c
+M	src/lib/read-full.c
+M	src/lib/restrict-access.c
+M	src/lib/restrict-process-size.c
+M	src/lib/safe-memset.c
+M	src/lib/safe-mkdir.c
+M	src/lib/safe-mkstemp.c
+M	src/lib/sendfile-util.c
+M	src/lib/seq-range-array.c
+M	src/lib/sort.c
+M	src/lib/str-find.c
+M	src/lib/str-sanitize.c
+M	src/lib/str-table.c
+M	src/lib/str.c
+M	src/lib/strescape.c
+M	src/lib/strfuncs.c
+M	src/lib/strnum.c
+M	src/lib/test-aqueue.c
+M	src/lib/test-array.c
+M	src/lib/test-base32.c
+M	src/lib/test-base64.c
+M	src/lib/test-bits.c
+M	src/lib/test-bloomfilter.c
+M	src/lib/test-bsearch-insert-pos.c
+M	src/lib/test-buffer.c
+M	src/lib/test-crc32.c
+M	src/lib/test-data-stack.c
+M	src/lib/test-failures.c
+M	src/lib/test-file-create-locked.c
+M	src/lib/test-guid.c
+M	src/lib/test-hash-format.c
+M	src/lib/test-hash-method.c
+M	src/lib/test-hash.c
+M	src/lib/test-hex-binary.c
+M	src/lib/test-hmac.c
+M	src/lib/test-imem.c
+M	src/lib/test-ioloop.c
+M	src/lib/test-iostream-proxy.c
+M	src/lib/test-iostream-pump.c
+M	src/lib/test-iostream-temp.c
+M	src/lib/test-iso8601-date.c
+M	src/lib/test-istream-base64-decoder.c
+M	src/lib/test-istream-base64-encoder.c
+M	src/lib/test-istream-chain.c
+M	src/lib/test-istream-concat.c
+M	src/lib/test-istream-crlf.c
+M	src/lib/test-istream-failure-at.c
+M	src/lib/test-istream-jsonstr.c
+M	src/lib/test-istream-multiplex.c
+M	src/lib/test-istream-seekable.c
+M	src/lib/test-istream-sized.c
+M	src/lib/test-istream-tee.c
+M	src/lib/test-istream-try.c
+M	src/lib/test-istream-unix.c
+M	src/lib/test-istream.c
+M	src/lib/test-json-parser.c
+M	src/lib/test-json-tree.c
+M	src/lib/test-lib-signals.c
+M	src/lib/test-lib.c
+M	src/lib/test-llist.c
+M	src/lib/test-log-throttle.c
+M	src/lib/test-malloc-overflow.c
+M	src/lib/test-memarea.c
+M	src/lib/test-mempool-allocfree.c
+M	src/lib/test-mempool-alloconly.c
+M	src/lib/test-mempool.c
+M	src/lib/test-multiplex.c
+M	src/lib/test-murmurhash3.c
+M	src/lib/test-net.c
+M	src/lib/test-numpack.c
+M	src/lib/test-ostream-buffer.c
+M	src/lib/test-ostream-escaped.c
+M	src/lib/test-ostream-failure-at.c
+M	src/lib/test-ostream-file.c
+M	src/lib/test-ostream-multiplex.c
+M	src/lib/test-path-util.c
+M	src/lib/test-pkcs5.c
+M	src/lib/test-primes.c
+M	src/lib/test-printf-format-fix.c
+M	src/lib/test-priorityq.c
+M	src/lib/test-seq-range-array.c
+M	src/lib/test-str-find.c
+M	src/lib/test-str-sanitize.c
+M	src/lib/test-str-table.c
+M	src/lib/test-str.c
+M	src/lib/test-strescape.c
+M	src/lib/test-strfuncs.c
+M	src/lib/test-strnum.c
+M	src/lib/test-time-util.c
+M	src/lib/test-timing.c
+M	src/lib/test-unichar.c
+M	src/lib/test-uri.c
+M	src/lib/test-utc-mktime.c
+M	src/lib/test-var-expand.c
+M	src/lib/test-wildcard-match.c
+M	src/lib/time-util.c
+M	src/lib/timing.c
+M	src/lib/unichar.c
+M	src/lib/unix-socket-create.c
+M	src/lib/unlink-directory.c
+M	src/lib/unlink-old-files.c
+M	src/lib/uri-util.c
+M	src/lib/utc-mktime.c
+M	src/lib/utc-offset.c
+M	src/lib/var-expand-if.c
+M	src/lib/var-expand.c
+M	src/lib/write-full.c
+M	src/lmtp/client.c
+M	src/lmtp/commands.c
+M	src/lmtp/lmtp-local.c
+M	src/lmtp/lmtp-proxy.c
+M	src/lmtp/lmtp-settings.c
+M	src/lmtp/main.c
+M	src/log/doveadm-connection.c
+M	src/log/log-connection.c
+M	src/log/log-error-buffer.c
+M	src/log/log-settings.c
+M	src/log/main.c
+M	src/login-common/access-lookup.c
+M	src/login-common/client-common-auth.c
+M	src/login-common/client-common.c
+M	src/login-common/login-proxy-state.c
+M	src/login-common/login-proxy.c
+M	src/login-common/login-settings.c
+M	src/login-common/main.c
+M	src/login-common/sasl-server.c
+M	src/master/capabilities-posix.c
+M	src/master/dup2-array.c
+M	src/master/main.c
+M	src/master/master-client.c
+M	src/master/master-settings.c
+M	src/master/service-anvil.c
+M	src/master/service-listen.c
+M	src/master/service-log.c
+M	src/master/service-monitor.c
+M	src/master/service-process-notify.c
+M	src/master/service-process.c
+M	src/master/service.c
+M	src/old-stats/client-export.c
+M	src/old-stats/client-reset.c
+M	src/old-stats/client.c
+M	src/old-stats/fifo-input-connection.c
+M	src/old-stats/global-memory.c
+M	src/old-stats/mail-command.c
+M	src/old-stats/mail-domain.c
+M	src/old-stats/mail-ip.c
+M	src/old-stats/mail-session.c
+M	src/old-stats/mail-stats.c
+M	src/old-stats/mail-user.c
+M	src/old-stats/main.c
+M	src/old-stats/stats-carbon.c
+M	src/old-stats/stats-settings.c
+M	src/plugins/acl/acl-api.c
+M	src/plugins/acl/acl-attributes.c
+M	src/plugins/acl/acl-backend-vfile-acllist.c
+M	src/plugins/acl/acl-backend-vfile-update.c
+M	src/plugins/acl/acl-backend-vfile.c
+M	src/plugins/acl/acl-backend.c
+M	src/plugins/acl/acl-cache.c
+M	src/plugins/acl/acl-global-file.c
+M	src/plugins/acl/acl-lookup-dict.c
+M	src/plugins/acl/acl-mailbox-list.c
+M	src/plugins/acl/acl-mailbox.c
+M	src/plugins/acl/acl-plugin.c
+M	src/plugins/acl/acl-shared-storage.c
+M	src/plugins/acl/acl-storage.c
+M	src/plugins/acl/doveadm-acl.c
+M	src/plugins/apparmor/apparmor-plugin.c
+M	src/plugins/autocreate/autocreate-plugin.c
+M	src/plugins/expire/doveadm-expire.c
+M	src/plugins/expire/expire-plugin.c
+M	src/plugins/expire/expire-set.c
+M	src/plugins/fs-compress/fs-compress.c
+M	src/plugins/fts-lucene/doveadm-fts-lucene.c
+M	src/plugins/fts-lucene/fts-backend-lucene.c
+M	src/plugins/fts-lucene/fts-lucene-plugin.c
+M	src/plugins/fts-lucene/lucene-wrapper.cc
+M	src/plugins/fts-solr/fts-backend-solr-old.c
+M	src/plugins/fts-solr/fts-backend-solr.c
+M	src/plugins/fts-solr/fts-solr-plugin.c
+M	src/plugins/fts-solr/solr-connection.c
+M	src/plugins/fts-squat/fts-backend-squat.c
+M	src/plugins/fts-squat/fts-squat-plugin.c
+M	src/plugins/fts-squat/squat-test.c
+M	src/plugins/fts-squat/squat-trie.c
+M	src/plugins/fts-squat/squat-uidlist.c
+M	src/plugins/fts/doveadm-dump-fts-expunge-log.c
+M	src/plugins/fts/doveadm-fts.c
+M	src/plugins/fts/fts-api.c
+M	src/plugins/fts/fts-build-mail.c
+M	src/plugins/fts/fts-expunge-log.c
+M	src/plugins/fts/fts-indexer.c
+M	src/plugins/fts/fts-parser-html.c
+M	src/plugins/fts/fts-parser-script.c
+M	src/plugins/fts/fts-parser-tika.c
+M	src/plugins/fts/fts-parser.c
+M	src/plugins/fts/fts-plugin.c
+M	src/plugins/fts/fts-search-args.c
+M	src/plugins/fts/fts-search-serialize.c
+M	src/plugins/fts/fts-search.c
+M	src/plugins/fts/fts-storage.c
+M	src/plugins/fts/fts-user.c
+M	src/plugins/fts/xml2text.c
+M	src/plugins/imap-acl/imap-acl-plugin.c
+M	src/plugins/imap-old-stats/imap-stats-plugin.c
+M	src/plugins/imap-quota/imap-quota-plugin.c
+M	src/plugins/imap-zlib/imap-zlib-plugin.c
+M	src/plugins/last-login/last-login-plugin.c
+M	src/plugins/lazy-expunge/lazy-expunge-plugin.c
+M	src/plugins/listescape/listescape-plugin.c
+M	src/plugins/mail-crypt/doveadm-mail-crypt.c
+M	src/plugins/mail-crypt/fs-crypt-common.c
+M	src/plugins/mail-crypt/fs-crypt-settings.c
+M	src/plugins/mail-crypt/fs-crypt.c
+M	src/plugins/mail-crypt/fs-mail-crypt.c
+M	src/plugins/mail-crypt/mail-crypt-acl-plugin.c
+M	src/plugins/mail-crypt/mail-crypt-global-key.c
+M	src/plugins/mail-crypt/mail-crypt-key.c
+M	src/plugins/mail-crypt/mail-crypt-plugin.c
+M	src/plugins/mail-crypt/mail-crypt-pluginenv.c
+M	src/plugins/mail-crypt/mail-crypt-userenv.c
+M	src/plugins/mail-crypt/test-mail-global-key.c
+M	src/plugins/mail-crypt/test-mail-key.c
+M	src/plugins/mail-filter/istream-ext-filter.c
+M	src/plugins/mail-filter/mail-filter-plugin.c
+M	src/plugins/mail-filter/ostream-ext-filter.c
+M	src/plugins/mail-log/mail-log-plugin.c
+M	src/plugins/mailbox-alias/mailbox-alias-plugin.c
+M	src/plugins/notify-status/notify-status-plugin.c
+M	src/plugins/notify/notify-plugin.c
+M	src/plugins/notify/notify-storage.c
+M	src/plugins/old-stats/mail-stats-connection.c
+M	src/plugins/old-stats/mail-stats-fill.c
+M	src/plugins/old-stats/mail-stats.c
+M	src/plugins/old-stats/stats-plugin.c
+M	src/plugins/pop3-migration/pop3-migration-plugin.c
+M	src/plugins/pop3-migration/test-pop3-migration-plugin.c
+M	src/plugins/push-notification/push-notification-driver-dlog.c
+M	src/plugins/push-notification/push-notification-driver-ox.c
+M	src/plugins/push-notification/push-notification-drivers.c
+M	src/plugins/push-notification/push-notification-drivers.h
+M	src/plugins/push-notification/push-notification-event-flagsclear.c
+M	src/plugins/push-notification/push-notification-event-flagsclear.h
+M	src/plugins/push-notification/push-notification-event-flagsset.c
+M	src/plugins/push-notification/push-notification-event-flagsset.h
+M	src/plugins/push-notification/push-notification-event-mailboxcreate.c
+M	src/plugins/push-notification/push-notification-event-mailboxcreate.h
+M	src/plugins/push-notification/push-notification-event-mailboxdelete.c
+M	src/plugins/push-notification/push-notification-event-mailboxdelete.h
+M	src/plugins/push-notification/push-notification-event-mailboxrename.c
+M	src/plugins/push-notification/push-notification-event-mailboxrename.h
+M	src/plugins/push-notification/push-notification-event-mailboxsubscribe.c
+M	src/plugins/push-notification/push-notification-event-mailboxsubscribe.h
+M	src/plugins/push-notification/push-notification-event-mailboxunsubscribe.c
+M	src/plugins/push-notification/push-notification-event-mailboxunsubscribe.h
+M	src/plugins/push-notification/push-notification-event-message-common.h
+M	src/plugins/push-notification/push-notification-event-messageappend.c
+M	src/plugins/push-notification/push-notification-event-messageappend.h
+M	src/plugins/push-notification/push-notification-event-messageexpunge.c
+M	src/plugins/push-notification/push-notification-event-messageexpunge.h
+M	src/plugins/push-notification/push-notification-event-messagenew.c
+M	src/plugins/push-notification/push-notification-event-messagenew.h
+M	src/plugins/push-notification/push-notification-event-messageread.c
+M	src/plugins/push-notification/push-notification-event-messageread.h
+M	src/plugins/push-notification/push-notification-event-messagetrash.c
+M	src/plugins/push-notification/push-notification-event-messagetrash.h
+M	src/plugins/push-notification/push-notification-events-rfc5423.c
+M	src/plugins/push-notification/push-notification-events-rfc5423.h
+M	src/plugins/push-notification/push-notification-events.c
+M	src/plugins/push-notification/push-notification-events.h
+M	src/plugins/push-notification/push-notification-plugin.c
+M	src/plugins/push-notification/push-notification-plugin.h
+M	src/plugins/push-notification/push-notification-triggers.c
+M	src/plugins/push-notification/push-notification-triggers.h
+M	src/plugins/push-notification/push-notification-txn-mbox.c
+M	src/plugins/push-notification/push-notification-txn-mbox.h
+M	src/plugins/push-notification/push-notification-txn-msg.c
+M	src/plugins/push-notification/push-notification-txn-msg.h
+M	src/plugins/quota-clone/quota-clone-plugin.c
+M	src/plugins/quota/doveadm-quota.c
+M	src/plugins/quota/quota-count.c
+M	src/plugins/quota/quota-dict.c
+M	src/plugins/quota/quota-dirsize.c
+M	src/plugins/quota/quota-fs.c
+M	src/plugins/quota/quota-imapc.c
+M	src/plugins/quota/quota-maildir.c
+M	src/plugins/quota/quota-plugin.c
+M	src/plugins/quota/quota-status-settings.c
+M	src/plugins/quota/quota-status.c
+M	src/plugins/quota/quota-storage.c
+M	src/plugins/quota/quota-util.c
+M	src/plugins/quota/quota.c
+M	src/plugins/quota/test-quota-util.c
+M	src/plugins/replication/replication-plugin.c
+M	src/plugins/snarf/snarf-plugin.c
+M	src/plugins/trash/trash-plugin.c
+M	src/plugins/var-expand-crypt/test-var-expand-crypt.c
+M	src/plugins/var-expand-crypt/var-expand-crypt-plugin.c
+M	src/plugins/virtual/virtual-config.c
+M	src/plugins/virtual/virtual-mail.c
+M	src/plugins/virtual/virtual-plugin.c
+M	src/plugins/virtual/virtual-save.c
+M	src/plugins/virtual/virtual-search.c
+M	src/plugins/virtual/virtual-storage.c
+M	src/plugins/virtual/virtual-sync.c
+M	src/plugins/virtual/virtual-transaction.c
+M	src/plugins/welcome/welcome-plugin.c
+M	src/plugins/zlib/zlib-plugin.c
+M	src/pop3-login/client-authenticate.c
+M	src/pop3-login/client.c
+M	src/pop3-login/pop3-login-settings.c
+M	src/pop3-login/pop3-proxy.c
+M	src/pop3/main.c
+M	src/pop3/pop3-client.c
+M	src/pop3/pop3-commands.c
+M	src/pop3/pop3-settings.c
+M	src/replication/aggregator/aggregator-settings.c
+M	src/replication/aggregator/aggregator.c
+M	src/replication/aggregator/notify-connection.c
+M	src/replication/aggregator/replicator-connection.c
+M	src/replication/replicator/doveadm-connection.c
+M	src/replication/replicator/dsync-client.c
+M	src/replication/replicator/notify-connection.c
+M	src/replication/replicator/replicator-brain.c
+M	src/replication/replicator/replicator-queue-auth.c
+M	src/replication/replicator/replicator-queue.c
+M	src/replication/replicator/replicator-settings.c
+M	src/replication/replicator/replicator.c
+M	src/stats/client-reader.c
+M	src/stats/client-writer.c
+M	src/stats/main.c
+M	src/stats/stats-event-category.c
+M	src/stats/stats-metrics.c
+M	src/stats/stats-settings.c
+M	src/submission-login/client-authenticate.c
+M	src/submission-login/client.c
+M	src/submission-login/submission-login-settings.c
+M	src/submission-login/submission-proxy.c
+M	src/submission/cmd-data.c
+M	src/submission/cmd-helo.c
+M	src/submission/cmd-mail.c
+M	src/submission/cmd-noop.c
+M	src/submission/cmd-quit.c
+M	src/submission/cmd-rcpt.c
+M	src/submission/cmd-rset.c
+M	src/submission/cmd-vrfy.c
+M	src/submission/main.c
+M	src/submission/submission-client.c
+M	src/submission/submission-commands.c
+M	src/submission/submission-settings.c
+M	src/util/gdbhelper.c
+M	src/util/maildirlock.c
+M	src/util/rawlog.c
+M	src/util/script-login.c
+M	src/util/script.c
+M	src/util/tcpwrap-settings.c
+M	src/util/tcpwrap.c
+
+2017-12-22 15:12:30 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (6f9ffa7)
 
     doveadm dump: Add "multiplex" dump type
 
@@ -199,7 +5426,7 @@ M	configure.ac
 
 M	src/doveadm/doveadm-dump.c
 
-2017-12-22 15:11:45 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (70b1a35)
+2017-12-22 15:11:45 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (baf3b9b)
 
     doveadm dump: Allow doveadm_cmd_dump.test() to be NULL
 
@@ -207,14 +5434,14 @@ M	src/doveadm/doveadm-dump.c
 
 M	src/doveadm/doveadm-dump.c
 
-2017-12-22 15:10:00 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (56c43d3)
+2017-12-22 15:10:00 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (4fcc784)
 
     lib: istream-multiplex - Return error if the last packet wasn't fully read
 
 
 M	src/lib/istream-multiplex.c
 
-2017-12-22 15:07:28 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (93fd68a)
+2017-12-22 15:07:28 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (1082d0b)
 
     doveadm: Fix potential crash or reading garbage from doveadm-server
 
@@ -223,14 +5450,14 @@ M	src/lib/istream-multiplex.c
 
 M	src/doveadm/server-connection.c
 
-2017-12-22 13:36:32 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (c0dd00d)
+2017-12-22 13:36:32 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (5bb2888)
 
     doveadm: Don't connect to stats-writer for the "quick init" commands
 
 
 M	src/doveadm/doveadm.c
 
-2017-12-22 13:20:41 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (e71a080)
+2017-12-22 13:20:41 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (1d8edec)
 
     lib-master: Add master_service_init_stats_client()
 
@@ -241,7 +5468,7 @@ M	src/lib-master/master-service-settings.c
 M	src/lib-master/master-service.c
 M	src/lib-master/master-service.h
 
-2017-12-22 13:27:48 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (818b09e)
+2017-12-22 13:27:48 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (aa572aa)
 
     lib-master: Hide connect(stats-writer) errors when running via CLI
 
@@ -253,7 +5480,7 @@ M	src/lib-master/master-service-settings.c
 M	src/lib-master/stats-client.c
 M	src/lib-master/stats-client.h
 
-2017-12-22 13:34:45 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (96dd47c)
+2017-12-22 13:34:45 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (7b1c748)
 
     auth: Fix password and scheme handling in Lua db
 
@@ -262,7 +5489,7 @@ M	src/lib-master/stats-client.h
 M	src/auth/db-lua.c
 M	src/auth/passdb-lua.c
 
-2017-12-22 09:42:50 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (c471ce9)
+2017-12-22 09:42:50 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (c0e0c97)
 
     imap-old-stats plugin: Finish renaming the plugin
 
@@ -271,7 +5498,7 @@ M	src/auth/passdb-lua.c
 M	src/plugins/imap-old-stats/imap-stats-plugin.c
 M	src/plugins/imap-old-stats/imap-stats-plugin.h
 
-2017-12-22 09:37:53 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (cb2feda)
+2017-12-22 09:37:53 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (73c823e)
 
     m4: Fix detecting libsodium to use LIBS instead of LDFLAGS
 
@@ -279,7 +5506,7 @@ M	src/plugins/imap-old-stats/imap-stats-plugin.h
 
 M	m4/want_sodium.m4
 
-2017-12-22 09:36:48 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (21a6bcd)
+2017-12-22 09:36:48 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (88a3015)
 
     m4: Avoid _FORTIFY_SOURCE redefinition warnings
 
@@ -293,7 +5520,7 @@ M	m4/want_sodium.m4
 
 M	m4/cc_fortify.m4
 
-2017-12-22 09:59:27 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (a8369d9)
+2017-12-22 09:59:27 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (20b273f)
 
     example-config: Fix postmaster_address comment
 
@@ -301,14 +5528,14 @@ M	m4/cc_fortify.m4
 
 M	doc/example-config/conf.d/15-lda.conf
 
-2017-12-22 11:25:06 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (6bc16cf)
+2017-12-22 11:25:06 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (8fe3391)
 
     doveadm-server: Fix potential hangs with SSL connections
 
 
 M	src/doveadm/client-connection-tcp.c
 
-2017-12-18 21:58:16 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (71965c1)
+2017-12-18 21:58:16 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (23ff476)
 
     auth: Don't include LIBSODIUM_LIBS in dependencies
 
@@ -317,7 +5544,7 @@ M	src/doveadm/client-connection-tcp.c
 M	m4/want_sodium.m4
 M	src/auth/Makefile.am
 
-2017-12-21 23:09:13 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7adffef)
+2017-12-21 23:09:13 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (70b97d6)
 
     lib-smtp: server: STARTTLS command: Call
     smtp_server_connection_set_ssl_streams() after calling the conn_start_tls()
@@ -329,7 +5556,7 @@ M	src/auth/Makefile.am
 
 M	src/lib-smtp/smtp-server-cmd-starttls.c
 
-2017-12-21 23:07:10 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (d076bd9)
+2017-12-21 23:07:10 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7237272)
 
     lib-smtp: server: Add smtp_server_connection_set_ssl_streams().
 
@@ -339,7 +5566,7 @@ M	src/lib-smtp/smtp-server-cmd-starttls.c
 M	src/lib-smtp/smtp-server-connection.c
 M	src/lib-smtp/smtp-server.h
 
-2017-12-21 23:00:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b1de005)
+2017-12-21 23:00:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (6438494)
 
     lib-smtp: server: Change conn_start_tls() connection callback to return a
     success status.
@@ -349,7 +5576,7 @@ M	src/lib-smtp/smtp-server-cmd-starttls.c
 M	src/lib-smtp/smtp-server.h
 M	src/submission-login/client.c
 
-2017-12-19 00:29:03 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (d0d92f4)
+2017-12-19 00:29:03 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (7923e2c)
 
     man: Update version number to v2.3
 
@@ -395,7 +5622,7 @@ M	doc/man/doveconf.1.in
 M	doc/man/dovecot-lda.1.in
 M	doc/man/dovecot.1.in
 
-2017-12-18 16:45:23 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (3f3d3c6)
+2017-12-18 16:45:23 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (28fede7)
 
     lib-smtp: server: Fixed assertion in smtp_server_connection_next_reply()
     checking whether command is fully replied.
@@ -411,7 +5638,7 @@ M	doc/man/dovecot.1.in
 
 M	src/lib-smtp/smtp-server-connection.c
 
-2017-12-18 19:28:10 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (de37420)
+2017-12-18 19:28:10 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (cfb605f)
 
     lib-smtp: server: Fix compile error in smtp-server-cmd-helo.c.
 
@@ -419,14 +5646,6 @@ M	src/lib-smtp/smtp-server-connection.c
     "smtp-server-cmd-helo.c", line 140: void function cannot return value
 
 M	src/lib-smtp/smtp-server-cmd-helo.c
-
-2017-12-16 16:52:19 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (12aba59)
-
-    Released v2.3.0.rc1.
-
-
-M	NEWS
-M	configure.ac
 
 2017-12-18 15:20:07 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (97fad7a)
 
@@ -46206,7 +51425,7 @@ M	src/doveadm/dsync/dsync-mailbox-import.h
 M	src/imap/imap-sync.c
 M	src/imap/imap-sync.h
 
-2016-02-01 20:26:19 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (b7b25e0)
+2016-02-01 20:26:19 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (b7b25e0a)
 
     imap: Removed special EXPUNGE callback for an Outlook workaround.
 

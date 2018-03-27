@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "ioloop.h"
@@ -58,8 +58,7 @@ void i_stream_unref(struct istream **stream)
 	_stream = (*stream)->real_stream;
 
 	if (!io_stream_unref(&_stream->iostream)) {
-		if (_stream->line_str != NULL)
-			str_free(&_stream->line_str);
+		str_free(&_stream->line_str);
 		i_stream_snapshot_free(&_stream->prev_snapshot);
 		i_stream_unref(&_stream->parent);
 		io_stream_free(&_stream->iostream);
@@ -907,34 +906,46 @@ bool i_stream_add_data(struct istream *_stream, const unsigned char *data,
 	return TRUE;
 }
 
+struct istream *i_stream_get_root_io(struct istream *stream)
+{
+	while (stream->real_stream->parent != NULL) {
+		i_assert(stream->real_stream->io == NULL);
+		stream = stream->real_stream->parent;
+	}
+	return stream;
+}
+
 void i_stream_set_input_pending(struct istream *stream, bool pending)
 {
 	if (!pending)
 		return;
 
-	while (stream->real_stream->parent != NULL) {
-		i_assert(stream->real_stream->io == NULL);
-		stream = stream->real_stream->parent;
-	}
+	stream = i_stream_get_root_io(stream);
 	if (stream->real_stream->io != NULL)
 		io_set_pending(stream->real_stream->io);
 }
 
-void i_stream_switch_ioloop(struct istream *stream)
+void i_stream_switch_ioloop_to(struct istream *stream, struct ioloop *ioloop)
 {
+	io_stream_switch_ioloop_to(&stream->real_stream->iostream, ioloop);
+
 	do {
-		if (stream->real_stream->switch_ioloop != NULL)
-			stream->real_stream->switch_ioloop(stream->real_stream);
+		if (stream->real_stream->switch_ioloop_to != NULL) {
+			stream->real_stream->switch_ioloop_to(
+				stream->real_stream, ioloop);
+		}
 		stream = stream->real_stream->parent;
 	} while (stream != NULL);
 }
 
+void i_stream_switch_ioloop(struct istream *stream)
+{
+	i_stream_switch_ioloop_to(stream, current_ioloop);
+}
+
 void i_stream_set_io(struct istream *stream, struct io *io)
 {
-	while (stream->real_stream->parent != NULL) {
-		i_assert(stream->real_stream->io == NULL);
-		stream = stream->real_stream->parent;
-	}
+	stream = i_stream_get_root_io(stream);
 
 	i_assert(stream->real_stream->io == NULL);
 	stream->real_stream->io = io;
@@ -942,10 +953,7 @@ void i_stream_set_io(struct istream *stream, struct io *io)
 
 void i_stream_unset_io(struct istream *stream, struct io *io)
 {
-	while (stream->real_stream->parent != NULL) {
-		i_assert(stream->real_stream->io == NULL);
-		stream = stream->real_stream->parent;
-	}
+	stream = i_stream_get_root_io(stream);
 
 	i_assert(stream->real_stream->io == io);
 	stream->real_stream->io = NULL;

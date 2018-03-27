@@ -439,6 +439,9 @@
 /* Build with SSL/TLS support */
 #undef HAVE_SSL
 
+/* Define if you have SSL_CIPHER_get_kx_nid */
+#undef HAVE_SSL_CIPHER_get_kx_nid
+
 /* Define if you have SSL_clear_options */
 #undef HAVE_SSL_CLEAR_OPTIONS
 

@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "array.h"
@@ -193,6 +193,7 @@ client_alloc(int fd, pool_t pool,
 	client->trusted = client_is_trusted(client);
 
 	if (conn->proxied) {
+		client->proxied_ssl = conn->proxy.ssl;
 		client->secured = conn->proxy.ssl || client->trusted;
 		client->ssl_secured = conn->proxy.ssl;
 		client->local_name = conn->proxy.hostname;
@@ -249,10 +250,8 @@ void client_disconnect(struct client *client, const char *reason)
 		o_stream_uncork(client->output);
 	if (!client->login_success) {
 		io_remove(&client->io);
-		if (client->ssl_iostream != NULL)
-			ssl_iostream_destroy(&client->ssl_iostream);
-		if (client->iostream_fd_proxy != NULL)
-			iostream_proxy_unref(&client->iostream_fd_proxy);
+		ssl_iostream_destroy(&client->ssl_iostream);
+		iostream_proxy_unref(&client->iostream_fd_proxy);
 		i_stream_close(client->input);
 		o_stream_close(client->output);
 		i_close_fd(&client->fd);
@@ -302,8 +301,7 @@ void client_destroy(struct client *client, const char *reason)
 
 	timeout_remove(&client->to_disconnect);
 	timeout_remove(&client->to_auth_waiting);
-	if (client->auth_response != NULL)
-		str_free(&client->auth_response);
+	str_free(&client->auth_response);
 
 	if (client->proxy_password != NULL) {
 		safe_memset(client->proxy_password, 0,
@@ -364,10 +362,8 @@ bool client_unref(struct client **_client)
 	if (client->v.free != NULL)
 		client->v.free(client);
 
-	if (client->ssl_iostream != NULL)
-		ssl_iostream_destroy(&client->ssl_iostream);
-	if (client->iostream_fd_proxy != NULL)
-		iostream_proxy_unref(&client->iostream_fd_proxy);
+	ssl_iostream_destroy(&client->ssl_iostream);
+	iostream_proxy_unref(&client->iostream_fd_proxy);
 	if (client->fd_proxying) {
 		DLLIST_REMOVE(&client_fd_proxies, client);
 		i_assert(client_fd_proxies_count > 0);
@@ -765,6 +761,9 @@ get_var_expand_table(struct client *client)
 	if (!client->tls) {
 		tab[11].value = client->secured ? "secured" : NULL;
 		tab[12].value = "";
+	} else if (client->proxied_ssl) {
+		tab[11].value = "TLS";
+		tab[12].value = "(proxied)";
 	} else {
 		const char *ssl_state =
 			ssl_iostream_is_handshaked(client->ssl_iostream) ?

@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "module-dir.h"
@@ -161,6 +161,10 @@ void ssl_iostream_destroy(struct ssl_iostream **_ssl_io)
 {
 	struct ssl_iostream *ssl_io = *_ssl_io;
 
+	if (_ssl_io == NULL || *_ssl_io == NULL)
+		return;
+
+	ssl_io = *_ssl_io;
 	*_ssl_io = NULL;
 	ssl_vfuncs->destroy(ssl_io);
 }
@@ -325,4 +329,20 @@ void ssl_iostream_settings_drop_stream_only(struct ssl_iostream_settings *set)
 	set->verbose = FALSE;
 	set->verbose_invalid_cert = FALSE;
 	set->allow_invalid_cert = FALSE;
+}
+
+const char *ssl_iostream_get_cipher(struct ssl_iostream *ssl_io,
+				    unsigned int *bits_r)
+{
+	return ssl_vfuncs->get_cipher(ssl_io, bits_r);
+}
+
+const char *ssl_iostream_get_pfs(struct ssl_iostream *ssl_io)
+{
+	return ssl_vfuncs->get_pfs(ssl_io);
+}
+
+const char *ssl_iostream_get_protocol_name(struct ssl_iostream *ssl_io)
+{
+	return ssl_vfuncs->get_protocol_name(ssl_io);
 }

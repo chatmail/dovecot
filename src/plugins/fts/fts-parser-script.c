@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "str.h"
@@ -71,6 +71,7 @@ static int script_contents_read(struct mail_user *user)
 	struct content *content;
 	bool eof_seen = FALSE;
 	int fd, ret = 0;
+	i_assert(suser != NULL);
 
 	fd = script_connect(user, &path);
 	if (fd == -1)

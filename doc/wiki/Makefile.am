@@ -14,7 +14,6 @@ wikifiles = ACL.txt \
 	AuthDatabase.LDAP.PasswordLookups.txt \
 	AuthDatabase.LDAP.Userdb.txt \
 	AuthDatabase.LDAP.txt \
-	AuthDatabase.Lua.txt \
 	AuthDatabase.Passwd.txt \
 	AuthDatabase.PasswdFile.txt \
 	AuthDatabase.SQL.txt \
@@ -52,14 +51,12 @@ wikifiles = ACL.txt \
 	Design.DoveadmProtocol.HTTP.txt \
 	Design.DoveadmProtocol.txt \
 	Design.Dsync.txt \
-	Design.Events.txt \
 	Design.Indexes.Cache.txt \
 	Design.Indexes.MailIndexApi.txt \
 	Design.Indexes.MainIndex.txt \
 	Design.Indexes.TransactionLog.txt \
 	Design.Indexes.txt \
 	Design.InputStreams.txt \
-	Design.Lua.txt \
 	Design.MailProcess.txt \
 	Design.Memory.txt \
 	Design.OutputStreams.txt \
@@ -192,7 +189,6 @@ wikifiles = ACL.txt \
 	Pigeonhole.txt \
 	Plugins.Apparmor.txt \
 	Plugins.Autocreate.txt \
-	Plugins.CharsetAlias.txt \
 	Plugins.Compress.txt \
 	Plugins.Expire.txt \
 	Plugins.FTS.Lucene.txt \
@@ -245,7 +241,6 @@ wikifiles = ACL.txt \
 	SharedMailboxes.Symlinks.txt \
 	SharedMailboxes.txt \
 	SocketUnavailable.txt \
-	Statistics.Old.txt \
 	Statistics.txt \
 	SystemUsers.txt \
 	TestInstallation.txt \

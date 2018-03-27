@@ -23,7 +23,6 @@ struct client {
 	struct smtp_server_connection *conn;
 	enum smtp_server_state last_state;
 	struct client_state state;
-	struct smtp_server_cmd_ctx *pending_helo;
 
 	struct mail_storage_service_user *service_user;
 	struct mail_user *user;
@@ -32,7 +31,7 @@ struct client {
 	struct imap_urlauth_context *urlauth_ctx;
 
 	struct smtp_client_connection *proxy_conn;
-	struct smtp_client_connection *proxy_trans;
+	struct timeout *to_quit;
 
 	struct smtp_server_stats stats;
 

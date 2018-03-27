@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
 #include "imap-common.h"
 #include "ioloop.h"
@@ -74,12 +74,32 @@ static void client_init_urlauth(struct client *client)
 
 static bool user_has_special_use_mailboxes(struct mail_user *user)
 {
-	struct mail_namespace *ns;
+	struct mail_namespace_settings *const *ns_set;
 
-	for (ns = user->namespaces; ns != NULL; ns = ns->next) {
-		if (ns->special_use_mailboxes)
-			return TRUE;
+	/*
+	 * We have to iterate over namespace and mailbox *settings* since
+	 * the namespaces haven't been set up yet.  The namespaces haven't
+	 * been set up so that we don't hold up the OK response to LOGIN
+	 * when using slow lib-storage backends.
+	 */
+
+	/* no namespaces => no special use flags */
+	if (!array_is_created(&user->set->namespaces))
+		return FALSE;
+
+	array_foreach(&user->set->namespaces, ns_set) {
+		struct mailbox_settings *const *box_set;
+
+		/* no mailboxes => no special use flags */
+		if (!array_is_created(&(*ns_set)->mailboxes))
+			continue;
+
+		array_foreach(&(*ns_set)->mailboxes, box_set) {
+			if ((*box_set)->special_use != NULL)
+				return TRUE;
+		}
 	}
+
 	return FALSE;
 }
 
@@ -135,9 +155,6 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 		(void)iostream_rawlog_create(set->rawlog_dir, &client->input,
 					     &client->output);
 	}
-
-	mail_namespaces_set_storage_callbacks(user->namespaces,
-					      &mail_storage_callbacks, client);
 
 	client->capability_string =
 		str_new(client->pool, sizeof(CAPABILITY_STRING)+64);
@@ -201,6 +218,15 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 
 	imap_refresh_proctitle();
 	return client;
+}
+
+int client_create_finish(struct client *client, const char **error_r)
+{
+	if (mail_namespaces_init(client->user, error_r) < 0)
+		return -1;
+	mail_namespaces_set_storage_callbacks(client->user->namespaces,
+					      &mail_storage_callbacks, client);
+	return 0;
 }
 
 void client_command_cancel(struct client_command_context **_cmd)

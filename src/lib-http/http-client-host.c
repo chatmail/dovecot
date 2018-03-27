@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "net.h"
@@ -62,7 +62,7 @@ http_client_host_shared_check_idle(
 	if (timeout <= HTTP_CLIENT_HOST_MINIMUM_IDLE_TIMEOUT_MSECS)
 		timeout = HTTP_CLIENT_HOST_MINIMUM_IDLE_TIMEOUT_MSECS;
 
-	hshared->to_idle = timeout_add_short(timeout,
+	hshared->to_idle = timeout_add_to(hshared->cctx->ioloop, timeout,
 		http_client_host_shared_idle_timeout, hshared);
 
 	e_debug(hshared->event, "Host is idle (timeout = %u msecs)", timeout);
@@ -90,7 +90,7 @@ static void
 http_client_host_shared_dns_callback(const struct dns_lookup_result *result,
 			      struct http_client_host_shared *hshared)
 {
-	const struct http_client_settings *set = &hshared->cctx->set;
+	struct http_client_context *cctx = hshared->cctx;
 	struct http_client_host *host;
 
 	hshared->dns_lookup = NULL;
@@ -111,7 +111,8 @@ http_client_host_shared_dns_callback(const struct dns_lookup_result *result,
 	memcpy(hshared->ips, result->ips, sizeof(*hshared->ips) * hshared->ips_count);
 
 	hshared->ips_timeout = ioloop_timeval;
-	timeval_add_msecs(&hshared->ips_timeout, set->dns_ttl_msecs);
+	i_assert(cctx->dns_ttl_msecs > 0);
+	timeval_add_msecs(&hshared->ips_timeout, cctx->dns_ttl_msecs);
 
 	/* notify all sessions */
 	host = hshared->hosts_list;
@@ -124,7 +125,7 @@ http_client_host_shared_dns_callback(const struct dns_lookup_result *result,
 static void http_client_host_shared_lookup
 (struct http_client_host_shared *hshared)
 {
-	const struct http_client_settings *set = &hshared->cctx->set;
+	struct http_client_context *cctx = hshared->cctx;
 	struct dns_lookup_settings dns_set;
 	struct ip_addr *ips;
 	int ret;
@@ -132,22 +133,17 @@ static void http_client_host_shared_lookup
 	i_assert(!hshared->explicit_ip);
 	i_assert(hshared->dns_lookup == NULL);
 
-	if (set->dns_client != NULL) {
+	if (cctx->dns_client != NULL) {
 		e_debug(hshared->event, "Performing asynchronous DNS lookup");
-		(void)dns_client_lookup(set->dns_client, hshared->name,
+		(void)dns_client_lookup(cctx->dns_client, hshared->name,
 			http_client_host_shared_dns_callback, hshared, &hshared->dns_lookup);
-	} else if (set->dns_client_socket_path != NULL) {
+	} else if (cctx->dns_client_socket_path != NULL) {
+		i_assert(cctx->dns_lookup_timeout_msecs > 0);
 		e_debug(hshared->event, "Performing asynchronous DNS lookup");
 		i_zero(&dns_set);
-		dns_set.dns_client_socket_path = set->dns_client_socket_path;
-		if (set->connect_timeout_msecs > 0)
-			dns_set.timeout_msecs = set->connect_timeout_msecs;
-		else if (set->request_timeout_msecs > 0)
-			dns_set.timeout_msecs = set->request_timeout_msecs;
-		else {
-			dns_set.timeout_msecs =
-				HTTP_CLIENT_DEFAULT_DNS_LOOKUP_TIMEOUT_MSECS;
-		}
+		dns_set.dns_client_socket_path = cctx->dns_client_socket_path;
+		dns_set.timeout_msecs = cctx->dns_lookup_timeout_msecs;
+		dns_set.ioloop = cctx->ioloop;
 		(void)dns_lookup(hshared->name, &dns_set,
 				 http_client_host_shared_dns_callback, hshared, &hshared->dns_lookup);
 	} else {
@@ -170,7 +166,8 @@ static void http_client_host_shared_lookup
 
 	if (hshared->ips_count > 0) {
 		hshared->ips_timeout = ioloop_timeval;
-		timeval_add_msecs(&hshared->ips_timeout, set->dns_ttl_msecs);
+		i_assert(cctx->dns_ttl_msecs > 0);
+		timeval_add_msecs(&hshared->ips_timeout, cctx->dns_ttl_msecs);
 	}
 }
 
@@ -304,9 +301,9 @@ http_client_host_shared_request_submitted(
 void http_client_host_shared_switch_ioloop(
 	struct http_client_host_shared *hshared)
 {
-	const struct http_client_settings *set = &hshared->cctx->set;
+	struct http_client_context *cctx = hshared->cctx;
 
-	if (hshared->dns_lookup != NULL && set->dns_client == NULL)
+	if (hshared->dns_lookup != NULL && cctx->dns_client == NULL)
 		dns_lookup_switch_ioloop(hshared->dns_lookup);
 	if (hshared->to_idle != NULL)
 		hshared->to_idle = io_loop_move_timeout(&hshared->to_idle);

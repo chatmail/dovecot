@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
 
 #include "auth-common.h"
 #include "ioloop.h"
@@ -14,6 +14,7 @@
 #include "auth-penalty.h"
 #include "auth-request.h"
 #include "auth-token.h"
+#include "auth-client-connection.h"
 #include "auth-master-connection.h"
 #include "auth-request-handler.h"
 #include "auth-policy.h"
@@ -216,7 +217,8 @@ auth_request_handle_failure(struct auth_request *request, const char *reply)
 	auth_request_ref(request);
 	auth_request_handler_remove(handler, request);
 
-	auth_policy_report(request);
+	if (request->set->policy_report_after_auth)
+		auth_policy_report(request);
 
 	if (auth_fields_exists(request->extra_fields, "nodelay")) {
 		/* passdb specifically requested not to delay the reply. */
@@ -264,7 +266,8 @@ auth_request_handler_reply_success_finish(struct auth_request *request)
 	str_append_tabescaped(str, request->user);
 	auth_str_append_extra_fields(request, str);
 
-	auth_policy_report(request);
+	if (request->set->policy_report_after_auth)
+		auth_policy_report(request);
 
 	if (handler->master_callback == NULL ||
 	    auth_fields_exists(request->extra_fields, "nologin") ||
@@ -581,6 +584,13 @@ bool auth_request_handler_auth_begin(struct auth_request_handler *handler,
 	/* Handle initial respose */
 	if (initial_resp == NULL) {
 		/* No initial response */
+		request->initial_response = NULL;
+		request->initial_response_len = 0;
+	} else if (handler->conn->version_minor < 2 && *initial_resp == '\0') {
+		/* Some authentication clients like Exim send and empty initial
+		   response field when it is in fact absent in the
+		   authentication command. This was allowed for older versions
+		   of the Dovecot authentication protocol. */
 		request->initial_response = NULL;
 		request->initial_response_len = 0;
 	} else if (*initial_resp == '\0' || strcmp(initial_resp, "=") == 0 ) {

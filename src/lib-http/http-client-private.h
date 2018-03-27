@@ -10,9 +10,6 @@
  * Defaults
  */
 
-#define HTTP_DEFAULT_PORT 80
-#define HTTPS_DEFAULT_PORT 443
-
 #define HTTP_CLIENT_CONTINUE_TIMEOUT_MSECS (1000*2)
 #define HTTP_CLIENT_DEFAULT_REQUEST_TIMEOUT_MSECS (1000*60*1)
 #define HTTP_CLIENT_DEFAULT_DNS_LOOKUP_TIMEOUT_MSECS (1000*10)
@@ -100,7 +97,9 @@ struct http_client_request {
 	struct http_client_queue *queue;
 	struct http_client_peer *peer;
 	struct http_client_connection *conn;
+
 	struct event *event;
+	unsigned int last_status;
 
 	string_t *headers;
 	time_t date;
@@ -118,6 +117,9 @@ struct http_client_request {
 	unsigned int timeout_msecs;
 	unsigned int attempt_timeout_msecs;
 	unsigned int max_attempts;
+
+	uoff_t response_offset, request_offset;
+	uoff_t bytes_in, bytes_out;
 
 	unsigned int attempts;
 	unsigned int redirects;
@@ -364,6 +366,8 @@ struct http_client {
 	struct http_client_context *cctx;
 	struct http_client_settings set;
 
+	struct http_client *prev, *next;
+
 	struct event *event;
 	struct ioloop *ioloop;
 	struct ssl_iostream_context *ssl_ctx;
@@ -385,9 +389,16 @@ struct http_client_context {
 	pool_t pool;
 	unsigned int refcount;
 	struct event *event;
+	struct ioloop *ioloop;
 
 	struct http_client_settings set;
 
+	struct dns_client *dns_client;
+	const char *dns_client_socket_path;
+	unsigned int dns_ttl_msecs;
+	unsigned int dns_lookup_timeout_msecs;
+
+	struct http_client *clients_list;
 	struct connection_list *conn_list;
 
 	HASH_TABLE_TYPE(http_client_peer_shared) peers;
@@ -475,9 +486,9 @@ void http_client_request_get_peer_addr(const struct http_client_request *req,
 enum http_response_payload_type
 http_client_request_get_payload_type(struct http_client_request *req);
 int http_client_request_send(struct http_client_request *req,
-			    bool pipelined, const char **error_r);
+			    bool pipelined);
 int http_client_request_send_more(struct http_client_request *req,
-				  bool pipelined, const char **error_r);
+				  bool pipelined);
 bool http_client_request_callback(struct http_client_request *req,
 	struct http_response *response);
 void http_client_request_connect_callback(struct http_client_request *req,
@@ -506,10 +517,15 @@ void http_client_connection_ref(struct http_client_connection *conn);
 bool http_client_connection_unref(struct http_client_connection **_conn);
 void http_client_connection_close(struct http_client_connection **_conn);
 
+void http_client_connection_lost(struct http_client_connection **_conn,
+				 const char *error) ATTR_NULL(2);
+
 void http_client_connection_peer_closed(struct http_client_connection **_conn);
 void http_client_connection_request_destroyed(
 	struct http_client_connection *conn, struct http_client_request *req);
 
+void http_client_connection_handle_output_error(
+	struct http_client_connection *conn);
 int http_client_connection_output(struct http_client_connection *conn);
 void http_client_connection_start_request_timeout(
 	struct http_client_connection *conn);

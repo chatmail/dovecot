@@ -1,4 +1,4 @@
-/* Copyright (c) 2005-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2005-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -1308,9 +1308,9 @@ enum quota_alloc_result quota_try_alloc(struct quota_transaction_context *ctx,
 	const char *error;
 	enum quota_get_result error_res;
 
-	if (quota_transaction_set_limits(ctx, &error_res, &error) < 0) {
-		*error_r = t_strdup_printf(
-			"Failed to set quota transaction limits: %s", error);
+	if (quota_transaction_set_limits(ctx, &error_res, error_r) < 0) {
+		if (error_res == QUOTA_GET_RESULT_BACKGROUND_CALC)
+			return QUOTA_ALLOC_RESULT_BACKGROUND_CALC;
 		return QUOTA_ALLOC_RESULT_TEMPFAIL;
 	}
 
@@ -1353,11 +1353,10 @@ enum quota_alloc_result quota_test_alloc(struct quota_transaction_context *ctx,
 		return QUOTA_ALLOC_RESULT_TEMPFAIL;
 	}
 
-	const char *error;
 	enum quota_get_result error_res;
-	if (quota_transaction_set_limits(ctx, &error_res, &error) < 0) {
-		*error_r = t_strdup_printf(
-			"Failed to set quota transaction limits: %s", error);
+	if (quota_transaction_set_limits(ctx, &error_res, error_r) < 0) {
+		if (error_res == QUOTA_GET_RESULT_BACKGROUND_CALC)
+			return QUOTA_ALLOC_RESULT_BACKGROUND_CALC;
 		return QUOTA_ALLOC_RESULT_TEMPFAIL;
 	}
 

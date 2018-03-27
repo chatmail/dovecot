@@ -99,6 +99,7 @@ struct smtp_client_transaction {
 	unsigned int finish_timeout_msecs;
 	struct timeout *to_finish, *to_send;
 
+	bool data_provided:1;
 	bool finished:1;
 	bool submitted_data:1;
 };
@@ -136,6 +137,7 @@ struct smtp_client_connection {
 	struct istream *raw_input;
 	struct ostream *raw_output, *dot_output;
 
+	struct ssl_iostream_context *ssl_ctx;
 	struct ssl_iostream *ssl_iostream;
 
 	enum smtp_client_connection_state state;
@@ -185,14 +187,20 @@ struct smtp_client {
  */
 
 void smtp_client_command_free(struct smtp_client_command *cmd);
-int smtp_client_command_send_more(struct smtp_client_connection *conn,
-				  const char **error_r);
+int smtp_client_command_send_more(struct smtp_client_connection *conn);
 int smtp_client_command_input_reply(struct smtp_client_command *cmd,
 				    const struct smtp_reply *reply);
+
 void smtp_client_command_fail(struct smtp_client_command **_cmd,
 			      unsigned int status, const char *error);
 void smtp_client_command_fail_reply(struct smtp_client_command **_cmd,
 				    const struct smtp_reply *reply);
+
+void smtp_client_commands_list_abort(struct smtp_client_command *cmds_list,
+				     unsigned int cmds_list_count);
+void smtp_client_commands_list_fail_reply(
+	struct smtp_client_command *cmds_list, unsigned int cmds_list_count,
+	const struct smtp_reply *reply);
 
 /*
  * Transaction
@@ -216,6 +224,8 @@ smpt_client_connection_label(struct smtp_client_connection *conn);
 void smtp_client_connection_fail(struct smtp_client_connection *conn,
 				 unsigned int status, const char *error);
 
+void smtp_client_connection_handle_output_error(
+	struct smtp_client_connection *conn);
 void smtp_client_connection_trigger_output(
 	struct smtp_client_connection *conn);
 
@@ -233,5 +243,11 @@ void smtp_client_connection_abort_transaction(
 void smtp_client_connection_next_transaction(
 	struct smtp_client_connection *conn,
 	struct smtp_client_transaction *trans);
+
+/*
+ * Client
+ */
+
+int smtp_client_init_ssl_ctx(struct smtp_client *client, const char **error_r);
 
 #endif

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2011-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "buffer.h"
@@ -133,7 +133,8 @@ static bool html_entity_get_unichar(const char *name, unichar_t *chr_r)
 	if (name[0] == '#' &&
 	    ((name[1] == 'x' &&
 	      str_to_uint32_hex(name+2, &chr) == 0) ||
-	     str_to_uint32(name+1, &chr) == 0)) {
+	     str_to_uint32(name+1, &chr) == 0) &&
+	     uni_is_valid_ucs4(chr)) {
 		*chr_r = chr;
 		return TRUE;
 	}
@@ -332,6 +333,9 @@ void mail_html2text_more(struct mail_html2text *ht,
 void mail_html2text_deinit(struct mail_html2text **_ht)
 {
 	struct mail_html2text *ht = *_ht;
+
+	if (ht == NULL)
+		return;
 
 	*_ht = NULL;
 	buffer_free(&ht->input);

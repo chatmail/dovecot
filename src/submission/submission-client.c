@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "submission-common.h"
 #include "array.h"
@@ -94,10 +94,11 @@ static void client_proxy_ready_cb(const struct smtp_reply *reply,
 		SMTP_CAPABILITY_SIZE | SMTP_CAPABILITY_ENHANCEDSTATUSCODES |
 		SMTP_CAPABILITY_CHUNKING | SMTP_CAPABILITY_BURL |
 		SMTP_CAPABILITY_VRFY;
+	caps &= SUBMISSION_SUPPORTED_SMTP_CAPABILITIES;
 	smtp_server_connection_set_capabilities(client->conn, caps);
 
-	/* send EHLO reply when EHLO command is pending */
-	client_handshake(client);
+	/* now that we know our capabilities, commence server protocol dialog */
+	smtp_server_connection_resume(client->conn);
 }
 
 static void client_proxy_create(struct client *client,
@@ -110,7 +111,10 @@ static void client_proxy_create(struct client *client,
 
 	i_zero(&ssl_set);
 	mail_user_init_ssl_client_settings(user, &ssl_set);
-	ssl_set.allow_invalid_cert = !set->submission_relay_ssl_verify;
+	if (set->submission_relay_ssl_verify)
+		ssl_set.verbose_invalid_cert = TRUE;
+	else
+		ssl_set.allow_invalid_cert = TRUE;
 
 	/* make proxy connection */
 	i_zero(&smtp_set);
@@ -136,6 +140,10 @@ static void client_proxy_create(struct client *client,
 	smtp_set.username = set->submission_relay_user;
 	smtp_set.master_user = set->submission_relay_master_user;
 	smtp_set.password = set->submission_relay_password;
+	smtp_set.connect_timeout_msecs =
+		set->submission_relay_connect_timeout;
+	smtp_set.command_timeout_msecs =
+		set->submission_relay_command_timeout;
 
 	if (strcmp(set->submission_relay_ssl, "smtps") == 0)
 		ssl_mode = SMTP_CLIENT_SSL_MODE_IMMEDIATE;
@@ -201,12 +209,14 @@ struct client *client_create(int fd_in, int fd_out,
 
 	client->conn = smtp_server_connection_create(smtp_server,
 		fd_in, fd_out, user->conn.remote_ip, user->conn.remote_port,
-		&smtp_set, &smtp_callbacks, client);
+		FALSE, &smtp_set, &smtp_callbacks, client);
+
+	client_proxy_create(client, set);
+
 	smtp_server_connection_login(client->conn,
 		client->user->username, helo,
 		pdata, pdata_len, user->conn.ssl_secured);
-
-	client_proxy_create(client, set);
+	smtp_server_connection_start_pending(client->conn);
 
 	mail_set = mail_user_set_get_storage_set(user);
 	if (*set->imap_urlauth_host != '\0' &&
@@ -366,6 +376,7 @@ void client_disconnect(struct client *client, const char *enh_code,
 		return;
 	client->disconnected = TRUE;
 
+	timeout_remove(&client->to_quit);
 	if (client->proxy_conn != NULL)
 		smtp_client_connection_close(&client->proxy_conn);
 

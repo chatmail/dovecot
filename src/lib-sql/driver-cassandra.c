@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2015-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -154,6 +154,7 @@ struct cassandra_transaction_context {
 
 	struct cassandra_sql_statement *stmt;
 	char *query;
+	cass_int64_t query_timestamp;
 	char *error;
 
 	bool begin_succeeded:1;
@@ -1374,6 +1375,7 @@ driver_cassandra_result_more(struct sql_result **_result, bool async,
 	   the caller" error text, so it won't be in the debug log output. */
 	i_free_and_null(old_result->error);
 
+	new_result->timestamp = old_result->timestamp;
 	new_result->consistency = old_result->consistency;
 	new_result->page_num = old_result->page_num + 1;
 	new_result->page0_start_time = old_result->page0_start_time;
@@ -1556,8 +1558,17 @@ driver_cassandra_transaction_commit(struct sql_transaction_context *_ctx,
 		query_type = CASSANDRA_QUERY_TYPE_WRITE;
 
 	if (ctx->query != NULL) {
-		driver_cassandra_query_full(_ctx->db, query, query_type,
-			  transaction_commit_callback, ctx);
+		struct cassandra_result *cass_result;
+
+		cass_result = driver_cassandra_query_init(db, query, query_type,
+			FALSE, transaction_commit_callback, ctx);
+		cass_result->statement = cass_statement_new(query, 0);
+		if (ctx->query_timestamp != 0) {
+			cass_result->timestamp = ctx->query_timestamp;
+			cass_statement_set_timestamp(cass_result->statement,
+						     ctx->query_timestamp);
+		}
+		(void)driver_cassandra_send_query(cass_result);
 	} else {
 		ctx->stmt->result =
 			driver_cassandra_query_init(db, query, query_type, TRUE,
@@ -1566,6 +1577,7 @@ driver_cassandra_transaction_commit(struct sql_transaction_context *_ctx,
 			/* wait for prepare to finish */
 		} else {
 			ctx->stmt->result->statement = ctx->stmt->cass_stmt;
+			ctx->stmt->result->timestamp = ctx->stmt->timestamp;
 			(void)driver_cassandra_send_query(ctx->stmt->result);
 			pool_unref(&ctx->stmt->stmt.pool);
 		}
@@ -1977,6 +1989,7 @@ driver_cassandra_statement_query(struct sql_statement *_stmt,
 						   callback, context);
 	if (stmt->cass_stmt != NULL) {
 		stmt->result->statement = stmt->cass_stmt;
+		stmt->result->timestamp = stmt->timestamp;
 	} else if (stmt->prep != NULL) {
 		/* wait for prepare to finish */
 		return;
@@ -2018,6 +2031,7 @@ driver_cassandra_update_stmt(struct sql_transaction_context *_ctx,
 		ctx->stmt = stmt;
 	else {
 		ctx->query = i_strdup(sql_statement_get_query(_stmt));
+		ctx->query_timestamp = stmt->timestamp;
 		pool_unref(&_stmt->pool);
 	}
 }

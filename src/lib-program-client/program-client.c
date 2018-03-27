@@ -1,4 +1,4 @@
-/* Copyright (c) 2002-2017 Dovecot authors, see the included COPYING file
+/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file
  */
 
 #include "lib.h"
@@ -144,7 +144,7 @@ void program_client_disconnected(struct program_client *pclient)
 	program_client_callback(pclient,
 		pclient->error != PROGRAM_CLIENT_ERROR_NONE ?
 			-1 :
-			pclient->exit_code,
+			(int)pclient->exit_code,
 		pclient->context);
 }
 
@@ -186,7 +186,7 @@ bool program_client_input_pending(struct program_client *pclient)
 
 	if (pclient->program_input != NULL &&
 	    !pclient->program_input->closed &&
-	    !i_stream_read_eof(pclient->program_input)) {
+	    i_stream_have_bytes_left(pclient->program_input)) {
 		return TRUE;
 	}
 
@@ -195,7 +195,7 @@ bool program_client_input_pending(struct program_client *pclient)
 		for(i = 0; i < count; i++) {
 			if (efds[i].input != NULL &&
 			    !efds[i].input->closed &&
-			    !i_stream_read_eof(efds[i].input)) {
+			    i_stream_have_bytes_left(efds[i].input)) {
 				return TRUE;
 			}
 		}
@@ -212,6 +212,7 @@ int program_client_program_output(struct program_client *pclient)
 	enum ostream_send_istream_result res;
 	int ret = 0;
 
+	/* flush the output first, before writing more */
 	if ((ret = o_stream_flush(output)) <= 0) {
 		if (ret < 0) {
 			i_error("write(%s) failed: %s",
@@ -223,6 +224,7 @@ int program_client_program_output(struct program_client *pclient)
 		return ret;
 	}
 
+	/* initialize dot stream if required */
 	if (!pclient->output_dot_created &&
 	    pclient->set.use_dotstream &&
 	    output != NULL) {
@@ -233,6 +235,7 @@ int program_client_program_output(struct program_client *pclient)
 		output = pclient->dot_output;
 
 	if (input != NULL && output != NULL) {
+		/* transfer provided input stream to output towards program */
 		res = o_stream_send_istream(output, input);
 		switch (res) {
 		case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
@@ -258,25 +261,27 @@ int program_client_program_output(struct program_client *pclient)
 		}
 	}
 
-	if (input == NULL &&
-	    output != NULL &&
-	    pclient->dot_output != NULL) {
-		if ((ret = o_stream_finish(pclient->dot_output)) <= 0) {
-			if (ret < 0) {
-				i_error("write(%s) failed: %s",
-					o_stream_get_name(output),
-					o_stream_get_error(output));
-					program_client_fail(pclient,
-							    PROGRAM_CLIENT_ERROR_IO);
-			}
-			return ret;
+	if (input == NULL && output != NULL) {
+		/* finish and flush program output */
+		if ((ret=o_stream_finish(output)) < 0) {
+			i_error("write(%s) failed: %s",
+				o_stream_get_name(output),
+				o_stream_get_error(output));
+			program_client_fail(pclient,
+					    PROGRAM_CLIENT_ERROR_IO);
+			return -1;
 		}
+		if (ret == 0)
+			return 0;
 		o_stream_unref(&pclient->dot_output);
 	}
 
 	if (input == NULL) {
+		/* check whether program i/o is finished */
 		if (!program_client_input_pending(pclient)) {
+			/* finished */
 			program_client_disconnect(pclient, FALSE);
+		/* close output towards program, so that it reads EOF */
 		} else if (program_client_close_output(pclient) < 0) {
 			program_client_fail(pclient,
 					    PROGRAM_CLIENT_ERROR_OTHER);
@@ -294,6 +299,7 @@ void program_client_program_input(struct program_client *pclient)
 	size_t size;
 	int ret = 0;
 
+	/* initialize seekable output if required */
 	if (pclient->output_seekable && pclient->seekable_output == NULL) {
 		struct istream *input_list[2] = { input, NULL };
 
@@ -308,6 +314,7 @@ void program_client_program_input(struct program_client *pclient)
 	}
 
 	if (input != NULL) {
+		/* initialize dot stream if required */
 		if (!pclient->input_dot_created &&
 		    pclient->set.use_dotstream) {
 			pclient->dot_input = i_stream_create_dot(input, FALSE);
@@ -315,22 +322,14 @@ void program_client_program_input(struct program_client *pclient)
 		}
 		if (pclient->dot_input != NULL)
 			input = pclient->dot_input;
-		else if (pclient->set.use_dotstream) {
-			/* just read it empty */
-			while(i_stream_read_more(input, &data,
-						 &size) > 0)
-				i_stream_skip(input, size);
-			output = NULL;
-		}
+
+		/* transfer input from program to provided output stream */
 		if (output != NULL) {
 			res = o_stream_send_istream(output, input);
 			switch (res) {
 			case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
-				if (pclient->set.use_dotstream &&
-				    pclient->dot_input != NULL) {
-					i_stream_unref(&pclient->dot_input);
-					input = pclient->program_input;
-				}
+				i_stream_unref(&pclient->dot_input);
+				input = pclient->program_input;
 				break;
 			case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
 			case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
@@ -350,34 +349,44 @@ void program_client_program_input(struct program_client *pclient)
 						    PROGRAM_CLIENT_ERROR_IO);
 				return;
 			}
-		} else {
-			while ((ret =
-				i_stream_read_more(input, &data, &size)) > 0 ||
-			       ret == -2) {
-				i_stream_skip(input, size);
-			}
+		}
 
+		/* read (the remainder of) the outer stream */
+		while ((ret=i_stream_read_more(input, &data, &size)) > 0)
+			i_stream_skip(input, size);
+		if (ret == 0)
+			return;
+		if (ret < 0) {
+			if (input->stream_errno != 0) {
+				i_error("read(%s) failed: %s",
+					i_stream_get_name(input),
+					i_stream_get_error(input));
+				program_client_fail(pclient,
+						    PROGRAM_CLIENT_ERROR_IO);
+				return;
+			}
+		}
+
+		/* flush output stream to make sure all is sent */
+		if (output != NULL) {
+			if ((ret=o_stream_flush(output)) < 0) {
+				i_error("write(%s) failed: %s",
+					o_stream_get_name(output),
+					o_stream_get_error(output));
+				program_client_fail(pclient,
+						    PROGRAM_CLIENT_ERROR_IO);
+				return;
+			}
 			if (ret == 0)
 				return;
-			if (ret < 0) {
-				if (input->stream_errno != 0) {
-					i_error("read(%s) failed: %s",
-						i_stream_get_name(input),
-						i_stream_get_error(input));
-					program_client_fail(pclient,
-							    PROGRAM_CLIENT_ERROR_IO);
-					return;
-				}
-			}
 		}
+
+		/* check whether program i/o is finished */
 		if (program_client_input_pending(pclient))
 			return;
-		if (pclient->program_input != NULL && !input->eof) {
-			program_client_fail(pclient,
-					    PROGRAM_CLIENT_ERROR_IO);
-			return;
-		}
 	}
+
+	/* finished */
 	program_client_disconnect(pclient, FALSE);
 }
 
@@ -389,7 +398,7 @@ void program_client_extra_fd_input(struct program_client_extra_fd *efd)
 	i_assert(efd->callback != NULL);
 	efd->callback(efd->context, efd->input);
 
-	if (efd->input->closed || i_stream_read_eof(efd->input)) {
+	if (efd->input->closed || !i_stream_have_bytes_left(efd->input)) {
 		if (!program_client_input_pending(pclient))
 			program_client_disconnect(pclient, FALSE);
 	}
@@ -667,7 +676,7 @@ int program_client_run(struct program_client *pclient)
 	if (pclient->error != PROGRAM_CLIENT_ERROR_NONE)
 		return -1;
 
-	return pclient->exit_code;
+	return (int)pclient->exit_code;
 }
 
 #undef program_client_run_async
@@ -678,7 +687,7 @@ void program_client_run_async(struct program_client *pclient,
 	i_assert(callback != NULL);
 
 	pclient->disconnected = FALSE;
-	pclient->exit_code = 1;
+	pclient->exit_code = PROGRAM_CLIENT_EXIT_SUCCESS;
 	pclient->error = PROGRAM_CLIENT_ERROR_NONE;
 
 	pclient->callback = callback;

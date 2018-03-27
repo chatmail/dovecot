@@ -7,9 +7,6 @@ Works:
  * K-9 on Android (merged Sept 2015 - https://github.com/k9mail/k-9/pull/718)
  * Apple Mail (according to
    https://forums.cpanel.net/threads/mail-ssl-sni.454592/ )
- * Mutt (ticket https://dev.mutt.org/trac/ticket/3923)
- * <NeoMutt.txt> (since 2016-03-07 according to
-   https://www.neomutt.org/feature/tls-sni)
 
 Doesn't work:
 
@@ -18,4 +15,4 @@ Doesn't work:
  * Outlook for Mac version 15 (according to
    https://forums.cpanel.net/threads/mail-ssl-sni.454592/ )
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

@@ -1,4 +1,4 @@
-/* Copyright (c) 2003-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2003-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "istream.h"
@@ -629,7 +629,6 @@ static void maildir_update_pop3_uidl(struct mail *_mail, const char *uidl)
 		uidl = "";
 	}
 
-	_mail->transaction->nontransactional_changes = TRUE;
 	maildir_uidlist_set_ext(mbox->uidlist, _mail->uid,
 				MAILDIR_UIDLIST_REC_EXT_POP3_UIDL, uidl);
 }

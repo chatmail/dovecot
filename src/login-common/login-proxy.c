@@ -1,4 +1,4 @@
-/* Copyright (c) 2004-2017 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2004-2018 Dovecot authors, see the included COPYING file */
 
 #include "login-common.h"
 #include "ioloop.h"
@@ -386,10 +386,8 @@ static void login_proxy_disconnect(struct login_proxy *proxy)
 		proxy->state_rec->num_proxying_connections--;
 	}
 
-	if (proxy->iostream_proxy != NULL)
-		iostream_proxy_unref(&proxy->iostream_proxy);
-	if (proxy->server_ssl_iostream != NULL)
-		ssl_iostream_destroy(&proxy->server_ssl_iostream);
+	iostream_proxy_unref(&proxy->iostream_proxy);
+	ssl_iostream_destroy(&proxy->server_ssl_iostream);
 
 	io_remove(&proxy->server_io);
 	i_stream_destroy(&proxy->server_input);

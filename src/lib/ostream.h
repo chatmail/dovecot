@@ -136,12 +136,30 @@ bool o_stream_is_corked(struct ostream *stream);
    the stream had overflown, return error. Returns 1 if all data is sent,
    0 there's still buffered data, -1 if error. */
 int o_stream_flush(struct ostream *stream);
+/* Wrapper to easily both uncork and flush. */
+static inline int o_stream_uncork_flush(struct ostream *stream)
+{
+	o_stream_uncork(stream);
+	return o_stream_flush(stream);
+}
+
 /* Set "flush pending" state of stream. If set, the flush callback is called
    when more data is allowed to be sent, even if the buffer itself is empty. */
 void o_stream_set_flush_pending(struct ostream *stream, bool set);
-/* Returns number of bytes currently in buffer. */
+/* Returns the number of bytes currently in all the pending write buffers of
+   this ostream, including its parent streams. This function is commonly used
+   by callers to determine when they've filled up the ostream so they can stop
+   writing to it. Because of this, the return value shouldn't include buffers
+   that are expected to be filled up before they send anything to their parent
+   stream. Otherwise the callers may stop writing to the stream too early and
+   hang. Such an example could be a compression ostream that won't send
+   anything to its parent stream before an internal compression buffer is
+   full. */
 size_t o_stream_get_buffer_used_size(const struct ostream *stream) ATTR_PURE;
-/* Returns number of bytes we can still write without failing. */
+/* Returns the (minimum) number of bytes we can still write without failing.
+   This is commonly used by callers to find out how many bytes they're
+   guaranteed to be able to send, and then generate that much data and send
+   it. */
 size_t o_stream_get_buffer_avail_size(const struct ostream *stream) ATTR_PURE;
 
 /* Seek to specified position from beginning of file. This works only for
@@ -210,7 +228,8 @@ int o_stream_pwrite(struct ostream *stream, const void *data, size_t size,
 void o_stream_get_last_write_time(struct ostream *stream, struct timeval *tv_r);
 
 /* If there are any I/O loop items associated with the stream, move all of
-   them to current_ioloop. */
+   them to provided/current ioloop. */
+void o_stream_switch_ioloop_to(struct ostream *stream, struct ioloop *ioloop);
 void o_stream_switch_ioloop(struct ostream *stream);
 
 #endif
