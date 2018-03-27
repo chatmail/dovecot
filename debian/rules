@@ -21,6 +21,8 @@ MOVE=install -d $(PKG_DIR:PKG=$(2))/$(dir $(1)); mv $(CORE_DIR)/$(1) $(PKG_DIR:P
 # Files to move from dovecot-core to the individual packages. Files added to
 # <addon>_files will be automatically moved from dovecot's tree to the
 # respective package.
+auth-lua_files = usr/lib/dovecot/modules/auth/libauthdb_lua.so
+
 imapd_files = usr/lib/dovecot/imap* \
 	      usr/lib/dovecot/modules/lib??_imap_!(sieve*) \
 	      usr/share/dovecot/conf.d/??-imap*
@@ -94,6 +96,7 @@ override_dh_auto_configure:
 	            --with-lucene \
 		    --with-apparmor \
 		    --with-lz4 \
+		    --with-lua=plugin \
 		    --libdir=\$${prefix}/lib \
 	            --libexecdir=\$${prefix}/lib \
 		    --docdir=\$${prefix}/share/doc/dovecot-core \
