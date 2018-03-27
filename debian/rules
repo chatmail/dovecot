@@ -97,6 +97,7 @@ override_dh_auto_configure:
 		    --with-apparmor \
 		    --with-lz4 \
 		    --with-lua=plugin \
+		    --with-sodium \
 		    --libdir=\$${prefix}/lib \
 	            --libexecdir=\$${prefix}/lib \
 		    --docdir=\$${prefix}/share/doc/dovecot-core \
