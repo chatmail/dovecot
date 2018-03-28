@@ -284,7 +284,7 @@ Architecture: any
 Depends: dovecot-core (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
-Description: secure POP3/IMAP server - LUA authentication plugin
+Description: secure POP3/IMAP server - Lua authentication plugin
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
  that all data is valid, making it nearly impossible to crash. It supports
