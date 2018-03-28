@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __CLIENT_H
-#define __CLIENT_H
+#ifndef CLIENT_H
+#define CLIENT_H
 
 #include "net.h"
 #include "client-common.h"
@@ -74,4 +71,4 @@ void client_send_reply_code(struct client *client,
 	client_send_reply_code(client, MANAGESIEVE_CMD_REPLY_BYE, resp_code, text)
 
 
-#endif /* __CLIENT_H */
+#endif

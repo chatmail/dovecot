@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_VALIDATOR_H
-#define __SIEVE_VALIDATOR_H
+#ifndef SIEVE_VALIDATOR_H
+#define SIEVE_VALIDATOR_H
 
 #include "lib.h"
 
@@ -186,4 +183,4 @@ struct sieve_validator_object_registry *sieve_validator_object_registry_create
 struct sieve_validator_object_registry *sieve_validator_object_registry_init
 	(struct sieve_validator *valdtr, const struct sieve_extension *ext);
 
-#endif /* __SIEVE_VALIDATOR_H */
+#endif

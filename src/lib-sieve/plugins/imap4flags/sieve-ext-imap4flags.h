@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_EXT_IMAP4FLAGS_H
-#define __SIEVE_EXT_IMAP4FLAGS_H
+#ifndef SIEVE_EXT_IMAP4FLAGS_H
+#define SIEVE_EXT_IMAP4FLAGS_H
 
 struct sieve_variable_storage;
 

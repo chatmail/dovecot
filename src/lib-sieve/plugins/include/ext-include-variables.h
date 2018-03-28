@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_INCLUDE_VARIABLES_H
-#define __EXT_INCLUDE_VARIABLES_H
+#ifndef EXT_INCLUDE_VARIABLES_H
+#define EXT_INCLUDE_VARIABLES_H
 
 #include "sieve-common.h"
 
@@ -40,5 +37,5 @@ bool ext_include_variables_dump
 void ext_include_variables_global_namespace_init
 	(const struct sieve_extension *this_ext, struct sieve_validator *valdtr);
 
-#endif /* __EXT_INCLUDE_VARIABLES_H */
+#endif
 

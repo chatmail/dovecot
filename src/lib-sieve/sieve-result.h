@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_RESULT_H
-#define __SIEVE_RESULT_H
+#ifndef SIEVE_RESULT_H
+#define SIEVE_RESULT_H
 
 #include "sieve-common.h"
 #include "sieve-error.h"

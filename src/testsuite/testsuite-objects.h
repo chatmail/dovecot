@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __TESTSUITE_OBJECTS_H
-#define __TESTSUITE_OBJECTS_H
+#ifndef TESTSUITE_OBJECTS_H
+#define TESTSUITE_OBJECTS_H
 
 #include "sieve-common.h"
 #include "sieve-objects.h"
@@ -83,4 +80,4 @@ const char *testsuite_object_member_name
 extern const struct testsuite_object_def message_testsuite_object;
 extern const struct testsuite_object_def envelope_testsuite_object;
 
-#endif /* __TESTSUITE_OBJECTS_H */
+#endif

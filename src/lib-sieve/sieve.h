@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_H
-#define __SIEVE_H
+#ifndef SIEVE_H
+#define SIEVE_H
 
 struct sieve_script;
 struct sieve_binary;

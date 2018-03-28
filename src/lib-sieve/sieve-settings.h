@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_SETTINGS_H
-#define __SIEVE_SETTINGS_H
+#ifndef SIEVE_SETTINGS_H
+#define SIEVE_SETTINGS_H
 
 #include "sieve-common.h"
 
@@ -62,4 +59,4 @@ static inline const char *sieve_environment_get_homedir
 	return callbacks->get_homedir(svinst->context);
 }
 
-#endif /* __SIEVE_SETTINGS_H */
+#endif

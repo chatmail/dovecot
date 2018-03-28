@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_ADDRESS_SOURCE_H
-#define __SIEVE_ADDRESS_SOURCE_H
+#ifndef SIEVE_ADDRESS_SOURCE_H
+#define SIEVE_ADDRESS_SOURCE_H
 
 #include "sieve-common.h"
 

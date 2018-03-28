@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_SCRIPT_H
-#define __SIEVE_SCRIPT_H
+#ifndef SIEVE_SCRIPT_H
+#define SIEVE_SCRIPT_H
 
 #include "sieve-common.h"
 
@@ -166,4 +163,4 @@ struct sieve_script *sieve_script_sequence_next
 	(struct sieve_script_sequence *seq, enum sieve_error *error_r);
 void sieve_script_sequence_free(struct sieve_script_sequence **_seq);
 
-#endif /* __SIEVE_SCRIPT_H */
+#endif

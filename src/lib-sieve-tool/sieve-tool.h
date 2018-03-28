@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_TOOL_H
-#define __SIEVE_TOOL_H
+#ifndef SIEVE_TOOL_H
+#define SIEVE_TOOL_H
 
 #include "sieve-common.h"
 
@@ -100,4 +97,4 @@ void sieve_tool_dump_binary_to
 void sieve_tool_parse_trace_option
 	(struct sieve_trace_config *tr_config, const char *tr_option);
 
-#endif /* __SIEVE_TOOL_H */
+#endif

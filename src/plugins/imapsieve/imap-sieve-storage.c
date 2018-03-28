@@ -22,10 +22,14 @@
 
 #define IMAP_SIEVE_USER_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, imap_sieve_user_module)
+#define IMAP_SIEVE_USER_CONTEXT_REQUIRE(obj) \
+	MODULE_CONTEXT_REQUIRE(obj, imap_sieve_user_module)
 #define IMAP_SIEVE_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, imap_sieve_storage_module)
+#define IMAP_SIEVE_CONTEXT_REQUIRE(obj) \
+	MODULE_CONTEXT_REQUIRE(obj, imap_sieve_storage_module)
 #define IMAP_SIEVE_MAIL_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, imap_sieve_mail_module)
+	MODULE_CONTEXT_REQUIRE(obj, imap_sieve_mail_module)
 
 struct imap_sieve_mailbox_rule;
 struct imap_sieve_user;
@@ -289,7 +293,7 @@ static struct imap_sieve_mailbox_event *
 imap_sieve_create_mailbox_event
 (struct mailbox_transaction_context *t, struct mail *dest_mail)
 {
-	struct imap_sieve_mailbox_transaction *ismt = IMAP_SIEVE_CONTEXT(t);
+	struct imap_sieve_mailbox_transaction *ismt = IMAP_SIEVE_CONTEXT_REQUIRE(t);
 	struct imap_sieve_mailbox_event *event;
 
 	if (!array_is_created(&ismt->events))
@@ -306,7 +310,7 @@ static void imap_sieve_add_mailbox_event
 	struct mail *dest_mail, struct mailbox *src_box,
 	const char *changed_flags)
 {
-	struct imap_sieve_mailbox_transaction *ismt = IMAP_SIEVE_CONTEXT(t);
+	struct imap_sieve_mailbox_transaction *ismt = IMAP_SIEVE_CONTEXT_REQUIRE(t);
 	struct imap_sieve_mailbox_event *event;
 
 	i_assert(ismt->src_box == NULL || ismt->src_box == src_box);
@@ -320,7 +324,7 @@ static void imap_sieve_add_mailbox_copy_event
 (struct mailbox_transaction_context *t,
 	struct mail *dest_mail, struct mail *src_mail)
 {
-	struct imap_sieve_mailbox_transaction *ismt = IMAP_SIEVE_CONTEXT(t);
+	struct imap_sieve_mailbox_transaction *ismt = IMAP_SIEVE_CONTEXT_REQUIRE(t);
 	struct imap_sieve_mailbox_event *event;
 
 	i_assert(ismt->src_box == NULL || ismt->src_box == src_mail->box);
@@ -442,7 +446,7 @@ static void imap_sieve_mail_allocated(struct mail *_mail)
 		IMAP_SIEVE_CONTEXT(_mail->transaction);
 	struct mail_user *user = _mail->box->storage->user;
 	struct imap_sieve_user *isuser =
-		IMAP_SIEVE_USER_CONTEXT(user);
+		IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 	struct mail_vfuncs *v = mail->vlast;
 	struct imap_sieve_mail *ismail;
 
@@ -471,9 +475,9 @@ imap_sieve_mailbox_copy(struct mail_save_context *ctx, struct mail *mail)
 	struct mail_storage *storage = t->box->storage;
 	struct mail_user *user = storage->user;
 	struct imap_sieve_user *isuser =
-		IMAP_SIEVE_USER_CONTEXT(user);
+		IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 	union mailbox_module_context *lbox =
-		IMAP_SIEVE_CONTEXT(t->box);
+		IMAP_SIEVE_CONTEXT_REQUIRE(t->box);
 	struct imap_sieve_mailbox_transaction *ismt =
 		IMAP_SIEVE_CONTEXT(t);
 
@@ -499,9 +503,9 @@ imap_sieve_mailbox_save_finish(struct mail_save_context *ctx)
 	struct mailbox_transaction_context *t = ctx->transaction;
 	struct mailbox *box = t->box;
 	struct imap_sieve_mailbox_transaction *ismt = IMAP_SIEVE_CONTEXT(t);
-	union mailbox_module_context *lbox = IMAP_SIEVE_CONTEXT(box);
+	union mailbox_module_context *lbox = IMAP_SIEVE_CONTEXT_REQUIRE(box);
 	struct mail_user *user = box->storage->user;
-	struct imap_sieve_user *isuser = 	IMAP_SIEVE_USER_CONTEXT(user);
+	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 	struct mail *dest_mail = ctx->copying_via_save ? NULL : ctx->dest_mail;
 
 	if (lbox->super.save_finish(ctx) < 0)
@@ -526,7 +530,7 @@ imap_sieve_mailbox_transaction_begin(struct mailbox *box,
 			 enum mailbox_transaction_flags flags,
 			 const char *reason)
 {
-	union mailbox_module_context *lbox = IMAP_SIEVE_CONTEXT(box);
+	union mailbox_module_context *lbox = IMAP_SIEVE_CONTEXT_REQUIRE(box);
 	struct mail_user *user = box->storage->user;
 	struct imap_sieve_user *isuser = 	IMAP_SIEVE_USER_CONTEXT(user);
 	struct mailbox_transaction_context *t;
@@ -609,7 +613,7 @@ imap_sieve_mailbox_transaction_run(
 	};
 	struct mailbox *src_box = ismt->src_box;
 	struct mail_user *user = dest_box->storage->user;
-	struct imap_sieve_user *isuser = 	IMAP_SIEVE_USER_CONTEXT(user);
+	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 	const struct imap_sieve_mailbox_event *mevent;
 	struct mailbox_header_lookup_ctx *headers_ctx;
 	struct mailbox_transaction_context *st;
@@ -740,14 +744,13 @@ imap_sieve_mailbox_transaction_run(
 			uid = mevent->dest_mail_uid;
 
 		/* Select event message */
-		if (!mail_set_uid(mail, uid)) {
-			imap_sieve_mailbox_error(sbox,
-				"Failed to find message for Sieve event (UID=%llu)",
+		if (!mail_set_uid(mail, uid) || mail->expunged) {
+			/* already gone for some reason */
+			imap_sieve_mailbox_debug(sbox,
+				"Message for Sieve event gone (UID=%llu)",
 				(unsigned long long)uid);
 			continue;
 		}
-
-		i_assert(!mail->expunged);
 
 		/* Run scripts for this mail */
 		ret = imap_sieve_run_mail
@@ -787,8 +790,8 @@ imap_sieve_mailbox_transaction_commit(
 	struct mailbox *box = t->box;
 	struct mail_user *user = box->storage->user;
 	struct imap_sieve_mailbox_transaction *ismt = IMAP_SIEVE_CONTEXT(t);
-	union mailbox_module_context *lbox = IMAP_SIEVE_CONTEXT(t->box);
-	struct imap_sieve_user *isuser = 	IMAP_SIEVE_USER_CONTEXT(user);
+	union mailbox_module_context *lbox = IMAP_SIEVE_CONTEXT_REQUIRE(t->box);
+	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 	int ret = 0;
 
 	if ((lbox->super.transaction_commit(t, changes_r)) < 0)
@@ -811,7 +814,7 @@ imap_sieve_mailbox_transaction_rollback(
 	struct mailbox_transaction_context *t)
 {
 	struct imap_sieve_mailbox_transaction *ismt = IMAP_SIEVE_CONTEXT(t);
-	union mailbox_module_context *lbox = IMAP_SIEVE_CONTEXT(t->box);
+	union mailbox_module_context *lbox = IMAP_SIEVE_CONTEXT_REQUIRE(t->box);
 
 	lbox->super.transaction_rollback(t);
 
@@ -822,7 +825,7 @@ imap_sieve_mailbox_transaction_rollback(
 static void imap_sieve_mailbox_allocated(struct mailbox *box)
 {
 	struct mail_user *user = box->storage->user;
-	struct imap_sieve_user *isuser = 	IMAP_SIEVE_USER_CONTEXT(user);
+	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 	struct mailbox_vfuncs *v = box->vlast;
 	union mailbox_module_context *lbox;
 
@@ -879,7 +882,7 @@ static bool rule_pattern_has_wildcards(const char *pattern)
 static void
 imap_sieve_mailbox_rules_init(struct mail_user *user)
 {
-	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT(user);
+	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 	string_t *identifier;
 	unsigned int i = 0;
 	size_t prefix_len;
@@ -1029,7 +1032,7 @@ imap_sieve_mailbox_rules_match_patterns(struct mail_user *user,
 	const char *cause,
 	ARRAY_TYPE(imap_sieve_mailbox_rule) *rules)
 {
-	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT(user);
+	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 	struct imap_sieve_mailbox_rule *const *rule_idx;
 	struct mail_namespace *dst_ns, *src_ns;
 
@@ -1077,7 +1080,7 @@ imap_sieve_mailbox_rules_match(struct mail_user *user,
 	const char *cause,
 	ARRAY_TYPE(imap_sieve_mailbox_rule) *rules)
 {
-	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT(user);
+	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 	struct imap_sieve_mailbox_rule lookup_rule;
 	struct imap_sieve_mailbox_rule *rule;
 
@@ -1141,7 +1144,7 @@ imap_sieve_mailbox_rules_get(struct mail_user *user,
 
 static void imap_sieve_user_deinit(struct mail_user *user)
 {
-	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT(user);
+	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT_REQUIRE(user);
 
 	if (isuser->isieve != NULL)
 		imap_sieve_deinit(&isuser->isieve);
@@ -1223,7 +1226,7 @@ static void imap_sieve_command_post(struct client_command_context *cmd)
 void imap_sieve_storage_client_created(struct client *client,
 	bool user_script)
 {
-	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT(client->user);
+	struct imap_sieve_user *isuser = IMAP_SIEVE_USER_CONTEXT_REQUIRE(client->user);
 
 	isuser->client = client;
 	isuser->user_script = user_script;

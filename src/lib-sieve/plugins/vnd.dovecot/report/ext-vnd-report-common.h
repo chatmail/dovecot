@@ -1,8 +1,5 @@
-/* Copyright (c)2016 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_REPORT_COMMON_H
-#define __EXT_REPORT_COMMON_H
+#ifndef EXT_REPORT_COMMON_H
+#define EXT_REPORT_COMMON_H
 
 /*
  * Extension configuration
@@ -40,4 +37,4 @@ extern const struct sieve_operation_def report_operation;
 const char *
 ext_vnd_report_parse_feedback_type(const char *feedback_type);
 
-#endif /* __EXT_NOTIFY_COMMON_H */
+#endif

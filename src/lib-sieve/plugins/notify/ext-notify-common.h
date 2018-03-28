@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_NOTIFY_COMMON_H
-#define __EXT_NOTIFY_COMMON_H
+#ifndef EXT_NOTIFY_COMMON_H
+#define EXT_NOTIFY_COMMON_H
 
 /*
  * Extension
@@ -66,4 +63,4 @@ int ext_notify_construct_message
 	(const struct sieve_runtime_env *renv, const char *msg_format,
 		string_t *out_msg);
 
-#endif /* __EXT_NOTIFY_COMMON_H */
+#endif

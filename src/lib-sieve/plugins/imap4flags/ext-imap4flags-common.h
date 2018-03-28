@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_IMAP4FLAGS_COMMON_H
-#define __EXT_IMAP4FLAGS_COMMON_H
+#ifndef EXT_IMAP4FLAGS_COMMON_H
+#define EXT_IMAP4FLAGS_COMMON_H
 
 #include "lib.h"
 
@@ -96,5 +93,5 @@ void ext_imap4flags_get_implicit_flags_init
 		struct sieve_result *result);
 
 
-#endif /* __EXT_IMAP4FLAGS_COMMON_H */
+#endif
 

@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_EDITHEADER_COMMON_H
-#define __EXT_EDITHEADER_COMMON_H
+#ifndef EXT_EDITHEADER_COMMON_H
+#define EXT_EDITHEADER_COMMON_H
 
 /*
  * Commands
@@ -49,4 +46,4 @@ bool ext_editheader_header_allow_delete
 bool ext_editheader_header_too_large
 	(const struct sieve_extension *ext, size_t size);
 
-#endif /* __EXT_EDITHEADER_COMMON_H */
+#endif

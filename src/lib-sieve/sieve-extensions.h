@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_EXTENSIONS_H
-#define __SIEVE_EXTENSIONS_H
+#ifndef SIEVE_EXTENSIONS_H
+#define SIEVE_EXTENSIONS_H
 
 #include "lib.h"
 #include "sieve-common.h"
@@ -191,4 +188,4 @@ void sieve_extension_capabilities_unregister
 const char *sieve_extension_capabilities_get_string
 	(struct sieve_instance *svinst, const char *cap_name);
 
-#endif /* __SIEVE_EXTENSIONS_H */
+#endif

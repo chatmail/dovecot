@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_RUNTIME_H
-#define __SIEVE_RUNTIME_H
+#ifndef SIEVE_RUNTIME_H
+#define SIEVE_RUNTIME_H
 
 #include "sieve-common.h"
 
@@ -41,4 +38,4 @@ struct sieve_runtime_env {
 	struct sieve_runtime_trace *trace;
 };
 
-#endif /* __SIEVE_RUNTIME_H */
+#endif

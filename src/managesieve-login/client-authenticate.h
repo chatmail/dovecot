@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __CLIENT_AUTHENTICATE_H
-#define __CLIENT_AUTHENTICATE_H
+#ifndef CLIENT_AUTHENTICATE_H
+#define CLIENT_AUTHENTICATE_H
 
 struct managesieve_arg;
 
@@ -21,4 +18,4 @@ void managesieve_client_auth_parse_response
 int cmd_authenticate
 	(struct managesieve_client *client, const struct managesieve_arg *args);
 
-#endif /* __CLIENT_AUTHENTICATE_H */
+#endif

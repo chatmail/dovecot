@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_MATCH_TYPES_H
-#define __SIEVE_MATCH_TYPES_H
+#ifndef SIEVE_MATCH_TYPES_H
+#define SIEVE_MATCH_TYPES_H
 
 #include "sieve-common.h"
 #include "sieve-extensions.h"
@@ -233,4 +230,4 @@ bool sieve_match_substring_validate_context
 		struct sieve_match_type_context *ctx,
 		struct sieve_ast_argument *key_arg);
 
-#endif /* __SIEVE_MATCH_TYPES_H */
+#endif

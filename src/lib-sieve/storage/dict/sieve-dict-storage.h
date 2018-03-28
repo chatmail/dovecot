@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_DICT_STORAGE_H
-#define __SIEVE_DICT_STORAGE_H
+#ifndef SIEVE_DICT_STORAGE_H
+#define SIEVE_DICT_STORAGE_H
 
 #include "sieve.h"
 #include "sieve-script-private.h"
