@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __MAIL_RAW_H
-#define __MAIL_RAW_H
+#ifndef MAIL_RAW_H
+#define MAIL_RAW_H
 
 #include "lib.h"
 #include "master-service.h"
@@ -18,6 +15,8 @@ struct mail_raw {
 struct mail_user *mail_raw_user_create
 	(struct master_service *service, struct mail_user *mail_user);
 
+struct mail_raw *mail_raw_open_stream
+	(struct mail_user *ruser, struct istream *input);
 struct mail_raw *mail_raw_open_file
 	(struct mail_user *ruser, const char *path);
 struct mail_raw *mail_raw_open_data
@@ -25,4 +24,4 @@ struct mail_raw *mail_raw_open_data
 void mail_raw_close(struct mail_raw **mailr);
 
 
-#endif /* __MAIL_RAW_H */
+#endif

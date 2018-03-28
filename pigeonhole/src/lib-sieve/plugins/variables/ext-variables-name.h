@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_VARIABLES_NAME
-#define __EXT_VARIABLES_NAME
+#ifndef EXT_VARIABLES_NAME_H
+#define EXT_VARIABLES_NAME_H
 
 /* Variable Substitution
  * ---------------------
@@ -43,4 +40,4 @@
 int ext_variable_name_parse
 	(ARRAY_TYPE(sieve_variable_name) *vname, const char **str, const char *strend);
 
-#endif /* __EXT_VARIABLES_NAME */
+#endif

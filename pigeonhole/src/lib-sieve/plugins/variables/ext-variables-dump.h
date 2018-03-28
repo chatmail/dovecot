@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_VARIABLES_DUMP_H
-#define __EXT_VARIABLES_DUMP_H
+#ifndef EXT_VARIABLES_DUMP_H
+#define EXT_VARIABLES_DUMP_H
 
 #include "sieve-common.h"
 
@@ -22,4 +19,4 @@ const char *ext_variables_dump_get_identifier
 (const struct sieve_extension *var_ext, const struct sieve_dumptime_env *denv,
 	const struct sieve_extension *ext, unsigned int index);
 
-#endif /* __EXT_VARIABLES_DUMP_H */
+#endif

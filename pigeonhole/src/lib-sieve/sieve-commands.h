@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_COMMANDS_H
-#define __SIEVE_COMMANDS_H
+#ifndef SIEVE_COMMANDS_H
+#define SIEVE_COMMANDS_H
 
 #include "lib.h"
 
@@ -286,4 +283,4 @@ extern const unsigned int sieve_core_tests_count;
 bool sieve_command_verify_headers_argument
 (struct sieve_validator *valdtr, struct sieve_ast_argument *headers);
 
-#endif /* __SIEVE_COMMANDS_H */
+#endif

@@ -1,12 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-/*
- * Public interface for other extensions to use
- */
-
-#ifndef __SIEVE_EXT_VARIABLES_H
-#define __SIEVE_EXT_VARIABLES_H
+#ifndef SIEVE_EXT_VARIABLES_H
+#define SIEVE_EXT_VARIABLES_H
 
 #include "lib.h"
 
@@ -14,6 +7,9 @@
 #include "sieve-extensions.h"
 #include "sieve-objects.h"
 #include "sieve-code.h"
+
+/* Public interface for other extensions to use
+ */
 
 /*
  * Limits
@@ -308,7 +304,7 @@ struct sieve_variables_modifier {
 	( (smodf)->object.def->identifier )
 
 ARRAY_DEFINE_TYPE(sieve_variables_modifier,
-	const struct sieve_variables_modifier);
+	struct sieve_variables_modifier);
 
 /* Registry */
 
@@ -358,4 +354,4 @@ void sieve_ext_variables_dump_set_scope
 (const struct sieve_extension *var_ext, const struct sieve_dumptime_env *denv,
 	const struct sieve_extension *ext, struct sieve_variable_scope *scope);
 
-#endif /* __SIEVE_EXT_VARIABLES_H */
+#endif

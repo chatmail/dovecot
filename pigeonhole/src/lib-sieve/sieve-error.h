@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_ERROR_H
-#define __SIEVE_ERROR_H
+#ifndef SIEVE_ERROR_H
+#define SIEVE_ERROR_H
 
 #include "lib.h"
 #include "compat.h"
@@ -205,4 +202,4 @@ struct sieve_error_handler *sieve_varexpand_ehandler_create
 (struct sieve_error_handler *parent, const char *format,
 	const struct var_expand_table *table);
 
-#endif /* __SIEVE_ERROR_H */
+#endif

@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __DOVEADM_SIEVE_CMD_H
-#define __DOVEADM_SIEVE_CMD_H
+#ifndef DOVEADM_SIEVE_CMD_H
+#define DOVEADM_SIEVE_CMD_H
 
 struct doveadm_sieve_cmd_context;
 

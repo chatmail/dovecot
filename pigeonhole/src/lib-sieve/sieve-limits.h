@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_LIMITS_H
-#define __SIEVE_LIMITS_H
+#ifndef SIEVE_LIMITS_H
+#define SIEVE_LIMITS_H
 
 /*
  * Scripts
@@ -42,4 +39,4 @@
 #define SIEVE_DEFAULT_MAX_ACTIONS      32
 #define SIEVE_DEFAULT_MAX_REDIRECTS    4
 
-#endif /* __SIEVE_LIMITS_H */
+#endif

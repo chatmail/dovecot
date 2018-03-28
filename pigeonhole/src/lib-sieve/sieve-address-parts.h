@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_ADDRESS_PARTS_H
-#define __SIEVE_ADDRESS_PARTS_H
+#ifndef SIEVE_ADDRESS_PARTS_H
+#define SIEVE_ADDRESS_PARTS_H
 
 #include "message-address.h"
 
@@ -135,4 +132,4 @@ int sieve_addrmatch_opr_optional_read
 		signed int *opt_code, int *exec_status, struct sieve_address_part *addrp,
 		struct sieve_match_type *mtch, struct sieve_comparator *cmp);
 
-#endif /* __SIEVE_ADDRESS_PARTS_H */
+#endif

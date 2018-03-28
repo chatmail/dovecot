@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_CODE_DUMPER_H
-#define __SIEVE_CODE_DUMPER_H
+#ifndef SIEVE_CODE_DUMPER_H
+#define SIEVE_CODE_DUMPER_H
 
 #include "sieve-common.h"
 
@@ -55,4 +52,4 @@ bool sieve_code_dumper_print_optional_operands
 
 void sieve_code_dumper_run(struct sieve_code_dumper *dumper);
 
-#endif /* __SIEVE_CODE_DUMPER_H */
+#endif

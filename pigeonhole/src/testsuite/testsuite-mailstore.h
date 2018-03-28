@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __TESTSUITE_MAILSTORE_H
-#define __TESTSUITE_MAILSTORE_H
+#ifndef TESTSUITE_MAILSTORE_H
+#define TESTSUITE_MAILSTORE_H
 
 #include "lib.h"
 
@@ -40,4 +37,4 @@ bool testsuite_mailstore_mail_index
 int testsuite_mailstore_set_imap_metadata
 	(const char *mailbox, const char *annotation, const char *value);
 
-#endif /* __TESTSUITE_MAILSTORE */
+#endif

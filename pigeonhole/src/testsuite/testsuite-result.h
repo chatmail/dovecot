@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __TESTSUITE_RESULT_H
-#define __TESTSUITE_RESULT_H
+#ifndef TESTSUITE_RESULT_H
+#define TESTSUITE_RESULT_H
 
 void testsuite_result_init(void);
 void testsuite_result_deinit(void);
@@ -22,4 +19,4 @@ void testsuite_result_print
 struct sieve_stringlist *testsuite_result_stringlist_create
 	(const struct sieve_runtime_env *renv, int index);
 
-#endif /* __TESTSUITE_RESULT_H */
+#endif

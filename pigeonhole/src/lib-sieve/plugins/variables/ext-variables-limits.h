@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_VARIABLES_LIMITS_H
-#define __EXT_VARIABLES_LIMITS_H
+#ifndef EXT_VARIABLES_LIMITS_H
+#define EXT_VARIABLES_LIMITS_H
 
 #include "sieve-limits.h"
 
@@ -35,4 +32,4 @@
 
 #define EXT_VARIABLES_MAX_MATCH_INDEX            SIEVE_MAX_MATCH_VALUES
 
-#endif /* __EXT_VARIABLES_LIMITS_H */
+#endif

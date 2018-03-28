@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_CONFIG_H
-#define __SIEVE_CONFIG_H
+#ifndef SIEVE_CONFIG_H
+#define SIEVE_CONFIG_H
 
 #include "pigeonhole-config.h"
 #include "pigeonhole-version.h"

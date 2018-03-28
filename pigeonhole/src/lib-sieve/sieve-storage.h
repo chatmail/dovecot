@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_STORAGE_H
-#define __SIEVE_STORAGE_H
+#ifndef SIEVE_STORAGE_H
+#define SIEVE_STORAGE_H
 
 #define MAILBOX_ATTRIBUTE_PREFIX_SIEVE \
 	MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER"sieve/"

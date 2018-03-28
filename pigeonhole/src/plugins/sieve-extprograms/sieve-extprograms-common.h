@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_EXTPROGRAMS_COMMON_H
-#define __SIEVE_EXTPROGRAMS_COMMON_H
+#ifndef SIEVE_EXTPROGRAMS_COMMON_H
+#define SIEVE_EXTPROGRAMS_COMMON_H
 
 #include "sieve-common.h"
 
@@ -107,4 +104,4 @@ int sieve_extprogram_set_input_mail
 
 int sieve_extprogram_run(struct sieve_extprogram *sprog);
 
-#endif /* __SIEVE_EXTPROGRAMS_COMMON_H */
+#endif

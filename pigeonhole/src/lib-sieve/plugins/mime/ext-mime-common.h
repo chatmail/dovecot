@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_FOREVERYPART_COMMON_H
-#define __EXT_FOREVERYPART_COMMON_H
+#ifndef EXT_FOREVERYPART_COMMON_H
+#define EXT_FOREVERYPART_COMMON_H
 
 #include "sieve-message.h"
 
@@ -85,4 +82,4 @@ struct ext_foreverypart_runtime_loop *
 ext_foreverypart_runtime_loop_get_current
 (const struct sieve_runtime_env *renv);
 
-#endif /* __EXT_FOREVERYPART_COMMON_H */
+#endif

@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_ACTIONS_H
-#define __SIEVE_ACTIONS_H
+#ifndef SIEVE_ACTIONS_H
+#define SIEVE_ACTIONS_H
 
 #include "lib.h"
 #include "mail-types.h"
@@ -293,4 +290,4 @@ int sieve_action_reject_mail
 // FIXME: move this to a more appropriate location
 bool sieve_mailbox_check_name(const char *mailbox, const char **error_r);
 
-#endif /* __SIEVE_ACTIONS_H */
+#endif

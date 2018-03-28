@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __MANAGESIEVE_COMMON_H
-#define __MANAGESIEVE_COMMON_H
+#ifndef MANAGESIEVE_COMMON_H
+#define MANAGESIEVE_COMMON_H
 
 #include "pigeonhole-config.h"
 
@@ -30,4 +27,4 @@ extern void (*hook_client_created)(struct client **client);
 
 void managesieve_refresh_proctitle(void);
 
-#endif /* __MANAGESIEVE_COMMON_H */
+#endif

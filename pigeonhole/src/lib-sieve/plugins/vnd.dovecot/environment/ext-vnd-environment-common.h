@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_VND_ENVIRONMENT_COMMON_H
-#define __EXT_VND_ENVIRONMENT_COMMON_H
+#ifndef EXT_VND_ENVIRONMENT_COMMON_H
+#define EXT_VND_ENVIRONMENT_COMMON_H
 
 #include "sieve-ext-environment.h"
 

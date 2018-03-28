@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __TESTSUITE_SCRIPT_H
-#define __TESTSUITE_SCRIPT_H
+#ifndef TESTSUITE_SCRIPT_H
+#define TESTSUITE_SCRIPT_H
 
 #include "sieve-common.h"
 
@@ -22,4 +19,4 @@ bool testsuite_script_multiscript
 struct sieve_binary *testsuite_script_get_binary(const struct sieve_runtime_env *renv);
 void testsuite_script_set_binary(const struct sieve_runtime_env *renv, struct sieve_binary *sbin);
 
-#endif /* __TESTSUITE_SCRIPT_H */
+#endif

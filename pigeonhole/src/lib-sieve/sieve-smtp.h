@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_SMTP_H
-#define __SIEVE_SMTP_H
+#ifndef SIEVE_SMTP_H
+#define SIEVE_SMTP_H
 
 #include "sieve-common.h"
 
@@ -31,4 +28,4 @@ void sieve_smtp_abort
 int sieve_smtp_finish
 	(struct sieve_smtp_context *sctx, const char **error_r);
 
-#endif /* __SIEVE_SMTP_H */
+#endif
