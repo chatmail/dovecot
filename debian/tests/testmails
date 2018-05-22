@@ -1,0 +1,245 @@
+#!/usr/bin/python3
+
+import crypt
+import grp
+import imaplib
+import os
+import os.path
+import poplib
+import pwd
+import random
+import string
+import subprocess
+import sys
+import unittest
+
+
+def random_string(length):
+    '''Return a random string, consisting of ASCII letters, with given
+    length.'''
+
+    s = ''
+    maxind = len(string.ascii_letters)-1
+    for l in range(length):
+        s += string.ascii_letters[random.randint(0, maxind)]
+    return s.lower()
+
+
+def login_exists(login):
+    '''Checks whether the given login exists on the system.'''
+
+    try:
+        pwd.getpwnam(login)
+        return True
+    except KeyError:
+        return False
+
+
+class TestUser:
+    '''Create a temporary test user and remove it again on close.'''
+
+    def __init__(self):
+        '''Create a new user account with a random password.'''
+
+        self.login = None
+
+        while(True):
+            login = random_string(8)
+            if not login_exists(login):
+                break
+
+        self.salt = random_string(2)
+        self.password = random_string(8)
+        self.crypted = crypt.crypt(self.password, self.salt)
+
+        subprocess.check_call(['useradd', '-p', self.crypted, '-m', login])
+
+        self.login = login
+        p = pwd.getpwnam(self.login)
+        self.uid = p[2]
+        self.gid = p[3]
+
+    def __del__(self):
+        '''Remove the created user account.'''
+
+        if self.login:
+            self.close()
+
+    def close(self):
+        '''Remove the created user account.'''
+
+        subprocess.check_call(['userdel', '-f', '-r', self.login])
+        self.login = None
+
+
+class DovecotBasics(unittest.TestCase):
+    '''Base operational tests for Dovecot server.'''
+
+    def setUp(self):
+        '''Create test scenario.
+
+        We want to test the default setup, but pre-setup an mbox on a tmp user
+        '''
+
+        self.user = TestUser()
+
+        # create fresh test mailbox with one new and one old mail
+        self.mailbox = '/var/mail/' + self.user.login
+        self.orig_mbox = '''From test1@test1.com Fri Nov 17 02:21:08 2006
+Date: Thu, 16 Nov 2006 17:12:23 -0800
+From: Test User 1 <test1@test1.com>
+To: Dovecot tester <dovecot@test.com>
+Subject: Test 1
+Status: N
+
+Some really important news.
+
+From test2@test1.com Tue Nov 28 11:29:34 2006
+Date: Tue, 28 Nov 2006 11:29:34 +0100
+From: Test User 2 <test2@test2.com>
+To: Dovecot tester <dovecot@test.com>
+Subject: Test 2
+Status: R
+
+More news.
+
+Get cracking!
+'''
+        with open(self.mailbox, 'w') as f:
+            f.write(self.orig_mbox)
+        os.chown(self.mailbox, self.user.uid, grp.getgrnam('mail')[2])
+        os.chmod(self.mailbox, 0o660)
+
+    def tearDown(self):
+        self.user.close()
+
+    def _test_pop3_proto(self, pop):
+        '''Internal factorization of POP3 protocol checks with an established
+        connection.'''
+
+        # check empty password
+        self.assertEqual(pop.user(self.user.login), b'+OK')
+        self.assertRaises(poplib.error_proto, pop.pass_, '')
+
+        # check wrong password
+        self.assertEqual(pop.user(self.user.login), b'+OK')
+        self.assertRaises(poplib.error_proto, pop.pass_, '123')
+
+        # check correct password
+        self.assertEqual(pop.user(self.user.login), b'+OK')
+        self.assertEqual(pop.pass_(self.user.password), b'+OK Logged in.')
+
+        # check messages
+        self.assertEqual(pop.stat()[0], 2, b'2 available messages')
+        self.assertEqual(pop.list()[1], [b'1 163', b'2 161'])
+        self.assertEqual('\n'.join(l.decode() for l in pop.retr(1)[1]), '''Date: Thu, 16 Nov 2006 17:12:23 -0800
+From: Test User 1 <test1@test1.com>
+To: Dovecot tester <dovecot@test.com>
+Subject: Test 1
+
+Some really important news.''')
+        self.assertEqual('\n'.join(l.decode() for l in pop.retr(2)[1]), '''Date: Tue, 28 Nov 2006 11:29:34 +0100
+From: Test User 2 <test2@test2.com>
+To: Dovecot tester <dovecot@test.com>
+Subject: Test 2
+
+More news.
+
+Get cracking!''')
+
+        self.assertEqual(pop.quit(), b'+OK Logging out.')
+
+    def test_pop3(self):
+        '''Test POP3 protocol.'''
+
+        pop = poplib.POP3('localhost')
+        self.assertEqual(pop.getwelcome(), b'+OK Dovecot (Ubuntu) ready.')
+
+        self._test_pop3_proto(pop)
+
+    def test_pop3s(self):
+        '''Test POP3S protocol.'''
+
+        pop = poplib.POP3_SSL('localhost')
+        self.assertEqual(pop.getwelcome(), b'+OK Dovecot (Ubuntu) ready.')
+
+        self._test_pop3_proto(pop)
+
+    def _test_imap_proto(self, imap):
+        '''Internal factorization of IMAP4 protocol checks with an established
+        connection.'''
+
+        # invalid passwords
+        self.assertRaises(imaplib.IMAP4.error, imap.login,
+                          self.user.login, '')
+        self.assertRaises(imaplib.IMAP4.error, imap.login,
+                          self.user.login, '123')
+
+        # correct password
+        imap.login(self.user.login, self.user.password)
+
+        # list mailboxes
+        status, imlist = imap.list()
+        self.assertEqual(status, 'OK')
+        self.assert_(imlist[0].decode().endswith('INBOX'))
+
+        # check mails
+        imap.select()
+        self.assertEqual(imap.search(None, 'ALL'), ('OK', [b'1 2']))
+        self.assertEqual(imap.fetch('1', '(FLAGS)'),
+                         ('OK', [b'1 (FLAGS (\\Recent))']))
+        self.assertEqual(imap.fetch('2', '(FLAGS)'),
+                         ('OK', [b'2 (FLAGS (\\Seen \\Recent))']))
+        self.assertEqual(imap.fetch('1', '(BODY[TEXT])')[1][0][1],
+                         b'Some really important news.\r\n')
+        self.assertEqual(imap.fetch('2', '(BODY[TEXT])')[1][0][1],
+                         b'More news.\r\n\r\nGet cracking!')
+
+        self.assertEqual(imap.fetch('1', '(RFC822)')[1],
+                         [(b'1 (RFC822 {163}',
+                          b'''Date: Thu, 16 Nov 2006 17:12:23 -0800\r
+From: Test User 1 <test1@test1.com>\r
+To: Dovecot tester <dovecot@test.com>\r
+Subject: Test 1\r
+\r
+Some really important news.\r
+'''), b')'])
+
+        # delete mail 1
+        self.assertEqual(imap.store('1', '+FLAGS', '\\Deleted')[0], 'OK')
+        self.assertEqual(imap.expunge()[0], 'OK')
+        self.assertEqual(imap.search(None, 'ALL'), ('OK', [b'1']))
+
+        # old mail 2 is mail 1 now
+        self.assertEqual(imap.fetch('1', '(RFC822)')[1],
+                         [(b'1 (RFC822 {161}',
+                          b'''Date: Tue, 28 Nov 2006 11:29:34 +0100\r
+From: Test User 2 <test2@test2.com>\r
+To: Dovecot tester <dovecot@test.com>\r
+Subject: Test 2\r
+\r
+More news.\r
+\r
+Get cracking!'''), b')'])
+        imap.close()
+        imap.logout()
+
+    def test_imap(self):
+        '''Test IMAP4 protocol.'''
+
+        imap = imaplib.IMAP4('localhost')
+        self._test_imap_proto(imap)
+
+    def test_imaps(self):
+        '''Test IMAP4S protocol.'''
+
+        imap = imaplib.IMAP4_SSL('localhost')
+        self._test_imap_proto(imap)
+
+
+if __name__ == '__main__':
+    os.dup2(1, 2)
+    suite = unittest.TestSuite()
+    suite.addTest(unittest.TestLoader().loadTestsFromTestCase(DovecotBasics))
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    sys.exit(not result.wasSuccessful())
