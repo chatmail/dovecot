@@ -1,3 +1,15 @@
+dovecot (1:2.2.36-1) unstable; urgency=medium
+
+  * [19f2274] d/gbp.conf: set merge-mode to "merge" to preserve pigeonhole/
+    when importing new dovecot sources
+  * [6b9bf0d] New upstream version 2.2.36
+  * [be12f22] Bump pigeonhole version to 0.4.24
+    + Remove new file under doc/rfc
+    + Ship the new imap_filter_sieve module in dovecot-sieve
+  * [b77be59] Bump Standards-Version to 4.1.4; no changes needed
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Wed, 06 Jun 2018 09:31:49 +0300
+
 dovecot (1:2.2.35-2) unstable; urgency=medium
 
   * [7665652] Use git-subtree to generate pigeonhole patch from git; add
