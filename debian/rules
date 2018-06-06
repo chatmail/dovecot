@@ -36,6 +36,9 @@ lmtpd_files = usr/lib/dovecot/lmtp* \
 managesieved_files = usr/lib/dovecot/managesieve* \
 		     usr/lib/dovecot/modules/settings/libmanagesieve*
 
+submissiond_files = usr/lib/dovecot/submission* \
+	           usr/share/dovecot/conf.d/??-submission.conf
+
 pgsql_files = usr/lib/dovecot/modules/auth/libdriver_pgsql* \
 	      usr/lib/dovecot/modules/dict/libdriver_pgsql* \
 	      usr/lib/dovecot/modules/libdriver_pgsql*
@@ -65,9 +68,6 @@ sieve_files = usr/bin/sieve* \
 	      usr/share/man/man1/sieve*
 
 solr_files = usr/lib/dovecot/modules/lib??_fts_solr_*
-
-submission_files = usr/lib/dovecot/submission* \
-	           usr/share/dovecot/conf.d/??-submission.conf
 
 lucene_files = usr/lib/dovecot/modules/lib??_fts_lucene_*
 

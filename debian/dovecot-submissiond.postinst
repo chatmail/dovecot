@@ -10,10 +10,14 @@ if [ "$1" = "configure" ]; then
     # maintainer version, and let it handle how to manage the real
     # configuration file in /etc/dovecot.
     ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
-    ucfr dovecot-submission /etc/dovecot/$conffile
+    # Use --force to allow hijacking the file from dovecot-submission
+    ucfr --force dovecot-submissiond /etc/dovecot/$conffile
   done
 
-  echo 'protocols = $protocols submission' > /usr/share/dovecot/protocols.d/submission.protocol
+  if [ -f /usr/share/dovecot/protocols.d/submission.protocol ]; then
+    rm -f /usr/share/dovecot/protocols.d/submission.protocol
+  fi
+  echo 'protocols = $protocols submission' > /usr/share/dovecot/protocols.d/submissiond.protocol
 fi
 
 #DEBHELPER#

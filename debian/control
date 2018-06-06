@@ -59,7 +59,7 @@ Suggests: dovecot-gssapi,
           dovecot-sieve,
           dovecot-solr,
           dovecot-sqlite,
-          dovecot-submission,
+          dovecot-submissiond,
           ntp
 Provides: dovecot-abi-${dovecot:ABI-Version}, dovecot-common
 Replaces: dovecot-common (<< 1:2.0.14-2~), mailavenger (<< 0.8.1-4)
@@ -263,12 +263,14 @@ Description: secure POP3/IMAP server - Lucene support
  .
  This package provides Lucene full text search support for Dovecot.
 
-Package: dovecot-submission
+Package: dovecot-submissiond
 Architecture: any
 Depends: dovecot-core (= ${binary:Version}),
          ucf (>= 2.0020),
          ${misc:Depends},
          ${shlibs:Depends}
+Breaks: dovecot-submission (<< 1:2.3.1-2~)
+Replaces: dovecot-submission (<< 1:2.3.1-2~)
 Description: secure POP3/IMAP server - mail submission agent
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
