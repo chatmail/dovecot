@@ -231,7 +231,7 @@ mail_transaction_log_init_hdr(struct mail_transaction_log *log,
 	hdr->hdr_size = sizeof(struct mail_transaction_log_header);
 	hdr->indexid = log->index->indexid;
 	hdr->create_stamp = ioloop_time;
-#if !WORDS_BIGENDIAN
+#ifndef WORDS_BIGENDIAN
 	hdr->compat_flags |= MAIL_INDEX_COMPAT_LITTLE_ENDIAN;
 #endif
 
@@ -536,7 +536,7 @@ mail_transaction_log_file_read_hdr(struct mail_transaction_log_file *file,
 		/* we have compatibility flags */
 		enum mail_index_header_compat_flags compat_flags = 0;
 
-#if !WORDS_BIGENDIAN
+#ifndef WORDS_BIGENDIAN
 		compat_flags |= MAIL_INDEX_COMPAT_LITTLE_ENDIAN;
 #endif
 		if (file->hdr.compat_flags != compat_flags) {

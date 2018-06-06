@@ -209,7 +209,7 @@ static struct {
 	{ CASS_CONSISTENCY_ONE, "one" },
 	{ CASS_CONSISTENCY_TWO, "two" },
 	{ CASS_CONSISTENCY_THREE, "three" },
-	{ CASS_CONSISTENCY_QUORUM, "" },
+	{ CASS_CONSISTENCY_QUORUM, "quorum" },
 	{ CASS_CONSISTENCY_ALL, "all" },
 	{ CASS_CONSISTENCY_LOCAL_QUORUM, "local-quorum" },
 	{ CASS_CONSISTENCY_EACH_QUORUM, "each-quorum" },
@@ -908,6 +908,45 @@ static void counters_inc_error(struct cassandra_db *db, CassError error)
 	}
 }
 
+static bool query_error_want_fallback(CassError error)
+{
+	switch (error) {
+	case CASS_ERROR_LIB_WRITE_ERROR:
+	case CASS_ERROR_LIB_REQUEST_TIMED_OUT:
+		/* Communication problems on client side. Maybe it will work
+		   with fallback consistency? */
+		return TRUE;
+	case CASS_ERROR_LIB_NO_HOSTS_AVAILABLE:
+		/* The client library couldn't connect to enough Cassandra
+		   nodes. The error message text is the same as for
+		   CASS_ERROR_SERVER_UNAVAILABLE. */
+		return TRUE;
+	case CASS_ERROR_SERVER_SERVER_ERROR:
+	case CASS_ERROR_SERVER_OVERLOADED:
+	case CASS_ERROR_SERVER_IS_BOOTSTRAPPING:
+	case CASS_ERROR_SERVER_READ_TIMEOUT:
+	case CASS_ERROR_SERVER_READ_FAILURE:
+	case CASS_ERROR_SERVER_WRITE_FAILURE:
+		/* Servers are having trouble. Maybe with fallback consistency
+		   we can reach non-troubled servers? */
+		return TRUE;
+	case CASS_ERROR_SERVER_UNAVAILABLE:
+		/* Cassandra server knows that there aren't enough nodes
+		   available. "All hosts in current policy attempted and were
+		   either unavailable or failed". */
+		return TRUE;
+	case CASS_ERROR_SERVER_WRITE_TIMEOUT:
+		/* Cassandra server couldn't reach all the needed nodes.
+		   This may be because it hasn't yet detected that the servers
+		   are down, or because the servers are just too busy. We'll
+		   try the fallback consistency to avoid unnecessary temporary
+		   errors. */
+		return TRUE;
+	default:
+		return FALSE;
+	}
+}
+
 static void query_callback(CassFuture *future, void *context)
 {
 	struct cassandra_result *result = context;
@@ -936,22 +975,7 @@ static void query_callback(CassFuture *future, void *context)
 			result->query, (int)errsize, errmsg, msecs/1000, msecs%1000,
 			result->page_num == 0 ? "" : t_strdup_printf(", page %u", result->page_num));
 
-		/* unavailable = cassandra server knows that there aren't
-		   enough nodes available. "All hosts in current policy
-		   attempted and were either unavailable or failed"
-
-		   no hosts available = The client library couldn't connect to
-		   enough cassanra nodes. Error message is the same as for
-		   "unavailable".
-
-		   write timeout = cassandra server couldn't reach all the
-		   needed nodes. this may be because it hasn't yet detected
-		   that the servers are down, or because the servers are just
-		   too busy. we'll try the fallback consistency to avoid
-		   unnecessary temporary errors. */
-		if ((error == CASS_ERROR_SERVER_UNAVAILABLE ||
-		     error == CASS_ERROR_LIB_NO_HOSTS_AVAILABLE ||
-		     error == CASS_ERROR_SERVER_WRITE_TIMEOUT) &&
+		if (query_error_want_fallback(error) &&
 		    result->fallback_consistency != result->consistency) {
 			/* retry with fallback consistency */
 			query_resend_with_fallback(result);

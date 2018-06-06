@@ -11,6 +11,7 @@
 #include "hash.h"
 #include "str.h"
 #include "strescape.h"
+#include "time-util.h"
 #include "master-interface.h"
 #include "master-service.h"
 #include "master-auth.h"
@@ -23,7 +24,7 @@ struct master_login_auth_request {
 	struct master_login_auth_request *prev, *next;
 
 	unsigned int id;
-	time_t create_stamp;
+	struct timeval create_stamp;
 
 	pid_t auth_pid;
 	unsigned int auth_id;
@@ -40,6 +41,8 @@ struct master_login_auth {
 	pool_t pool;
 	const char *auth_socket_path;
 	int refcount;
+
+	struct timeval connect_time, handshake_time;
 
 	int fd;
 	struct io *io;
@@ -80,14 +83,32 @@ master_login_auth_init(const char *auth_socket_path, bool request_auth_token)
 	return auth;
 }
 
+static void request_failure(struct master_login_auth *auth,
+			    struct master_login_auth_request *request,
+			    const char *log_reason, const char *client_reason)
+{
+	string_t *str = t_str_new(128);
+
+	str_printfa(str, "auth connected %u msecs ago",
+		    timeval_diff_msecs(&ioloop_timeval, &auth->connect_time));
+	if (auth->handshake_time.tv_sec != 0) {
+		str_printfa(str, ", handshake %u msecs ago",
+			    timeval_diff_msecs(&ioloop_timeval, &auth->handshake_time));
+	}
+	str_printfa(str, ", request took %u msecs, client-pid=%u client-id=%u",
+		    timeval_diff_msecs(&ioloop_timeval, &request->create_stamp),
+		    request->client_pid, request->auth_id);
+
+	i_error("%s (%s)", log_reason, str_c(str));
+	request->callback(NULL, client_reason, request->context);
+}
+
 static void
-request_internal_failure(struct master_login_auth_request *request,
+request_internal_failure(struct master_login_auth *auth,
+			 struct master_login_auth_request *request,
 			 const char *reason)
 {
-	i_error("%s (client-pid=%u client-id=%u)",
-		reason, request->client_pid, request->auth_id);
-	request->callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
-			  request->context);
+	request_failure(auth, request, reason, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE);
 }
 
 void master_login_auth_disconnect(struct master_login_auth *auth)
@@ -99,7 +120,7 @@ void master_login_auth_disconnect(struct master_login_auth *auth)
 		DLLIST2_REMOVE(&auth->request_head,
 			       &auth->request_tail, request);
 
-		request_internal_failure(request,
+		request_internal_failure(auth, request,
 			"Disconnected from auth server, aborting");
 		i_free(request);
 	}
@@ -119,6 +140,8 @@ void master_login_auth_disconnect(struct master_login_auth *auth)
 		auth->fd = -1;
 	}
 	auth->version_received = FALSE;
+	i_zero(&auth->connect_time);
+	i_zero(&auth->handshake_time);
 }
 
 static void master_login_auth_unref(struct master_login_auth **_auth)
@@ -149,7 +172,7 @@ static unsigned int auth_get_next_timeout_secs(struct master_login_auth *auth)
 {
 	time_t expires;
 
-	expires = auth->request_head->create_stamp +
+	expires = auth->request_head->create_stamp.tv_sec +
 		MASTER_AUTH_LOOKUP_TIMEOUT_SECS;
 	return expires <= ioloop_time ? 0 : expires - ioloop_time;
 }
@@ -168,8 +191,8 @@ static void master_login_auth_timeout(struct master_login_auth *auth)
 
 		reason = t_strdup_printf(
 			"Auth server request timed out after %u secs",
-			(unsigned int)(ioloop_time - request->create_stamp));
-		request_internal_failure(request, reason);
+			(unsigned int)(ioloop_time - request->create_stamp.tv_sec));
+		request_internal_failure(auth, request, reason);
 		i_free(request);
 	}
 	timeout_remove(&auth->to);
@@ -265,7 +288,7 @@ master_login_auth_input_notfound(struct master_login_auth *auth,
 		const char *reason = t_strdup_printf(
 			"Authenticated user not found from userdb, "
 			"auth lookup id=%u", id);
-		request_internal_failure(request, reason);
+		request_internal_failure(auth, request, reason);
 		i_free(request);
 	}
 	return TRUE;
@@ -292,13 +315,12 @@ master_login_auth_input_fail(struct master_login_auth *auth,
 	request = master_login_auth_lookup_request(auth, id);
 	if (request != NULL) {
 		if (error == NULL) {
-			request_internal_failure(request,
+			request_internal_failure(auth, request,
 						 "Internal auth failure");
 		} else {
-			i_error("Internal auth failure: %s "
-				"(client-pid=%u client-id=%u)",
-				error, request->client_pid, request->auth_id);
-			request->callback(NULL, error, request->context);
+			const char *log_reason = t_strdup_printf(
+				"Internal auth failure: %s", error);
+			request_failure(auth, request, log_reason, error);
 		}
 		i_free(request);
 	}
@@ -342,6 +364,7 @@ static void master_login_auth_input(struct master_login_auth *auth)
 			return;
 		}
 		auth->version_received = TRUE;
+		auth->handshake_time = ioloop_timeval;
 	}
 	if (!auth->spid_received) {
 		line = i_stream_next_line(auth->input);
@@ -391,6 +414,8 @@ master_login_auth_connect(struct master_login_auth *auth)
 			auth->auth_socket_path);
 		return -1;
 	}
+	io_loop_time_refresh();
+	auth->connect_time = ioloop_timeval;
 	auth->fd = fd;
 	auth->input = i_stream_create_fd(fd, AUTH_MAX_INBUF_SIZE, FALSE);
 	auth->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
@@ -476,8 +501,9 @@ void master_login_auth_request(struct master_login_auth *auth,
 	if (id == 0)
 		id++;
 
+	io_loop_time_refresh();
 	login_req = i_new(struct master_login_auth_request, 1);
-	login_req->create_stamp = ioloop_time;
+	login_req->create_stamp = ioloop_timeval;
 	login_req->id = id;
 	login_req->auth_pid = req->auth_pid;
 	login_req->client_pid = req->client_pid;

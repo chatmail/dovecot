@@ -16,4 +16,4 @@ and <user databases> [UserDatabase.txt]:
    virtual domains
  * <Lua> [AuthDatabase.Lua.txt]: Lua script for authentication (v2.3.0+)
 
-(This file was created from the wiki on 2018-03-19 04:42)
+(This file was created from the wiki on 2018-05-23 04:42)

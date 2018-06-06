@@ -98,6 +98,7 @@ wikifiles = ACL.txt \
 	HowTo.SimpleVirtualInstall.txt \
 	HowTo.WriteConfiguration.txt \
 	HowTo.txt \
+	IMAPServer.Hibernation.txt \
 	IMAPServer.txt \
 	ImapMetadata.txt \
 	IndexFiles.txt \
