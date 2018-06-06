@@ -1,3 +1,11 @@
+dovecot (1:2.3.1-2) experimental; urgency=medium
+
+  * [9354842] Update murmur3-big-endian.patch with upstream commits
+  * [be60b19] Rename dovecot-submission to dovecot-submissiond
+  * [c5f38f9] Bump Standards-Version to 4.1.4; no changes needed
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Wed, 06 Jun 2018 12:15:27 +0300
+
 dovecot (1:2.3.1-1) experimental; urgency=medium
 
   * [d07381b] New upstream version 2.3.1
