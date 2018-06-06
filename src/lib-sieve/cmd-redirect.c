@@ -381,9 +381,6 @@ static int act_redirect_send
 
 	ret = o_stream_send_istream(output, input);
 
-	/* blocking i/o required */
-	i_assert( ret != 0 );
-
 	if (ret < 0 && input->stream_errno != 0) {
 		sieve_result_critical(aenv,
 			"redirect action: failed to read input message",
@@ -393,7 +390,7 @@ static int act_redirect_send
 		i_stream_unref(&input);
 		return SIEVE_EXEC_TEMP_FAILURE;
 	}
-  i_stream_unref(&input);
+	i_stream_unref(&input);
 
 	/* Close SMTP transport */
 	if ( (ret=sieve_smtp_finish(sctx, &error)) <= 0 ) {
