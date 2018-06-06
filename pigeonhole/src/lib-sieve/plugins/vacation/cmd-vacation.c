@@ -1006,7 +1006,7 @@ static int act_vacation_send
 		subject = ctx->subject;
 	}
 
-	subject = str_sanitize(subject, 256);
+	subject = str_sanitize_utf8(subject, config->max_subject_codepoints);
 
 	/* Obtain full To address for reply */
 
@@ -1131,6 +1131,12 @@ static int act_vacation_commit
 	const char *const *hdsp, *const *headers;
 	const char *reply_from, *orig_recipient, *smtp_from, *user_email;
 	int ret;
+
+	if ((aenv->flags & SIEVE_EXECUTE_FLAG_SKIP_RESPONSES) != 0) {
+		sieve_result_global_log(aenv,
+			"not sending vacation reply (skipped)");
+		return SIEVE_EXEC_OK;
+	}
 
 	reply_from = orig_recipient = smtp_from = user_email = NULL;
 

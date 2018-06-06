@@ -63,6 +63,14 @@ int sieve_script_check
 		ATTR_NULL(3, 4);
 
 /*
+ * Data script
+ */
+
+struct sieve_script *sieve_data_script_create_from_input
+	(struct sieve_instance *svinst, const char *name,
+		struct istream *input);
+
+/*
  * Binary
  */
 
@@ -80,7 +88,7 @@ struct sieve_binary *sieve_script_binary_load
 	(struct sieve_script *script, enum sieve_error *error_r);
 int sieve_script_binary_save
 	(struct sieve_script *script, struct sieve_binary *sbin, bool update,
-		enum sieve_error *error_r);
+		enum sieve_error *error_r) ATTR_NULL(4);
 
 const char *sieve_script_binary_get_prefix
 	(struct sieve_script *script);
