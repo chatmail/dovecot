@@ -2,7 +2,6 @@
 
 #include "lib.h"
 #include "time-util.h"
-#include "restrict-access.h"
 #include "stats-plugin.h"
 #include "mail-stats.h"
 
@@ -47,9 +46,6 @@ static int process_io_open(void)
 	if (proc_io_disabled)
 		return -1;
 
-	bool dumpable = restrict_access_get_dumpable();
-	if (!dumpable)
-		restrict_access_set_dumpable(TRUE);
 	proc_io_fd = open(PROC_IO_PATH, O_RDONLY);
 	if (proc_io_fd == -1 && errno == EACCES) {
 		/* kludge: if we're running with permissions temporarily
@@ -65,8 +61,6 @@ static int process_io_open(void)
 		}
 		errno = EACCES;
 	}
-	if (!dumpable)
-		restrict_access_set_dumpable(FALSE);
 	if (proc_io_fd == -1) {
 		if (errno != ENOENT)
 			i_error("open(%s) failed: %m", PROC_IO_PATH);
@@ -147,6 +141,11 @@ void mail_stats_fill(struct stats_user *suser, struct mail_stats *stats_r)
 	(void)gettimeofday(&stats_r->clock_time, NULL);
 	process_read_io_stats(stats_r);
 	user_trans_stats_get(suser, stats_r);
+}
+
+void mail_stats_global_preinit(void)
+{
+	(void)process_io_open();
 }
 
 void mail_stats_fill_global_deinit(void)

@@ -66,13 +66,34 @@ All the FTS settings go inside 'plugin {} ' section of 90-plugin.conf.
 
  * 'fts_autoindex=yes': Index new messages immediately after they've been
    saved/copied. (v2.2.9+)
+ * 'fts_autoindex_exclude=pattern1', 'fts_autoindex_exclude2=pattern2', ...:
+   Exclude given mailboxes, one pattern per setting. Supports "*" and "?"
+   wildcards. If a name starts with '\', it's treated as a case-insensitive
+   special-use flag. (v2.2.25+)
+    * Example:
+
+      ---%<-------------------------------------------------------------------
+      plugin {
+        fts_autoindex_exclude = \Junk
+        fts_autoindex_exclude2 = \Trash
+        fts_autoindex_exclude3 = DUMPSTER
+      }
+      ---%<-------------------------------------------------------------------
+
  * 'fts_autoindex_max_recent_msgs=n': Skip autoindexing the mailbox if it has
    more than n \Recent messages (implying that the mailbox is never actually
    being accessed). (v2.2.9+)
+ * 'fts_enforced':
+    * no (default): All body searches will index all missing mails in FTS.
+      Header searches will use FTS if the mails are indexed, otherwise fallback
+      to parsing the headers (usually from dovecot.index.cache). If FTS search
+      fails, fallback to reading and parsing all mails.
+    * yes: All header and body searches will index all missing mails in FTS. If
+      FTS search fails, error is returned to client.
  * 'fts_index_timeout': When SEARCH notices that index isn't up to date, it
    tells indexer to index the mails and waits until it is finished. This
    setting adds a maximum timeout to this wait. If the timeout is reached, the
    SEARCH fails with:'NO [INUSE] Timeout while waiting for indexing to finish'
    (v2.1+)
 
-(This file was created from the wiki on 2018-03-19 04:42)
+(This file was created from the wiki on 2018-05-23 04:42)

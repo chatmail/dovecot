@@ -220,8 +220,11 @@ imapc_mailbox_fetch_state(struct imapc_mailbox *mbox, uint32_t first_uid)
 	struct imapc_command *cmd;
 
 	if (mbox->exists_count == 0) {
-		/* empty mailbox - no point in fetching anything */
-		mbox->state_fetched_success = TRUE;
+		/* empty mailbox - no point in fetching anything.
+		   just make sure everything is expunged in local index. */
+		mbox->sync_next_lseq = 1;
+		imapc_mailbox_init_delayed_trans(mbox);
+		imapc_mailbox_fetch_state_finish(mbox);
 		return;
 	}
 	if (mbox->state_fetching_uid1) {
@@ -357,15 +360,26 @@ imapc_mailbox_msgmap_update(struct imapc_mailbox *mbox,
 
 	msgmap = imapc_client_mailbox_get_msgmap(mbox->client_box);
 	msg_count = imapc_msgmap_count(msgmap);
-	if (fetch_uid != 0 &&
+	if (fetch_uid != 0 && mbox->state_fetched_success &&
 	    (IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_MSN_WORKAROUNDS) ||
 	     IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_NO_MSN_UPDATES))) {
 		/* if we know the UID, use own own generated rseq instead of
-		   the potentially broken rseq that the server sent. */
+		   the potentially broken rseq that the server sent.
+		   Skip this during the initial FETCH 1:* (UID ..) handling,
+		   or we can't detect duplicate UIDs and will instead
+		   assert-crash later on. */
 		uint32_t fixed_rseq;
 
 		if (imapc_msgmap_uid_to_rseq(msgmap, fetch_uid, &fixed_rseq))
 			rseq = fixed_rseq;
+		else if (fetch_uid >= imapc_msgmap_uidnext(msgmap) &&
+			 rseq <= msg_count) {
+			/* The current rseq is wrong. Lets hope that the
+			   correct rseq is the next new one. This happens
+			   especially with no-msn-updates when mails have been
+			   expunged and new mails arrive in the same session. */
+			rseq = msg_count+1;
+		}
 	}
 
 	if (rseq <= msg_count) {
@@ -434,7 +448,8 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 
 	fetch_uid = 0; flags = 0;
 	for (i = 0; list[i].type != IMAP_ARG_EOL; i += 2) {
-		if (!imap_arg_get_atom(&list[i], &atom))
+		if (!imap_arg_get_atom(&list[i], &atom) ||
+		    list[i+1].type == IMAP_ARG_EOL)
 			return;
 
 		if (strcasecmp(atom, "UID") == 0) {

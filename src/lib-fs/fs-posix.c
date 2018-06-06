@@ -37,6 +37,7 @@ struct posix_fs {
 	bool mode_auto;
 	bool have_dirs;
 	bool disable_fsync;
+	bool accurate_mtime;
 };
 
 struct posix_fs_file {
@@ -110,6 +111,8 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 			fs->have_dirs = TRUE;
 		} else if (strcmp(arg, "no-fsync") == 0) {
 			fs->disable_fsync = TRUE;
+		} else if (strcmp(arg, "accurate-mtime") == 0) {
+			fs->accurate_mtime = TRUE;
 		} else if (strncmp(arg, "mode=", 5) == 0) {
 			unsigned int mode;
 			if (str_to_uint_oct(arg+5, &mode) < 0) {
@@ -317,6 +320,13 @@ fs_posix_file_init(struct fs *_fs, const char *path,
 	struct posix_fs *fs = (struct posix_fs *)_fs;
 	struct posix_fs_file *file;
 	guid_128_t guid;
+	size_t path_len = strlen(path);
+
+	if (path_len > 0 && path[path_len-1] == '/') {
+		/* deleting "path/" (used e.g. by doveadm fs delete) - strip
+		   out the trailing "/" since it doesn't work well with NFS. */
+		path = t_strndup(path, path_len-1);
+	}
 
 	file = i_new(struct posix_fs_file, 1);
 	file->file.fs = _fs;
@@ -449,28 +459,45 @@ fs_posix_read_stream(struct fs_file *_file, size_t max_buffer_size)
 static void fs_posix_write_rename_if_needed(struct posix_fs_file *file)
 {
 	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
-	const char *new_fname, *new_prefix, *p;
+	const char *new_fname;
 
 	new_fname = fs_metadata_find(&file->file.metadata, FS_METADATA_WRITE_FNAME);
 	if (new_fname == NULL)
 		return;
 
-	p = strrchr(file->file.path, '/');
-	if (p == NULL)
-		new_prefix = "";
-	else
-		new_prefix = t_strdup_until(file->file.path, p+1);
 	i_free(file->file.path);
-	file->file.path = i_strconcat(new_prefix, new_fname, NULL);
+	file->file.path = i_strdup(new_fname);
 
 	i_free(file->full_path);
 	file->full_path = fs->path_prefix == NULL ? i_strdup(file->file.path) :
 		i_strconcat(fs->path_prefix, file->file.path, NULL);
 }
 
+static int fs_posix_write_finish_link(struct posix_fs_file *file)
+{
+	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
+	unsigned int try_count = 0;
+	int ret;
+
+	ret = link(file->temp_path, file->full_path);
+	while (ret < 0 && errno == ENOENT &&
+	       try_count <= MAX_MKDIR_RETRY_COUNT) {
+		if (fs_posix_mkdir_parents(fs, file->full_path) < 0)
+			return -1;
+		ret = link(file->temp_path, file->full_path);
+		try_count++;
+	}
+	if (ret < 0) {
+		fs_set_error(file->file.fs, "link(%s, %s) failed: %m",
+			     file->temp_path, file->full_path);
+	}
+	return ret;
+}
+
 static int fs_posix_write_finish(struct posix_fs_file *file)
 {
 	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
+	unsigned int try_count = 0;
 	int ret, old_errno;
 
 	if ((file->open_flags & FS_OPEN_FLAG_FSYNC) != 0 &&
@@ -481,15 +508,27 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 			return -1;
 		}
 	}
+	if (fs->accurate_mtime) {
+		/* Linux updates the mtime timestamp only on timer interrupts.
+		   This isn't anywhere close to being microsecond precision.
+		   If requested, use utimes() to explicitly set a more accurate
+		   mtime. */
+		struct timeval tv[2];
+		if (gettimeofday(&tv[0], NULL) < 0)
+			i_fatal("gettimeofday() failed: %m");
+		tv[1] = tv[0];
+		if ((utimes(file->temp_path, tv)) < 0) {
+			fs_set_error(file->file.fs, "utimes(%s) failed: %m",
+				     file->temp_path);
+			return -1;
+		}
+	}
 
 	fs_posix_write_rename_if_needed(file);
 	switch (file->open_mode) {
 	case FS_OPEN_MODE_CREATE_UNIQUE_128:
 	case FS_OPEN_MODE_CREATE:
-		if ((ret = link(file->temp_path, file->full_path)) < 0) {
-			fs_set_error(file->file.fs, "link(%s, %s) failed: %m",
-				     file->temp_path, file->full_path);
-		}
+		ret = fs_posix_write_finish_link(file);
 		old_errno = errno;
 		if (unlink(file->temp_path) < 0) {
 			fs_set_error(file->file.fs, "unlink(%s) failed: %m",
@@ -503,7 +542,15 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 		}
 		break;
 	case FS_OPEN_MODE_REPLACE:
-		if (rename(file->temp_path, file->full_path) < 0) {
+		ret = rename(file->temp_path, file->full_path);
+		while (ret < 0 && errno == ENOENT &&
+		       try_count <= MAX_MKDIR_RETRY_COUNT) {
+			if (fs_posix_mkdir_parents(fs, file->full_path) < 0)
+				return -1;
+			ret = rename(file->temp_path, file->full_path);
+			try_count++;
+		}
+		if (ret < 0) {
 			fs_set_error(file->file.fs, "rename(%s, %s) failed: %m",
 				     file->temp_path, file->full_path);
 			return -1;
@@ -814,7 +861,8 @@ static bool fs_posix_iter_want(struct posix_fs_iter *iter, const char *fname)
 		const char *path = t_strdup_printf("%s/%s", iter->path, fname);
 		struct stat st;
 
-		if (stat(path, &st) < 0)
+		if (stat(path, &st) < 0 &&
+		    lstat(path, &st) < 0)
 			ret = FALSE;
 		else if (!S_ISDIR(st.st_mode))
 			ret = (iter->iter.flags & FS_ITER_FLAG_DIRS) == 0;
@@ -847,16 +895,13 @@ static const char *fs_posix_iter_next(struct fs_iter *_iter)
 			if (fs_posix_iter_want(iter, d->d_name))
 				return d->d_name;
 			break;
-		case DT_REG:
-		case DT_LNK:
-			if ((iter->iter.flags & FS_ITER_FLAG_DIRS) == 0)
-				return d->d_name;
-			break;
 		case DT_DIR:
 			if ((iter->iter.flags & FS_ITER_FLAG_DIRS) != 0)
 				return d->d_name;
 			break;
 		default:
+			if ((iter->iter.flags & FS_ITER_FLAG_DIRS) == 0)
+				return d->d_name;
 			break;
 		}
 #else

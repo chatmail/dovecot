@@ -81,7 +81,6 @@ struct mail_storage_settings {
 	const char *const *parsed_mail_attachment_content_type_filter;
 	bool parsed_mail_attachment_exclude_inlined;
 	bool parsed_mail_attachment_detection_add_flags_on_save;
-	bool parsed_mail_attachment_detection_add_flags_on_fetch;
 };
 struct mail_namespace_settings {
 	const char *name;
@@ -505,13 +504,15 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 
 			if (strcmp(opt, "add-flags-on-save") == 0) {
 				set->parsed_mail_attachment_detection_add_flags_on_save = TRUE;
-			} else if (strcmp(opt, "add-flags-on-fetch") == 0) {
-				set->parsed_mail_attachment_detection_add_flags_on_fetch = TRUE;
 			} else if (strcmp(opt, "exclude-inlined") == 0) {
 				set->parsed_mail_attachment_exclude_inlined = TRUE;
 			} else if (strncmp(opt, "content-type=", 13) == 0) {
 				const char *value = p_strdup(pool, opt+13);
 				array_append(&content_types, &value, 1);
+			} else {
+				*error_r = t_strdup_printf("mail_attachment_detection_options: "
+					"Unknown option: %s", opt);
+				return FALSE;
 			}
 			options++;
 		}
@@ -4802,34 +4803,34 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
-	&fs_crypt_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&login_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
 	&mdbox_setting_parser_info, 
-	&aggregator_setting_parser_info, 
 	&director_setting_parser_info, 
 	&imap_login_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
+	&fs_crypt_setting_parser_info, 
+	&ssl_params_setting_parser_info, 
 	&maildir_setting_parser_info, 
 	&imap_urlauth_setting_parser_info, 
-	&quota_status_setting_parser_info, 
-	&ssl_params_setting_parser_info, 
-	&login_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&stats_setting_parser_info, 
+	&aggregator_setting_parser_info, 
 	&pop3_login_setting_parser_info, 
+	&pop3c_setting_parser_info, 
 	&dict_setting_parser_info, 
+	&replicator_setting_parser_info, 
 	&imapc_setting_parser_info, 
-	&master_setting_parser_info, 
-	&auth_setting_parser_info, 
 	&mail_user_setting_parser_info, 
-	&pop3_setting_parser_info, 
+	&quota_status_setting_parser_info, 
+	&lmtp_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&master_setting_parser_info, 
 	&imap_setting_parser_info, 
+	&pop3_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

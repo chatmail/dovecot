@@ -58,13 +58,107 @@ service:
 Configuration
 -------------
 
-Just add 'submission' to the protocols and configure the relay MTA server. The
-configuration is currently only documented in the example configuration in
-doc/example-config/conf.d/20-submission.conf. The submission service is a login
-service, just like IMAP, POP3 and <ManageSieve> [Pigeonhole.ManageSieve.txt],
-so clients are required to authenticate. The same authentication configuration
-will also apply to submission, unless you're doing protocol-specific things, in
+Submission Service
+------------------
+
+Just add 'submission' to the 'protocols=' setting and configure the relay MTA
+server. The submission service is a login service, just like IMAP, POP3 and
+<ManageSieve> [Pigeonhole.ManageSieve.txt], so clients are required to
+authenticate. The same <authentication configuration> [Authentication.txt] will
+also apply to submission, unless you're doing protocol-specific things, in
 which case you may need to amend your configuration for the new protocol. BURL
 support requires a working IMAP URLAUTH implementation.
 
-(This file was created from the wiki on 2018-03-19 04:42)
+The following settings apply to the Submission service:
+
+submission_logout_format = in=%i out=%o:
+  The SMTP Submission logout format string. The following variable
+  substitutions are supported:
+  %i :
+    Total number of bytes read from client
+
+  %o :
+    Total number of bytes sent to client
+
+  %{command_count} :
+    Number of commands received from client
+
+  %{reply_count} :
+    Number of replies sent to client
+
+  %{session} :
+    Session ID of the login session
+
+  %{transaction_id} :
+    ID of the current transaction, if any
+
+hostname :
+  The host name reported by the SMTP service (and other parts of Dovecot), for
+  example to the client in the initial greeting and to the relay server in the
+  HELO/EHLO command. Default is the system's real hostname@domain.
+
+submission_max_mail_size :
+  The maximum size of messages accepted for relay. This announced in the SMTP
+  SIZE capability. If not configured, this is either determined from the relay
+  server or left unlimited if no limit is known (the relay MTA will reply with
+  error if some unknown limit exists there, which is duly passed to Dovecot's
+  client).
+
+submission_max_recipients :
+  Maximum number of recipients accepted per connection (default: unlimited).
+
+Relay MTA
+---------
+
+The Dovecot SMTP submission service directly proxies the mail transaction to
+the SMTP relay configured with the following settings:
+
+submission_relay_host :
+  Host name for the relay server (required).
+
+submission_relay_port = 25 :
+  Port for the relay server.
+
+submission_relay_trusted = no :
+  Is the relay server trusted? This determines whether we try to send
+  (Postfix-specific) XCLIENT data to the relay server.
+
+submission_relay_user = :
+  User name for authentication to the relay MTA if authentication is required
+  there (authorization ID).
+
+submission_relay_master_user = :
+  Master user name for authentication to the relay MTA if authentication is
+  required there (authentication ID).
+
+submission_relay_password = :
+  Password for authentication to the relay MTA if authentication is required
+  there.
+
+submission_relay_ssl = no :
+  Indicates whether TLS is used for the connection to the relay server. The
+  following values are defined for this setting:
+  no :
+    No SSL is used.
+
+  smtps :
+    An SMTPS connection (immediate SSL) is used.
+
+  starttls :
+    The STARTTLS command is used to establish the TLS layer.
+
+submission_relay_ssl_verify = yes :
+  Configures whether the TLS certificate of the relay server is to be verified.
+
+submission_relay_rawlog_dir :
+  Write protocol logs for relay connection to this directory for debugging.
+
+Proxy
+-----
+
+Like IMAP and POP3, the Submission login service supports proxying to multiple
+backend servers. The <proxy configuration wiki page>
+[PasswordDatabase.ExtraFields.Proxy.txt] for POP3 and IMAP applies
+automatically to Submission as well.
+
+(This file was created from the wiki on 2018-05-23 04:42)
