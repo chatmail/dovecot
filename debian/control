@@ -1,7 +1,7 @@
 Source: dovecot
 Section: mail
 Priority: optional
-Maintainer: Dovecot Maintainers <jaldhar-dovecot@debian.org>
+Maintainer: Dovecot Maintainers <dovecot@packages.debian.org>
 Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>,
            Jelmer Vernooij <jelmer@debian.org>,
            Apollon Oikonomopoulos <apoikos@debian.org>
