@@ -147,8 +147,7 @@ void sieve_script_unref(struct sieve_script **_script)
 	if ( --script->refcount != 0 )
 		return;
 
-	if ( script->stream != NULL )
-		i_stream_unref(&script->stream);
+	i_stream_unref(&script->stream);
 
 	if ( script->v.destroy != NULL )
 		script->v.destroy(script);
@@ -505,12 +504,7 @@ int sieve_script_binary_save
 	enum sieve_error *error_r)
 {
 	struct sieve_script *bin_script = sieve_binary_script(sbin);
-	enum sieve_error error;
 
-	if ( error_r != NULL )
-		*error_r = SIEVE_ERROR_NONE;
-	else
-		error_r = &error;
 
 	i_assert(bin_script == NULL || sieve_script_equals(bin_script, script));
 

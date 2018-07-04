@@ -1,17 +1,16 @@
 noinst_LTLIBRARIES = liblib.la
 
-BUILT_SOURCES = unicodemap.c
+BUILT_SOURCES = $(srcdir)/unicodemap.c
 
 EXTRA_DIST = unicodemap.c unicodemap.pl UnicodeData.txt
 
-UnicodeData.txt:
-	test -f UnicodeData.txt || wget https://dovecot.org/res/UnicodeData.txt
+$(srcdir)/UnicodeData.txt:
+	test -f $@ || wget -O $@ https://dovecot.org/res/UnicodeData.txt
 
-$(srcdir)/unicodemap.c: unicodemap.pl UnicodeData.txt
-	perl $(srcdir)/unicodemap.pl < UnicodeData.txt > $@
+$(srcdir)/unicodemap.c: $(srcdir)/unicodemap.pl $(srcdir)/UnicodeData.txt
+	perl $(srcdir)/unicodemap.pl < $(srcdir)/UnicodeData.txt > $@
 
 liblib_la_SOURCES = \
-	abspath.c \
 	array.c \
 	aqueue.c \
 	askpass.c \
@@ -19,6 +18,7 @@ liblib_la_SOURCES = \
 	base32.c \
 	base64.c \
 	bits.c \
+	bloomfilter.c \
 	bsearch-insert-pos.c \
 	buffer.c \
 	child-wait.c \
@@ -28,10 +28,11 @@ liblib_la_SOURCES = \
 	data-stack.c \
 	eacces-error.c \
 	env-util.c \
+	event-filter.c \
+	event-log.c \
 	execv-const.c \
 	failures.c \
-	fd-close-on-exec.c \
-	fd-set-nonblock.c \
+	fd-util.c \
 	fdatasync-path.c \
 	fdpass.c \
 	file-cache.c \
@@ -55,6 +56,8 @@ liblib_la_SOURCES = \
 	imem.c \
 	ipwd.c \
 	iostream.c \
+	iostream-pump.c \
+	iostream-proxy.c \
 	iostream-rawlog.c \
 	iostream-temp.c \
 	iso8601-date.c \
@@ -93,11 +96,14 @@ liblib_la_SOURCES = \
 	json-parser.c \
 	json-tree.c \
 	lib.c \
+	lib-event.c \
 	lib-signals.c \
 	log-throttle.c \
 	md4.c \
 	md5.c \
+	memarea.c \
 	mempool.c \
+	mempool-allocfree.c \
 	mempool-alloconly.c \
 	mempool-datastack.c \
 	mempool-system.c \
@@ -107,12 +113,12 @@ liblib_la_SOURCES = \
 	mmap-util.c \
 	module-dir.c \
 	mountpoint.c \
+	murmurhash3.c \
 	net.c \
 	nfs-workarounds.c \
 	numpack.c \
 	ostream.c \
 	ostream-buffer.c \
-	ostream-escaped.c \
 	ostream-failure-at.c \
 	ostream-file.c \
 	ostream-hash.c \
@@ -120,6 +126,7 @@ liblib_la_SOURCES = \
 	ostream-null.c \
 	ostream-rawlog.c \
 	ostream-unix.c \
+	path-util.c \
 	pkcs5.c \
 	primes.c \
 	printf-format-fix.c \
@@ -138,6 +145,8 @@ liblib_la_SOURCES = \
 	sha1.c \
 	sha2.c \
 	sha3.c \
+	sort.c \
+	stats-dist.c \
 	str.c \
 	str-find.c \
 	str-sanitize.c \
@@ -146,7 +155,6 @@ liblib_la_SOURCES = \
 	strfuncs.c \
 	strnum.c \
 	time-util.c \
-	timing.c \
 	unix-socket-create.c \
 	unlink-directory.c \
 	unlink-old-files.c \
@@ -160,7 +168,6 @@ liblib_la_SOURCES = \
 	write-full.c
 
 headers = \
-	abspath.h \
 	aqueue.h \
 	array.h \
 	array-decl.h \
@@ -169,6 +176,7 @@ headers = \
 	base32.h \
 	base64.h \
 	bits.h \
+	bloomfilter.h \
 	bsearch-insert-pos.h \
 	buffer.h \
 	byteorder.h \
@@ -179,10 +187,11 @@ headers = \
 	data-stack.h \
 	eacces-error.h \
 	env-util.h \
+	event-filter.h \
+	event-log.h \
 	execv-const.h \
 	failures.h \
-	fd-close-on-exec.h \
-	fd-set-nonblock.h \
+	fd-util.h \
 	fdatasync-path.h \
 	fdpass.h \
 	file-cache.h \
@@ -209,6 +218,8 @@ headers = \
 	ipwd.h \
 	iostream.h \
 	iostream-private.h \
+	iostream-pump.h \
+	iostream-proxy.h \
 	iostream-rawlog.h \
 	iostream-rawlog-private.h \
 	iostream-temp.h \
@@ -239,6 +250,8 @@ headers = \
 	json-parser.h \
 	json-tree.h \
 	lib.h \
+	lib-event.h \
+	lib-event-private.h \
 	lib-signals.h \
 	llist.h \
 	log-throttle.h \
@@ -246,17 +259,18 @@ headers = \
 	md4.h \
 	md5.h \
 	malloc-overflow.h \
+	memarea.h \
 	mempool.h \
 	mkdir-parents.h \
 	mmap-util.h \
 	module-context.h \
 	module-dir.h \
 	mountpoint.h \
+	murmurhash3.h \
 	net.h \
 	nfs-workarounds.h \
 	numpack.h \
 	ostream.h \
-	ostream-escaped.h \
 	ostream-failure-at.h \
 	ostream-file-private.h \
 	ostream-hash.h \
@@ -265,12 +279,12 @@ headers = \
 	ostream-null.h \
 	ostream-rawlog.h \
 	ostream-unix.h \
+	path-util.h \
 	pkcs5.h \
 	primes.h \
 	printf-format-fix.h \
 	process-title.h \
 	priorityq.h \
-	rand.h \
 	randgen.h \
 	read-full.h \
 	restrict-access.h \
@@ -285,6 +299,7 @@ headers = \
 	sha2.h \
 	sha3.h \
 	sort.h \
+	stats-dist.h \
 	str.h \
 	str-find.h \
 	str-sanitize.h \
@@ -293,7 +308,6 @@ headers = \
 	strfuncs.h \
 	strnum.h \
 	time-util.h \
-	timing.h \
 	unix-socket-create.h \
 	unlink-directory.h \
 	unlink-old-files.h \
@@ -323,6 +337,7 @@ test_lib_SOURCES = \
 	test-base32.c \
 	test-base64.c \
 	test-bits.c \
+	test-bloomfilter.c \
 	test-bsearch-insert-pos.c \
 	test-buffer.c \
 	test-byteorder.c \
@@ -334,10 +349,13 @@ test_lib_SOURCES = \
 	test-hash.c \
 	test-hash-format.c \
 	test-hash-method.c \
+	test-hmac.c \
 	test-hex-binary.c \
 	test-imem.c \
 	test-ioloop.c \
 	test-iso8601-date.c \
+	test-iostream-pump.c \
+	test-iostream-proxy.c \
 	test-iostream-temp.c \
 	test-istream.c \
 	test-istream-base64-decoder.c \
@@ -346,31 +364,38 @@ test_lib_SOURCES = \
 	test-istream-concat.c \
 	test-istream-crlf.c \
 	test-istream-failure-at.c \
+	test-istream-jsonstr.c \
 	test-istream-multiplex.c \
 	test-istream-seekable.c \
+	test-istream-sized.c \
 	test-istream-tee.c \
 	test-istream-try.c \
 	test-istream-unix.c \
 	test-json-parser.c \
 	test-json-tree.c \
+	test-lib-signals.c \
 	test-llist.c \
 	test-log-throttle.c \
 	test-malloc-overflow.c \
+	test-memarea.c \
 	test-mempool.c \
+	test-mempool-allocfree.c \
 	test-mempool-alloconly.c \
+	test-murmurhash3.c \
 	test-pkcs5.c \
 	test-net.c \
 	test-numpack.c \
 	test-ostream-buffer.c \
-	test-ostream-escaped.c \
 	test-ostream-failure-at.c \
 	test-ostream-file.c \
 	test-ostream-multiplex.c \
 	test-multiplex.c \
+	test-path-util.c \
 	test-primes.c \
 	test-printf-format-fix.c \
 	test-priorityq.c \
 	test-seq-range-array.c \
+	test-stats-dist.c \
 	test-str.c \
 	test-strescape.c \
 	test-strfuncs.c \
@@ -379,20 +404,20 @@ test_lib_SOURCES = \
 	test-str-sanitize.c \
 	test-str-table.c \
 	test-time-util.c \
-	test-timing.c \
 	test-unichar.c \
 	test-utc-mktime.c \
+	test-uri.c \
 	test-var-expand.c \
 	test-wildcard-match.c
 
 test_headers = \
-	test-lib.h
+	test-lib.h \
+	test-lib.inc
 
 test_lib_LDADD = $(test_libs)
 test_lib_DEPENDENCIES = $(test_libs)
 
-check: check-am check-test
-check-test: all-am
+check-local:
 	for bin in $(test_programs); do \
 	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
 	done

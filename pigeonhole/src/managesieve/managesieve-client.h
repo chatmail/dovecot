@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __MANAGESIEVE_CLIENT_H
-#define __MANAGESIEVE_CLIENT_H
+#ifndef MANAGESIEVE_CLIENT_H
+#define MANAGESIEVE_CLIENT_H
 
 #include "managesieve-commands.h"
 
@@ -20,7 +17,7 @@ struct client_command_context {
 	command_func_t *func;
 	void *context;
 
-	unsigned int param_error:1;
+	bool param_error:1;
 };
 
 struct managesieve_module_register {
@@ -66,14 +63,14 @@ struct client {
 	unsigned int deleted_count;
 	unsigned int renamed_count;
 
-	unsigned int disconnected:1;
-	unsigned int destroyed:1;
-	unsigned int command_pending:1;
-	unsigned int input_pending:1;
-	unsigned int output_pending:1;
-	unsigned int handling_input:1;
-	unsigned int anvil_sent:1;
-	unsigned int input_skip_line:1; /* skip all the data until we've
+	bool disconnected:1;
+	bool destroyed:1;
+	bool command_pending:1;
+	bool input_pending:1;
+	bool output_pending:1;
+	bool handling_input:1;
+	bool anvil_sent:1;
+	bool input_skip_line:1; /* skip all the data until we've
 					   found a new line */
 };
 
@@ -145,4 +142,4 @@ int client_output(struct client *client);
 
 void clients_destroy_all(void);
 
-#endif /* __MANAGESIEVE_CLIENT_H */
+#endif

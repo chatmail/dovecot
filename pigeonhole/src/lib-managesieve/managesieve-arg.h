@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __MANAGESIEVE_ARG_H
-#define __MANAGESIEVE_ARG_H
+#ifndef MANAGESIEVE_ARG_H
+#define MANAGESIEVE_ARG_H
 
 #include "array.h"
 

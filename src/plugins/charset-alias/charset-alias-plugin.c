@@ -11,7 +11,7 @@
 
 
 #define CHARSET_ALIAS_USER_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, charset_alias_user_module)
+	MODULE_CONTEXT_REQUIRE(obj, charset_alias_user_module)
 
 static MODULE_CONTEXT_DEFINE_INIT(charset_alias_user_module,
 				  &mail_user_module_register);

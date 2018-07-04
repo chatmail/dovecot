@@ -17,7 +17,7 @@ Description: Set default protocols value as empty and enable each
  # --sysconfdir=/etc --localstatedir=/var
  
 -# Protocols we want to be serving.
--#protocols = imap pop3 lmtp
+-#protocols = imap pop3 lmtp submission
 +# Enable installed protocols
 +!include_try /usr/share/dovecot/protocols.d/*.protocol
  

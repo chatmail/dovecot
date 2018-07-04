@@ -10,7 +10,7 @@
 #include "imapc-storage.h"
 #include "imapc-search.h"
 
-#define IMAPC_CONTEXT(obj) \
+#define IMAPC_SEARCHCTX(obj) \
 	MODULE_CONTEXT(obj, imapc_storage_module)
 
 struct imapc_search_context {
@@ -183,9 +183,9 @@ static void imapc_search_callback(const struct imapc_command_reply *reply,
 				  void *context)
 {
 	struct mail_search_context *ctx = context;
-	struct imapc_mailbox *mbox =
-		(struct imapc_mailbox *)ctx->transaction->box;
-	struct imapc_search_context *ictx = IMAPC_CONTEXT(ctx);
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(ctx->transaction->box);
+	struct imapc_search_context *ictx = IMAPC_SEARCHCTX(ctx);
+	i_assert(ictx != NULL);
 
 	ictx->finished = TRUE;
 	if (reply->state == IMAPC_COMMAND_STATE_OK) {
@@ -194,7 +194,7 @@ static void imapc_search_callback(const struct imapc_command_reply *reply,
 	} else if (reply->state == IMAPC_COMMAND_STATE_DISCONNECTED) {
 		mail_storage_set_internal_error(mbox->box.storage);
 	} else {
-		mail_storage_set_critical(mbox->box.storage,
+		mailbox_set_critical(&mbox->box,
 			"imapc: Command failed: %s", reply->text_full);
 	}
 	imapc_client_stop(mbox->storage->client->client);
@@ -207,7 +207,7 @@ imapc_search_init(struct mailbox_transaction_context *t,
 		  enum mail_fetch_field wanted_fields,
 		  struct mailbox_header_lookup_ctx *wanted_headers)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)t->box;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(t->box);
 	struct mail_search_context *ctx;
 	struct imapc_search_context *ictx;
 	struct imapc_command *cmd;
@@ -251,7 +251,7 @@ static void imapc_search_set_matches(struct mail_search_arg *args)
 
 bool imapc_search_next_update_seq(struct mail_search_context *ctx)
 {
-	struct imapc_search_context *ictx = IMAPC_CONTEXT(ctx);
+	struct imapc_search_context *ictx = IMAPC_SEARCHCTX(ctx);
 
 	if (ictx == NULL || !ictx->success)
 		return index_storage_search_next_update_seq(ctx);
@@ -266,7 +266,7 @@ bool imapc_search_next_update_seq(struct mail_search_context *ctx)
 
 int imapc_search_deinit(struct mail_search_context *ctx)
 {
-	struct imapc_search_context *ictx = IMAPC_CONTEXT(ctx);
+	struct imapc_search_context *ictx = IMAPC_SEARCHCTX(ctx);
 
 	if (ictx != NULL) {
 		array_free(&ictx->rseqs);

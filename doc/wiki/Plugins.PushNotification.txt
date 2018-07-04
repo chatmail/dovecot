@@ -33,10 +33,7 @@ This will cause notifications to end up in your debug log.
 OX driver
 ---------
 
- The OX backend supports sending notifications on <MessageNew.txt> events (i.e.
-mail deliveries, not IMAP APPENDs).
-
-The HTTP end-point (URL + authentication information) to use is configured in
+ The HTTP end-point (URL + authentication information) to use is configured in
 the Dovecot configuration file. The appropriate configuration options will
 contain the HTTP URL denoting the end-point to connect to as well as the
 authentication information for Basic Authentication as configured by properties
@@ -94,4 +91,4 @@ by defining "user_from_metadata" in the push_notification_driver url, e.g.
 push_notification_driver = ox:url=http://example.com/ user_from_metadata
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-05-23 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

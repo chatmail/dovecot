@@ -193,7 +193,7 @@ static void test_timeval_cmp_margin(void)
 
 static void test_timeval_diff(void)
 {
-	static struct timeval input[] = {
+	static const struct timeval input[] = {
 		{ 1, 0 }, { 0, 999999 },
 		{ 1, 0 }, { 0, 999001 },
 		{ 1, 1 }, { 0, 999001 },

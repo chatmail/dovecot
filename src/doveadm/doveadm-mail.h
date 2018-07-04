@@ -61,12 +61,11 @@ union doveadm_mail_cmd_module_context {
 
 struct doveadm_mail_cmd_context {
 	pool_t pool;
+	struct doveadm_cmd_context *cctx;
 	const struct doveadm_mail_cmd *cmd;
 	const char *const *args;
 	/* args including -options */
 	const char *const *full_args;
-	/* connection via doveadm-server */
-	struct client_connection *conn;
 
 	const char *getopt_args;
 	const struct doveadm_settings *set;
@@ -77,8 +76,6 @@ struct doveadm_mail_cmd_context {
 	struct mail_search_args *search_args;
 	struct istream *users_list_input;
 
-	struct ip_addr cur_client_ip;
-	const char *cur_username;
 	struct mail_storage_service_user *cur_service_user;
 	struct mail_user *cur_mail_user;
 	struct doveadm_mail_cmd_vfuncs v;
@@ -92,15 +89,13 @@ struct doveadm_mail_cmd_context {
 	int exit_code;
 
 	/* This command is being called by a remote doveadm client. */
-	unsigned int proxying:1;
+	bool proxying:1;
 	/* We're handling only a single user */
-	unsigned int iterate_single_user:1;
+	bool iterate_single_user:1;
 	/* We're going through all users (not set for wildcard usernames) */
-	unsigned int iterate_all_users:1;
+	bool iterate_all_users:1;
 	/* Add username header to all replies */
-	unsigned int add_username_header:1;
-	/* Running from CLI doveadm (not doveadm-server) */
-	unsigned int cli:1;
+	bool add_username_header:1;
 };
 
 struct doveadm_mail_cmd {
@@ -138,7 +133,6 @@ struct doveadm_mail_cmd_context *
 doveadm_mail_cmd_init(const struct doveadm_mail_cmd *cmd,
 		      const struct doveadm_settings *set);
 int doveadm_mail_single_user(struct doveadm_mail_cmd_context *ctx,
-			     const struct doveadm_cmd_context *cctx,
 			     const char **error_r);
 int doveadm_mail_server_user(struct doveadm_mail_cmd_context *ctx,
 			     const struct mail_storage_service_input *input,
@@ -201,9 +195,6 @@ extern struct doveadm_cmd_ver2 doveadm_cmd_copy_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_move_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_update_ver2;
 extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_path_ver2;
-extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_cache_decision;
-extern struct doveadm_cmd_ver2 doveadm_cmd_mailbox_cache_remove;
-extern struct doveadm_cmd_ver2 doveadm_cmd_rebuild_attachments;
 
 #define DOVEADM_CMD_MAIL_COMMON \
 DOVEADM_CMD_PARAM('A', "all-users", CMD_PARAM_BOOL, 0) \

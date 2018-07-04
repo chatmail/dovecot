@@ -38,7 +38,8 @@ struct program_client_local {
 };
 
 static
-void program_client_local_waitchild(const struct child_wait_status *, struct program_client_local *);
+void program_client_local_waitchild(const struct child_wait_status *,
+				    struct program_client_local *);
 static
 void program_client_local_disconnect(struct program_client *pclient, bool force);
 static
@@ -234,11 +235,9 @@ int program_client_local_connect(struct program_client *pclient)
 
 		/* if we want to allow root, then we will not drop
 		   root privileges */
-		pclient->set.restrict_set.drop_setuid_root =
-			!pclient->set.allow_root;
-
-		restrict_access(&pclient->set.restrict_set, pclient->set.home,
-				!pclient->set.allow_root);
+		restrict_access(&pclient->set.restrict_set,
+				pclient->set.allow_root ? RESTRICT_ACCESS_FLAG_ALLOW_ROOT : 0,
+				pclient->set.home);
 
 		exec_child(pclient->path, pclient->args, &pclient->envs,
 			   fd_in[0], fd_out[1], child_extra_fds,
@@ -295,8 +294,7 @@ int program_client_local_close_output(struct program_client *pclient)
 static
 void program_client_local_exited(struct program_client_local *plclient)
 {
-	if (plclient->to_kill != NULL)
-		timeout_remove(&plclient->to_kill);
+	timeout_remove(&plclient->to_kill);
 	if (plclient->child_wait != NULL)
 		child_wait_free(&plclient->child_wait);
 
@@ -304,7 +302,7 @@ void program_client_local_exited(struct program_client_local *plclient)
 	plclient->exited = TRUE;
 	plclient->pid = -1;
 	/* Evaluate child exit status */
-	pclient->exit_code = -1;
+	pclient->exit_code = PROGRAM_CLIENT_EXIT_INTERNAL_FAILURE;
 
 	if (WIFEXITED(plclient->status)) {
 		/* Exited */
@@ -313,9 +311,9 @@ void program_client_local_exited(struct program_client_local *plclient)
 		if (exit_code != 0) {
 			i_info("program `%s' terminated with non-zero exit code %d",
 			       pclient->path, exit_code);
-			pclient->exit_code = 0;
+			pclient->exit_code = PROGRAM_CLIENT_EXIT_FAILURE;
 		} else {
-			pclient->exit_code = 1;
+			pclient->exit_code = PROGRAM_CLIENT_EXIT_SUCCESS;
 		}
 	} else if (WIFSIGNALED(plclient->status)) {
 		/* Killed with a signal */
@@ -343,8 +341,7 @@ static
 void program_client_local_kill(struct program_client_local *plclient)
 {
 	/* time to die */
-	if (plclient->to_kill != NULL)
-		timeout_remove(&plclient->to_kill);
+	timeout_remove(&plclient->to_kill);
 
 	i_assert(plclient->pid != (pid_t)-1);
 
@@ -415,7 +412,7 @@ void program_client_local_disconnect(struct program_client *pclient, bool force)
 
 	if (pid < 0) {
 		/* program never started */
-		pclient->exit_code = 0;
+		pclient->exit_code = PROGRAM_CLIENT_EXIT_FAILURE;
 		program_client_local_exited(plclient);
 		return;
 	}
@@ -465,7 +462,7 @@ void program_client_local_switch_ioloop(struct program_client *pclient)
 
 	if (plclient->to_kill != NULL)
 		plclient->to_kill = io_loop_move_timeout(&plclient->to_kill);
-	lib_signals_reset_ioloop();
+	child_wait_switch_ioloop();
 }
 
 struct program_client *

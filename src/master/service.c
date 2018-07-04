@@ -79,7 +79,7 @@ resolve_ip(const char *address, const struct ip_addr **ips_r,
 	if (address == NULL || strcmp(address, "*") == 0) {
 		/* IPv4 any */
 		ip_list = t_new(struct ip_addr, 1);
-		net_get_ip_any4(ip_list);
+		*ip_list = net_ip4_any;
 		*ips_r = ip_list;
 		*ips_count_r = 1;
 		return 0;
@@ -88,7 +88,7 @@ resolve_ip(const char *address, const struct ip_addr **ips_r,
 	if (strcmp(address, "::") == 0 || strcmp(address, "[::]") == 0) {
 		/* IPv6 any */
 		ip_list = t_new(struct ip_addr, 1);
-		net_get_ip_any6(ip_list);
+		*ip_list = net_ip6_any;
 		*ips_r = ip_list;
 		*ips_count_r = 1;
 		return 0;
@@ -498,17 +498,20 @@ int services_create(const struct master_settings *set,
 	return 0;
 }
 
-void service_signal(struct service *service, int signo)
+unsigned int service_signal(struct service *service, int signo,
+			    unsigned int *uninitialized_count_r)
 {
 	struct service_process *process = service->processes;
 	unsigned int count = 0;
 
+	*uninitialized_count_r = 0;
 	for (; process != NULL; process = process->next) {
 		i_assert(process->service == service);
 
 		if (!SERVICE_PROCESS_IS_INITIALIZED(process) &&
 		    signo != SIGKILL) {
 			/* too early to signal it */
+			*uninitialized_count_r += 1;
 			continue;
 		}
 		    
@@ -524,15 +527,17 @@ void service_signal(struct service *service, int signo)
 			  signo == SIGTERM ? "SIGTERM" : "SIGKILL",
 			  count, service->set->name);
 	}
+	return count;
 }
 
 static void service_login_notify_send(struct service *service)
 {
-	service->last_login_notify_time = ioloop_time;
-	if (service->to_login_notify != NULL)
-		timeout_remove(&service->to_login_notify);
+	unsigned int uninitialized_count;
 
-	service_signal(service, SIGUSR1);
+	service->last_login_notify_time = ioloop_time;
+	timeout_remove(&service->to_login_notify);
+
+	service_signal(service, SIGUSR1, &uninitialized_count);
 }
 
 static void service_login_notify_timeout(struct service *service)
@@ -574,18 +579,15 @@ void service_login_notify(struct service *service, bool all_processes_full)
 static void services_kill_timeout(struct service_list *service_list)
 {
 	struct service *const *services, *log_service;
-	bool sigterm_log;
+	unsigned int service_uninitialized, uninitialized_count = 0;
+	unsigned int signal_count = 0;
 	int sig;
 
-	if (!service_list->sigterm_sent || !service_list->sigterm_sent_to_log)
+	if (!service_list->sigterm_sent)
 		sig = SIGTERM;
 	else
 		sig = SIGKILL;
-	sigterm_log = service_list->sigterm_sent;
 	service_list->sigterm_sent = TRUE;
-
-	i_warning("Processes aren't dying after reload, sending %s.",
-		  sig == SIGTERM ? "SIGTERM" : "SIGKILL");
 
 	log_service = NULL;
 	array_foreach(&service_list->services, services) {
@@ -593,14 +595,36 @@ static void services_kill_timeout(struct service_list *service_list)
 
 		if (service->type == SERVICE_TYPE_LOG)
 			log_service = service;
-		else
-			service_signal(service, sig);
+		else {
+			signal_count += service_signal(service, sig,
+						       &service_uninitialized);
+			uninitialized_count += service_uninitialized;
+		}
 	}
-	/* kill log service later so it could still have a chance of logging
-	   something */
-	if (log_service != NULL && sigterm_log) {
-		service_signal(log_service, sig);
+	if (log_service == NULL) {
+		/* log service doesn't exist - shouldn't really happen */
+	} else if (signal_count > 0 || uninitialized_count > 0) {
+		/* kill log service later so the last remaining processes
+		   can still have a chance of logging something */
+	} else {
+		if (!service_list->sigterm_sent_to_log)
+			sig = SIGTERM;
+		else
+			sig = SIGKILL;
 		service_list->sigterm_sent_to_log = TRUE;
+		signal_count += service_signal(log_service, sig, &service_uninitialized);
+		uninitialized_count += service_uninitialized;
+	}
+	if (signal_count > 0) {
+		string_t *str = t_str_new(128);
+		str_printfa(str, "Processes aren't dying after reload, "
+			    "sent %s to %u processes.",
+			    sig == SIGTERM ? "SIGTERM" : "SIGKILL", signal_count);
+		if (uninitialized_count > 0) {
+			str_printfa(str, " (%u processes still uninitialized)",
+				    uninitialized_count);
+		}
+		i_warning("%s", str_c(str));
 	}
 }
 
@@ -635,8 +659,7 @@ void service_list_unref(struct service_list *service_list)
 	if (--service_list->refcount > 0)
 		return;
 
-	if (service_list->to_kill != NULL)
-		timeout_remove(&service_list->to_kill);
+	timeout_remove(&service_list->to_kill);
 	pool_unref(&service_list->set_pool);
 	pool_unref(&service_list->pool);
 }

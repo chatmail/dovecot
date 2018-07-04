@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_INDEX_COMMON_H
-#define __EXT_INDEX_COMMON_H
+#ifndef EXT_INDEX_COMMON_H
+#define EXT_INDEX_COMMON_H
 
 #include "sieve-common.h"
 
@@ -29,4 +26,4 @@ extern const struct sieve_operand_def index_operand;
 
 extern const struct sieve_extension_def index_extension;
 
-#endif /* __EXT_INDEX_COMMON_H */
+#endif

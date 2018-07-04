@@ -40,8 +40,8 @@ struct director_host {
 	unsigned int delayed_sync_hosts_hash;
 
 	/* we are this director */
-	unsigned int self:1;
-	unsigned int removed:1;
+	bool self:1;
+	bool removed:1;
 };
 
 struct director_host *

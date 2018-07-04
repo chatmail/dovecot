@@ -82,7 +82,7 @@ struct doveadm_connection {
 	const char **cmd_pending_args;
 	unsigned int cmd_pending_idx;
 
-	unsigned int handshaked:1;
+	bool handshaked:1;
 };
 
 static struct doveadm_connection *doveadm_connections;
@@ -128,7 +128,6 @@ doveadm_cmd_host_list_removed(struct doveadm_connection *conn,
 	int ret;
 
 	orig_hosts_list = mail_hosts_init(conn->dir->set->director_user_expire,
-					  conn->dir->set->director_consistent_hashing,
 					  NULL);
 	(void)mail_hosts_parse_and_add(orig_hosts_list,
 				       conn->dir->set->director_mail_servers);
@@ -165,9 +164,9 @@ doveadm_director_host_append_status(const struct director_host *host,
 {
 	time_t last_failed = I_MAX(host->last_network_failure,
 				   host->last_protocol_failure);
-	str_printfa(str, "%s\t%u\t%s\t%ld\t",
+	str_printfa(str, "%s\t%u\t%s\t%"PRIdTIME_T"\t",
 		    host->ip_str, host->port, type,
-		    (long)last_failed);
+		    last_failed);
 }
 
 static void doveadm_director_append_status(struct director *dir, string_t *str)
@@ -202,11 +201,10 @@ doveadm_director_connection_append_status(struct director_connection *conn,
 		str_append(str, "syncing");
 
 	str_printfa(str, "\t%u\t%"PRIuUOFF_T"\t%"PRIuUOFF_T"\t%zu\t%zu\t"
-		    "%ld\t%ld", status.last_ping_msecs,
+		    "%"PRIdTIME_T"\t%"PRIdTIME_T, status.last_ping_msecs,
 		    status.bytes_read, status.bytes_sent,
 		    status.bytes_buffered, status.peak_bytes_buffered,
-		    (long)status.last_input.tv_sec,
-		    (long)status.last_output.tv_sec);
+		    status.last_input.tv_sec, status.last_output.tv_sec);
 }
 
 static void
@@ -691,8 +689,13 @@ doveadm_cmd_user_lookup(struct doveadm_connection *conn,
 		username = args[0];
 		tag = args[1] != NULL ? args[1] : "";
 	}
-	if (str_to_uint(username, &username_hash) < 0)
-		username_hash = director_get_username_hash(conn->dir, username);
+	if (str_to_uint(username, &username_hash) < 0) {
+		if (!director_get_username_hash(conn->dir,
+						username, &username_hash)) {
+			o_stream_nsend_str(conn->output, "TRYAGAIN\n");
+			return DOVEADM_DIRECTOR_CMD_RET_OK;
+		}
+	}
 
 	/* get user's current host */
 	mail_tag = mail_tag_find(conn->dir->mail_hosts, tag);
@@ -777,8 +780,13 @@ doveadm_cmd_user_move(struct doveadm_connection *conn, const char *const *args)
 		return DOVEADM_DIRECTOR_CMD_RET_OK;
 	}
 
-	if (str_to_uint(args[0], &username_hash) < 0)
-		username_hash = director_get_username_hash(conn->dir, args[0]);
+	if (str_to_uint(args[0], &username_hash) < 0) {
+		if (!director_get_username_hash(conn->dir,
+						args[0], &username_hash)) {
+			o_stream_nsend_str(conn->output, "TRYAGAIN\n");
+			return DOVEADM_DIRECTOR_CMD_RET_OK;
+		}
+	}
 
 	user = user_directory_lookup(host->tag->users, username_hash);
 	if (user != NULL && USER_IS_BEING_KILLED(user)) {
@@ -1078,8 +1086,8 @@ doveadm_connection_init(struct director *dir, int fd)
 	conn = i_new(struct doveadm_connection, 1);
 	conn->fd = fd;
 	conn->dir = dir;
-	conn->input = i_stream_create_fd(conn->fd, 1024, FALSE);
-	conn->output = o_stream_create_fd(conn->fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(conn->fd, 1024);
+	conn->output = o_stream_create_fd(conn->fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	doveadm_connection_set_io(conn);
 	o_stream_nsend_str(conn->output, DOVEADM_HANDSHAKE);

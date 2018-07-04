@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_STORAGE_PRIVATE_H
-#define __SIEVE_STORAGE_PRIVATE_H
+#ifndef SIEVE_STORAGE_PRIVATE_H
+#define SIEVE_STORAGE_PRIVATE_H
 
 #include "sieve.h"
 #include "sieve-error-private.h"
@@ -121,9 +118,9 @@ struct sieve_storage {
 	enum sieve_storage_flags flags;
 
 	/* this is the main personal storage */
-	unsigned int main_storage:1;
-	unsigned int allows_synchronization:1;
-	unsigned int is_default:1;
+	bool main_storage:1;
+	bool allows_synchronization:1;
+	bool is_default:1;
 };
 
 struct sieve_storage *sieve_storage_alloc
@@ -148,8 +145,8 @@ int sieve_storage_active_script_is_default
 struct sieve_storage_list_context {
 	struct sieve_storage *storage;
 
-	unsigned int seen_active:1; // Just present for assertions
-	unsigned int seen_default:1;
+	bool seen_active:1; // Just present for assertions
+	bool seen_default:1;
 };
 
 /*
@@ -175,8 +172,8 @@ struct sieve_storage_save_context {
 
 	time_t mtime;
 
-	unsigned int failed:1;
-	unsigned int finished:1;
+	bool failed:1;
+	bool finished:1;
 };
 
 /*
@@ -200,12 +197,6 @@ const struct sieve_storage *sieve_storage_find_class
 /*
  * Built-in storage drivers
  */
-
-/* data (currently only for internal use) */
-
-#define SIEVE_DATA_STORAGE_DRIVER_NAME "data"
-
-extern const struct sieve_storage sieve_data_storage;
 
 /* file */
 

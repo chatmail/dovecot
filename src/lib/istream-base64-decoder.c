@@ -22,7 +22,7 @@ static int i_stream_read_parent(struct istream_private *stream)
 
 	/* we have less than one base64 block.
 	   see if there is more data available. */
-	ret = i_stream_read(stream->parent);
+	ret = i_stream_read_memarea(stream->parent);
 	if (ret <= 0) {
 		stream->istream.stream_errno = stream->parent->stream_errno;
 		stream->istream.eof = stream->parent->eof;
@@ -71,26 +71,43 @@ i_stream_base64_try_decode_block(struct base64_decoder_istream *bstream)
 	return pos > 0 ? 1 : 0;
 }
 
+static void i_stream_base64_last_partial_block(struct istream_private *stream)
+{
+	const unsigned char *data;
+	size_t i, size;
+
+	/* base64 input with a partial block */
+	data = i_stream_get_data(stream->parent, &size);
+	for (i = 0; i < size; i++) {
+		if (!base64_is_valid_char(data[i]))
+			break;
+	}
+	if (i == size) {
+		io_stream_set_error(&stream->iostream,
+			    "base64 input ends with a partial block: 0x%s",
+			    binary_to_hex(data, size));
+		stream->istream.stream_errno = EPIPE;
+	} else {
+		io_stream_set_error(&stream->iostream,
+			"Invalid base64 data: 0x%s",
+			binary_to_hex(data, size));
+		stream->istream.stream_errno = EINVAL;
+	}
+}
+
 static ssize_t i_stream_base64_decoder_read(struct istream_private *stream)
 {
 	struct base64_decoder_istream *bstream =
 		(struct base64_decoder_istream *)stream;
-	const unsigned char *data;
-	size_t pre_count, post_count, size;
+	size_t pre_count, post_count;
 	int ret;
 
 	do {
 		ret = i_stream_read_parent(stream);
 		if (ret <= 0) {
 			if (ret < 0 && stream->istream.stream_errno == 0 &&
-			    i_stream_get_data_size(stream->parent) > 0) {
-				/* base64 input with a partial block */
-				data = i_stream_get_data(stream->parent, &size);
-				io_stream_set_error(&stream->iostream,
-					"base64 input ends with a partial block: 0x%s",
-					binary_to_hex(data, size));
-				stream->istream.stream_errno = EINVAL;
-			}
+			    i_stream_get_data_size(stream->parent) > 0)
+				i_stream_base64_last_partial_block(stream);
 			return ret;
 		}
 
@@ -137,5 +154,5 @@ i_stream_create_base64_decoder(struct istream *input)
 	bstream->istream.istream.blocking = input->blocking;
 	bstream->istream.istream.seekable = input->seekable;
 	return i_stream_create(&bstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }

@@ -30,27 +30,26 @@ void mail_crypt_key_cache_destroy(struct mail_crypt_key_cache_entry **cache);
 void mail_crypt_key_register_mailbox_internal_attributes(void);
 
 /* returns -1 on error, 0 not found, 1 = found */
-int mail_crypt_get_private_key(struct mailbox_transaction_context *t,
-			       const char *pubid,
-			       bool user_key, bool shared,
-			       struct dcrypt_private_key **key_r,
-			       const char **error_r);
+int mail_crypt_get_private_key(struct mailbox *box, const char *pubid,
+				bool user_key, bool shared,
+				struct dcrypt_private_key **key_r,
+				const char **error_r);
 int mail_crypt_user_get_private_key(struct mail_user *user, const char *pubid,
 				    struct dcrypt_private_key **key_r,
 				    const char **error_r);
-int mail_crypt_box_get_private_key(struct mailbox_transaction_context *t,
+int mail_crypt_box_get_private_key(struct mailbox *box,
 				   struct dcrypt_private_key **key_r,
 				   const char **error_r);
-int mail_crypt_box_get_private_keys(struct mailbox_transaction_context *t,
+int mail_crypt_box_get_private_keys(struct mailbox *box,
 				    ARRAY_TYPE(dcrypt_private_key) *keys_r,
 				    const char **error_r);
 int mail_crypt_user_get_public_key(struct mail_user *user,
 				   struct dcrypt_public_key **key_r,
 				   const char **error_r);
-int mail_crypt_box_get_public_key(struct mailbox_transaction_context *t,
+int mail_crypt_box_get_public_key(struct mailbox *box,
 				  struct dcrypt_public_key **key_r,
 				  const char **error_r);
-int mail_crypt_box_get_shared_key(struct mailbox_transaction_context *t,
+int mail_crypt_box_get_shared_key(struct mailbox *box,
 				  const char *pubid,
 				  struct dcrypt_private_key **key_r,
 				  const char **error_r);
@@ -104,7 +103,7 @@ int mail_crypt_box_share_private_keys(struct mailbox_transaction_context *t,
 int mail_crypt_user_get_or_gen_public_key(struct mail_user *user,
 					  struct dcrypt_public_key **pub_key_r,
 					  const char **error_r);
-int mail_crypt_box_get_or_gen_public_key(struct mailbox_transaction_context *t,
+int mail_crypt_box_get_or_gen_public_key(struct mailbox *box,
 					 struct dcrypt_public_key **pub_key_r,
 					 const char **error_r);
 

@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_EXTENSIONS_H
-#define __SIEVE_EXTENSIONS_H
+#ifndef SIEVE_EXTENSIONS_H
+#define SIEVE_EXTENSIONS_H
 
 #include "lib.h"
 #include "sieve-common.h"
@@ -90,13 +87,13 @@ struct sieve_extension {
 	struct sieve_instance *svinst;
 	void *context;
 
-	unsigned int required:1;
-	unsigned int loaded:1;
-	unsigned int enabled:1;
-	unsigned int dummy:1;
-	unsigned int global:1;
-	unsigned int implicit:1;
-	unsigned int overridden:1;
+	bool required:1;
+	bool loaded:1;
+	bool enabled:1;
+	bool dummy:1;
+	bool global:1;
+	bool implicit:1;
+	bool overridden:1;
 };
 
 #define sieve_extension_is(ext, definition) \
@@ -191,4 +188,4 @@ void sieve_extension_capabilities_unregister
 const char *sieve_extension_capabilities_get_string
 	(struct sieve_instance *svinst, const char *cap_name);
 
-#endif /* __SIEVE_EXTENSIONS_H */
+#endif

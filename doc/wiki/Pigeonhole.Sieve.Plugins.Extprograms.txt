@@ -212,53 +212,6 @@ Full Examples
 Example 1
 ---------
 
-This simple example shows how to use the "vnd.dovecot.execute" extension to
-perform some sort of test on the incoming message.
-
-Relevant configuration:
-
----%<-------------------------------------------------------------------------
-plugin {
- sieve_extensions = +vnd.dovecot.execute
-
- sieve_plugins = sieve_extprograms
- sieve_execute_bin_dir = /usr/lib/dovecot/sieve-execute
-}
----%<-------------------------------------------------------------------------
-
-The sieve script:
-
----%<-------------------------------------------------------------------------
-require "vnd.dovecot.execute";
-
-if not execute :pipe "hasfrop.sh" {
-        discard;
-        stop;
-}
----%<-------------------------------------------------------------------------
-
-At the location '/usr/lib/dovecot/sieve-execute', create the executable script
-'hasfrop.sh'. In this example, the 'hasfrop.sh' checks whether the message
-contains the literal text "FROP" anywhere in the message. The Sieve script
-shown above discards the message if this scripts ends with an exit code other
-than 0, which happens when "FROP" was found.
-
----%<-------------------------------------------------------------------------
-# Something that reads the whole message and inspects it for some
-# property. Not that the whole message needs to be read from input!
-N=`cat | grep -i "FROP"` # Check it for the undesirable text "FROP"
-if [ ! -z "$N" ]; then
-        # Result: deny
-        exit 1;
-fi
-
-# Result: accept
-exit 0
----%<-------------------------------------------------------------------------
-
-Example 2
----------
-
 This example shows how to use the "vnd.dovecot.execute" extension for
 querying/updating a MySQL database. This is used to redirect messages only once
 every 300s for a particular sender. Note that this particular use case could
@@ -334,4 +287,4 @@ fi
 exit 1
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-05-23 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

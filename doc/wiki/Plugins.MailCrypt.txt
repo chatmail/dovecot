@@ -30,9 +30,7 @@ Contents
 
      8. mail-crypt-plugin and ACLs
 
-     9. decrypting files encrypted with mail-crypt plugin
-
-     10. fs-crypt and fs-mail-crypt
+     9. fs-crypt and fs-mail-crypt
 
  2. doveadm plugin
 
@@ -291,13 +289,6 @@ folder key is encrypted to recipient's public key. If you have
 *mail_crypt_acl_require_secure_key_sharing* plugin setting, you can't share the
 key to groups or someone with no public key.
 
-decrypting files encrypted with mail-crypt plugin
--------------------------------------------------
-
-You can use decrypt.rb
-[https://gist.github.com/cmouse/882f2e2a60c1e49b7d343f5a6a2721de] to decrypt
-encrypted files.
-
 fs-crypt and fs-mail-crypt
 --------------------------
 
@@ -329,7 +320,7 @@ Example:
 
 ---%<-------------------------------------------------------------------------
 plugin {
-    fts_index_fs = crypt:set_prefix=fscrypt_index:posix:prefix=/tmp/fts
+    fts_index_fs = crypt:set_prefix=fscrypt_index:posix:set_prefix=/tmp/fts
     fscrypt_index_public_key = <server.pub
     fscrypt_index_private_key = <server.key
 }
@@ -425,4 +416,4 @@ doveadm mailbox cryptokey password [-u username | -A] [-N | -n password] [-O |
 
 Sets, changes or clears password for user's private key.
 
-(This file was created from the wiki on 2018-05-23 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

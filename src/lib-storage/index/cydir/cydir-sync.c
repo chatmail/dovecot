@@ -5,6 +5,7 @@
 #include "str.h"
 #include "cydir-storage.h"
 #include "cydir-sync.h"
+#include "mailbox-recent-flags.h"
 
 static void cydir_sync_set_uidvalidity(struct cydir_sync_context *ctx)
 {
@@ -142,8 +143,7 @@ int cydir_sync_finish(struct cydir_sync_context **_ctx, bool success)
 	} else {
 		mail_index_sync_rollback(&ctx->index_sync_ctx);
 	}
-	if (ctx->path != NULL)
-		str_free(&ctx->path);
+	str_free(&ctx->path);
 	i_free(ctx);
 	return ret;
 }
@@ -162,7 +162,7 @@ static int cydir_sync(struct cydir_mailbox *mbox)
 struct mailbox_sync_context *
 cydir_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
-	struct cydir_mailbox *mbox = (struct cydir_mailbox *)box;
+	struct cydir_mailbox *mbox = CYDIR_MAILBOX(box);
 	int ret = 0;
 
 	if (index_mailbox_want_full_sync(&mbox->box, flags))

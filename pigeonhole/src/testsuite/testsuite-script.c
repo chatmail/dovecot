@@ -14,6 +14,7 @@
 #include "testsuite-common.h"
 #include "testsuite-settings.h"
 #include "testsuite-log.h"
+#include "testsuite-smtp.h"
 #include "testsuite-result.h"
 
 #include "testsuite-script.h"
@@ -88,11 +89,13 @@ bool testsuite_script_is_subtest(const struct sieve_runtime_env *renv)
 
 bool testsuite_script_run(const struct sieve_runtime_env *renv)
 {
+	const struct sieve_script_env *senv = renv->scriptenv;
 	struct testsuite_interpreter_context *ictx =
 		testsuite_interpreter_context_get(renv->interp, testsuite_ext);
 	struct sieve_script_env scriptenv;
 	struct sieve_result *result;
 	struct sieve_interpreter *interp;
+	const char *error;
 	int ret;
 
 	i_assert(ictx != NULL);
@@ -106,16 +109,20 @@ bool testsuite_script_run(const struct sieve_runtime_env *renv)
 	testsuite_log_clear_messages();
 
 	/* Compose script execution environment */
-	i_zero(&scriptenv);
+	if (sieve_script_env_init(&scriptenv, senv->user, &error) < 0) {
+		sieve_runtime_error(renv, NULL,
+			"testsuite: failed to initialize script execution: %s",
+			error);
+		return FALSE;
+	}
 	scriptenv.default_mailbox = "INBOX";
-	scriptenv.postmaster_address = "postmaster@example.com";
-	scriptenv.smtp_start = NULL;
-	scriptenv.smtp_add_rcpt = NULL;
-	scriptenv.smtp_send = NULL;
-	scriptenv.smtp_finish = NULL;
+	scriptenv.smtp_start = testsuite_smtp_start;
+	scriptenv.smtp_add_rcpt = testsuite_smtp_add_rcpt;
+	scriptenv.smtp_send = testsuite_smtp_send;
+	scriptenv.smtp_abort = testsuite_smtp_abort;
+	scriptenv.smtp_finish = testsuite_smtp_finish;
 	scriptenv.duplicate_mark = NULL;
 	scriptenv.duplicate_check = NULL;
-	scriptenv.user = renv->scriptenv->user;
 	scriptenv.trace_log = renv->scriptenv->trace_log;
 	scriptenv.trace_config = renv->scriptenv->trace_config;
 
@@ -169,9 +176,11 @@ bool testsuite_script_multiscript
 (const struct sieve_runtime_env *renv, ARRAY_TYPE (const_string) *scriptfiles)
 {
 	struct sieve_instance *svinst = testsuite_sieve_instance;
+	const struct sieve_script_env *senv = renv->scriptenv;
 	struct sieve_script_env scriptenv;
 	struct sieve_multiscript *mscript;
 	const char *const *scripts;
+	const char *error;
 	unsigned int count, i;
 	bool more = TRUE;
 	bool result = TRUE;
@@ -179,16 +188,20 @@ bool testsuite_script_multiscript
 	testsuite_log_clear_messages();
 
 	/* Compose script execution environment */
-	i_zero(&scriptenv);
+	if (sieve_script_env_init(&scriptenv, senv->user, &error) < 0) {
+		sieve_runtime_error(renv, NULL,
+			"testsuite: failed to initialize script execution: %s",
+			error);
+		return FALSE;
+	}
 	scriptenv.default_mailbox = "INBOX";
-	scriptenv.postmaster_address = "postmaster@example.com";
-	scriptenv.smtp_start = NULL;
-	scriptenv.smtp_add_rcpt = NULL;
-	scriptenv.smtp_send = NULL;
-	scriptenv.smtp_finish = NULL;
+	scriptenv.smtp_start = testsuite_smtp_start;
+	scriptenv.smtp_add_rcpt = testsuite_smtp_add_rcpt;
+	scriptenv.smtp_send = testsuite_smtp_send;
+	scriptenv.smtp_abort = testsuite_smtp_abort;
+	scriptenv.smtp_finish = testsuite_smtp_finish;
 	scriptenv.duplicate_mark = NULL;
 	scriptenv.duplicate_check = NULL;
-	scriptenv.user = renv->scriptenv->user;
 	scriptenv.trace_log = renv->scriptenv->trace_log;
 	scriptenv.trace_config = renv->scriptenv->trace_config;
 

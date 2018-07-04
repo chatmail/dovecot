@@ -6,7 +6,9 @@
 #include "istream-unix.h"
 #include "ostream.h"
 #include "base64.h"
+#include "str.h"
 #include "strescape.h"
+#include "str-sanitize.h"
 #include "master-service.h"
 #include "mail-storage-service.h"
 #include "imap-client.h"
@@ -256,6 +258,15 @@ imap_master_client_input_args(struct connection *conn, const char *const *args,
 		master_input.state_import_bad_idle_done;
 	imap_client->state_import_idle_continue =
 		master_input.state_import_idle_continue;
+	if (imap_client->user->mail_debug) {
+		if (imap_client->state_import_bad_idle_done)
+			i_debug("imap-master: Unhibernated because IDLE was stopped with BAD command");
+		else if (imap_client->state_import_idle_continue)
+			i_debug("imap-master: Unhibernated to send mailbox changes");
+		else
+			i_debug("imap-master: Unhibernated because IDLE was stopped with DONE");
+	}
+
 	ret = imap_state_import_internal(imap_client, master_input.state->data,
 					 master_input.state->used, &error);
 	if (ret <= 0) {
@@ -270,6 +281,10 @@ imap_master_client_input_args(struct connection *conn, const char *const *args,
 	/* make sure all pending input gets handled */
 	i_assert(imap_client->to_delayed_input == NULL);
 	if (master_input.client_input->used > 0) {
+		if (imap_client->user->mail_debug) {
+			i_debug("imap-master: Pending client input: '%s'",
+				str_sanitize(str_c(master_input.client_input), 128));
+		}
 		imap_client->to_delayed_input =
 			timeout_add(0, client_input, imap_client);
 	}
@@ -314,11 +329,10 @@ void imap_master_client_create(int fd)
 	struct imap_master_client *client;
 
 	client = i_new(struct imap_master_client, 1);
+	client->conn.unix_socket = TRUE;
 	connection_init_server(master_clients, &client->conn,
 			       "imap-master", fd, fd);
 
-	i_assert(client->conn.input == NULL);
-	client->conn.input = i_stream_create_unix(fd, (size_t)-1);
 	/* read the first file descriptor that we can */
 	i_stream_unix_set_read_fd(client->conn.input);
 }
@@ -329,7 +343,7 @@ static struct connection_settings client_set = {
 	.major_version = 1,
 	.minor_version = 0,
 
-	.input_max_size = 0, /* don't auto-create istream */
+	.input_max_size = (size_t)-1,
 	.output_max_size = (size_t)-1,
 	.client = FALSE
 };

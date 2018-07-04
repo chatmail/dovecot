@@ -10,6 +10,8 @@
 
 #define SNARF_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, snarf_storage_module)
+#define SNARF_CONTEXT_REQUIRE(obj) \
+	MODULE_CONTEXT_REQUIRE(obj, snarf_storage_module)
 
 struct snarf_mail_storage {
 	union mail_storage_module_context module_ctx;
@@ -46,9 +48,10 @@ static int snarf(struct mailbox *srcbox, struct mailbox *destbox)
 	if (mailbox_sync(srcbox, MAILBOX_SYNC_FLAG_FULL_READ) < 0)
 		return -1;
 
-	src_trans = mailbox_transaction_begin(srcbox, 0);
+	src_trans = mailbox_transaction_begin(srcbox, 0, "snarf src_trans");
 	dest_trans = mailbox_transaction_begin(destbox,
-					MAILBOX_TRANSACTION_FLAG_EXTERNAL);
+					MAILBOX_TRANSACTION_FLAG_EXTERNAL,
+					"snarf dest_trans");
 
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);
@@ -101,7 +104,7 @@ static int snarf(struct mailbox *srcbox, struct mailbox *destbox)
 static struct mailbox_sync_context *
 snarf_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
-	struct snarf_mailbox *sbox = SNARF_CONTEXT(box);
+	struct snarf_mailbox *sbox = SNARF_CONTEXT_REQUIRE(box);
 
 	(void)snarf(sbox->snarf_box, box);
 	/* close the mailbox so that we don't have to keep it locked */
@@ -111,7 +114,7 @@ snarf_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 
 static void snarf_mailbox_free(struct mailbox *box)
 {
-	struct snarf_mailbox *sbox = SNARF_CONTEXT(box);
+	struct snarf_mailbox *sbox = SNARF_CONTEXT_REQUIRE(box);
 
 	mailbox_free(&sbox->snarf_box);
 	sbox->module_ctx.super.free(box);
@@ -148,7 +151,7 @@ static void snarf_mailbox_allocated(struct mailbox *box)
 
 	if (!box->inbox_user)
 		return;
-	if (sstorage != NULL && sstorage->snarfing_disabled)
+	if (sstorage == NULL || sstorage->snarfing_disabled)
 		return;
 
 	if (!snarf_box_find(box->storage->user, &snarf_list, &snarf_name))
@@ -171,7 +174,7 @@ snarf_mailbox_alloc(struct mail_storage *storage,
 		    struct mailbox_list *list,
 		    const char *vname, enum mailbox_flags flags)
 {
-	struct snarf_mail_storage *sstorage = SNARF_CONTEXT(storage);
+	struct snarf_mail_storage *sstorage = SNARF_CONTEXT_REQUIRE(storage);
 	struct mail_namespace *ns = mailbox_list_get_namespace(list);
 	struct mailbox *box;
 	struct mailbox_list *snarf_list;

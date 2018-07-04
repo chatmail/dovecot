@@ -16,7 +16,6 @@
 #include "imap-login-client.h"
 #include "client-authenticate.h"
 #include "auth-client.h"
-#include "ssl-proxy.h"
 #include "imap-proxy.h"
 #include "imap-quote.h"
 #include "imap-login-commands.h"
@@ -66,15 +65,20 @@ static bool client_handle_parser_error(struct imap_client *client,
 				       struct imap_parser *parser)
 {
 	const char *msg;
-	bool fatal;
+	enum imap_parser_error parse_error;
 
-	msg = imap_parser_get_error(parser, &fatal);
-	if (fatal) {
+	msg = imap_parser_get_error(parser, &parse_error);
+	switch (parse_error) {
+	case IMAP_PARSE_ERROR_NONE:
+		i_unreached();
+	case IMAP_PARSE_ERROR_LITERAL_TOO_BIG:
 		client_send_reply(&client->common,
 				  IMAP_CMD_REPLY_BYE, msg);
 		client_destroy(&client->common,
 			       t_strconcat("Disconnected: ", msg, NULL));
 		return FALSE;
+	default:
+		break;
 	}
 
 	client_send_reply(&client->common, IMAP_CMD_REPLY_BAD, msg);
@@ -103,15 +107,24 @@ static const char *get_capability(struct client *client)
 {
 	struct imap_client *imap_client = (struct imap_client *)client;
 	string_t *cap_str = t_str_new(256);
+	bool explicit_capability = FALSE;
 
 	if (*imap_client->set->imap_capability == '\0')
 		str_append(cap_str, CAPABILITY_BANNER_STRING);
-	else if (*imap_client->set->imap_capability != '+')
+	else if (*imap_client->set->imap_capability != '+') {
+		explicit_capability = TRUE;
 		str_append(cap_str, imap_client->set->imap_capability);
-	else {
+	} else {
 		str_append(cap_str, CAPABILITY_BANNER_STRING);
 		str_append_c(cap_str, ' ');
 		str_append(cap_str, imap_client->set->imap_capability + 1);
+	}
+
+	if (!explicit_capability) {
+		if (imap_client->set->imap_literal_minus)
+			str_append(cap_str, " LITERAL-");
+		else
+			str_append(cap_str, " LITERAL+");
 	}
 
 	if (client_is_tls_enabled(client) && !client->tls)
@@ -335,6 +348,8 @@ static int cmd_id(struct imap_client *client)
 		id->parser = imap_parser_create(client->common.input,
 						client->common.output,
 						MAX_IMAP_LINE);
+		if (client->set->imap_literal_minus)
+			imap_parser_enable_literal_minus(id->parser);
 		parser_flags = IMAP_PARSE_FLAG_STOP_AT_LIST;
 	} else {
 		id = client->cmd_id;
@@ -576,8 +591,7 @@ static void imap_client_input(struct client *client)
 			   don't allow any commands */
 			client_notify_status(client, FALSE,
 					     AUTH_SERVER_WAITING_MSG);
-			if (client->to_auth_waiting != NULL)
-				timeout_remove(&client->to_auth_waiting);
+			timeout_remove(&client->to_auth_waiting);
 
 			client->input_blocked = TRUE;
 			break;
@@ -606,7 +620,9 @@ static void imap_client_create(struct client *client, void **other_sets)
 	imap_client->parser =
 		imap_parser_create(imap_client->common.input,
 				   imap_client->common.output, MAX_IMAP_LINE);
-	client->io = io_add(client->fd, IO_READ, client_input, client);
+	if (imap_client->set->imap_literal_minus)
+		imap_parser_enable_literal_minus(imap_client->parser);
+	client->io = io_add_istream(client->input, client_input, client);
 }
 
 static void imap_client_destroy(struct client *client)

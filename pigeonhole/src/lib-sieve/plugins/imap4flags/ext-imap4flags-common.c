@@ -97,8 +97,8 @@ bool ext_imap4flags_command_validate
 			return FALSE;
 		}
 
-		if ( !sieve_variable_argument_activate
-			(var_ext, valdtr, cmd, arg, !sieve_command_is(cmd, tst_hasflag) ) )
+		if ( !sieve_variable_argument_activate(var_ext, var_ext,
+			valdtr, cmd, arg, !sieve_command_is(cmd, tst_hasflag) ) )
 			return FALSE;
 
 		if ( sieve_ast_argument_type(arg2) != SAAT_STRING &&
@@ -611,7 +611,7 @@ struct ext_imap4flags_stringlist {
 	string_t *flags_string;
 	struct ext_imap4flags_iter flit;
 
-	unsigned int normalize:1;
+	bool normalize:1;
 };
 
 static struct sieve_stringlist *ext_imap4flags_stringlist_create

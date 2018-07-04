@@ -28,7 +28,7 @@ void mail_index_map_init_extbufs(struct mail_index_map *map,
 		p_clear(map->extension_pool);
 
 		/* try to use the existing pool's size for initial_count so
-		   we don't grow it unneededly */
+		   we don't grow it needlessly */
 		size = p_get_max_easy_alloc_size(map->extension_pool);
 		if (size > EXT_GLOBAL_ALLOC_SIZE + EXT_PER_ALLOC_SIZE) {
 			initial_count = (size - EXT_GLOBAL_ALLOC_SIZE) /
@@ -312,8 +312,7 @@ void mail_index_unmap(struct mail_index_map **_map)
 	i_assert(map->refcount == 0);
 	mail_index_record_map_unlink(map);
 
-	if (map->extension_pool != NULL)
-		pool_unref(&map->extension_pool);
+	pool_unref(&map->extension_pool);
 	if (array_is_created(&map->keyword_idx_map))
 		array_free(&map->keyword_idx_map);
 	buffer_free(&map->hdr_copy_buf);

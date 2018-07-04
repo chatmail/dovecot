@@ -16,11 +16,13 @@ endif
 # Macros to help move files to the module packages
 CORE_DIR=$(CURDIR)/debian/dovecot-core
 PKG_DIR=$(CURDIR)/debian/dovecot-PKG
-MOVE=mv $(CORE_DIR)/$(1) $(PKG_DIR:PKG=$(2))/$(dir $(1));
+MOVE=install -d $(PKG_DIR:PKG=$(2))/$(dir $(1)); mv $(CORE_DIR)/$(1) $(PKG_DIR:PKG=$(2))/$(dir $(1));
 
 # Files to move from dovecot-core to the individual packages. Files added to
 # <addon>_files will be automatically moved from dovecot's tree to the
 # respective package.
+auth-lua_files = usr/lib/dovecot/modules/auth/libauthdb_lua.so
+
 imapd_files = usr/lib/dovecot/imap* \
 	      usr/lib/dovecot/modules/lib??_imap_!(*sieve*) \
 	      usr/share/dovecot/conf.d/??-imap*
@@ -33,6 +35,9 @@ lmtpd_files = usr/lib/dovecot/lmtp* \
 
 managesieved_files = usr/lib/dovecot/managesieve* \
 		     usr/lib/dovecot/modules/settings/libmanagesieve*
+
+submissiond_files = usr/lib/dovecot/submission* \
+	           usr/share/dovecot/conf.d/??-submission.conf
 
 pgsql_files = usr/lib/dovecot/modules/auth/libdriver_pgsql* \
 	      usr/lib/dovecot/modules/dict/libdriver_pgsql* \
@@ -87,9 +92,13 @@ override_dh_auto_configure:
 	            --with-gssapi=plugin \
 	            --with-solr \
 	            --with-ioloop=best \
+		    --with-icu \
 	            --with-libwrap \
 	            --with-lucene \
+		    --with-apparmor \
 		    --with-lz4 \
+		    --with-lua=plugin \
+		    --with-sodium \
 		    --libdir=\$${prefix}/lib \
 	            --libexecdir=\$${prefix}/lib \
 		    --docdir=\$${prefix}/share/doc/dovecot-core \
@@ -133,8 +142,8 @@ override_dh_install:
 	# or debian/ to the individual packages. NOTE: there is nothing in
 	# debian/tmp!
 	dh_install
-	install -o root -g root -m 0755 $(CORE_DIR)/usr/share/doc/dovecot-core/mkcert.sh \
-		$(CORE_DIR)/usr/share/dovecot/
+	install -D -o root -g root -m 0755 $(CORE_DIR)/usr/share/doc/dovecot-core/mkcert.sh \
+		$(CORE_DIR)/usr/share/dovecot/mkcert.sh
 	rm $(CORE_DIR)/usr/share/doc/dovecot-core/mkcert.sh
 	rm $(CORE_DIR)/usr/share/doc/dovecot-core/dovecot-openssl.cnf
 	rm $(CORE_DIR)/usr/share/doc/dovecot-core/solr-schema.xml
@@ -146,6 +155,7 @@ override_dh_install:
 	
 	rmdir $(CORE_DIR)/usr/include
 	rmdir $(CORE_DIR)/usr/share/aclocal
+	install -d $(PKG_DIR:PKG=dev)/usr/share/dovecot
 	grep ABI_VERSION config.h \
 		| perl -ne '/"(.+)\(.+\)"/ && print $$1' \
 		| tr '[A-Z]' '[a-z]' > $(PKG_DIR:PKG=dev)/usr/share/dovecot/dovecot-abi
@@ -153,8 +163,8 @@ override_dh_install:
 	# Install apport hook
 	install -D -m 644 debian/source_dovecot.py $(CURDIR)/debian/dovecot-core/usr/share/apport/package-hooks/dovecot-core.py
 
-	install -m644 debian/dovecot-imapd.ufw.profile debian/dovecot-imapd/etc/ufw/applications.d/dovecot-imapd
-	install -m644 debian/dovecot-pop3d.ufw.profile debian/dovecot-pop3d/etc/ufw/applications.d/dovecot-pop3d
+	install -D -m644 debian/dovecot-imapd.ufw.profile debian/dovecot-imapd/etc/ufw/applications.d/dovecot-imapd
+	install -D -m644 debian/dovecot-pop3d.ufw.profile debian/dovecot-pop3d/etc/ufw/applications.d/dovecot-pop3d
 
 override_dh_installpam:
 	dh_installpam -pdovecot-core --name=dovecot

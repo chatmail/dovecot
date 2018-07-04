@@ -64,12 +64,12 @@ static void director_refresh_proctitle_timeout(void *context ATTR_UNUSED)
 		str_printfa(str, ", %u moving", director->users_moving_count);
 	if (director->users_kicking_count > 0)
 		str_printfa(str, ", %u kicking", director->users_kicking_count);
-	str_printfa(str, ", %lu+%lu req/s",
-		    (unsigned long)(director->num_requests - prev_requests),
-		    (unsigned long)(director->num_incoming_requests - prev_incoming_requests));
-	str_printfa(str, ", %llu+%llu kB/s",
-		    (unsigned long long)(director->ring_traffic_input - prev_input)/1024,
-		    (unsigned long long)(director->ring_traffic_output - prev_output)/1024);
+	str_printfa(str, ", %"PRIu64"+%"PRIu64" req/s",
+		    director->num_requests - prev_requests,
+		    director->num_incoming_requests - prev_incoming_requests);
+	str_printfa(str, ", %"PRIu64"+%"PRIu64" kB/s",
+		    (director->ring_traffic_input - prev_input)/1024,
+		    (director->ring_traffic_output - prev_output)/1024);
 	str_append_c(str, ']');
 
 	prev_requests = director->num_requests;
@@ -115,24 +115,19 @@ director_socket_type_get_from_name(const char *path)
 }
 
 static enum director_socket_type
-listener_get_socket_type_fallback(const struct director_settings *set,
-				  int listen_fd)
+listener_get_socket_type_fallback(int listen_fd)
 {
 	in_port_t local_port;
 
 	if (net_getsockname(listen_fd, NULL, &local_port) == 0 &&
 	    local_port != 0) {
 		/* TCP/IP connection */
-		if (local_port == set->director_doveadm_port)
-			return DIRECTOR_SOCKET_TYPE_DOVEADM;
-		else
-			return DIRECTOR_SOCKET_TYPE_RING;
+		return DIRECTOR_SOCKET_TYPE_RING;
 	}
 	return DIRECTOR_SOCKET_TYPE_AUTH;
 }
 
-static void listener_sockets_init(const struct director_settings *set,
-				  struct ip_addr *listen_ip_r,
+static void listener_sockets_init(struct ip_addr *listen_ip_r,
 				  in_port_t *listen_port_r)
 {
 	const char *name;
@@ -152,7 +147,7 @@ static void listener_sockets_init(const struct director_settings *set,
 		type = director_socket_type_get_from_name(name);
 		if (type == DIRECTOR_SOCKET_TYPE_UNKNOWN) {
 			/* mainly for backwards compatibility */
-			type = listener_get_socket_type_fallback(set, listen_fd);
+			type = listener_get_socket_type_fallback(listen_fd);
 		}
 		if (type == DIRECTOR_SOCKET_TYPE_RING && *listen_port_r == 0 &&
 		    net_getsockname(listen_fd, &ip, &port) == 0 && port > 0) {
@@ -279,7 +274,7 @@ static void main_preinit(void)
 	}
 	set = master_service_settings_get_others(master_service)[0];
 
-	listener_sockets_init(set, &listen_ip, &listen_port);
+	listener_sockets_init(&listen_ip, &listen_port);
 	if (listen_port == 0 && *set->director_servers != '\0') {
 		i_fatal("No inet_listeners defined for director service "
 			"(for standalone keep director_servers empty)");
@@ -296,14 +291,13 @@ static void main_preinit(void)
 		i_fatal("Invalid value for director_mail_servers setting");
 	director->orig_config_hosts = mail_hosts_dup(director->mail_hosts);
 
-	restrict_access_by_env(NULL, FALSE);
+	restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 	restrict_access_allow_coredumps(TRUE);
 }
 
 static void main_deinit(void)
 {
-	if (to_proctitle_refresh != NULL)
-		timeout_remove(&to_proctitle_refresh);
+	timeout_remove(&to_proctitle_refresh);
 	notify_connections_deinit();
 	/* deinit doveadm connections before director, so it can clean up
 	   its pending work, such as abort user moves. */

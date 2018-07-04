@@ -21,9 +21,9 @@ struct acl_mailbox_list_iterate_context {
 	struct mailbox_info info;
 
 	char sep;
-	unsigned int hide_nonlistable_subscriptions:1;
-	unsigned int simple_star_glob:1;
-	unsigned int autocreate_acls_checked:1;
+	bool hide_nonlistable_subscriptions:1;
+	bool simple_star_glob:1;
+	bool autocreate_acls_checked:1;
 };
 
 static const char *acl_storage_right_names[ACL_STORAGE_RIGHT_COUNT] = {
@@ -41,14 +41,14 @@ static const char *acl_storage_right_names[ACL_STORAGE_RIGHT_COUNT] = {
 };
 
 #define ACL_LIST_ITERATE_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, acl_mailbox_list_module)
+	MODULE_CONTEXT_REQUIRE(obj, acl_mailbox_list_module)
 
 struct acl_mailbox_list_module acl_mailbox_list_module =
 	MODULE_CONTEXT_INIT(&mailbox_list_module_register);
 
 struct acl_backend *acl_mailbox_list_get_backend(struct mailbox_list *list)
 {
-	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(list);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT_REQUIRE(list);
 
 	return alist->rights.backend;
 }
@@ -57,7 +57,7 @@ int acl_mailbox_list_have_right(struct mailbox_list *list, const char *name,
 				bool parent, unsigned int acl_storage_right_idx,
 				bool *can_see_r)
 {
-	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(list);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT_REQUIRE(list);
 	struct acl_backend *backend = alist->rights.backend;
 	const unsigned int *idx_arr = alist->rights.acl_storage_right_idx;
 	struct acl_object *aclobj;
@@ -87,7 +87,7 @@ acl_mailbox_try_list_fast(struct mailbox_list_iterate_context *_ctx)
 {
 	struct acl_mailbox_list_iterate_context *ctx =
 		ACL_LIST_ITERATE_CONTEXT(_ctx);
-	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(_ctx->list);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT_REQUIRE(_ctx->list);
 	struct acl_backend *backend = alist->rights.backend;
 	const unsigned int *idxp;
 	const struct acl_mask *acl_mask;
@@ -95,7 +95,6 @@ acl_mailbox_try_list_fast(struct mailbox_list_iterate_context *_ctx)
 	struct mail_namespace *ns = _ctx->list->ns;
 	struct mailbox_list_iter_update_context update_ctx;
 	const char *name;
-	int ret;
 
 	if ((_ctx->flags & (MAILBOX_LIST_ITER_RAW_LIST |
 			       MAILBOX_LIST_ITER_SELECT_SUBSCRIBED)) != 0)
@@ -125,17 +124,16 @@ acl_mailbox_try_list_fast(struct mailbox_list_iterate_context *_ctx)
 	update_ctx.tree_ctx = mailbox_tree_init(ctx->sep);
 
 	nonowner_list_ctx = acl_backend_nonowner_lookups_iter_init(backend);
-	while ((ret = acl_backend_nonowner_lookups_iter_next(nonowner_list_ctx,
-							     &name)) > 0) {
+	while (acl_backend_nonowner_lookups_iter_next(nonowner_list_ctx,
+							     &name)) {
 		T_BEGIN {
 			const char *vname =
 				mailbox_list_get_vname(ns->list, name);
 			mailbox_list_iter_update(&update_ctx, vname);
 		} T_END;
 	}
-	acl_backend_nonowner_lookups_iter_deinit(&nonowner_list_ctx);
 
-	if (ret == 0)
+	if (acl_backend_nonowner_lookups_iter_deinit(&nonowner_list_ctx) >= 0)
 		ctx->lookup_boxes = update_ctx.tree_ctx;
 	else
 		mailbox_tree_deinit(&update_ctx.tree_ctx);
@@ -146,7 +144,7 @@ acl_mailbox_list_iter_init_shared(struct mailbox_list *list,
 				  const char *const *patterns,
 				  enum mailbox_list_iter_flags flags)
 {
-	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(list);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT_REQUIRE(list);
 	struct mailbox_list_iterate_context *ctx;
 	int ret;
 
@@ -165,7 +163,7 @@ acl_mailbox_list_iter_init(struct mailbox_list *list,
 			   const char *const *patterns,
 			   enum mailbox_list_iter_flags flags)
 {
-	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(list);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT_REQUIRE(list);
 	struct mailbox_list_iterate_context *_ctx;
 	struct acl_mailbox_list_iterate_context *ctx;
 	const char *p;
@@ -212,7 +210,7 @@ acl_mailbox_list_iter_next_info(struct mailbox_list_iterate_context *_ctx)
 {
 	struct acl_mailbox_list_iterate_context *ctx =
 		ACL_LIST_ITERATE_CONTEXT(_ctx);
-	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(_ctx->list);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT_REQUIRE(_ctx->list);
 	const struct mailbox_info *info;
 
 	while ((info = alist->module_ctx.super.iter_next(_ctx)) != NULL) {
@@ -483,7 +481,7 @@ acl_mailbox_list_iter_deinit(struct mailbox_list_iterate_context *_ctx)
 {
 	struct acl_mailbox_list_iterate_context *ctx =
 		ACL_LIST_ITERATE_CONTEXT(_ctx);
-	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(_ctx->list);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT_REQUIRE(_ctx->list);
 	int ret = _ctx->failed ? -1 : 0;
 
         if (ctx->lookup_boxes != NULL)
@@ -495,7 +493,7 @@ acl_mailbox_list_iter_deinit(struct mailbox_list_iterate_context *_ctx)
 
 static void acl_mailbox_list_deinit(struct mailbox_list *list)
 {
-	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(list);
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT_REQUIRE(list);
 
 	if (alist->rights.backend != NULL)
 		acl_backend_deinit(&alist->rights.backend);
@@ -553,7 +551,6 @@ static void acl_mailbox_list_init_default(struct mailbox_list *list)
 
 void acl_mail_namespace_storage_added(struct mail_namespace *ns)
 {
-	struct acl_user *auser = ACL_USER_CONTEXT(ns->user);
 	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(ns->list);
 	struct acl_backend *backend;
 	const char *current_username, *owner_username;
@@ -561,6 +558,7 @@ void acl_mail_namespace_storage_added(struct mail_namespace *ns)
 
 	if (alist == NULL)
 		return;
+	struct acl_user *auser = ACL_USER_CONTEXT_REQUIRE(ns->user);
 
 	owner_username = ns->user->username;
 	current_username = auser->acl_user;

@@ -497,6 +497,15 @@ Sieve Interpreter - Extension Configuration
   configuration options. Refer to doc/extensions/vacation.txt for settings
   specific to the vacation extension.
 
+- Variables extension:
+
+  The Sieve variables extension [RFC5229] adds the concept of variables to the
+  Sieve language.
+
+  The variables extension is available by default, but it has its own specific
+  configuration options. Refer to doc/extensions/variables.txt for settings
+  specific to the variables extension.
+
 - Include extension:
 
   The Sieve include extension (draft) permits users to include one Sieve script
@@ -557,13 +566,6 @@ Sieve Interpreter - Extension Configuration
   support to IMAP.
 
   Refer to doc/plugins/imapsieve.txt for more information.
-
-- IMAP Filter Sieve plugin
-
-  The "imap_filter_sieve" plugin adds the ability to manually invoke Sieve
-  filtering in IMAP.
-
-  Refer to doc/plugins/imap_filter_sieve.txt for more information.
 
 Sieve Interpreter - Trace Debugging
 -----------------------------------

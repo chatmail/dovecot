@@ -19,9 +19,9 @@ struct lz4_istream {
 	buffer_t *chunk_buf;
 	uint32_t chunk_size, chunk_left, max_uncompressed_chunk_size;
 
-	unsigned int log_errors:1;
-	unsigned int marked:1;
-	unsigned int header_read:1;
+	bool log_errors:1;
+	bool marked:1;
+	bool header_read:1;
 };
 
 static void i_stream_lz4_close(struct iostream_private *stream,
@@ -29,8 +29,7 @@ static void i_stream_lz4_close(struct iostream_private *stream,
 {
 	struct lz4_istream *zstream = (struct lz4_istream *)stream;
 
-	if (zstream->chunk_buf != NULL)
-		buffer_free(&zstream->chunk_buf);
+	buffer_free(&zstream->chunk_buf);
 	if (close_parent)
 		i_stream_close(zstream->istream.parent);
 }
@@ -40,8 +39,7 @@ static void lz4_read_error(struct lz4_istream *zstream, const char *error)
 	io_stream_set_error(&zstream->istream.iostream,
 			    "lz4.read(%s): %s at %"PRIuUOFF_T,
 			    i_stream_get_name(&zstream->istream.istream), error,
-			    zstream->istream.abs_start_offset +
-			    zstream->istream.istream.v_offset);
+			    i_stream_get_absolute_offset(&zstream->istream.istream));
 	if (zstream->log_errors)
 		i_error("%s", zstream->istream.iostream.error);
 }
@@ -53,8 +51,8 @@ static int i_stream_lz4_read_header(struct lz4_istream *zstream)
 	size_t size;
 	int ret;
 
-	ret = i_stream_read_data(zstream->istream.parent, &data, &size,
-				 sizeof(*hdr)-1);
+	ret = i_stream_read_bytes(zstream->istream.parent, &data, &size,
+				  sizeof(*hdr));
 	if (ret < 0) {
 		zstream->istream.istream.stream_errno =
 			zstream->istream.parent->stream_errno;
@@ -87,7 +85,7 @@ static ssize_t i_stream_lz4_read(struct istream_private *stream)
 {
 	struct lz4_istream *zstream = (struct lz4_istream *)stream;
 	const unsigned char *data;
-	size_t size, max_size;
+	size_t size;
 	int ret;
 
 	if (!zstream->header_read) {
@@ -97,8 +95,8 @@ static ssize_t i_stream_lz4_read(struct istream_private *stream)
 	}
 
 	if (zstream->chunk_left == 0) {
-		ret = i_stream_read_data(stream->parent, &data, &size,
-					 IOSTREAM_LZ4_CHUNK_PREFIX_LEN);
+		ret = i_stream_read_bytes(stream->parent, &data, &size,
+					  IOSTREAM_LZ4_CHUNK_PREFIX_LEN);
 		if (ret < 0) {
 			stream->istream.stream_errno =
 				stream->parent->stream_errno;
@@ -126,8 +124,7 @@ static ssize_t i_stream_lz4_read(struct istream_private *stream)
 
 	/* read the whole compressed chunk into memory */
 	while (zstream->chunk_left > 0 &&
-	       (ret = i_stream_read_data(zstream->istream.parent,
-					 &data, &size, 0)) > 0) {
+	       (ret = i_stream_read_more(zstream->istream.parent, &data, &size)) > 0) {
 		if (size > zstream->chunk_left)
 			size = zstream->chunk_left;
 		buffer_append(zstream->chunk_buf, data, size);
@@ -137,7 +134,7 @@ static ssize_t i_stream_lz4_read(struct istream_private *stream)
 	if (zstream->chunk_left > 0) {
 		if (ret == -1 && zstream->istream.parent->stream_errno == 0) {
 			lz4_read_error(zstream, "truncated lz4 chunk");
-			stream->istream.stream_errno = EINVAL;
+			stream->istream.stream_errno = EPIPE;
 			return -1;
 		}
 		zstream->istream.istream.stream_errno =
@@ -145,23 +142,15 @@ static ssize_t i_stream_lz4_read(struct istream_private *stream)
 		return ret;
 	}
 	/* if we already have max_buffer_size amount of data, fail here */
-	i_stream_compress(stream);
-	if (stream->pos >= i_stream_get_max_buffer_size(&stream->istream))
+	if (stream->pos - stream->skip >= i_stream_get_max_buffer_size(&stream->istream))
 		return -2;
 	/* allocate enough space for the old data and the new
 	   decompressed chunk. we don't know the original compressed size,
 	   so just allocate the max amount of memory. */
-	max_size = stream->pos + zstream->max_uncompressed_chunk_size;
-	if (stream->buffer_size < max_size) {
-		stream->w_buffer = i_realloc(stream->w_buffer,
-					     stream->buffer_size, max_size);
-		stream->buffer_size = max_size;
-		stream->buffer = stream->w_buffer;
-	}
-	ret = LZ4_decompress_safe(zstream->chunk_buf->data,
-				  (void *)(stream->w_buffer + stream->pos),
+	void *dest = i_stream_alloc(stream, zstream->max_uncompressed_chunk_size);
+	ret = LZ4_decompress_safe(zstream->chunk_buf->data, dest,
 				  zstream->chunk_buf->used,
-				  stream->buffer_size - stream->pos);
+				  zstream->max_uncompressed_chunk_size);
 	i_assert(ret <= (int)zstream->max_uncompressed_chunk_size);
 	if (ret < 0) {
 		lz4_read_error(zstream, "corrupted lz4 chunk");
@@ -318,6 +307,6 @@ struct istream *i_stream_create_lz4(struct istream *input, bool log_errors)
 	zstream->chunk_buf = buffer_create_dynamic(default_pool, 1024);
 
 	return i_stream_create(&zstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }
 #endif

@@ -17,7 +17,7 @@ static void test_charset_is_utf8(void)
 
 static void test_charset_utf8_common(const char *input_charset)
 {
-	struct {
+	static const struct {
 		const char *input;
 		const char *output;
 		enum charset_result result;
@@ -60,7 +60,7 @@ static void test_charset_utf8(void)
 #ifdef HAVE_ICONV
 static void test_charset_iconv(void)
 {
-	struct {
+	static const struct {
 		const char *charset;
 		const char *input;
 		const char *output;
@@ -110,7 +110,7 @@ static void test_charset_iconv(void)
 }
 static void test_charset_iconv_crashes(void)
 {
-	struct {
+	static const struct {
 		const char *charset;
 		const char *input;
 	} tests[] = {
@@ -156,7 +156,7 @@ static void test_charset_iconv_utf7_state(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_charset_is_utf8,
 		test_charset_utf8,
 #ifdef HAVE_ICONV

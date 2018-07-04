@@ -34,11 +34,13 @@ struct mail_crypt_mailbox {
 const char *mail_crypt_plugin_version = DOVECOT_ABI_VERSION;
 
 #define MAIL_CRYPT_MAIL_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_crypt_mail_module)
+	MODULE_CONTEXT_REQUIRE(obj, mail_crypt_mail_module)
 #define MAIL_CRYPT_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_crypt_storage_module)
+	MODULE_CONTEXT_REQUIRE(obj, mail_crypt_storage_module)
 #define MAIL_CRYPT_USER_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, mail_crypt_user_module)
+#define MAIL_CRYPT_USER_CONTEXT_REQUIRE(obj) \
+	MODULE_CONTEXT_REQUIRE(obj, mail_crypt_user_module)
 
 static MODULE_CONTEXT_DEFINE_INIT(mail_crypt_user_module,
 				  &mail_user_module_register);
@@ -73,10 +75,8 @@ static void mail_crypt_cache_close(struct mail_crypt_user *muser)
 {
 	struct mail_crypt_cache *cache = &muser->cache;
 
-	if (cache->to != NULL)
-		timeout_remove(&cache->to);
-	if (cache->input != NULL)
-		i_stream_unref(&cache->input);
+	timeout_remove(&cache->to);
+	i_stream_unref(&cache->input);
 	i_zero(cache);
 }
 
@@ -123,30 +123,25 @@ static int mail_crypt_istream_get_private_key(const char *pubkey_digest,
 	int ret;
 	struct mail *_mail = context;
 	struct mail_crypt_user *muser =
-		MAIL_CRYPT_USER_CONTEXT(_mail->box->storage->user);
-	i_assert(muser != NULL);
+		MAIL_CRYPT_USER_CONTEXT_REQUIRE(_mail->box->storage->user);
 
 	*priv_key_r = mail_crypt_global_key_find(&muser->global_keys,
 						 pubkey_digest);
 	if (*priv_key_r != NULL) return 1;
 
 	struct mail_namespace *ns = mailbox_get_namespace(_mail->box);
-	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(_mail->box, 0);
 
 	if (ns->type == MAIL_NAMESPACE_TYPE_SHARED) {
-		ret = mail_crypt_box_get_shared_key(t, pubkey_digest,
+		ret = mail_crypt_box_get_shared_key(_mail->box, pubkey_digest,
 						    priv_key_r, error_r);
 	} else if (ns->type != MAIL_NAMESPACE_TYPE_PUBLIC) {
-		ret = mail_crypt_get_private_key(t, pubkey_digest,
+		ret = mail_crypt_get_private_key(_mail->box, pubkey_digest,
 						 FALSE, FALSE, priv_key_r,
 						 error_r);
 	} else {
 		*error_r = "Public emails cannot have keys";
 		ret = -1;
 	}
-
-	(void)mailbox_transaction_commit(&t);
 
 	i_assert(ret <= 0 || *priv_key_r != NULL);
 
@@ -158,7 +153,7 @@ mail_crypt_istream_opened(struct mail *_mail, struct istream **stream)
 {
 	struct mail_private *mail = (struct mail_private *)_mail;
 	struct mail_user *user = _mail->box->storage->user;
-	struct mail_crypt_user *muser = MAIL_CRYPT_USER_CONTEXT(user);
+	struct mail_crypt_user *muser = MAIL_CRYPT_USER_CONTEXT_REQUIRE(user);
 	struct mail_crypt_cache *cache = &muser->cache;
 	union mail_module_context *mmail = MAIL_CRYPT_MAIL_CONTEXT(mail);
 	struct istream *input;
@@ -191,7 +186,7 @@ static void mail_crypt_close(struct mail *_mail)
 	struct mail_private *mail = (struct mail_private *)_mail;
 	union mail_module_context *mmail = MAIL_CRYPT_MAIL_CONTEXT(mail);
 	struct mail_crypt_user *muser =
-		MAIL_CRYPT_USER_CONTEXT(_mail->box->storage->user);
+		MAIL_CRYPT_USER_CONTEXT_REQUIRE(_mail->box->storage->user);
 	struct mail_crypt_cache *cache = &muser->cache;
 	uoff_t size;
 
@@ -256,8 +251,7 @@ mail_crypt_mail_save_begin(struct mail_save_context *ctx,
 	struct mailbox *box = ctx->transaction->box;
 	struct mail_crypt_mailbox *mbox = MAIL_CRYPT_CONTEXT(box);
 	struct mail_crypt_user *muser =
-		MAIL_CRYPT_USER_CONTEXT(box->storage->user);
-	i_assert(muser != NULL);
+		MAIL_CRYPT_USER_CONTEXT_REQUIRE(box->storage->user);
 
 	enum io_stream_encrypt_flags enc_flags;
 	if (muser->save_version == 1) {
@@ -282,7 +276,7 @@ mail_crypt_mail_save_begin(struct mail_save_context *ctx,
 		const char *error;
 		int ret;
 
-		if ((ret = mail_crypt_box_get_public_key(ctx->transaction, &pub_key,
+		if ((ret = mail_crypt_box_get_public_key(box, &pub_key,
 							 &error)) <= 0)
 		{
 			struct dcrypt_keypair pair;
@@ -346,7 +340,7 @@ static void mail_crypt_mailbox_close(struct mailbox *box)
 {
 	struct mail_crypt_mailbox *mbox = MAIL_CRYPT_CONTEXT(box);
 	struct mail_crypt_user *muser =
-		MAIL_CRYPT_USER_CONTEXT(box->storage->user);
+		MAIL_CRYPT_USER_CONTEXT_REQUIRE(box->storage->user);
 
 	if (mbox->pub_key != NULL)
 		dcrypt_key_unref_public(&mbox->pub_key);
@@ -390,7 +384,7 @@ static void mail_crypt_mailbox_allocated(struct mailbox *box)
 
 static void mail_crypt_mail_user_deinit(struct mail_user *user)
 {
-	struct mail_crypt_user *muser = MAIL_CRYPT_USER_CONTEXT(user);
+	struct mail_crypt_user *muser = MAIL_CRYPT_USER_CONTEXT_REQUIRE(user);
 
 	mail_crypt_key_cache_destroy(&muser->key_cache);
 	mail_crypt_global_keys_free(&muser->global_keys);
@@ -472,7 +466,6 @@ static struct module crypto_post_module = {
 void mail_crypt_plugin_init(struct module *module)
 {
 	const char* error;
-	random_init();
 	if (!dcrypt_initialize("openssl", NULL, &error))
 		i_fatal("dcrypt_initialize(): %s", error);
 	mail_storage_hooks_add(module, &mail_crypt_mail_storage_hooks);
@@ -489,5 +482,4 @@ void mail_crypt_plugin_deinit(void)
 {
 	mail_storage_hooks_remove(&mail_crypt_mail_storage_hooks);
 	mail_storage_hooks_remove(&mail_crypt_mail_storage_hooks_post);
-	random_deinit();
 }

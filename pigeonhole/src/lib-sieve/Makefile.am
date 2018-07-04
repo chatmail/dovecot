@@ -4,7 +4,6 @@ dovecot_pkglib_LTLIBRARIES = libdovecot-sieve.la
 
 AM_CPPFLAGS = \
 	$(LIBDOVECOT_INCLUDE) \
-	$(LIBDOVECOT_LDA_INCLUDE) \
 	$(LIBDOVECOT_SERVICE_INCLUDE) \
 	-I$(top_srcdir)/src/lib-sieve/util \
 	-DMODULEDIR=\""$(dovecot_moduledir)"\"
@@ -49,7 +48,6 @@ endif
 
 strgdir = $(top_builddir)/src/lib-sieve/storage
 storages = \
-	$(strgdir)/data/libsieve_storage_data.la \
 	$(strgdir)/file/libsieve_storage_file.la \
 	$(strgdir)/dict/libsieve_storage_dict.la \
 	$(strgdir)/ldap/libsieve_storage_ldap.la \
@@ -88,14 +86,12 @@ libdovecot_sieve_la_DEPENDENCIES = \
 	$(storages) \
 	$(plugins) \
 	$(top_builddir)/src/lib-sieve/util/libsieve_util.la \
-	$(LIBDOVECOT_LDA_DEPS) \
 	$(LIBDOVECOT_STORAGE_DEPS) \
 	$(LIBDOVECOT_DEPS)
 libdovecot_sieve_la_LIBADD = \
 	$(storages) \
 	$(plugins) \
 	$(top_builddir)/src/lib-sieve/util/libsieve_util.la \
-	$(LIBDOVECOT_LDA) \
 	$(LIBDOVECOT_STORAGE) \
 	$(LIBDOVECOT)
 

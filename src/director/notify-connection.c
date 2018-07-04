@@ -53,7 +53,8 @@ static void notify_connection_input(struct notify_connection *conn)
 	unsigned int hash;
 
 	while ((line = i_stream_read_next_line(conn->input)) != NULL) {
-		hash = director_get_username_hash(conn->dir, line);
+		if (!director_get_username_hash(conn->dir, line, &hash))
+			continue;
 		array_foreach(mail_hosts_get_tags(conn->dir->mail_hosts), tagp)
 			notify_update_user(conn->dir, *tagp, line, hash);
 	}
@@ -76,7 +77,7 @@ void notify_connection_init(struct director *dir, int fd, bool fifo)
 	conn->fd = fd;
 	conn->fifo = fifo;
 	conn->dir = dir;
-	conn->input = i_stream_create_fd(conn->fd, 1024, FALSE);
+	conn->input = i_stream_create_fd(conn->fd, 1024);
 	conn->io = io_add(conn->fd, IO_READ, notify_connection_input, conn);
 	DLLIST_PREPEND(&notify_connections, conn);
 }

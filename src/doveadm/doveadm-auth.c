@@ -88,7 +88,7 @@ cmd_user_input(struct auth_master_connection *conn,
 	} else if (show_field != NULL) {
 		size_t show_field_len = strlen(show_field);
 
-		for (; *fields; fields++) {
+		for (; *fields != NULL; fields++) {
 			if (strncmp(*fields, show_field, show_field_len) == 0 &&
 			    (*fields)[show_field_len] == '=')
 				printf("%s\n", *fields + show_field_len + 1);
@@ -98,7 +98,7 @@ cmd_user_input(struct auth_master_connection *conn,
 
 		if (updated_username != NULL)
 			printf("  %-10s: %s\n", "user", updated_username);
-		for (; *fields; fields++) {
+		for (; *fields != NULL; fields++) {
 			p = strchr(*fields, '=');
 			if (p == NULL)
 				printf("  %-10s\n", *fields);
@@ -579,10 +579,14 @@ cmd_user_mail_input(struct mail_storage_service_ctx *storage_service,
 		cmd_user_mail_print_fields(input, user, userdb_fields, show_field);
 	else {
 		string_t *str = t_str_new(128);
-		var_expand_with_funcs(str, expand_field,
-				      mail_user_var_expand_table(user),
-				      mail_user_var_expand_func_table, user);
-		printf("%s\n", str_c(str));
+		if (var_expand_with_funcs(str, expand_field,
+					  mail_user_var_expand_table(user),
+					  mail_user_var_expand_func_table, user,
+					  &error) <= 0) {
+			i_error("Failed to expand %s: %s", expand_field, error);
+		} else {
+			printf("%s\n", str_c(str));
+		}
 	}
 
 	mail_user_unref(&user);

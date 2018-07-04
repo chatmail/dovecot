@@ -48,19 +48,18 @@ struct passdb_module_interface {
 				   lookup_credentials_callback_t *callback);
 
 	/* Update credentials */
-	int (*set_credentials)(struct auth_request *request,
-			       const char *new_credentials,
-			       set_credentials_callback_t *callback);
+	void (*set_credentials)(struct auth_request *request,
+				const char *new_credentials,
+				set_credentials_callback_t *callback);
 };
 
 struct passdb_module {
 	const char *args;
 	/* The default caching key for this module, or NULL if caching isn't
 	   wanted. This is updated by settings in auth_passdb. */
-#define default_cache_key cache_key /* FIXME: remove in v2.3 - for API backwards compatibility */
 	const char *default_cache_key;
 	/* Default password scheme for this module.
-	   If cache_key is set, must not be NULL. */
+	   If default_cache_key is set, must not be NULL. */
 	const char *default_pass_scheme;
 	/* Supported authentication mechanisms, NULL is all, [NULL] is none*/
 	const char *const *mechanisms;

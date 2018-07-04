@@ -131,8 +131,13 @@ void director_request(struct director *dir, const char *username,
 		      director_request_callback *callback, void *context)
 {
 	struct director_request *request;
-	unsigned int username_hash =
-		director_get_username_hash(dir, username);
+	unsigned int username_hash;
+
+	if (!director_get_username_hash(dir, username,
+					&username_hash)) {
+		callback(NULL, NULL, "Failed to expand director_username_hash", context);
+		return;
+	}
 
 	dir->num_requests++;
 

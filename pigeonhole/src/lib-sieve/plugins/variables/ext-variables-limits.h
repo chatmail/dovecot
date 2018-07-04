@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_VARIABLES_LIMITS_H
-#define __EXT_VARIABLES_LIMITS_H
+#ifndef EXT_VARIABLES_LIMITS_H
+#define EXT_VARIABLES_LIMITS_H
 
 #include "sieve-limits.h"
 
@@ -24,11 +21,15 @@
  *  as a syntax error, which SHOULD be discovered at compile-time.
  */
 
-#define EXT_VARIABLES_MAX_SCOPE_SIZE              255
-#define EXT_VARIABLES_MAX_VARIABLE_NAME_LEN       64
-#define EXT_VARIABLES_MAX_VARIABLE_SIZE           (4 * 1024)
-#define EXT_VARIABLES_MAX_NAMESPACE_ELEMENTS      10
+#define EXT_VARIABLES_DEFAULT_MAX_SCOPE_SIZE     255
+#define EXT_VARIABLES_DEFAULT_MAX_VARIABLE_SIZE  (4 * 1024)
 
-#define EXT_VARIABLES_MAX_MATCH_INDEX             SIEVE_MAX_MATCH_VALUES
+#define EXT_VARIABLES_REQUIRED_MAX_SCOPE_SIZE    128
+#define EXT_VARIABLES_REQUIRED_MAX_VARIABLE_SIZE 4000
 
-#endif /* __EXT_VARIABLES_LIMITS_H */
+#define EXT_VARIABLES_MAX_VARIABLE_NAME_LEN      64
+#define EXT_VARIABLES_MAX_NAMESPACE_ELEMENTS     10
+
+#define EXT_VARIABLES_MAX_MATCH_INDEX            SIEVE_MAX_MATCH_VALUES
+
+#endif

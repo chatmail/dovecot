@@ -31,12 +31,13 @@ AM_CPPFLAGS = \
 	-DPKG_STATEDIR=\""$(statedir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	-DBINDIR=\""$(bindir)"\" \
-	-DMANDIR=\""$(mandir)"\"
+	-DMANDIR=\""$(mandir)"\" \
+	$(BINARY_CFLAGS)
 
 cmd_pw_libs = \
-	../auth/libpassword.a \
-	../lib-ntlm/libntlm.a \
-	../lib-otp/libotp.a
+	../auth/libpassword.la \
+	../lib-ntlm/libntlm.la \
+	../lib-otp/libotp.la
 
 libs = \
 	dsync/libdsync.la \
@@ -47,7 +48,10 @@ doveadm_LDADD = \
 	$(cmd_pw_libs) \
 	$(CRYPT_LIBS) \
 	$(LIBDOVECOT_STORAGE) \
-	$(LIBDOVECOT)
+	$(LIBDOVECOT) \
+	$(LIBSODIUM_LIBS) \
+	$(BINARY_LDFLAGS)
+
 doveadm_DEPENDENCIES = \
 	$(libs) \
 	$(cmd_pw_libs) \
@@ -57,7 +61,9 @@ doveadm_DEPENDENCIES = \
 doveadm_server_LDADD = \
 	$(libs) \
 	$(LIBDOVECOT_STORAGE) \
-	$(LIBDOVECOT)
+	$(LIBDOVECOT) \
+	$(BINARY_LDFLAGS)
+
 doveadm_server_DEPENDENCIES = \
 	$(libs) \
 	$(LIBDOVECOT_STORAGE_DEPS) \
@@ -72,13 +78,13 @@ doveadm_common_cmds = \
 	doveadm-kick.c \
 	doveadm-log.c \
 	doveadm-master.c \
-	doveadm-mount.c \
 	doveadm-mutf7.c \
 	doveadm-penalty.c \
 	doveadm-proxy.c \
 	doveadm-replicator.c \
 	doveadm-sis.c \
 	doveadm-stats.c \
+	doveadm-oldstats.c \
 	doveadm-who.c
 
 doveadm_common_mail_cmds = \
@@ -100,9 +106,7 @@ doveadm_common_mail_cmds = \
 	doveadm-mailbox-list-iter.c \
 	doveadm-mail-save.c \
 	doveadm-mail-search.c \
-	doveadm-mail-server.c \
-	doveadm-mail-mailbox-cache.c \
-	doveadm-mail-rebuild.c
+	doveadm-mail-server.c
 
 # these aren't actually useful in doveadm-server, but plugins may implement
 # both dumping and some other commands inside a single plugin. not having the
@@ -143,6 +147,7 @@ doveadm_server_SOURCES = \
 	$(common) \
 	doveadm-auth-server.c \
 	client-connection.c \
+	client-connection-tcp.c \
 	client-connection-http.c \
 	doveadm-print-server.c \
 	doveadm-print-json.c \
@@ -182,12 +187,11 @@ test_libs = \
 	../lib/liblib.la
 test_deps = $(noinst_LTLIBRARIES) $(test_libs)
 
-test_doveadm_util_SOURCES = test-doveadm-util.c
-test_doveadm_util_LDADD = doveadm-util.o $(test_libs) $(MODULE_LIBS)
+test_doveadm_util_SOURCES = doveadm-util.c test-doveadm-util.c
+test_doveadm_util_LDADD = $(test_libs) $(MODULE_LIBS)
 test_doveadm_util_DEPENDENCIES = $(test_deps)
 
-check: check-am check-test
-check-test: all-am
+check-local:
 	for bin in $(test_programs); do \
 	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
 	done

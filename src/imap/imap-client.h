@@ -78,6 +78,7 @@ struct client_command_stats_start {
 struct client_command_context {
 	struct client_command_context *prev, *next;
 	struct client *client;
+	struct event *event;
 
 	pool_t pool;
 	/* IMAP command tag */
@@ -107,14 +108,14 @@ struct client_command_context {
 
 	struct imap_client_sync_context *sync;
 
-	unsigned int uid:1; /* used UID command */
-	unsigned int cancel:1; /* command is wanted to be cancelled */
-	unsigned int param_error:1;
-	unsigned int search_save_result:1; /* search result is being updated */
-	unsigned int search_save_result_used:1; /* command uses search save */
-	unsigned int temp_executed:1; /* temporary execution state tracking */
-	unsigned int tagline_sent:1;
-	unsigned int executing:1;
+	bool uid:1; /* used UID command */
+	bool cancel:1; /* command is wanted to be cancelled */
+	bool param_error:1;
+	bool search_save_result:1; /* search result is being updated */
+	bool search_save_result_used:1; /* command uses search save */
+	bool temp_executed:1; /* temporary execution state tracking */
+	bool tagline_sent:1;
+	bool executing:1;
 };
 
 struct imap_client_vfuncs {
@@ -143,6 +144,7 @@ struct client {
 	struct client *prev, *next;
 
 	struct imap_client_vfuncs v;
+	struct event *event;
 	const char *session_id;
 	const char *const *userdb_fields; /* for internal session saving/restoring */
 
@@ -155,7 +157,7 @@ struct client {
 	pool_t pool;
 	struct mail_storage_service_user *service_user;
 	const struct imap_settings *set;
-	const struct lda_settings *lda_set;
+	const struct smtp_submit_settings *smtp_set;
 	string_t *capability_string;
 	const char *disconnect_reason;
 
@@ -212,27 +214,27 @@ struct client {
 
 	/* syncing marks this TRUE when it sees \Deleted flags. this is by
 	   EXPUNGE for Outlook-workaround. */
-	unsigned int sync_seen_deletes:1;
-	unsigned int logged_out:1;
-	unsigned int disconnected:1;
-	unsigned int hibernated:1;
-	unsigned int destroyed:1;
-	unsigned int handling_input:1;
-	unsigned int syncing:1;
-	unsigned int id_logged:1;
-	unsigned int mailbox_examined:1;
-	unsigned int anvil_sent:1;
-	unsigned int tls_compression:1;
-	unsigned int input_skip_line:1; /* skip all the data until we've
+	bool sync_seen_deletes:1;
+	bool logged_out:1;
+	bool disconnected:1;
+	bool hibernated:1;
+	bool destroyed:1;
+	bool handling_input:1;
+	bool syncing:1;
+	bool id_logged:1;
+	bool mailbox_examined:1;
+	bool anvil_sent:1;
+	bool tls_compression:1;
+	bool input_skip_line:1; /* skip all the data until we've
 					   found a new line */
-	unsigned int modseqs_sent_since_sync:1;
-	unsigned int notify_immediate_expunges:1;
-	unsigned int notify_count_changes:1;
-	unsigned int notify_flag_changes:1;
-	unsigned int imap_metadata_enabled:1;
-	unsigned int nonpermanent_modseqs:1;
-	unsigned int state_import_bad_idle_done:1;
-	unsigned int state_import_idle_continue:1;
+	bool modseqs_sent_since_sync:1;
+	bool notify_immediate_expunges:1;
+	bool notify_count_changes:1;
+	bool notify_flag_changes:1;
+	bool imap_metadata_enabled:1;
+	bool nonpermanent_modseqs:1;
+	bool state_import_bad_idle_done:1;
+	bool state_import_idle_continue:1;
 };
 
 struct imap_module_register {
@@ -251,10 +253,11 @@ extern unsigned int imap_client_count;
 /* Create new client with specified input/output handles. socket specifies
    if the handle is a socket. */
 struct client *client_create(int fd_in, int fd_out, const char *session_id,
-			     struct mail_user *user,
+			     struct event *event, struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
 			     const struct imap_settings *set,
-			     const struct lda_settings *lda_set);
+			     const struct smtp_submit_settings *smtp_set);
+/* Finish creating the client. Returns 0 if ok, -1 if there's an error. */
 int client_create_finish(struct client *client, const char **error_r);
 void client_destroy(struct client *client, const char *reason) ATTR_NULL(2);
 
@@ -310,6 +313,7 @@ client_search_update_lookup(struct client *client, const char *tag,
 void client_search_updates_free(struct client *client);
 
 struct client_command_context *client_command_alloc(struct client *client);
+void client_command_init_finished(struct client_command_context *cmd);
 void client_command_cancel(struct client_command_context **cmd);
 void client_command_free(struct client_command_context **cmd);
 
@@ -324,6 +328,6 @@ void client_input(struct client *client);
 bool client_handle_input(struct client *client);
 int client_output(struct client *client);
 
-void clients_destroy_all(struct mail_storage_service_ctx *storage_service);
+void clients_destroy_all(void);
 
 #endif

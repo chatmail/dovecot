@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_AST_H
-#define __SIEVE_AST_H
+#ifndef SIEVE_AST_H
+#define SIEVE_AST_H
 
 #include "lib.h"
 #include "str.h"
@@ -371,4 +368,4 @@ struct sieve_ast_argument *sieve_ast_stringlist_join
 
 void sieve_ast_unparse(struct sieve_ast *ast);
 
-#endif /* __SIEVE_AST_H */
+#endif

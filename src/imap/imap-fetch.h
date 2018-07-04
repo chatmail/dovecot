@@ -37,8 +37,8 @@ struct imap_fetch_context_handler {
 	const char *name;
 	const char *nil_reply;
 
-	unsigned int buffered:1;
-	unsigned int want_deinit:1;
+	bool buffered:1;
+	bool want_deinit:1;
 };
 
 struct imap_fetch_qresync_args {
@@ -53,7 +53,7 @@ struct imap_fetch_state {
 	struct mail *cur_mail;
 	unsigned int cur_handler;
 	const char *cur_human_name;
-	uoff_t cur_size, cur_offset;
+	uoff_t cur_size;
 	enum mail_fetch_field cur_size_field;
 	string_t *cur_str;
 	size_t cur_str_prefix_size;
@@ -62,17 +62,17 @@ struct imap_fetch_state {
 	int (*cont_handler)(struct imap_fetch_context *ctx);
 	uint64_t *cur_stats_sizep;
 
-	unsigned int fetching:1;
-	unsigned int seen_flags_changed:1;
+	bool fetching:1;
+	bool seen_flags_changed:1;
 	/* TRUE if the first FETCH parameter result hasn't yet been sent to
 	   the IMAP client. Note that this doesn't affect buffered content in
 	   cur_str until it gets flushed out. */
-	unsigned int cur_first:1;
+	bool cur_first:1;
 	/* TRUE if the cur_str prefix has been flushed. More data may still
 	   be added to it. */
-	unsigned int line_partial:1;
-	unsigned int skipped_expunged_msgs:1;
-	unsigned int failed:1;
+	bool line_partial:1;
+	bool skipped_expunged_msgs:1;
+	bool failed:1;
 };
 
 struct imap_fetch_context {
@@ -90,15 +90,16 @@ struct imap_fetch_context {
 
 	struct imap_fetch_state state;
 	ARRAY_TYPE(seq_range) fetch_failed_uids;
+	unsigned int fetched_mails_count;
 
 	enum mail_error error;
 	const char *errstr;
 
-	unsigned int initialized:1;
-	unsigned int failures:1;
-	unsigned int flags_have_handler:1;
-	unsigned int flags_update_seen:1;
-	unsigned int flags_show_only_seen_changes:1;
+	bool initialized:1;
+	bool failures:1;
+	bool flags_have_handler:1;
+	bool flags_update_seen:1;
+	bool flags_show_only_seen_changes:1;
 };
 
 void imap_fetch_handlers_register(const struct imap_fetch_handler *handlers,

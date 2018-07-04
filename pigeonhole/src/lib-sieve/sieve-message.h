@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_MESSAGE_H
-#define __SIEVE_MESSAGE_H
+#ifndef SIEVE_MESSAGE_H
+#define SIEVE_MESSAGE_H
 
 #include "sieve-common.h"
 #include "sieve-stringlist.h"
@@ -43,20 +40,12 @@ const void *sieve_message_context_extension_get
 
 /* Envelope */
 
-const struct sieve_address *sieve_message_get_final_recipient_address
+const struct smtp_address *sieve_message_get_final_recipient
 	(struct sieve_message_context *msgctx);
-const struct sieve_address *sieve_message_get_orig_recipient_address
-	(struct sieve_message_context *msgctx);
-
-const struct sieve_address *sieve_message_get_sender_address
+const struct smtp_address *sieve_message_get_orig_recipient
 	(struct sieve_message_context *msgctx);
 
-const char *sieve_message_get_orig_recipient
-	(struct sieve_message_context *msgctx);
-const char *sieve_message_get_final_recipient
-	(struct sieve_message_context *msgctx);
-
-const char *sieve_message_get_sender
+const struct smtp_address *sieve_message_get_sender
 	(struct sieve_message_context *msgctx);
 
 /* Mail */
@@ -288,4 +277,4 @@ struct sieve_header_list *sieve_mime_header_list_create
 	struct sieve_message_part_iter *part_iter,
 	bool mime_decode, bool children);
 
-#endif /* __SIEVE_MESSAGE_H */
+#endif

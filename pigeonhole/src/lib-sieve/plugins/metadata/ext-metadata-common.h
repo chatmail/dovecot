@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_METADATA_COMMON_H
-#define __EXT_METADATA_COMMON_H
+#ifndef EXT_METADATA_COMMON_H
+#define EXT_METADATA_COMMON_H
 
 #include "lib.h"
 #include "mail-storage.h"
@@ -40,4 +37,4 @@ extern const struct sieve_operation_def servermetadata_operation;
 extern const struct sieve_operation_def metadataexists_operation;
 extern const struct sieve_operation_def servermetadataexists_operation;
 
-#endif /* __EXT_METADATA_COMMON_H */
+#endif

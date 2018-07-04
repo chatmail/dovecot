@@ -20,6 +20,7 @@
 #include "director.h"
 
 #define DIRECTOR_IPC_PROXY_PATH "ipc"
+#define DIRECTOR_DNS_SOCKET_PATH "dns-client"
 #define DIRECTOR_RECONNECT_RETRY_SECS 60
 #define DIRECTOR_RECONNECT_TIMEOUT_MSECS (30*1000)
 #define DIRECTOR_USER_MOVE_TIMEOUT_MSECS (30*1000)
@@ -56,14 +57,10 @@ director_user_kill_finish_delayed(struct director *dir, struct user *user,
 
 static bool director_is_self_ip_set(struct director *dir)
 {
-	struct ip_addr ip;
-
-	net_get_ip_any4(&ip);
-	if (net_ip_compare(&dir->self_ip, &ip))
+	if (net_ip_compare(&dir->self_ip, &net_ip4_any))
 		return FALSE;
 
-	net_get_ip_any6(&ip);
-	if (net_ip_compare(&dir->self_ip, &ip))
+	if (net_ip_compare(&dir->self_ip, &net_ip6_any))
 		return FALSE;
 
 	return TRUE;
@@ -218,8 +215,7 @@ static bool director_wait_for_others(struct director *dir)
 		(*hostp)->last_network_failure = 0;
 		(*hostp)->last_protocol_failure = 0;
 	}
-	if (dir->to_reconnect != NULL)
-		timeout_remove(&dir->to_reconnect);
+	timeout_remove(&dir->to_reconnect);
 	dir->to_reconnect = timeout_add(DIRECTOR_QUICK_RECONNECT_TIMEOUT_MSECS,
 					director_quick_reconnect_retry, dir);
 	return TRUE;
@@ -286,8 +282,7 @@ void director_set_ring_handshaked(struct director *dir)
 {
 	i_assert(!dir->ring_handshaked);
 
-	if (dir->to_handshake_warning != NULL)
-		timeout_remove(&dir->to_handshake_warning);
+	timeout_remove(&dir->to_handshake_warning);
 	if (dir->ring_handshake_warning_sent) {
 		i_warning("Directors have been connected, "
 			  "continuing delayed requests");
@@ -326,8 +321,7 @@ void director_set_ring_synced(struct director *dir)
 	i_assert((dir->left != NULL && dir->right != NULL) ||
 		 (dir->left == NULL && dir->right == NULL));
 
-	if (dir->to_handshake_warning != NULL)
-		timeout_remove(&dir->to_handshake_warning);
+	timeout_remove(&dir->to_handshake_warning);
 	if (dir->ring_handshake_warning_sent) {
 		i_warning("Ring is synced, continuing delayed requests "
 			  "(syncing took %d secs, hosts_hash=%u)",
@@ -339,8 +333,7 @@ void director_set_ring_synced(struct director *dir)
 	host = dir->right == NULL ? NULL :
 		director_connection_get_host(dir->right);
 
-	if (dir->to_reconnect != NULL)
-		timeout_remove(&dir->to_reconnect);
+	timeout_remove(&dir->to_reconnect);
 	if (host != director_get_preferred_right_host(dir)) {
 		/* try to reconnect to preferred host later */
 		dir->to_reconnect =
@@ -352,8 +345,7 @@ void director_set_ring_synced(struct director *dir)
 		director_connection_set_synced(dir->left, TRUE);
 	if (dir->right != NULL)
 		director_connection_set_synced(dir->right, TRUE);
-	if (dir->to_sync != NULL)
-		timeout_remove(&dir->to_sync);
+	timeout_remove(&dir->to_sync);
 	dir->ring_synced = TRUE;
 	dir->ring_last_sync_time = ioloop_time;
 	/* If there are any director hosts still marked as "removed", we can
@@ -543,8 +535,7 @@ static void director_hosts_purge_removed(struct director *dir)
 	struct director_host *const *hosts, *host;
 	unsigned int i, count;
 
-	if (dir->to_remove_dirs != NULL)
-		timeout_remove(&dir->to_remove_dirs);
+	timeout_remove(&dir->to_remove_dirs);
 
 	hosts = array_get(&dir->dir_hosts, &count);
 	for (i = 0; i < count; ) {
@@ -672,7 +663,7 @@ void director_update_host(struct director *dir, struct director_host *src,
 
 	dir_debug("Updating host %s vhost_count=%u "
 		  "down=%d last_updown_change=%ld (hosts_hash=%u)",
-		  host->ip_str, host->vhost_count, host->down,
+		  host->ip_str, host->vhost_count, host->down ? 1 : 0,
 		  (long)host->last_updown_change,
 		  mail_hosts_hash(dir->mail_hosts));
 
@@ -842,6 +833,7 @@ director_flush_user(struct director *dir, struct user *user)
 		{ 'h', user->host->hostname, "host" },
 		{ '\0', NULL, NULL }
 	};
+	const char *error;
 
 	/* Execute flush script, if set. Only the director that started the
 	   user moving will call the flush script. Having each director do it
@@ -862,12 +854,17 @@ director_flush_user(struct director *dir, struct user *user)
 	ctx->host_ip = user->host->ip;
 
 	string_t *s_sock = str_new(default_pool, 32);
-	var_expand(s_sock, dir->set->director_flush_socket, tab);
+	if (var_expand(s_sock, dir->set->director_flush_socket, tab, &error) <= 0) {
+		i_error("Failed to expand director_flush_socket=%s: %s",
+			dir->set->director_flush_socket, error);
+		director_user_kill_finish_delayed(dir, user, FALSE);
+		return;
+	}
 	ctx->socket_path = str_free_without_data(&s_sock);
 
-	const char *error;
 	struct program_client_settings set = {
 		.client_connect_timeout_msecs = 10000,
+		.dns_client_socket_path = DIRECTOR_DNS_SOCKET_PATH,
 	};
 
 	restrict_access_init(&set.restrict_set);
@@ -925,8 +922,7 @@ static void director_user_move_free(struct user *user)
 	dir_debug("User %u move finished at state=%s", user->username_hash,
 		  user_kill_state_names[kill_ctx->kill_state]);
 
-	if (kill_ctx->to_move != NULL)
-		timeout_remove(&kill_ctx->to_move);
+	timeout_remove(&kill_ctx->to_move);
 	i_free(kill_ctx->socket_path);
 	i_free(kill_ctx);
 	user->kill_ctx = NULL;
@@ -1427,8 +1423,7 @@ static void director_user_freed(struct user *user)
 		if (user->kill_ctx->callback_pending) {
 			/* kill_ctx is used as a callback parameter.
 			   only remove the timeout and finish the free later. */
-			if (user->kill_ctx->to_move != NULL)
-				timeout_remove(&user->kill_ctx->to_move);
+			timeout_remove(&user->kill_ctx->to_move);
 		} else {
 			director_user_move_free(user);
 		}
@@ -1453,7 +1448,6 @@ director_init(const struct director_settings *set,
 	i_array_init(&dir->pending_requests, 16);
 	i_array_init(&dir->connections, 8);
 	dir->mail_hosts = mail_hosts_init(set->director_user_expire,
-					  set->director_consistent_hashing,
 					  director_user_freed);
 
 	dir->ipc_proxy = ipc_client_init(DIRECTOR_IPC_PROXY_PATH);
@@ -1479,18 +1473,12 @@ void director_deinit(struct director **_dir)
 	mail_hosts_deinit(&dir->orig_config_hosts);
 
 	ipc_client_deinit(&dir->ipc_proxy);
-	if (dir->to_reconnect != NULL)
-		timeout_remove(&dir->to_reconnect);
-	if (dir->to_handshake_warning != NULL)
-		timeout_remove(&dir->to_handshake_warning);
-	if (dir->to_request != NULL)
-		timeout_remove(&dir->to_request);
-	if (dir->to_sync != NULL)
-		timeout_remove(&dir->to_sync);
-	if (dir->to_remove_dirs != NULL)
-		timeout_remove(&dir->to_remove_dirs);
-	if (dir->to_callback != NULL)
-		timeout_remove(&dir->to_callback);
+	timeout_remove(&dir->to_reconnect);
+	timeout_remove(&dir->to_handshake_warning);
+	timeout_remove(&dir->to_request);
+	timeout_remove(&dir->to_sync);
+	timeout_remove(&dir->to_remove_dirs);
+	timeout_remove(&dir->to_callback);
 	while (array_count(&dir->dir_hosts) > 0) {
 		hostp = array_idx(&dir->dir_hosts, 0);
 		host = *hostp;
@@ -1566,10 +1554,18 @@ void director_iterate_users_deinit(struct director_user_iter **_iter)
 	i_free(iter);
 }
 
-unsigned int
-director_get_username_hash(struct director *dir, const char *username)
+bool
+director_get_username_hash(struct director *dir, const char *username,
+			   unsigned int *hash_r)
 {
-	return mail_user_hash(username, dir->set->director_username_hash);
+	const char *error;
+
+	if (mail_user_hash(username, dir->set->director_username_hash, hash_r,
+			   &error))
+		return TRUE;
+	i_error("Failed to expand director_user_expire=%s: %s",
+		dir->set->director_username_hash, error);
+	return FALSE;
 }
 
 void directors_init(void)

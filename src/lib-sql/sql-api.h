@@ -1,6 +1,8 @@
 #ifndef SQL_API_H
 #define SQL_API_H
 
+struct timespec;
+
 /* This SQL API is designed to work asynchronously. The underlying drivers
    however may not. */
 
@@ -69,8 +71,7 @@ struct sql_commit_result {
 };
 
 typedef void sql_query_callback_t(struct sql_result *result, void *context);
-typedef void sql_commit_callback_t(const char *error, void *context);
-typedef void sql_commit2_callback_t(const struct sql_commit_result *result, void *context);
+typedef void sql_commit_callback_t(const struct sql_commit_result *result, void *context);
 
 void sql_drivers_init(void);
 void sql_drivers_deinit(void);
@@ -209,15 +210,8 @@ void sql_transaction_commit(struct sql_transaction_context **ctx,
 #define sql_transaction_commit(ctx, callback, context) \
 	  sql_transaction_commit(ctx + \
 		CALLBACK_TYPECHECK(callback, void (*)( \
-			const char *, typeof(context))), \
-		(sql_commit_callback_t *)callback, context)
-void sql_transaction_commit2(struct sql_transaction_context **ctx,
-			     sql_commit2_callback_t *callback, void *context);
-#define sql_transaction_commit2(ctx, callback, context) \
-	  sql_transaction_commit2(ctx + \
-		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct sql_commit_result *, typeof(context))), \
-		(sql_commit2_callback_t *)callback, context)
+		(sql_commit_callback_t *)callback, context)
 /* Synchronous commit. Returns 0 if ok, -1 if error. */
 int sql_transaction_commit_s(struct sql_transaction_context **ctx,
 			     const char **error_r);

@@ -3,12 +3,11 @@
 #include "common.h"
 #include "ioloop.h"
 #include "lib-signals.h"
-#include "fd-close-on-exec.h"
 #include "array.h"
 #include "write-full.h"
 #include "env-util.h"
 #include "hostpid.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "ipwd.h"
 #include "str.h"
 #include "execv-const.h"
@@ -39,9 +38,16 @@
 #define MASTER_PID_FILE_NAME "master.pid"
 #define SERVICE_TIME_MOVED_BACKWARDS_MAX_THROTTLE_SECS (60*3)
 
+struct master_delayed_error {
+	enum log_type type;
+	const char *line;
+};
+
 uid_t master_uid;
 gid_t master_gid;
 bool core_dumps_disabled;
+bool have_proc_fs_suid_dumpable;
+bool have_proc_sys_kernel_core_pattern;
 const char *ssl_manual_key_password;
 int global_master_dead_pipe_fd[2];
 struct service_list *services;
@@ -50,6 +56,9 @@ bool startup_finished = FALSE;
 static char *pidfile_path;
 static struct master_instance_list *instances;
 static struct timeout *to_instance;
+
+static ARRAY(struct master_delayed_error) delayed_errors;
+static pool_t delayed_errors_pool;
 static failure_callback_t *orig_fatal_callback;
 static failure_callback_t *orig_error_callback;
 
@@ -74,7 +83,7 @@ void process_exec(const char *cmd)
 				  argv[0]);
 	if (strncmp(argv[0], PACKAGE, strlen(PACKAGE)) != 0)
 		argv[0] = t_strconcat(PACKAGE"-", argv[0], NULL);
-	(void)execv_const(executable, argv);
+	execv_const(executable, argv);
 }
 
 int get_uidgid(const char *user, uid_t *uid_r, gid_t *gid_r,
@@ -180,6 +189,44 @@ startup_error_handler(const struct failure_context *ctx,
 		t_strdup_vprintf(fmt, args2));
 	va_end(args2);
 	orig_error_callback(ctx, fmt, args);
+}
+
+static void ATTR_FORMAT(2, 0)
+startup_early_error_handler(const struct failure_context *ctx,
+			    const char *fmt, va_list args)
+{
+	struct master_delayed_error *err;
+	va_list args2;
+
+	VA_COPY(args2, args);
+	if (delayed_errors_pool == NULL) {
+		delayed_errors_pool =
+			pool_alloconly_create("delayed errors", 512);
+		i_array_init(&delayed_errors, 8);
+	}
+	err = array_append_space(&delayed_errors);
+	err->type = ctx->type;
+	err->line = p_strdup_vprintf(delayed_errors_pool, fmt, args2);
+	va_end(args2);
+
+	orig_error_callback(ctx, fmt, args);
+}
+
+static void startup_early_errors_flush(void)
+{
+	struct failure_context ctx;
+	const struct master_delayed_error *err;
+
+	if (delayed_errors_pool == NULL)
+		return;
+
+	i_zero(&ctx);
+	array_foreach(&delayed_errors, err) {
+		ctx.type = err->type;
+		i_log_type(&ctx, "%s", err->line);
+	}
+	array_free(&delayed_errors);
+	pool_unref(&delayed_errors_pool);
 }
 
 static void fatal_log_check(const struct master_settings *set)
@@ -296,9 +343,8 @@ static void instance_update_now(struct master_instance_list *list)
 		(void)master_instance_list_update(list, services->set->base_dir);
 	}
 	
-	if (to_instance != NULL)
-		timeout_remove(&to_instance);
-	to_instance = timeout_add((3600*12 + rand()%(60*30)) * 1000,
+	timeout_remove(&to_instance);
+	to_instance = timeout_add((3600 * 12 + i_rand_limit(60 * 30)) * 1000,
 				  instance_update_now, list);
 }
 
@@ -380,7 +426,8 @@ sig_settings_reload(const siginfo_t *si ATTR_UNUSED,
 static void
 sig_log_reopen(const siginfo_t *si ATTR_UNUSED, void *context ATTR_UNUSED)
 {
-        service_signal(services->log, SIGUSR1);
+	unsigned int uninitialized_count;
+	service_signal(services->log, SIGUSR1, &uninitialized_count);
 
 	master_service_init_log(master_service, "master: ");
 	i_set_fatal_handler(master_fatal_callback);
@@ -426,6 +473,7 @@ static void main_log_startup(char **protocols)
 #define STARTUP_STRING PACKAGE_NAME" v"DOVECOT_VERSION_FULL" starting up"
 	string_t *str = t_str_new(128);
 	rlim_t core_limit;
+	struct stat st;
 
 	str_append(str, STARTUP_STRING);
 	if (protocols[0] == NULL)
@@ -439,6 +487,10 @@ static void main_log_startup(char **protocols)
 		core_limit == 0;
 	if (core_dumps_disabled)
 		str_append(str, " (core dumps disabled)");
+	if (stat(LINUX_PROC_FS_SUID_DUMPABLE, &st) == 0)
+		have_proc_fs_suid_dumpable = TRUE;
+	if (stat(LINUX_PROC_SYS_KERNEL_CORE_PATTERN, &st) == 0)
+		have_proc_sys_kernel_core_pattern = TRUE;
 	i_info("%s", str_c(str));
 }
 
@@ -530,12 +582,16 @@ static const char *get_full_config_path(struct service_list *list)
 	if (*path == '/')
 		return path;
 
-	return p_strdup(list->pool, t_abspath(path));
+	const char *abspath, *error;
+	if (t_abspath(path, &abspath, &error) < 0) {
+		i_fatal("t_abspath(%s) failed: %s", path, error);
+	}
+	return p_strdup(list->pool, abspath);
 }
 
 static void master_time_moved(time_t old_time, time_t new_time)
 {
-	unsigned long secs;
+	time_t secs;
 
 	if (new_time >= old_time)
 		return;
@@ -546,9 +602,9 @@ static void master_time_moved(time_t old_time, time_t new_time)
 	if (secs > SERVICE_TIME_MOVED_BACKWARDS_MAX_THROTTLE_SECS)
 		secs = SERVICE_TIME_MOVED_BACKWARDS_MAX_THROTTLE_SECS;
 	services_throttle_time_sensitives(services, secs);
-	i_warning("Time moved backwards by %lu seconds, "
-		  "waiting for %lu secs until new services are launched again.",
-		  (unsigned long)(old_time - new_time), secs);
+	i_warning("Time moved backwards by %"PRIdTIME_T" seconds, waiting for "
+		  "%"PRIdTIME_T" secs until new services are launched again.",
+		  old_time - new_time, secs);
 }
 
 static void daemonize(void)
@@ -597,9 +653,6 @@ static void print_build_options(void)
 #ifdef IOLOOP_NOTIFY_KQUEUE
 		" notify=kqueue"
 #endif
-#ifdef HAVE_IPV6
-		" ipv6"
-#endif
 #ifdef HAVE_GNUTLS
 		" gnutls"
 #endif
@@ -607,11 +660,10 @@ static void print_build_options(void)
 		" openssl"
 #endif
 	        " io_block_size=%u"
-	"\nMail storages: "MAIL_STORAGES"\n"
 #ifdef SQL_DRIVER_PLUGINS
-	"SQL driver plugins:"
+	"\nSQL driver plugins:"
 #else
-	"SQL drivers:"
+	"\nSQL drivers:"
 #endif
 #ifdef BUILD_CASSANDRA
 		" cassandra"
@@ -714,9 +766,14 @@ int main(int argc, char *argv[])
 	}
 	master_service = master_service_init(MASTER_SERVICE_NAME,
 				MASTER_SERVICE_FLAG_STANDALONE |
-				MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR,
+				MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR |
+				MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME,
 				&argc, &argv, "+Fanp");
 	i_unset_failure_prefix();
+
+	i_get_failure_handlers(&orig_fatal_callback, &orig_error_callback,
+			       &orig_info_callback, &orig_debug_callback);
+	i_set_error_handler(startup_early_error_handler);
 
 	io_loop_set_time_moved_callback(current_ioloop, master_time_moved);
 
@@ -809,6 +866,7 @@ int main(int argc, char *argv[])
 		i_strconcat(set->base_dir, "/"MASTER_PID_FILE_NAME, NULL);
 
 	master_service_init_log(master_service, "master: ");
+	startup_early_errors_flush();
 	i_get_failure_handlers(&orig_fatal_callback, &orig_error_callback,
 			       &orig_info_callback, &orig_debug_callback);
 	i_set_fatal_handler(startup_fatal_handler);

@@ -17,9 +17,9 @@
 #define DICT_QUOTA_CLONE_COUNT_PATH DICT_QUOTA_CLONE_PATH"messages"
 
 #define QUOTA_CLONE_USER_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, quota_clone_user_module)
+	MODULE_CONTEXT_REQUIRE(obj, quota_clone_user_module)
 #define QUOTA_CLONE_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, quota_clone_storage_module)
+	MODULE_CONTEXT_REQUIRE(obj, quota_clone_storage_module)
 
 static MODULE_CONTEXT_DEFINE_INIT(quota_clone_user_module,
 				  &mail_user_module_register);
@@ -47,7 +47,8 @@ static void quota_clone_flush_real(struct mailbox *box)
 	struct quota_root_iter *iter;
 	struct quota_root *root;
 	uint64_t bytes_value, count_value, limit;
-	int ret_bytes, ret_count;
+	const char *error;
+	enum quota_get_result bytes_res, count_res;
 
 	/* we'll clone the first quota root */
 	iter = quota_root_iter_init(box);
@@ -60,28 +61,51 @@ static void quota_clone_flush_real(struct mailbox *box)
 	}
 
 	/* get new values first */
-	ret_bytes = quota_get_resource(root, "", QUOTA_NAME_STORAGE_BYTES,
-				       &bytes_value, &limit);
-	if (ret_bytes < 0) {
-		i_error("quota_clone_plugin: Failed to lookup current quota bytes");
+	bytes_res = quota_get_resource(root, "", QUOTA_NAME_STORAGE_BYTES,
+				       &bytes_value, &limit, &error);
+	if (bytes_res == QUOTA_GET_RESULT_INTERNAL_ERROR) {
+		i_error("quota_clone_plugin: "
+			"Failed to get quota resource "QUOTA_NAME_STORAGE_BYTES": %s",
+			error);
 		return;
 	}
-	ret_count = quota_get_resource(root, "", QUOTA_NAME_MESSAGES,
-				       &count_value, &limit);
-	if (ret_count < 0) {
-		i_error("quota_clone_plugin: Failed to lookup current quota count");
+	count_res = quota_get_resource(root, "", QUOTA_NAME_MESSAGES,
+				       &count_value, &limit, &error);
+	if (count_res == QUOTA_GET_RESULT_INTERNAL_ERROR) {
+		i_error("quota_clone_plugin: "
+			"Failed to get quota resource "QUOTA_NAME_MESSAGES": %s",
+			error);
+		return;
+	}
+	if (bytes_res == QUOTA_GET_RESULT_UNKNOWN_RESOURCE &&
+	    count_res == QUOTA_GET_RESULT_UNKNOWN_RESOURCE) {
+		/* quota resources don't exist - no point in updating it */
+		return;
+	}
+	if (bytes_res == QUOTA_GET_RESULT_BACKGROUND_CALC &&
+	    count_res == QUOTA_GET_RESULT_BACKGROUND_CALC) {
+		/* Blocked by an ongoing quota calculation - try again later */
 		return;
 	}
 
-	/* update resources always regardless of existence,
-	   FIXME: This should be fixed in v2.3 */
+	/* Then update the resources that exist. The resources' existence can't
+	   change unless the quota backend is changed, so we don't worry about
+	   the special case of lookup changing from
+	   RESULT_LIMITED/RESULT_UNLIMITED to RESULT_UNKNOWN_RESOURCE, which
+	   leaves the old value unchanged. */
 	trans = dict_transaction_begin(quser->dict);
-	dict_set(trans, DICT_QUOTA_CLONE_BYTES_PATH,
-		 t_strdup_printf("%llu", (unsigned long long)bytes_value));
-	dict_set(trans, DICT_QUOTA_CLONE_COUNT_PATH,
-		 t_strdup_printf("%llu", (unsigned long long)count_value));
-	if (dict_transaction_commit(&trans) < 0)
-		i_error("quota_clone_plugin: Failed to commit dict update");
+	if (bytes_res == QUOTA_GET_RESULT_LIMITED ||
+	    bytes_res == QUOTA_GET_RESULT_UNLIMITED) {
+		dict_set(trans, DICT_QUOTA_CLONE_BYTES_PATH,
+			 t_strdup_printf("%"PRIu64, bytes_value));
+	}
+	if (count_res == QUOTA_GET_RESULT_LIMITED ||
+	    count_res == QUOTA_GET_RESULT_UNLIMITED) {
+		dict_set(trans, DICT_QUOTA_CLONE_COUNT_PATH,
+			 t_strdup_printf("%"PRIu64, count_value));
+	}
+	if (dict_transaction_commit(&trans, &error) < 0)
+		i_error("quota_clone_plugin: Failed to commit dict update: %s", error);
 	else
 		qbox->quota_changed = FALSE;
 }
@@ -92,8 +116,7 @@ static void quota_clone_flush(struct mailbox *box)
 	struct quota_clone_user *quser =
 		QUOTA_CLONE_USER_CONTEXT(box->storage->user);
 
-	if (qbox->to_quota_flush != NULL)
-		timeout_remove(&qbox->to_quota_flush);
+	timeout_remove(&qbox->to_quota_flush);
 
 	if (quser->quota_flushing) {
 		/* recursing back from quota recalculation */
@@ -205,7 +228,7 @@ static void quota_clone_mail_user_created(struct mail_user *user)
 	dict_set.username = user->username;
 	dict_set.base_dir = user->set->base_dir;
 	(void)mail_user_get_home(user, &dict_set.home_dir);
-	if (dict_init_full(uri, &dict_set, &dict, &error) < 0) {
+	if (dict_init(uri, &dict_set, &dict, &error) < 0) {
 		i_error("quota_clone_dict: Failed to initialize '%s': %s",
 			uri, error);
 		return;

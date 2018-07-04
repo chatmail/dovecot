@@ -14,7 +14,7 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
 
 --- a/configure.ac
 +++ b/configure.ac
-@@ -321,7 +321,12 @@
+@@ -302,7 +302,12 @@
  # SIZE_MAX is missing without this
  CXXFLAGS="$CXXFLAGS -D__STDC_LIMIT_MACROS"
  
@@ -30,9 +30,9 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
  
 --- a/src/lmtp/lmtp-settings.c
 +++ b/src/lmtp/lmtp-settings.c
-@@ -78,7 +78,7 @@
+@@ -76,7 +76,7 @@
+ 	.lmtp_rcpt_check_quota = FALSE,
  	.lmtp_user_concurrency_limit = 0,
- 	.lmtp_address_translate = "",
  	.lmtp_hdr_delivery_address = "final:none:original",
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
@@ -41,7 +41,7 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
  
 --- a/src/login-common/login-settings.c
 +++ b/src/login-common/login-settings.c
-@@ -50,7 +50,7 @@
+@@ -51,7 +51,7 @@
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",

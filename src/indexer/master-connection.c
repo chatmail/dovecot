@@ -30,7 +30,7 @@ struct master_connection {
 	struct istream *input;
 	struct ostream *output;
 
-	unsigned int version_received:1;
+	bool version_received:1;
 };
 
 static void ATTR_NULL(1, 2)
@@ -83,8 +83,8 @@ index_mailbox_precache(struct master_connection *conn, struct mailbox *box)
 	}
 	seq = status.last_cached_seq + 1;
 
-	trans = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_NO_CACHE_DEC);
-	mailbox_transaction_set_reason(trans, "indexing");
+	trans = mailbox_transaction_begin(box, MAILBOX_TRANSACTION_FLAG_NO_CACHE_DEC,
+					  "indexing");
 	search_args = mail_search_build_init();
 	mail_search_build_add_seqset(search_args, seq, status.messages);
 	ctx = mailbox_search_init(trans, search_args, NULL,
@@ -297,7 +297,7 @@ master_connection_create(int fd, struct mail_storage_service_ctx *storage_servic
 	conn->storage_service = storage_service;
 	conn->fd = fd;
 	conn->io = io_add(conn->fd, IO_READ, master_connection_input, conn);
-	conn->input = i_stream_create_fd(conn->fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(conn->fd, (size_t)-1);
 
 	handshake = t_strdup_printf(INDEXER_WORKER_HANDSHAKE,
 		master_service_get_process_limit(master_service));

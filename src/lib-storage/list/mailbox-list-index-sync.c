@@ -4,6 +4,7 @@
 #include "ioloop.h"
 #include "hash.h"
 #include "str.h"
+#include "sort.h"
 #include "mail-index.h"
 #include "mail-storage.h"
 #include "mailbox-list-index-sync.h"
@@ -160,7 +161,7 @@ mailbox_list_index_sync_names(struct mailbox_list_index_sync_context *ctx)
 	get_existing_name_ids(&existing_name_ids, ilist->mailbox_tree);
 	array_sort(&existing_name_ids, uint32_cmp);
 
-	hdr_buf = buffer_create_dynamic(pool_datastack_create(), 1024);
+	hdr_buf = t_buffer_create(1024);
 	buffer_append_zero(hdr_buf, sizeof(struct mailbox_list_index_header));
 
 	/* add existing names to header (with deduplication) */
@@ -224,7 +225,7 @@ sync_expunge_nonexistent(struct mailbox_list_index_sync_context *sync_ctx,
 int mailbox_list_index_sync_begin(struct mailbox_list *list,
 				  struct mailbox_list_index_sync_context **sync_ctx_r)
 {
-	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
+	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT_REQUIRE(list);
 	struct mailbox_list_index_sync_context *sync_ctx;
 	struct mail_index_sync_ctx *index_sync_ctx;
 	struct mail_index_view *view;

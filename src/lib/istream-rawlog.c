@@ -33,7 +33,6 @@ static void i_stream_rawlog_destroy(struct iostream_private *stream)
                /* get to same position in parent stream */
                i_stream_seek(rstream->istream.parent, v_offset);
        }
-       i_stream_unref(&rstream->istream.parent);
 }
 
 static ssize_t i_stream_rawlog_read(struct istream_private *stream)
@@ -52,7 +51,7 @@ static ssize_t i_stream_rawlog_read(struct istream_private *stream)
 	if (pos > stream->pos)
 		ret = 0;
 	else do {
-		if ((ret = i_stream_read(stream->parent)) == -2)
+		if ((ret = i_stream_read_memarea(stream->parent)) == -2)
 			return -2;
 
 		stream->istream.stream_errno = stream->parent->stream_errno;
@@ -83,7 +82,9 @@ i_stream_create_rawlog(struct istream *input, const char *rawlog_path,
 	i_assert(rawlog_path != NULL);
 	i_assert(rawlog_fd != -1);
 
-	rawlog_output = o_stream_create_fd(rawlog_fd, 0, autoclose_fd);
+	rawlog_output = autoclose_fd ?
+		o_stream_create_fd_autoclose(&rawlog_fd, 0) :
+		o_stream_create_fd(rawlog_fd, 0);
 	o_stream_set_name(rawlog_output,
 			  t_strdup_printf("rawlog(%s)", rawlog_path));
 	return i_stream_create_rawlog_from_stream(input, rawlog_output, flags);
@@ -111,5 +112,5 @@ i_stream_create_rawlog_from_stream(struct istream *input,
 	rstream->istream.istream.blocking = input->blocking;
 	rstream->istream.istream.seekable = input->seekable;
 	return i_stream_create(&rstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }

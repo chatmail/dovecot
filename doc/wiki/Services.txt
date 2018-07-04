@@ -36,9 +36,9 @@ Contents
 
      8. doveadm
 
-     9. imap, pop3, submission, managesieve
+     9. imap, pop3, managesieve
 
-     10. imap-login, pop3-login, submission-login, managesieve-login
+     10. imap-login, pop3-login, managesieve-login
 
      11. indexer
 
@@ -384,11 +384,10 @@ connect to the correct backend to run the command.
    set to the mail UID for higher security, because the process can't gain root
    privileges anymore.
 
-imap, pop3, submission, managesieve
------------------------------------
+imap, pop3, managesieve
+-----------------------
 
-Post-login process for handling IMAP/POP3/ <Submission.txt>/ <ManageSieve>
-[Pigeonhole.ManageSieve.txt] client connections.
+Post-login process for handling IMAP/POP3/ManageSieve client connections.
 
  * *client_limit* may be increased from the default 1 to save some CPU and
    memory, but it also increases the latency when one process serving multiple
@@ -400,13 +399,11 @@ Post-login process for handling IMAP/POP3/ <Submission.txt>/ <ManageSieve>
    users. This is improves performance, but it's less secure, because bugs in
    code may leak email data from another user's earlier connection.
  * *process_limit* defaults to 1024, which means that the number of
-   simultaneous connections for the protocol that this service handles (IMAP,
-   POP3, <Submission.txt>, or <ManageSieve> [Pigeonhole.ManageSieve.txt]) is
-   limited by this setting. If you expect more connections, increase this
-   value.
+   simultaneous IMAP (or POP3 or <ManageSieve.txt>) connections is limited by
+   this setting. If you expect more connections, increase this value.
 
-imap-login, pop3-login, submission-login, managesieve-login
------------------------------------------------------------
+imap-login, pop3-login, managesieve-login
+-----------------------------------------
 
 See <LoginProcess.txt>.
 
@@ -497,4 +494,4 @@ Mail process statistics tracking. Its behavior is very similar to the anvil
 process, but anvil's data is of higher importance and lower traffic than stats,
 so stats are tracked in a separate process.
 
-(This file was created from the wiki on 2018-05-23 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

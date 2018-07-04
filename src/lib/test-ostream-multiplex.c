@@ -1,9 +1,7 @@
 /* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
-#include "randgen.h"
 #include "ioloop.h"
-#include "fd-set-nonblock.h"
 #include "str.h"
 #include "istream.h"
 #include "ostream-private.h"
@@ -91,12 +89,12 @@ static void test_ostream_multiplex_stream_read(struct istream *is)
 
 static void test_ostream_multiplex_stream_write(struct ostream *channel ATTR_UNUSED)
 {
-	size_t rounds = 1 + rand() % 10;
+	size_t rounds = 1 + i_rand() % 10;
 	for(size_t i = 0; i < rounds; i++) {
-		if ((rand() % 2) != 0)
-			o_stream_nsend_str(chan1, msgs[rand() % N_ELEMENTS(msgs)]);
+		if ((i_rand() % 2) != 0)
+			o_stream_nsend_str(chan1, msgs[i_rand() % N_ELEMENTS(msgs)]);
 		else
-			o_stream_nsend_str(chan0, msgs[rand() % N_ELEMENTS(msgs)]);
+			o_stream_nsend_str(chan0, msgs[i_rand() % N_ELEMENTS(msgs)]);
 	}
 }
 
@@ -111,8 +109,8 @@ static void test_ostream_multiplex_stream(void)
 	test_assert(pipe(fds) == 0);
 	fd_set_nonblock(fds[0], TRUE);
 	fd_set_nonblock(fds[1], TRUE);
-	struct ostream *os = o_stream_create_fd(fds[1], (size_t)-1, FALSE);
-	struct istream *is = i_stream_create_fd(fds[0], (size_t)-1, FALSE);
+	struct ostream *os = o_stream_create_fd(fds[1], (size_t)-1);
+	struct istream *is = i_stream_create_fd(fds[0], (size_t)-1);
 
 	chan0 = o_stream_create_multiplex(os, (size_t)-1);
 	chan1 = o_stream_multiplex_add_channel(chan0, 1);
@@ -127,9 +125,9 @@ static void test_ostream_multiplex_stream(void)
 	io_remove(&io0);
 	io_remove(&io1);
 
-	test_assert(o_stream_nfinish(chan1) == 0);
+	test_assert(o_stream_finish(chan1) > 0);
 	o_stream_unref(&chan1);
-	test_assert(o_stream_nfinish(chan0) == 0);
+	test_assert(o_stream_finish(chan0) > 0);
 	o_stream_unref(&chan0);
 
 	i_stream_unref(&is);
@@ -145,8 +143,6 @@ static void test_ostream_multiplex_stream(void)
 
 void test_ostream_multiplex(void)
 {
-	random_init();
 	test_ostream_multiplex_simple();
 	test_ostream_multiplex_stream();
-	random_deinit();
 }

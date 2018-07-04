@@ -232,8 +232,7 @@ imap_hibernate_client_input_line(struct connection *conn, const char *line)
 	if (ret < 0) {
 		if (client->imap_client != NULL)
 			imap_client_destroy(&client->imap_client, NULL);
-		if (fd != -1)
-			i_close_fd(&fd);
+		i_close_fd(&fd);
 		return -1;
 	} else if (ret == 0) {
 		/* still need to read another fd */
@@ -254,11 +253,9 @@ void imap_hibernate_client_create(int fd, bool debug)
 
 	client = i_new(struct imap_hibernate_client, 1);
 	client->debug = debug;
+	client->conn.unix_socket = TRUE;
 	connection_init_server(hibernate_clients, &client->conn,
 			       "imap-hibernate", fd, fd);
-
-	i_assert(client->conn.input == NULL);
-	client->conn.input = i_stream_create_unix(fd, (size_t)-1);
 	i_stream_unix_set_read_fd(client->conn.input);
 }
 
@@ -268,7 +265,7 @@ static struct connection_settings client_set = {
 	.major_version = 1,
 	.minor_version = 0,
 
-	.input_max_size = 0, /* don't auto-create istream */
+	.input_max_size = (size_t)-1,
 	.output_max_size = (size_t)-1,
 	.client = FALSE
 };

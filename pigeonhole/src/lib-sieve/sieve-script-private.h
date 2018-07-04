@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_SCRIPT_PRIVATE_H
-#define __SIEVE_SCRIPT_PRIVATE_H
+#ifndef SIEVE_SCRIPT_PRIVATE_H
+#define SIEVE_SCRIPT_PRIVATE_H
 
 #include "sieve-common.h"
 #include "sieve-script.h"
@@ -69,7 +66,7 @@ struct sieve_script {
 	/* Stream */
 	struct istream *stream;
 
-	unsigned int open:1;
+	bool open:1;
 };
 
 void sieve_script_init
@@ -81,7 +78,6 @@ void sieve_script_init
  * Built-in script drivers
  */
 
-extern const struct sieve_script sieve_data_script;
 extern const struct sieve_script sieve_file_script;
 extern const struct sieve_script sieve_dict_script;
 extern const struct sieve_script sieve_ldap_script;
@@ -119,4 +115,4 @@ void sieve_script_sys_debug
 void sieve_script_sequence_init
 (struct sieve_script_sequence *seq, struct sieve_storage *storage);
 
-#endif /* __SIEVE_SCRIPT_PRIVATE_H */
+#endif

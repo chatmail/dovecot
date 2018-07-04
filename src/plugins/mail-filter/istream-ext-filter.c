@@ -5,7 +5,6 @@
 #include "strescape.h"
 #include "net.h"
 #include "eacces-error.h"
-#include "fd-set-nonblock.h"
 #include "ostream.h"
 #include "istream-private.h"
 #include "istream-ext-filter.h"
@@ -27,15 +26,9 @@ i_stream_mail_filter_close(struct iostream_private *stream, bool close_parent)
 	struct mail_filter_istream *mstream =
 		(struct mail_filter_istream *)stream;
 
-	if (mstream->ext_in != NULL)
-		i_stream_destroy(&mstream->ext_in);
-	if (mstream->ext_out != NULL)
-		o_stream_destroy(&mstream->ext_out);
-	if (mstream->fd != -1) {
-		if (close(mstream->fd) < 0)
-			i_error("ext-filter: close() failed: %m");
-		mstream->fd = -1;
-	}
+	i_stream_destroy(&mstream->ext_in);
+	o_stream_destroy(&mstream->ext_out);
+	i_close_fd(&mstream->fd);
 	if (close_parent)
 		i_stream_close(mstream->istream.parent);
 }
@@ -54,7 +47,7 @@ i_stream_read_copy_from(struct istream *istream, struct istream *source)
 	if (pos > stream->pos)
 		ret = 0;
 	else do {
-		if ((ret = i_stream_read(source)) == -2)
+		if ((ret = i_stream_read_memarea(source)) == -2)
 			return -2;
 
 		stream->istream.stream_errno = source->stream_errno;
@@ -81,13 +74,8 @@ i_stream_mail_filter_read_once(struct mail_filter_istream *mstream)
 
 	if (mstream->ext_out != NULL) {
 		/* we haven't sent everything yet */
-		(void)o_stream_send_istream(mstream->ext_out, stream->parent);
-		if (mstream->ext_out->stream_errno != 0) {
-			stream->istream.stream_errno =
-				mstream->ext_out->stream_errno;
-			return -1;
-		}
-		if (i_stream_is_eof(stream->parent)) {
+		switch (o_stream_send_istream(mstream->ext_out, stream->parent)) {
+		case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
 			o_stream_destroy(&mstream->ext_out);
 			/* if we wanted to be a blocking stream,
 			   from now on the rest of the reads are */
@@ -95,6 +83,19 @@ i_stream_mail_filter_read_once(struct mail_filter_istream *mstream)
 				net_set_nonblock(mstream->fd, FALSE);
 			if (shutdown(mstream->fd, SHUT_WR) < 0)
 				i_error("ext-filter: shutdown() failed: %m");
+			break;
+		case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
+		case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
+		case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
+			break;
+		case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+			stream->istream.stream_errno =
+				mstream->ext_out->stream_errno;
+			io_stream_set_error(&stream->iostream,
+				"write(%s) failed: %s",
+				o_stream_get_name(mstream->ext_out),
+				o_stream_get_error(mstream->ext_out));
+			return -1;
 		}
 	}
 
@@ -121,7 +122,7 @@ static ssize_t i_stream_mail_filter_read(struct istream_private *stream)
 	}
 	if (ret == -1 && !i_stream_have_bytes_left(&stream->istream) &&
 	    stream->istream.v_offset == 0) {
-		/* EOF without any input -> assume the script is repoting
+		/* EOF without any input -> assume the script is reporting
 		   failure. pretty ugly way, but currently there's no error
 		   reporting channel. */
 		stream->istream.stream_errno = EIO;
@@ -170,8 +171,8 @@ static int filter_connect(struct mail_filter_istream *mstream,
 
 	mstream->fd = fd;
 	mstream->ext_in =
-		i_stream_create_fd(fd, mstream->istream.max_buffer_size, FALSE);
-	mstream->ext_out = o_stream_create_fd(fd, 0, FALSE);
+		i_stream_create_fd(fd, mstream->istream.max_buffer_size);
+	mstream->ext_out = o_stream_create_fd(fd, 0);
 
 	str = t_str_new(256);
 	str_append(str, "VERSION\tscript\t4\t0\nnoreply\n");
@@ -211,5 +212,5 @@ i_stream_create_ext_filter(struct istream *input, const char *socket_path,
 	mstream->fd = -1;
 	(void)filter_connect(mstream, socket_path, args);
 
-	return i_stream_create(&mstream->istream, input, mstream->fd);
+	return i_stream_create(&mstream->istream, input, mstream->fd, 0);
 }

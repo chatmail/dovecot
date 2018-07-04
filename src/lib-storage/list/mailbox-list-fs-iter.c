@@ -49,9 +49,9 @@ struct fs_list_iterate_context {
 	/* current directory we're handling */
 	struct list_dir_context *dir;
 
-	unsigned int inbox_found:1;
-	unsigned int inbox_has_children:1;
-	unsigned int listed_prefix_inbox:1;
+	bool inbox_found:1;
+	bool inbox_has_children:1;
+	bool listed_prefix_inbox:1;
 };
 
 static int
@@ -292,7 +292,7 @@ fs_list_dir_read(struct fs_list_iterate_context *ctx,
 	fsdir = opendir(path);
 	if (fsdir == NULL) {
 		if (ENOTFOUND(errno)) {
-			/* root) user gave invalid hiearchy, ignore
+			/* root) user gave invalid hierarchy, ignore
 			   sub) probably just race condition with other client
 			   deleting the mailbox. */
 			return 0;
@@ -561,8 +561,7 @@ int fs_list_iter_deinit(struct mailbox_list_iterate_context *_ctx)
 		pool_unref(&dir->pool);
 	}
 
-	if (ctx->info_pool != NULL)
-		pool_unref(&ctx->info_pool);
+	pool_unref(&ctx->info_pool);
 	pool_unref(&_ctx->pool);
 	return ret;
 }

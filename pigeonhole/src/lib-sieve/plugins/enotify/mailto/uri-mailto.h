@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __URI_MAILTO_H
-#define __URI_MAILTO_H
+#ifndef URI_MAILTO_H
+#define URI_MAILTO_H
 
 /*
  * Types
@@ -15,7 +12,7 @@ struct uri_mailto_header_field {
 
 struct uri_mailto_recipient {
 	const char *full;
-	const char *normalized;
+	const struct smtp_address *address;
 	bool carbon_copy;
 };
 
@@ -39,6 +36,6 @@ struct uri_mailto *uri_mailto_parse
 	const char **unique_headers, int max_recipients, int max_headers,
 	struct sieve_error_handler *ehandler);
 
-#endif /* __URI_MAILTO_H */
+#endif
 
 

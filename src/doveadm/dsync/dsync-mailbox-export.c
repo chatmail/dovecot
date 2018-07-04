@@ -59,14 +59,14 @@ struct dsync_mailbox_exporter {
 	const char *error;
 	enum mail_error mail_error;
 
-	unsigned int body_search_initialized:1;
-	unsigned int auto_export_mails:1;
-	unsigned int mails_have_guids:1;
-	unsigned int minimal_dmail_fill:1;
-	unsigned int return_all_mails:1;
-	unsigned int export_received_timestamps:1;
-	unsigned int export_virtual_sizes:1;
-	unsigned int no_hdr_hashes:1;
+	bool body_search_initialized:1;
+	bool auto_export_mails:1;
+	bool mails_have_guids:1;
+	bool minimal_dmail_fill:1;
+	bool return_all_mails:1;
+	bool export_received_timestamps:1;
+	bool export_virtual_sizes:1;
+	bool no_hdr_hashes:1;
 };
 
 static int dsync_mail_error(struct dsync_mailbox_exporter *exporter,
@@ -403,7 +403,8 @@ dsync_mailbox_export_search(struct dsync_mailbox_exporter *exporter)
 	}
 
 	exporter->trans = mailbox_transaction_begin(exporter->box,
-						MAILBOX_TRANSACTION_FLAG_SYNC);
+						MAILBOX_TRANSACTION_FLAG_SYNC,
+						__func__);
 	search_ctx = mailbox_search_init(exporter->trans, search_args, NULL,
 					 wanted_fields, wanted_headers);
 	mail_search_args_unref(&search_args);
@@ -564,7 +565,7 @@ dsync_mailbox_export_iter_next_nonexistent_attr(struct dsync_mailbox_exporter *e
 			continue;
 
 		/* lookup the value mainly to get its last_change value. */
-		if (mailbox_attribute_get_stream(exporter->trans, attr->type,
+		if (mailbox_attribute_get_stream(exporter->box, attr->type,
 						 attr->key, &value) < 0) {
 			exporter->error = p_strdup_printf(exporter->pool,
 				"Mailbox attribute %s lookup failed: %s", attr->key,
@@ -573,8 +574,7 @@ dsync_mailbox_export_iter_next_nonexistent_attr(struct dsync_mailbox_exporter *e
 			break;
 		}
 		if ((value.flags & MAIL_ATTRIBUTE_VALUE_FLAG_READONLY) != 0) {
-			if (value.value_stream != NULL)
-				i_stream_unref(&value.value_stream);
+			i_stream_unref(&value.value_stream);
 			continue;
 		}
 
@@ -616,7 +616,7 @@ dsync_mailbox_export_iter_next_attr(struct dsync_mailbox_exporter *exporter)
 		if (attr_change == NULL && !export_all_attrs)
 			continue;
 
-		if (mailbox_attribute_get_stream(exporter->trans,
+		if (mailbox_attribute_get_stream(exporter->box,
 						 exporter->attr_type, key,
 						 &value) < 0) {
 			exporter->error = p_strdup_printf(exporter->pool,
@@ -687,8 +687,7 @@ int dsync_mailbox_export_next_attr(struct dsync_mailbox_exporter *exporter,
 	if (exporter->error != NULL)
 		return -1;
 
-	if (exporter->attr.value_stream != NULL)
-		i_stream_unref(&exporter->attr.value_stream);
+	i_stream_unref(&exporter->attr.value_stream);
 
 	if (exporter->attr_iter != NULL) {
 		ret = dsync_mailbox_export_iter_next_attr(exporter);
@@ -939,11 +938,9 @@ int dsync_mailbox_export_deinit(struct dsync_mailbox_exporter **_exporter,
 		(void)mailbox_attribute_iter_deinit(&exporter->attr_iter);
 	dsync_mailbox_export_body_search_deinit(exporter);
 	(void)mailbox_transaction_commit(&exporter->trans);
-	if (exporter->wanted_headers != NULL)
-		mailbox_header_lookup_unref(&exporter->wanted_headers);
+	mailbox_header_lookup_unref(&exporter->wanted_headers);
 
-	if (exporter->attr.value_stream != NULL)
-		i_stream_unref(&exporter->attr.value_stream);
+	i_stream_unref(&exporter->attr.value_stream);
 	hash_table_destroy(&exporter->export_guids);
 	hash_table_destroy(&exporter->changes);
 

@@ -157,15 +157,19 @@ void auth_policy_open_and_close_to_key(const char *fromkey, const char *tokey, s
 
 void auth_policy_init(void)
 {
+	struct ssl_iostream_settings ssl_set;
+	i_zero(&ssl_set);
+
 	http_client_set.request_absolute_timeout_msecs = global_auth_settings->policy_server_timeout_msecs;
 	if (global_auth_settings->debug)
 		http_client_set.debug = 1;
-	http_client_set.ssl_ca_dir = global_auth_settings->ssl_client_ca_dir;
-	http_client_set.ssl_ca_file = global_auth_settings->ssl_client_ca_file;
-	if (*http_client_set.ssl_ca_dir == '\0' &&
-	    *http_client_set.ssl_ca_file == '\0')
-		http_client_set.ssl_allow_invalid_cert = TRUE;
+	ssl_set.ca_dir = global_auth_settings->ssl_client_ca_dir;
+	ssl_set.ca_file = global_auth_settings->ssl_client_ca_file;
+	if (*ssl_set.ca_dir == '\0' &&
+	    *ssl_set.ca_file == '\0')
+		ssl_set.allow_invalid_cert = TRUE;
 
+	http_client_set.ssl = &ssl_set;
 	http_client = http_client_init(&http_client_set);
 
 	/* prepare template */
@@ -226,16 +230,14 @@ void auth_policy_deinit(void)
 }
 
 static
-void auth_policy_finish(void *ctx)
+void auth_policy_finish(struct policy_lookup_ctx *context)
 {
-	struct policy_lookup_ctx *context = ctx;
-
 	if (context->parser != NULL) {
 		const char *error ATTR_UNUSED;
-		(void)json_parser_deinit(&(context->parser), &error);
+		(void)json_parser_deinit(&context->parser, &error);
 	}
 	if (context->http_request != NULL)
-		http_client_request_abort(&(context->http_request));
+		http_client_request_abort(&context->http_request);
 	if (context->request != NULL)
 		auth_request_unref(&context->request);
 }
@@ -258,7 +260,7 @@ void auth_policy_parse_response(struct policy_lookup_ctx *context)
 			else
 				continue;
 		} else if (context->parse_state == POLICY_RESULT_VALUE_STATUS) {
-			if (type != JSON_TYPE_NUMBER || str_to_int(value, &(context->result)) != 0)
+			if (type != JSON_TYPE_NUMBER || str_to_int(value, &context->result) != 0)
 				break;
 			context->parse_state = POLICY_RESULT;
 		} else if (context->parse_state == POLICY_RESULT_VALUE_MESSAGE) {
@@ -277,7 +279,7 @@ void auth_policy_parse_response(struct policy_lookup_ctx *context)
 
 	context->parse_error = TRUE;
 
-	io_remove(&(context->io));
+	io_remove(&context->io);
 
 	if (context->payload->stream_errno != 0) {
 		auth_request_log_error(context->request, "policy",
@@ -291,13 +293,13 @@ void auth_policy_parse_response(struct policy_lookup_ctx *context)
 			"Policy server response was malformed");
 	} else {
 		const char *error = "unknown";
-		if (json_parser_deinit(&(context->parser), &error) != 0)
+		if (json_parser_deinit(&context->parser, &error) != 0)
 			auth_request_log_error(context->request, "policy",
 				"Policy server response JSON parse error: %s", error);
 		else if (context->parse_state == POLICY_RESULT)
 			context->parse_error = FALSE;
 	}
-	i_stream_unref(&(context->payload));
+	i_stream_unref(&context->payload);
 
 	if (context->parse_error) {
 		context->result = (context->set->policy_reject_on_fail ? -1 : 0);
@@ -451,8 +453,8 @@ void auth_policy_create_json(struct policy_lookup_ctx *context,
 
 	i_assert(digest != NULL);
 
-	void *ctx = t_malloc(digest->context_size);
-	buffer_t *buffer = buffer_create_dynamic(pool_datastack_create(), 64);
+	void *ctx = t_malloc_no0(digest->context_size);
+	buffer_t *buffer = t_buffer_create(64);
 
 	digest->init(ctx);
 	digest->loop(ctx,
@@ -477,9 +479,13 @@ void auth_policy_create_json(struct policy_lookup_ctx *context,
 	const char *hashed_password = binary_to_hex(buffer->data, buffer->used);
 	str_append_c(context->json, '{');
 	var_table = policy_get_var_expand_table(context->request, hashed_password, requested_username);
-	auth_request_var_expand_with_table(context->json, auth_policy_json_template,
-					   context->request, var_table,
-					   auth_policy_escape_function);
+	const char *error;
+	if (auth_request_var_expand_with_table(context->json, auth_policy_json_template,
+					       context->request, var_table,
+					       auth_policy_escape_function, &error) <= 0) {
+		auth_request_log_error(context->request, "policy",
+			"Failed to expand auth policy template: %s", error);
+	}
 	if (include_success) {
 		str_append(context->json, ",\"success\":");
 		if (!context->request->failed && context->request->successful &&
@@ -490,6 +496,11 @@ void auth_policy_create_json(struct policy_lookup_ctx *context,
 		str_append(context->json, ",\"policy_reject\":");
 		str_append(context->json, context->request->policy_refusal ? "true" : "false");
 	}
+	str_append(context->json, ",\"tls\":");
+	if (context->request->secured == AUTH_REQUEST_SECURED_TLS)
+		str_append(context->json, "true");
+	else
+		str_append(context->json, "false");
 	str_append_c(context->json, '}');
 	auth_request_log_debug(context->request, "policy",
 		"Policy server request JSON: %s", str_c(context->json));

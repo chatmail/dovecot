@@ -106,15 +106,19 @@ static void fs_compress_deinit(struct fs *_fs)
 	i_free(fs);
 }
 
-static struct fs_file *
-fs_compress_file_init(struct fs *_fs, const char *path,
+static struct fs_file *fs_compress_file_alloc(void)
+{
+	struct compress_fs_file *file = i_new(struct compress_fs_file, 1);
+	return &file->file;
+}
+
+static void
+fs_compress_file_init(struct fs_file *_file, const char *path,
 		      enum fs_open_mode mode, enum fs_open_flags flags)
 {
-	struct compress_fs *fs = (struct compress_fs *)_fs;
-	struct compress_fs_file *file;
+	struct compress_fs *fs = (struct compress_fs *)_file->fs;
+	struct compress_fs_file *file = (struct compress_fs_file *)_file;
 
-	file = i_new(struct compress_fs_file, 1);
-	file->file.fs = _fs;
 	file->file.path = i_strdup(path);
 	file->fs = fs;
 	file->open_mode = mode;
@@ -122,17 +126,16 @@ fs_compress_file_init(struct fs *_fs, const char *path,
 	/* avoid unnecessarily creating two seekable streams */
 	flags &= ~FS_OPEN_FLAG_SEEKABLE;
 
-	file->file.parent = fs_file_init(_fs->parent, path, mode | flags);
+	file->file.parent = fs_file_init_parent(_file, path, mode | flags);
 	if (mode == FS_OPEN_MODE_READONLY &&
 	    (flags & FS_OPEN_FLAG_ASYNC) == 0) {
 		/* use async stream for parent, so fs_read_stream() won't create
-		   another seekable stream unneededly */
-		file->super_read = fs_file_init(_fs->parent, path, mode | flags |
-						FS_OPEN_FLAG_ASYNC);
+		   another seekable stream needlessly */
+		file->super_read = fs_file_init_parent(_file, path,
+			mode | flags | FS_OPEN_FLAG_ASYNC);
 	} else {
 		file->super_read = file->file.parent;
 	}
-	return &file->file;
 }
 
 static void fs_compress_file_deinit(struct fs_file *_file)
@@ -150,8 +153,7 @@ static void fs_compress_file_close(struct fs_file *_file)
 {
 	struct compress_fs_file *file = (struct compress_fs_file *)_file;
 
-	if (file->input != NULL)
-		i_stream_unref(&file->input);
+	i_stream_unref(&file->input);
 	if (file->super_read != NULL)
 		fs_file_close(file->super_read);
 	if (_file->parent != NULL)
@@ -238,8 +240,7 @@ static int fs_compress_write_stream_finish(struct fs_file *_file, bool success)
 			o_stream_unref(&_file->output);
 	}
 	if (!success) {
-		if (file->temp_output != NULL)
-			o_stream_destroy(&file->temp_output);
+		o_stream_destroy(&file->temp_output);
 		if (file->super_output != NULL)
 			fs_write_stream_abort_parent(_file, &file->super_output);
 		return -1;
@@ -257,22 +258,8 @@ static int fs_compress_write_stream_finish(struct fs_file *_file, bool success)
 	/* finish writing the temporary file */
 	input = iostream_temp_finish(&file->temp_output, IO_BLOCK_SIZE);
 	file->super_output = fs_write_stream(_file->parent);
-	if (o_stream_send_istream(file->super_output, input) >= 0)
-		ret = fs_write_stream_finish(_file->parent, &file->super_output);
-	else if (input->stream_errno != 0) {
-		fs_write_stream_abort_error(_file->parent, &file->super_output,
-					    "read(%s) failed: %s",
-					    i_stream_get_name(input),
-					    i_stream_get_error(input));
-		ret = -1;
-	} else {
-		i_assert(file->super_output->stream_errno != 0);
-		fs_write_stream_abort_error(_file->parent, &file->super_output,
-					    "write(%s) failed: %s",
-					    o_stream_get_name(file->super_output),
-					    o_stream_get_error(file->super_output));
-		ret = -1;
-	}
+	o_stream_nsend_istream(file->super_output, input);
+	ret = fs_write_stream_finish(_file->parent, &file->super_output);
 	i_stream_unref(&input);
 	return ret;
 }
@@ -284,6 +271,7 @@ const struct fs fs_class_compress = {
 		fs_compress_init,
 		fs_compress_deinit,
 		fs_wrapper_get_properties,
+		fs_compress_file_alloc,
 		fs_compress_file_init,
 		fs_compress_file_deinit,
 		fs_compress_file_close,
@@ -305,6 +293,7 @@ const struct fs fs_class_compress = {
 		fs_wrapper_copy,
 		fs_wrapper_rename,
 		fs_wrapper_delete,
+		fs_wrapper_iter_alloc,
 		fs_wrapper_iter_init,
 		fs_wrapper_iter_next,
 		fs_wrapper_iter_deinit,

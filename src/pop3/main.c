@@ -5,7 +5,7 @@
 #include "buffer.h"
 #include "istream.h"
 #include "ostream.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "base64.h"
 #include "str.h"
 #include "process-title.h"
@@ -57,9 +57,10 @@ void pop3_refresh_proctitle(void)
 	case 1:
 		client = pop3_clients;
 		str_append(title, client->user->username);
-		if (client->user->remote_ip != NULL) {
+		if (client->user->conn.remote_ip != NULL) {
 			str_append_c(title, ' ');
-			str_append(title, net_ip2addr(client->user->remote_ip));
+			str_append(title,
+				   net_ip2addr(client->user->conn.remote_ip));
 		}
 		if (client->destroyed)
 			str_append(title, " (deinit)");
@@ -104,6 +105,7 @@ client_create_from_input(const struct mail_storage_service_input *input,
 	struct mail_storage_service_user *user;
 	struct mail_user *mail_user;
 	struct pop3_settings *set;
+	const char *errstr;
 
 	if (mail_storage_service_lookup_next(storage_service, input,
 					     &user, &mail_user, error_r) <= 0) {
@@ -118,8 +120,14 @@ client_create_from_input(const struct mail_storage_service_input *input,
 	if (set->verbose_proctitle)
 		verbose_proctitle = TRUE;
 
-	settings_var_expand(&pop3_setting_parser_info, set,
-			    mail_user->pool, mail_user_var_expand_table(mail_user));
+	if (settings_var_expand(&pop3_setting_parser_info, set,
+				mail_user->pool, mail_user_var_expand_table(mail_user),
+				&errstr) <= 0) {
+		*error_r = t_strdup_printf("Failed to expand settings: %s", errstr);
+		mail_user_unref(&mail_user);
+		mail_storage_service_user_unref(&user);
+		return -1;
+	}
 
 	*client_r = client_create(fd_in, fd_out, input->session_id,
 				  mail_user, user, set);
@@ -249,6 +257,7 @@ login_client_connected(const struct master_login_client *login_client,
 {
 	struct client *client;
 	struct mail_storage_service_input input;
+	enum mail_auth_request_flags flags = login_client->auth_req.flags;
 	const char *error;
 	buffer_t input_buf;
 
@@ -256,9 +265,15 @@ login_client_connected(const struct master_login_client *login_client,
 	input.module = input.service = "pop3";
 	input.local_ip = login_client->auth_req.local_ip;
 	input.remote_ip = login_client->auth_req.remote_ip;
+	input.local_port = login_client->auth_req.local_port;
+	input.remote_port = login_client->auth_req.remote_port;
 	input.username = username;
 	input.userdb_fields = extra_fields;
 	input.session_id = login_client->session_id;
+	if ((flags & MAIL_AUTH_REQUEST_FLAG_CONN_SECURED) != 0)
+		input.conn_secured = TRUE;
+	if ((flags & MAIL_AUTH_REQUEST_FLAG_CONN_SSL_SECURED) != 0)
+		input.conn_ssl_secured = TRUE;
 
 	buffer_create_from_const_data(&input_buf, login_client->data,
 				      login_client->auth_req.data_size);
@@ -302,7 +317,8 @@ int main(int argc, char *argv[])
 		NULL
 	};
 	struct master_login_settings login_set;
-	enum master_service_flags service_flags = 0;
+	enum master_service_flags service_flags =
+		MASTER_SERVICE_FLAG_SEND_STATS;
 	enum mail_storage_service_flags storage_service_flags = 0;
 	const char *username = NULL, *auth_socket_path = "auth-master";
 	int c;
@@ -322,8 +338,6 @@ int main(int argc, char *argv[])
 			MASTER_SERVICE_FLAG_STD_CLIENT;
 	} else {
 		service_flags |= MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
-		storage_service_flags |=
-			MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT;
 	}
 
 	/*
@@ -356,11 +370,19 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	login_set.auth_socket_path = t_abspath(auth_socket_path);
-	if (argv[optind] != NULL)
-		login_set.postlogin_socket_path = t_abspath(argv[optind]);
+	const char *error;
+	if (t_abspath(auth_socket_path, &login_set.auth_socket_path, &error) < 0) {
+		i_fatal("t_abspath(%s) failed: %s", auth_socket_path, error);
+	}
+	if (argv[optind] != NULL) {
+		if (t_abspath(argv[optind], &login_set.postlogin_socket_path, &error) < 0) {
+			i_fatal("t_abspath(%s) failed: %s", argv[optind], error);
+		}
+	}
 	login_set.callback = login_client_connected;
 	login_set.failure_callback = login_client_failed;
+	if (!IS_STANDALONE())
+		master_login = master_login_init(master_service, &login_set);
 
 	master_service_set_die_callback(master_service, pop3_die);
 
@@ -368,6 +390,8 @@ int main(int argc, char *argv[])
 		mail_storage_service_init(master_service,
 					  set_roots, storage_service_flags);
 	master_service_init_finish(master_service);
+	/* NOTE: login_set.*_socket_path are now invalid due to data stack
+	   having been freed */
 
 	/* fake that we're running, so we know if client was destroyed
 	   while handling its initial input */
@@ -378,13 +402,12 @@ int main(int argc, char *argv[])
 			main_stdio_run(username);
 		} T_END;
 	} else {
-		master_login = master_login_init(master_service, &login_set);
 		io_loop_set_running(current_ioloop);
 	}
 
 	if (io_loop_is_running(current_ioloop))
 		master_service_run(master_service, client_connected);
-	clients_destroy_all(storage_service);
+	clients_destroy_all();
 
 	if (master_login != NULL)
 		master_login_deinit(&master_login);

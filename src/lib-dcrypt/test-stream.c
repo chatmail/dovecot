@@ -167,7 +167,7 @@ void test_static_v2_input(void)
 		i_stream_skip(is_2, siz);
 	}
 
-	i_assert(o_stream_nfinish(os_2)==0);
+	i_assert(o_stream_finish(os_2) > 0);
 
 	o_stream_close(os_2);
 	i_stream_close(is_2);
@@ -184,7 +184,7 @@ void test_write_read_v1(void)
 	unsigned char payload[IO_BLOCK_SIZE];
 	const unsigned char *ptr;
 	size_t pos = 0, siz;
-	random_fill_weak(payload, IO_BLOCK_SIZE);
+	random_fill(payload, IO_BLOCK_SIZE);
 
 	buffer_t *buf = buffer_create_dynamic(default_pool, sizeof(payload));
 	struct ostream *os = o_stream_create_buffer(buf);
@@ -195,7 +195,7 @@ void test_write_read_v1(void)
 		i_debug("error: %s", o_stream_get_error(os_2));
 
 	test_assert(os_2->stream_errno == 0);
-	test_assert(o_stream_nfinish(os_2) == 0);
+	test_assert(o_stream_finish(os_2) > 0);
 	test_assert(os_2->stream_errno == 0);
 
 	o_stream_unref(&os);
@@ -235,7 +235,7 @@ void test_write_read_v1_short(void)
 	unsigned char payload[1];
 	const unsigned char *ptr;
 	size_t pos = 0, siz;
-	random_fill_weak(payload, 1);
+	random_fill(payload, 1);
 
 	buffer_t *buf = buffer_create_dynamic(default_pool, 64);
 	struct ostream *os = o_stream_create_buffer(buf);
@@ -246,7 +246,7 @@ void test_write_read_v1_short(void)
 		i_debug("error: %s", o_stream_get_error(os_2));
 
 	test_assert(os_2->stream_errno == 0);
-	test_assert(o_stream_nfinish(os_2) == 0);
+	test_assert(o_stream_finish(os_2) > 0);
 	test_assert(os_2->stream_errno == 0);
 
 	o_stream_unref(&os);
@@ -265,7 +265,7 @@ void test_write_read_v1_short(void)
 			test_istream_set_size(is, ++offset);
 
 		test_assert_idx(pos + siz <= sizeof(payload), pos);
-		if (pos + siz > sizeof(payload)) break;
+		if (siz > sizeof(payload) || pos + siz > sizeof(payload)) break;
 		test_assert_idx(siz == 0 || memcmp(ptr, payload + pos, siz) == 0, pos);
 		i_stream_skip(is_2, siz); pos += siz;
 	}
@@ -288,7 +288,7 @@ void test_write_read_v1_empty(void)
 	buffer_t *buf = buffer_create_dynamic(default_pool, 64);
 	struct ostream *os = o_stream_create_buffer(buf);
 	struct ostream *os_2 = o_stream_create_encrypt(os, "<unused>", test_v1_kp.pub, IO_STREAM_ENC_VERSION_1);
-	test_assert(o_stream_nfinish(os_2) == 0);
+	test_assert(o_stream_finish(os_2) > 0);
 	if (os_2->stream_errno != 0)
 		i_debug("error: %s", o_stream_get_error(os_2));
 
@@ -328,13 +328,13 @@ void test_write_read_v2(void)
 	unsigned char payload[IO_BLOCK_SIZE*10];
 	const unsigned char *ptr;
 	size_t pos = 0, siz;
-	random_fill_weak(payload, IO_BLOCK_SIZE*10);
+	random_fill(payload, IO_BLOCK_SIZE*10);
 
 	buffer_t *buf = buffer_create_dynamic(default_pool, sizeof(payload));
 	struct ostream *os = o_stream_create_buffer(buf);
 	struct ostream *os_2 = o_stream_create_encrypt(os, "aes-256-gcm-sha256", test_v1_kp.pub, IO_STREAM_ENC_INTEGRITY_AEAD);
 	o_stream_nsend(os_2, payload, sizeof(payload));
-	test_assert(o_stream_nfinish(os_2) == 0);
+	test_assert(o_stream_finish(os_2) > 0);
 	if (os_2->stream_errno != 0)
 		i_debug("error: %s", o_stream_get_error(os_2));
 
@@ -381,13 +381,13 @@ void test_write_read_v2_short(void)
 	unsigned char payload[1];
 	const unsigned char *ptr;
 	size_t pos = 0, siz;
-	random_fill_weak(payload, 1);
+	random_fill(payload, 1);
 
 	buffer_t *buf = buffer_create_dynamic(default_pool, 64);
 	struct ostream *os = o_stream_create_buffer(buf);
 	struct ostream *os_2 = o_stream_create_encrypt(os, "aes-256-gcm-sha256", test_v1_kp.pub, IO_STREAM_ENC_INTEGRITY_AEAD);
 	o_stream_nsend(os_2, payload, sizeof(payload));
-	test_assert(o_stream_nfinish(os_2) == 0);
+	test_assert(o_stream_finish(os_2) > 0);
 	if (os_2->stream_errno != 0)
 		i_debug("error: %s", o_stream_get_error(os_2));
 
@@ -406,7 +406,7 @@ void test_write_read_v2_short(void)
 		test_istream_set_size(is, ++offset);
 
 		test_assert_idx(pos + siz <= sizeof(payload), pos);
-		if (pos + siz > sizeof(payload)) break;
+		if (siz > sizeof(payload) || pos + siz > sizeof(payload)) break;
 		test_assert_idx(siz == 0 || memcmp(ptr, payload + pos, siz) == 0, pos);
 		i_stream_skip(is_2, siz); pos += siz;
 	}
@@ -431,7 +431,7 @@ void test_write_read_v2_empty(void)
 	buffer_t *buf = buffer_create_dynamic(default_pool, 64);
 	struct ostream *os = o_stream_create_buffer(buf);
 	struct ostream *os_2 = o_stream_create_encrypt(os, "aes-256-gcm-sha256", test_v1_kp.pub, IO_STREAM_ENC_INTEGRITY_AEAD);
-	test_assert(o_stream_nfinish(os_2) == 0);
+	test_assert(o_stream_finish(os_2) > 0);
 	if (os_2->stream_errno != 0)
 		i_debug("error: %s", o_stream_get_error(os_2));
 
@@ -562,14 +562,13 @@ int main(void) {
 		i_error("No functional dcrypt backend found - skipping tests: %s", error);
 		return 0;
 	}
-	random_init();
 
 	test_assert(dcrypt_key_load_private(&test_v1_kp.priv, key_v1_priv, NULL, NULL, NULL));
 	test_assert(dcrypt_key_load_public(&test_v1_kp.pub, key_v1_pub, NULL));
 	test_assert(dcrypt_key_load_private(&test_v2_kp.priv, key_v2_priv, NULL, NULL, NULL));
 	test_assert(dcrypt_key_load_public(&test_v2_kp.pub, key_v2_pub, NULL));
 
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_static_v1_input,
 		test_static_v1_input_short,
 		test_static_v2_input,

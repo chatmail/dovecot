@@ -33,6 +33,7 @@ struct imap_settings {
 	const char *imap_id_log;
 	const char *imap_fetch_failure;
 	bool imap_metadata;
+	bool imap_literal_minus;
 	unsigned int imap_hibernate_timeout;
 
 	/* imap urlauth: */

@@ -1,29 +1,7 @@
-v0.4.24 2018-05-24  Stephan Bosch <stephan@rename-it.nl>
+v0.5.1 28-03-2018  Stephan Bosch <stephan@rename-it.nl>
 
-	+ Implement plugin for the a vendor-defined IMAP capability called
-	  "FILTER=SIEVE". It adds the ability to manually invoke Sieve filtering
-	  in IMAP. More information can be found in
-	  doc/plugins/imap_filter_sieve.txt.
-	- Fix assert panics triggered by empty messages that are being forwarded
-	  using redirect or vnd.dovecot.report. This does not likely normally
-	  occur, but this is seen as a result of certain benign failures in
-	  object storage.
-	- Make the length of the subject header for the vacation response
-	  configurable and enforce the limit in UTF-8 codepoints rather than
-	  bytes. The subject header for a vacation response was statically
-	  truncated to 256 bytes, which is too limited for multi-byte UTF-8
-	  characters.
-	- Sieve editheader extension: Fix assertion panic occurring when it is
-	  used to manipulate a message header with a very large header field.
-	- Properly abort execution of the sieve_discard script upon error.
-	  Before, the LDA Sieve plugin attempted to execute the sieve_discard
-	  script when an error occurs. This can lead to the message being lost.
-	- Fix the interaction between quota and the sieve_discard script. When
-	  quota was used together with a sieve_discard script, the message
-	  delivery did not bounce when the quota was exceeded.
-
-v0.4.23 20-03-2018  Stephan Bosch <stephan@rename-it.nl>
-
+	- Explicitly disallow UTF-8 in localpart in addresses parsed from Sieve
+	  script.
 	- editheader extension: Corrected the stream position calculations
 	  performed while making the modified message available as a stream.
 	  Pigeonhole Sieve crashed in LMTP with an assertion panic when the
@@ -33,34 +11,36 @@ v0.4.23 20-03-2018  Stephan Bosch <stephan@rename-it.nl>
 	- fileinto extension: Fix assert panic occurring when fileinto is used
 	  without being listed in the require line, while the copy extension is
 	  listed there. This is a very old bug.
-	- imapsieve plugin: Do not log an error for messages that disappear
-	  concurrently while applying Sieve scripts. This is a further
-	  improvement on the imapsieve fix in the previous release (which fixed
-	  a panic). This event is now logged as a debug message.
-
-v0.4.22 01-03-2018  Stephan Bosch <stephan@rename-it.nl>
-
-	- Fixed filesystem path handling problem: sieve plugin could have
-	  assert-crashed with specific path lengths with: "Panic: file
-	  realpath.c: line 86 (path_normalize): assertion failed: (npath_pos +
-	  1 < npath + asize)".
+	- imapsieve plugin: Do not assert crash or log an error for messages
+	  that disappear concurrently while applying Sieve scripts. This event
+	  is now logged as a debug message.
 	- Sieve extprograms plugin: Large output from "execute" command crashed
 	  delivery. Fixed buffering issue in code that handles output from the
 	  external program.
-	- editheader extension: Extensively reworked the low-level
-	  implementation of adding and removing headers. This solves a few
-	  integer arithmetic problems reported by Clang runtime checks, but also
-	  improves code structure and reliability in general.
-	- imapsieve: Fix assert crash occurring when selected messages are
-	  expunged concurrently by the time Sieve filter is to be applied.
-	- imap4flags extension: Fix binary byte-code corruption occurring when
-	  the setflag, addflag, or removeflag command's flag-list is a variable.
+
+v0.5.0.1 05-01-2018  Stephan Bosch <stephan@rename-it.nl>
+
+	- imap4flags extension: Fix binary corruption occurring when
+	  setflag/addflag/removeflag flag-list is a variable.
+	- sieve-extprograms plugin: Fix segfault occurring when used in
+	  IMAPSieve context.
+
+v0.5.0 24-12-2017  Stephan Bosch <stephan@rename-it.nl>
+
+	* editheader extension: The implementation of header modifications is
+	  heavily updated. Although the functionality has not changed, the
+	  underlying code was updated to address several static analysis
+	  warnings, runtime integer arithmetic warnings (Clang), and to match
+	  updates in the Dovecot stream API.
+	+ variables extension: Made the maximum scope and variable size
+	  configurable.
+	+ subaddress: Support multiple recipient_delimiters.
 	- enotify extension: mailto method: Fixed parsing of mailto URI with
 	  only a header part.
-	- enotify extension: mailto method: Make sure "From:" header is set to a
-	  usable address and not "(null)".
-	- Fixed writing address headers to outgoing messages. It sometimes
-	  erroneously applied another layer of MIME header encoding.
+	- enotify plugin: mailto method: Make sure the "From:" header is set to
+	  a usable address and not "(null)".
+	- Fixed writing address headers to outgoing messages. Sometimes headers
+	  were MIME-encoded twice, yielding invalid results.
 
 v0.4.21 12-10-2017 Stephan Bosch <stephan@rename-it.nl>
 

@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_MATCH_H
-#define __SIEVE_MATCH_H
+#ifndef SIEVE_MATCH_H
+#define SIEVE_MATCH_H
 
 #include "sieve-common.h"
 
@@ -23,7 +20,7 @@ struct sieve_match_context {
 	int match_status;
 	int exec_status;
 
-	unsigned int trace:1;
+	bool trace:1;
 };
 
 /*
@@ -68,4 +65,4 @@ int sieve_match_opr_optional_read
 		int *exec_status, struct sieve_comparator *cmp,
 		struct sieve_match_type *mcht);
 
-#endif /* __SIEVE_MATCH_H */
+#endif

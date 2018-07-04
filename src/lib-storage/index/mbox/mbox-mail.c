@@ -18,9 +18,8 @@
 
 static void mbox_prepare_resync(struct mail *mail)
 {
-	struct mbox_transaction_context *t =
-		(struct mbox_transaction_context *)mail->transaction;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->box;
+	struct mbox_transaction_context *t = MBOX_TRANSCTX(mail->transaction);
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(mail->box);
 
 	if (mbox->mbox_lock_type == F_RDLCK) {
 		if (mbox->mbox_lock_id == t->read_lock_id)
@@ -32,10 +31,9 @@ static void mbox_prepare_resync(struct mail *mail)
 
 static int mbox_mail_seek(struct index_mail *mail)
 {
-	struct mbox_transaction_context *t =
-		(struct mbox_transaction_context *)mail->mail.mail.transaction;
 	struct mail *_mail = &mail->mail.mail;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)_mail->box;
+	struct mbox_transaction_context *t = MBOX_TRANSCTX(_mail->transaction);
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(_mail->box);
 	enum mbox_sync_flags sync_flags = 0;
 	int ret, try;
 	bool deleted;
@@ -104,18 +102,16 @@ static int mbox_mail_seek(struct index_mail *mail)
 		sync_flags |= MBOX_SYNC_UNDIRTY | MBOX_SYNC_FORCE_SYNC;
 	}
 	if (ret == 0) {
-		mail_storage_set_critical(&mbox->storage->storage,
-			"Losing sync for mail uid=%u in mbox file %s",
-			_mail->uid, mailbox_get_path(&mbox->box));
+		mail_set_critical(_mail, "mbox: Losing sync");
 	}
 	return 0;
 }
 
 static int mbox_mail_get_received_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)_mail->box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(_mail->box);
 
 	if (index_mail_get_received_date(_mail, date_r) == 0)
 		return 0;
@@ -136,7 +132,7 @@ static int mbox_mail_get_received_date(struct mail *_mail, time_t *date_r)
 
 static int mbox_mail_get_save_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 
 	if (index_mail_get_save_date(_mail, date_r) == 0)
@@ -156,7 +152,7 @@ mbox_mail_get_md5_header(struct index_mail *mail, const char **value_r)
 	struct mail *_mail = &mail->mail.mail;
 	static uint8_t empty_md5[16] =
 		{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)_mail->box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(_mail->box);
 	const void *ext_data;
 
 	if (mail->data.guid != NULL) {
@@ -183,8 +179,8 @@ static int
 mbox_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 		      const char **value_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)_mail->box;
+	struct index_mail *mail = INDEX_MAIL(_mail);
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(_mail->box);
 	uoff_t offset;
 	bool move_offset;
 	int ret;
@@ -241,7 +237,7 @@ mbox_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 static int
 mbox_mail_get_next_offset(struct index_mail *mail, uoff_t *next_offset_r)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->mail.mail.box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(mail->mail.mail.box);
 	struct mail_index_view *view;
 	const struct mail_index_header *hdr;
 	uint32_t seq;
@@ -289,9 +285,9 @@ mbox_mail_get_next_offset(struct index_mail *mail, uoff_t *next_offset_r)
 
 static int mbox_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)_mail->box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(_mail->box);
 	struct istream *input;
 	struct message_size hdr_size;
 	uoff_t old_offset, body_offset, body_size, next_offset;
@@ -306,9 +302,7 @@ static int mbox_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 
 	/* our header size varies, so don't do any caching */
 	if (istream_raw_mbox_get_body_offset(mbox->mbox_stream, &body_offset) < 0) {
-		mail_storage_set_critical(_mail->box->storage,
-			"mbox %s: Couldn't get body offset for uid=%u",
-			mailbox_get_path(&mbox->box), mail->mail.mail.uid);
+		mail_set_critical(_mail, "mbox: Couldn't get body offset");
 		return -1;
 	}
 
@@ -322,9 +316,7 @@ static int mbox_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 	/* verify that the calculated body size is correct */
 	if (istream_raw_mbox_get_body_size(mbox->mbox_stream,
 					   body_size, &body_size) < 0) {
-		mail_storage_set_critical(_mail->box->storage,
-			"mbox %s: Couldn't get body size for uid=%u",
-			mailbox_get_path(&mbox->box), mail->mail.mail.uid);
+		mail_set_critical(_mail, "mbox: Couldn't get body size");
 		return -1;
 	}
 
@@ -337,7 +329,7 @@ static int mbox_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 
 static int mbox_mail_init_stream(struct index_mail *mail)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)mail->mail.mail.box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(mail->mail.mail.box);
 	struct istream *raw_stream;
 	uoff_t hdr_offset, next_offset;
 	int ret;
@@ -359,9 +351,8 @@ static int mbox_mail_init_stream(struct index_mail *mail)
 
 	raw_stream = mbox->mbox_stream;
 	if (istream_raw_mbox_get_header_offset(raw_stream, &hdr_offset) < 0) {
-		mail_storage_set_critical(mbox->box.storage,
-			"mbox %s: Couldn't get header offset for uid=%u",
-			mailbox_get_path(&mbox->box), mail->mail.mail.uid);
+		mail_set_critical(&mail->mail.mail,
+			"mbox: Couldn't get header offset");
 		return -1;
 	}
 	i_stream_seek(raw_stream, hdr_offset);
@@ -384,7 +375,7 @@ static int mbox_mail_get_stream(struct mail *_mail, bool get_body ATTR_UNUSED,
 				struct message_size *body_size,
 				struct istream **stream_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 
 	if (mail->data.stream == NULL) {
 		if (mbox_mail_init_stream(mail) < 0)
@@ -396,7 +387,7 @@ static int mbox_mail_get_stream(struct mail *_mail, bool get_body ATTR_UNUSED,
 
 static void mbox_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 
 	index_mail_set_seq(_mail, seq, saving);
 	mail->data.dont_cache_fetch_fields |= MAIL_FETCH_PHYSICAL_SIZE;
@@ -404,7 +395,7 @@ static void mbox_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
 
 static bool mbox_mail_set_uid(struct mail *_mail, uint32_t uid)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	bool ret;
 
 	ret = index_mail_set_uid(_mail, uid);
@@ -439,7 +430,7 @@ struct mail_vfuncs mbox_mail_vfuncs = {
 	mbox_mail_get_stream,
 	index_mail_get_binary_stream,
 	mbox_mail_get_special,
-	index_mail_get_real_mail,
+	index_mail_get_backend_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
 	index_mail_update_modseq,
@@ -448,5 +439,4 @@ struct mail_vfuncs mbox_mail_vfuncs = {
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,
 	index_mail_opened,
-	index_mail_set_cache_corrupted_reason
 };

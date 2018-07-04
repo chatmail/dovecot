@@ -5,6 +5,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-fts \
+	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-I$(top_srcdir)/src/lib-http \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-imap \
@@ -57,9 +58,9 @@ noinst_HEADERS = \
 
 pkglibexec_PROGRAMS = xml2text
 
-xml2text_SOURCES = xml2text.c
-
-xml2text_LDADD = fts-parser-html.lo $(LIBDOVECOT)
+xml2text_SOURCES = xml2text.c fts-parser-html.c
+xml2text_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+xml2text_LDADD = $(LIBDOVECOT) $(BINARY_LDFLAGS)
 xml2text_DEPENDENCIES = $(module_LTLIBRARIES) $(LIBDOVECOT_DEPS)
 
 pkglibexec_SCRIPTS = decode2text.sh

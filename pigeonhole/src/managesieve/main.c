@@ -6,12 +6,11 @@
 #include "ioloop.h"
 #include "istream.h"
 #include "ostream.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "str.h"
 #include "base64.h"
 #include "process-title.h"
 #include "restrict-access.h"
-#include "fd-close-on-exec.h"
 #include "settings-parser.h"
 #include "master-interface.h"
 #include "master-service.h"
@@ -54,9 +53,10 @@ void managesieve_refresh_proctitle(void)
 	case 1:
 		client = managesieve_clients;
 		str_append(title, client->user->username);
-		if (client->user->remote_ip != NULL) {
+		if (client->user->conn.remote_ip != NULL) {
 			str_append_c(title, ' ');
-			str_append(title, net_ip2addr(client->user->remote_ip));
+			str_append(title,
+				   net_ip2addr(client->user->conn.remote_ip));
 		}
 
 		if ( client->cmd.name != NULL &&
@@ -129,6 +129,7 @@ client_create_from_input(const struct mail_storage_service_input *input,
 	struct mail_user *mail_user;
 	struct client *client;
 	struct managesieve_settings *set;
+	const char *error;
 
 	if (mail_storage_service_lookup_next(storage_service, input,
 					     &user, &mail_user, error_r) <= 0)
@@ -139,8 +140,13 @@ client_create_from_input(const struct mail_storage_service_input *input,
 	if (set->verbose_proctitle)
 		verbose_proctitle = TRUE;
 
-	settings_var_expand(&managesieve_setting_parser_info, set, mail_user->pool,
-			    mail_user_var_expand_table(mail_user));
+	if (settings_var_expand(&managesieve_setting_parser_info, set, mail_user->pool,
+				mail_user_var_expand_table(mail_user), &error) <= 0) {
+		i_error("Failed to expand settings: %s", error);
+		mail_storage_service_user_unref(&user);
+		mail_user_unref(&mail_user);
+		return -1;
+	}
 
 	client = client_create
 		(fd_in, fd_out, input->session_id, mail_user, user, set);
@@ -184,6 +190,7 @@ login_client_connected(const struct master_login_client *client,
 {
 #define MSG_BYE_INTERNAL_ERROR "BYE \""CRITICAL_MSG"\"\r\n"
 	struct mail_storage_service_input input;
+	enum mail_auth_request_flags flags = client->auth_req.flags;
 	const char *error;
 	buffer_t input_buf;
 
@@ -192,9 +199,15 @@ login_client_connected(const struct master_login_client *client,
 	input.service = "sieve";
 	input.local_ip = client->auth_req.local_ip;
 	input.remote_ip = client->auth_req.remote_ip;
+	input.local_port = client->auth_req.local_port;
+	input.remote_port = client->auth_req.remote_port;
 	input.username = username;
 	input.userdb_fields = extra_fields;
 	input.session_id = client->session_id;
+	if ((flags & MAIL_AUTH_REQUEST_FLAG_CONN_SECURED) != 0)
+		input.conn_secured = TRUE;
+	if ((flags & MAIL_AUTH_REQUEST_FLAG_CONN_SSL_SECURED) != 0)
+		input.conn_ssl_secured = TRUE;
 
 	buffer_create_from_const_data(&input_buf, client->data,
 				 client->auth_req.data_size);
@@ -242,7 +255,7 @@ int main(int argc, char *argv[])
 	struct master_login_settings login_set;
 	enum master_service_flags service_flags = 0;
 	enum mail_storage_service_flags storage_service_flags = 0;
-	const char *username = NULL;
+	const char *username = NULL, *error = NULL;
 	int c;
 
 	i_zero(&login_set);
@@ -260,8 +273,6 @@ int main(int argc, char *argv[])
 			MASTER_SERVICE_FLAG_STD_CLIENT;
 	} else {
 		service_flags |= MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
-		storage_service_flags |=
-			MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT;
 	}
 
 	master_service = master_service_init("managesieve", service_flags,
@@ -294,10 +305,27 @@ int main(int argc, char *argv[])
 		exit(0);
 	}
 
+	if (t_abspath("auth-master", &login_set.auth_socket_path, &error) < 0)
+		i_fatal("t_abspath(%s) failed: %s", "auth-master", error);
+
+	if (argv[optind] != NULL &&
+	    t_abspath(argv[optind], &login_set.postlogin_socket_path, &error) < 0) {
+		i_fatal("t_abspath(%s) failed: %s",
+			argv[optind], error);
+	}
+
+	login_set.callback = login_client_connected;
+	login_set.failure_callback = login_client_failed;
+
+	if (!IS_STANDALONE())
+		master_login = master_login_init(master_service, &login_set);
+
 	storage_service =
 		mail_storage_service_init(master_service,
 					  set_roots, storage_service_flags);
 	master_service_init_finish(master_service);
+	/* NOTE: login_set.*_socket_path are now invalid due to data stack
+	   having been freed */
 
 	/* fake that we're running, so we know if client was destroyed
 		while handling its initial input */
@@ -308,13 +336,6 @@ int main(int argc, char *argv[])
 			main_stdio_run(username);
 		} T_END;
 	} else {
-		login_set.auth_socket_path = t_abspath("auth-master");
-		if (argv[optind] != NULL)
-			login_set.postlogin_socket_path = t_abspath(argv[optind]);
-		login_set.callback = login_client_connected;
-		login_set.failure_callback = login_client_failed;
-
-		master_login = master_login_init(master_service, &login_set);
 		io_loop_set_running(current_ioloop);
 	}
 

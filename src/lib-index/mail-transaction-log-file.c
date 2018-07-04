@@ -114,8 +114,7 @@ void mail_transaction_log_file_free(struct mail_transaction_log_file **_file)
 	if (file == file->log->head)
 		file->log->head = NULL;
 
-	if (file->buffer != NULL) 
-		buffer_free(&file->buffer);
+	buffer_free(&file->buffer);
 
 	if (file->mmap_base != NULL) {
 		if (munmap(file->mmap_base, file->mmap_size) < 0)
@@ -574,7 +573,7 @@ mail_transaction_log_file_read_hdr(struct mail_transaction_log_file *file,
 			/* index file was probably just rebuilt and we don't
 			   know about it yet */
 			mail_transaction_log_file_set_corrupted(file,
-				"indexid changed %u -> %u",
+				"indexid changed: %u -> %u",
 				file->log->index->indexid, file->hdr.indexid);
 			return 0;
 		}
@@ -767,7 +766,7 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
 		file->hdr.prev_file_offset = 0;
 	}
 
-	writebuf = buffer_create_dynamic(pool_datastack_create(), 128);
+	writebuf = t_buffer_create(128);
 	buffer_append(writebuf, &file->hdr, sizeof(file->hdr));
 
 	if (index->ext_hdr_init_data != NULL && reset)
@@ -957,8 +956,7 @@ int mail_transaction_log_file_open(struct mail_transaction_log_file *file,
 		}
 
 		/* ESTALE - try again */
-		if (file->buffer != NULL)
-			buffer_free(&file->buffer);
+		buffer_free(&file->buffer);
         }
 
 	mail_transaction_log_file_add_to_list(file);
@@ -1273,9 +1271,8 @@ get_modseq_next_offset_at(struct mail_transaction_log_file *file,
 	if (ret <= 0) {
 		mail_index_set_error(file->log->index,
 			"Failed to map transaction log %s for getting offset "
-			"for modseq=%llu with start_offset=%"PRIuUOFF_T": %s",
-			file->filepath, (unsigned long long)modseq,
-			*cur_offset, reason);
+			"for modseq=%"PRIu64" with start_offset=%"PRIuUOFF_T": %s",
+			file->filepath, modseq, *cur_offset, reason);
 		return -1;
 	}
 
@@ -1582,7 +1579,7 @@ mail_transaction_log_file_read_more(struct mail_transaction_log_file *file,
 	uint32_t read_offset;
 	ssize_t ret;
 
-	read_offset = file->buffer_offset + buffer_get_used_size(file->buffer);
+	read_offset = file->buffer_offset + file->buffer->used;
 
 	do {
 		data = buffer_append_space_unsafe(file->buffer, LOG_PREFETCH);
@@ -1733,10 +1730,9 @@ static int
 mail_transaction_log_file_mmap(struct mail_transaction_log_file *file,
 			       const char **reason_r)
 {
-	if (file->buffer != NULL) {
-		/* in case we just switched to mmaping */
-		buffer_free(&file->buffer);
-	}
+	/* we may have switched to mmaping */
+	buffer_free(&file->buffer);
+
 	file->mmap_size = file->last_size;
 	file->mmap_base = mmap(NULL, file->mmap_size, PROT_READ, MAP_SHARED,
 			       file->fd, 0);
@@ -1866,7 +1862,7 @@ int mail_transaction_log_file_map(struct mail_transaction_log_file *file,
 
 	if (file->buffer != NULL && file->buffer_offset <= start_offset) {
 		/* see if we already have it */
-		size = buffer_get_used_size(file->buffer);
+		size = file->buffer->used;
 		if (file->buffer_offset + size >= end_offset)
 			return 1;
 	}
@@ -1914,14 +1910,14 @@ int mail_transaction_log_file_map(struct mail_transaction_log_file *file,
 					  reason_r) ? 1 : 0;
 }
 
-void mail_transaction_log_file_move_to_memory(struct mail_transaction_log_file
-					      *file)
+int mail_transaction_log_file_move_to_memory(struct mail_transaction_log_file *file)
 {
 	const char *error;
 	buffer_t *buf;
+	int ret = 0;
 
 	if (MAIL_TRANSACTION_LOG_FILE_IN_MEMORY(file))
-		return;
+		return 0;
 
 	if (file->mmap_base != NULL) {
 		/* just copy to memory */
@@ -1938,7 +1934,11 @@ void mail_transaction_log_file_move_to_memory(struct mail_transaction_log_file
 		file->mmap_base = NULL;
 	} else if (file->buffer_offset != 0) {
 		/* we don't have the full log in the memory. read it. */
-		(void)mail_transaction_log_file_read(file, 0, FALSE, &error);
+		ret = mail_transaction_log_file_read(file, 0, FALSE, &error);
+		if (ret <= 0) {
+			mail_index_set_error(file->log->index,
+				"%s: Failed to read into memory: %s", file->filepath, error);
+		}
 	}
 	file->last_size = 0;
 
@@ -1948,4 +1948,5 @@ void mail_transaction_log_file_move_to_memory(struct mail_transaction_log_file
 
 	i_free(file->filepath);
 	file->filepath = i_strdup(file->log->filepath);
+	return ret < 0 ? -1 : 0;
 }

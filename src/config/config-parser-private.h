@@ -9,7 +9,6 @@ enum config_line_type {
 	CONFIG_LINE_TYPE_CONTINUE,
 	CONFIG_LINE_TYPE_ERROR,
 	CONFIG_LINE_TYPE_KEYVALUE,
-	CONFIG_LINE_TYPE_KEYVALUE_QUOTED,
 	CONFIG_LINE_TYPE_KEYFILE,
 	CONFIG_LINE_TYPE_KEYVARIABLE,
 	CONFIG_LINE_TYPE_SECTION_BEGIN,
@@ -59,8 +58,8 @@ struct config_parser_context {
 
 	HASH_TABLE(const char *, const char *) seen_settings;
 	struct config_filter_context *filter;
-	unsigned int expand_values:1;
-	unsigned int hide_errors:1;
+	bool expand_values:1;
+	bool hide_errors:1;
 };
 
 extern void (*hook_config_parser_begin)(struct config_parser_context *ctx);

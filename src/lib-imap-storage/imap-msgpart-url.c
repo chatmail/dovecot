@@ -27,7 +27,7 @@ struct imap_msgpart_url {
 	
 	struct imap_msgpart_open_result result;
 
-	unsigned int decode_cte_to_binary:1;
+	bool decode_cte_to_binary:1;
 };
 
 int imap_msgpart_url_create(struct mail_user *user, const struct imap_url *url,
@@ -38,9 +38,11 @@ int imap_msgpart_url_create(struct mail_user *user, const struct imap_url *url,
 	struct imap_msgpart_url *mpurl;
 	struct imap_msgpart *msgpart;
 
-	i_assert(url->mailbox != NULL && url->uid != 0 &&
-		 url->search_program == NULL);
-
+	if (url->mailbox == NULL || url->uid == 0 ||
+	    url->search_program != NULL) {
+		*error_r = "Invalid messagepart IMAP URL";
+		return -1;
+	}
 	if (imap_msgpart_parse(section, &msgpart) < 0) {
 		*error_r = "Invalid section";
 		return -1;
@@ -90,10 +92,6 @@ int imap_msgpart_url_parse(struct mail_user *user, struct mailbox *selected_box,
 	}
 	if (url->mailbox == NULL) {
 		*error_r = "Mailbox-relative IMAP URL, but no mailbox selected";
-		return 0;
-	}
-	if (url->uid == 0 || url->search_program != NULL) {
-		*error_r = "Invalid messagepart IMAP URL";
 		return 0;
 	}
 	if (imap_msgpart_url_create(user, url, mpurl_r, error_r) < 0)
@@ -176,7 +174,7 @@ int imap_msgpart_url_open_mail(struct imap_msgpart_url *mpurl,
 		return ret;
 
 	/* start transaction */
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	mail = mail_alloc(t, MAIL_FETCH_MESSAGE_PARTS |
 			  MAIL_FETCH_IMAP_BODYSTRUCTURE, NULL);
 
@@ -274,8 +272,7 @@ void imap_msgpart_url_free(struct imap_msgpart_url **_mpurl)
 
 	*_mpurl = NULL;
 
-	if (mpurl->result.input != NULL)
-		i_stream_unref(&mpurl->result.input);
+	i_stream_unref(&mpurl->result.input);
 	if (mpurl->part != NULL)
 		imap_msgpart_free(&mpurl->part);
 	if (mpurl->mail != NULL)

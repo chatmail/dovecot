@@ -44,4 +44,4 @@ this reason there exists 'mail_index_map_get_header_ext()' and
 non-map versions return the data from the latest map if the message hasn't been
 expunged.
 
-(This file was created from the wiki on 2018-05-23 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

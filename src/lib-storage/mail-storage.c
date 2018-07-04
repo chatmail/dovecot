@@ -41,6 +41,18 @@
 extern struct mail_search_register *mail_search_register_imap;
 extern struct mail_search_register *mail_search_register_human;
 
+struct event_category event_category_storage = {
+	.name = "storage",
+};
+struct event_category event_category_mailbox = {
+	.parent = &event_category_storage,
+	.name = "mailbox",
+};
+struct event_category event_category_mail = {
+	.parent = &event_category_mailbox,
+	.name = "mail",
+};
+
 struct mail_storage_module_register mail_storage_module_register = { 0 };
 struct mail_module_register mail_module_register = { 0 };
 
@@ -229,26 +241,27 @@ mail_storage_get_class(struct mail_namespace *ns, const char *driver,
 
 static int
 mail_storage_verify_root(const char *root_dir, const char *dir_type,
-			 bool autocreate, const char **error_r)
+			 const char **error_r)
 {
 	struct stat st;
 
 	if (stat(root_dir, &st) == 0) {
 		/* exists */
-		return 1;
+		if (S_ISDIR(st.st_mode))
+			return 0;
+		*error_r = t_strdup_printf(
+			"Root mail directory is a file: %s", root_dir);
+		return -1;
 	} else if (errno == EACCES) {
 		*error_r = mail_error_eacces_msg("stat", root_dir);
 		return -1;
-	} else if (errno != ENOENT && errno != ENOTDIR) {
+	} else if (errno != ENOENT) {
 		*error_r = t_strdup_printf("stat(%s) failed: %m", root_dir);
 		return -1;
-	} else if (!autocreate) {
+	} else {
 		*error_r = t_strdup_printf(
 			"Root %s directory doesn't exist: %s", dir_type, root_dir);
 		return -1;
-	} else {
-		/* doesn't exist */
-		return 0;
 	}
 }
 
@@ -258,8 +271,6 @@ mail_storage_create_root(struct mailbox_list *list,
 {
 	const char *root_dir, *type_name, *error;
 	enum mailbox_list_path_type type;
-	bool autocreate;
-	int ret;
 
 	if (list->set.iter_from_index_dir) {
 		type = MAILBOX_LIST_PATH_TYPE_INDEX;
@@ -279,27 +290,19 @@ mail_storage_create_root(struct mailbox_list *list,
 
 		/* we don't need to verify, but since debugging is
 		   enabled, check and log if the root doesn't exist */
-		if (mail_storage_verify_root(root_dir, type_name, FALSE, &error) < 0) {
+		if (mail_storage_verify_root(root_dir, type_name, &error) < 0) {
 			i_debug("Namespace %s: Creating storage despite: %s",
 				list->ns->prefix, error);
 		}
 		return 0;
 	}
 
-	autocreate = (flags & MAIL_STORAGE_FLAG_NO_AUTOCREATE) == 0;
-	if (autocreate && list->set.iter_from_index_dir) {
+	if ((flags & MAIL_STORAGE_FLAG_NO_AUTOCREATE) == 0) {
 		/* If the directories don't exist, we'll just autocreate them
-		   later. FIXME: Make this the default in v2.3 even when
-		   ITERINDEX isn't used. */
+		   later. */
 		return 0;
 	}
-	ret = mail_storage_verify_root(root_dir, type_name, autocreate, error_r);
-	if (ret == 0) {
-		ret = mailbox_list_try_mkdir_root(list, root_dir,
-						  MAILBOX_LIST_PATH_TYPE_MAILBOX,
-						  error_r);
-	}
-	return ret < 0 ? -1 : 0;
+	return mail_storage_verify_root(root_dir, type_name, error_r);
 }
 
 static bool
@@ -554,12 +557,41 @@ void mail_storage_set_critical(struct mail_storage *storage,
 	storage->last_internal_error = i_strdup_vprintf(fmt, va);
 	va_end(va);
 	storage->last_error_is_internal = TRUE;
-	i_error("%s", storage->last_internal_error);
+	e_error(storage->user->event, "%s", storage->last_internal_error);
 
 	/* free the old_error and old_internal_error only after the new error
 	   is generated, because they may be one of the parameters. */
 	i_free(old_error);
 	i_free(old_internal_error);
+}
+
+void mailbox_set_critical(struct mailbox *box, const char *fmt, ...)
+{
+	va_list va;
+
+	va_start(va, fmt);
+	T_BEGIN {
+		mail_storage_set_critical(box->storage, "Mailbox %s: %s",
+			box->vname, t_strdup_vprintf(fmt, va));
+	} T_END;
+	va_end(va);
+}
+
+void mail_set_critical(struct mail *mail, const char *fmt, ...)
+{
+	va_list va;
+
+	va_start(va, fmt);
+	T_BEGIN {
+		if (mail->saving) {
+			mailbox_set_critical(mail->box, "Saving mail: %s",
+				t_strdup_vprintf(fmt, va));
+		} else {
+			mailbox_set_critical(mail->box, "UID=%u: %s",
+				mail->uid, t_strdup_vprintf(fmt, va));
+		}
+	} T_END;
+	va_end(va);
 }
 
 const char *mail_storage_get_last_internal_error(struct mail_storage *storage,
@@ -870,6 +902,32 @@ struct mailbox *mailbox_alloc_guid(struct mailbox_list *list,
 	return box;
 }
 
+struct mailbox *mailbox_alloc_delivery(struct mail_user *user,
+	const char *name, enum mailbox_flags flags)
+{
+	struct mail_namespace *ns;
+	
+	flags |= MAILBOX_FLAG_SAVEONLY |
+		MAILBOX_FLAG_POST_SESSION;
+
+	ns = mail_namespace_find(user->namespaces, name);
+	if (strcmp(name, ns->prefix) == 0 &&
+	    (ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
+		/* delivering to a namespace prefix means we actually want to
+		   deliver to the INBOX instead */
+		name = "INBOX";
+		ns = mail_namespace_find_inbox(user->namespaces);
+	}
+
+	if (strcasecmp(name, "INBOX") == 0) {
+		/* deliveries to INBOX must always succeed,
+		   regardless of ACLs */
+		flags |= MAILBOX_FLAG_IGNORE_ACLS;
+	}
+
+	return mailbox_alloc(ns->list, name, flags);
+}
+
 void mailbox_set_reason(struct mailbox *box, const char *reason)
 {
 	i_assert(reason != NULL);
@@ -881,8 +939,18 @@ bool mailbox_is_autocreated(struct mailbox *box)
 {
 	if (box->inbox_user)
 		return TRUE;
+	if ((box->flags & MAILBOX_FLAG_AUTO_CREATE) != 0)
+		return TRUE;
 	return box->set != NULL &&
 		strcmp(box->set->autocreate, MAILBOX_SET_AUTO_NO) != 0;
+}
+
+bool mailbox_is_autosubscribed(struct mailbox *box)
+{
+	if ((box->flags & MAILBOX_FLAG_AUTO_SUBSCRIBE) != 0)
+		return TRUE;
+	return box->set != NULL &&
+		strcmp(box->set->autocreate, MAILBOX_SET_AUTO_SUBSCRIBE) == 0;
 }
 
 static int mailbox_autocreate(struct mailbox *box)
@@ -893,18 +961,15 @@ static int mailbox_autocreate(struct mailbox *box)
 	if (mailbox_create(box, NULL, FALSE) < 0) {
 		errstr = mailbox_get_last_internal_error(box, &error);
 		if (error != MAIL_ERROR_EXISTS) {
-			mail_storage_set_critical(box->storage,
-				"Failed to autocreate mailbox %s: %s",
-				box->vname, errstr);
+			mailbox_set_critical(box,
+				"Failed to autocreate mailbox: %s",
+				errstr);
 			return -1;
 		}
-	} else if (box->set != NULL &&
-		   strcmp(box->set->autocreate,
-			  MAILBOX_SET_AUTO_SUBSCRIBE) == 0) {
+	} else if (mailbox_is_autosubscribed(box)) {
 		if (mailbox_set_subscribed(box, TRUE) < 0) {
-			mail_storage_set_critical(box->storage,
-				"Failed to autosubscribe to mailbox %s: %s",
-				box->vname,
+			mailbox_set_critical(box,
+				"Failed to autosubscribe to mailbox: %s",
 				mailbox_get_last_internal_error(box, NULL));
 			return -1;
 		}
@@ -924,7 +989,7 @@ static int mailbox_autocreate_and_reopen(struct mailbox *box)
 	if (ret < 0 && box->inbox_user &&
 	    !box->storage->user->inbox_open_error_logged) {
 		box->storage->user->inbox_open_error_logged = TRUE;
-		mail_storage_set_critical(box->storage,
+		mailbox_set_critical(box,
 			"Opening INBOX failed: %s",
 			mailbox_get_last_internal_error(box, NULL));
 	}
@@ -1208,7 +1273,7 @@ mailbox_open_full(struct mailbox *box, struct istream *input)
 	if (input != NULL) {
 		if ((box->storage->class_flags &
 		     MAIL_STORAGE_CLASS_FLAG_OPEN_STREAMS) == 0) {
-			mail_storage_set_critical(box->storage,
+			mailbox_set_critical(box,
 				"Storage doesn't support streamed mailboxes");
 			return -1;
 		}
@@ -1222,7 +1287,7 @@ mailbox_open_full(struct mailbox *box, struct istream *input)
 	} T_END;
 
 	if (ret < 0 && box->storage->error == MAIL_ERROR_NOTFOUND &&
-	    !box->deleting &&
+	    !box->deleting && !box->creating &&
 	    box->input == NULL && mailbox_is_autocreated(box)) T_BEGIN {
 		ret = mailbox_autocreate_and_reopen(box);
 	} T_END;
@@ -1311,8 +1376,8 @@ static int mailbox_alloc_index_pvt(struct mailbox *box)
 	if (mailbox_create_missing_dir(box, MAILBOX_LIST_PATH_TYPE_INDEX_PRIVATE) < 0)
 		return -1;
 
-	box->index_pvt = mail_index_alloc_cache_get(NULL, index_dir,
-		t_strconcat(box->index_prefix, ".pvt", NULL));
+	box->index_pvt = mail_index_alloc_cache_get(box->storage->user->event,
+		NULL, index_dir, t_strconcat(box->index_prefix, ".pvt", NULL));
 	mail_index_set_fsync_mode(box->index_pvt,
 				  box->storage->set->parsed_fsync_mode, 0);
 	mail_index_set_lock_method(box->index_pvt,
@@ -1402,10 +1467,14 @@ void mailbox_free(struct mailbox **_box)
 	mailbox_close(box);
 	box->v.free(box);
 
+	if (box->attribute_iter_count != 0) {
+		i_panic("Trying to free mailbox %s with %u open attribute iterators",
+			box->name, box->attribute_iter_count);
+	}
+
 	DLLIST_REMOVE(&box->storage->mailboxes, box);
 	mail_storage_obj_unref(box->storage);
-	if (box->metadata_pool != NULL)
-		pool_unref(&box->metadata_pool);
+	pool_unref(&box->metadata_pool);
 	pool_unref(&box->pool);
 }
 
@@ -1656,15 +1725,23 @@ mailbox_lists_rename_compatible(struct mailbox_list *list1,
 				const char **error_r)
 {
 	if (!nullequals(list1->set.alt_dir, list2->set.alt_dir)) {
-		*error_r = "one namespace has alt dir and another doesn't";
+		*error_r = t_strdup_printf("Namespace %s has alt dir, %s doesn't",
+					   list1->ns->prefix, list2->ns->prefix);
 		return FALSE;
 	}
 	if (!nullequals(list1->set.index_dir, list2->set.index_dir)) {
-		*error_r = "one namespace has index dir and another doesn't";
+		*error_r = t_strdup_printf("Namespace %s has index dir, %s doesn't",
+					   list1->ns->prefix, list2->ns->prefix);
+		return FALSE;
+	}
+	if (!nullequals(list1->set.index_cache_dir, list2->set.index_cache_dir)) {
+		*error_r = t_strdup_printf("Namespace %s has index cache dir, %s doesn't",
+					   list1->ns->prefix, list2->ns->prefix);
 		return FALSE;
 	}
 	if (!nullequals(list1->set.control_dir, list2->set.control_dir)) {
-		*error_r = "one namespace has control dir and another doesn't";
+		*error_r = t_strdup_printf("Namespace %s has control dir, %s doesn't",
+					   list1->ns->prefix, list2->ns->prefix);
 		return FALSE;
 	}
 	return TRUE;
@@ -1678,15 +1755,16 @@ int mailbox_rename_check_children(struct mailbox *src, struct mailbox *dest)
 	size_t dest_prefix_len = strlen(dest->vname)+1;
 	/* this can return folders with * in their name, that are not
 	   actually our children */
-	const char *pattern = t_strdup_printf("%s%c*", src->vname,
-				  mail_namespace_get_sep(src->list->ns));
+	char ns_sep = mail_namespace_get_sep(src->list->ns);
+	const char *pattern = t_strdup_printf("%s%c*", src->vname, ns_sep);
 
 	struct mailbox_list_iterate_context *iter = mailbox_list_iter_init(src->list, pattern,
 				      MAILBOX_LIST_ITER_RETURN_NO_FLAGS);
 
 	const struct mailbox_info *child;
 	while((child = mailbox_list_iter_next(iter)) != NULL) {
-		if (strncmp(child->vname, src->vname, src_prefix_len) != 0)
+		if (strncmp(child->vname, src->vname, src_prefix_len-1) != 0 ||
+		    child->vname[src_prefix_len-1] != ns_sep)
 			continue; /* not our child */
 		/* if total length of new name exceeds the limit, fail */
 		if (strlen(child->vname + src_prefix_len)+dest_prefix_len > MAILBOX_LIST_NAME_MAX_LENGTH) {
@@ -2087,7 +2165,8 @@ int mailbox_search_result_build(struct mailbox_transaction_context *t,
 
 struct mailbox_transaction_context *
 mailbox_transaction_begin(struct mailbox *box,
-			  enum mailbox_transaction_flags flags)
+			  enum mailbox_transaction_flags flags,
+			  const char *reason)
 {
 	struct mailbox_transaction_context *trans;
 
@@ -2097,7 +2176,8 @@ mailbox_transaction_begin(struct mailbox *box,
 	i_assert(box->opened);
 
 	box->transaction_count++;
-	trans = box->v.transaction_begin(box, flags);
+	trans = box->v.transaction_begin(box, flags, reason);
+	i_assert(trans->reason != NULL);
 	return trans;
 }
 
@@ -2109,8 +2189,7 @@ int mailbox_transaction_commit(struct mailbox_transaction_context **t)
 	/* Store changes temporarily so that plugins overriding
 	   transaction_commit() can look at them. */
 	ret = mailbox_transaction_commit_get_changes(t, &changes);
-	if (changes.pool != NULL)
-		pool_unref(&changes.pool);
+	pool_unref(&changes.pool);
 	return ret;
 }
 
@@ -2153,15 +2232,6 @@ void mailbox_transaction_rollback(struct mailbox_transaction_context **_t)
 	*_t = NULL;
 	box->v.transaction_rollback(t);
 	box->transaction_count--;
-}
-
-void mailbox_transaction_set_reason(struct mailbox_transaction_context *t,
-				    const char *reason)
-{
-	i_assert(reason != NULL);
-
-	i_free(t->reason);
-	t->reason = i_strdup(reason);
 }
 
 unsigned int mailbox_transaction_get_count(const struct mailbox *box)
@@ -2224,10 +2294,7 @@ void mailbox_save_context_deinit(struct mail_save_context *ctx)
 {
 	i_assert(ctx->dest_mail != NULL);
 
-	if (!ctx->dest_mail_external)
-		mail_free(&ctx->dest_mail);
-	else
-		ctx->dest_mail = NULL;
+	mail_free(&ctx->dest_mail);
 }
 
 void mailbox_save_set_flags(struct mail_save_context *ctx,
@@ -2319,17 +2386,6 @@ void mailbox_save_set_pop3_order(struct mail_save_context *ctx,
 	i_assert(order > 0);
 
 	ctx->data.pop3_order = order;
-}
-
-void mailbox_save_set_dest_mail(struct mail_save_context *ctx,
-				struct mail *mail)
-{
-	i_assert(mail != NULL);
-
-	if (!ctx->dest_mail_external)
-		mail_free(&ctx->dest_mail);
-	ctx->dest_mail = mail;
-	ctx->dest_mail_external = TRUE;
 }
 
 struct mail *mailbox_save_get_dest_mail(struct mail_save_context *ctx)
@@ -2424,6 +2480,8 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 {
 	struct mail_save_context *ctx = *_ctx;
 	struct mailbox_transaction_context *t = ctx->transaction;
+	const struct mail_storage_settings *mail_set =
+		mailbox_get_settings(t->box);
 	/* we need to keep a copy of this because save_finish implementations
 	   will likely zero the data structure during cleanup */
 	struct mail_keywords *keywords = ctx->data.keywords;
@@ -2453,6 +2511,10 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 			mailbox_save_add_pvt_flags(t, pvt_flags);
 		t->save_count++;
 	}
+
+	if (mail_set->parsed_mail_attachment_detection_add_flags_on_save &&
+	    !mail_has_attachment_keywords(ctx->dest_mail))
+		mail_set_attachment_keywords(ctx->dest_mail);
 
 	if (keywords != NULL)
 		mailbox_keywords_unref(&keywords);
@@ -2583,25 +2645,17 @@ void mailbox_set_deleted(struct mailbox *box)
 	box->mailbox_deleted = TRUE;
 }
 
-int mailbox_get_path_to(struct mailbox *box, enum mailbox_list_path_type type,
-			const char **path_r)
+static int get_path_to(struct mailbox *box, enum mailbox_list_path_type type,
+		       const char **internal_path, const char **path_r)
 {
 	int ret;
 
-	if (type == MAILBOX_LIST_PATH_TYPE_MAILBOX && box->_path != NULL) {
-		if (box->_path[0] == '\0') {
+	if (internal_path != NULL && *internal_path != NULL) {
+		if ((*internal_path)[0] == '\0') {
 			*path_r = NULL;
 			return 0;
 		}
-		*path_r = box->_path;
-		return 1;
-	}
-	if (type == MAILBOX_LIST_PATH_TYPE_INDEX && box->_index_path != NULL) {
-		if (box->_index_path[0] == '\0') {
-			*path_r = NULL;
-			return 0;
-		}
-		*path_r = box->_index_path;
+		*path_r = *internal_path;
 		return 1;
 	}
 	ret = mailbox_list_get_path(box->list, box->name, type, path_r);
@@ -2609,11 +2663,19 @@ int mailbox_get_path_to(struct mailbox *box, enum mailbox_list_path_type type,
 		mail_storage_copy_list_error(box->storage, box->list);
 		return -1;
 	}
-	if (type == MAILBOX_LIST_PATH_TYPE_MAILBOX && box->_path == NULL)
-		box->_path = ret == 0 ? "" : p_strdup(box->pool, *path_r);
-	if (type == MAILBOX_LIST_PATH_TYPE_INDEX && box->_index_path == NULL)
-		box->_index_path = ret == 0 ? "" : p_strdup(box->pool, *path_r);
+	if (internal_path != NULL && *internal_path == NULL)
+		*internal_path = ret == 0 ? "" : p_strdup(box->pool, *path_r);
 	return ret;
+}
+
+int mailbox_get_path_to(struct mailbox *box, enum mailbox_list_path_type type,
+			const char **path_r)
+{
+	if (type == MAILBOX_LIST_PATH_TYPE_MAILBOX)
+		return get_path_to(box, type, &box->_path, path_r);
+	if (type == MAILBOX_LIST_PATH_TYPE_INDEX)
+		return get_path_to(box, type, &box->_index_path, path_r);
+	return get_path_to(box, type, NULL, path_r);
 }
 
 const char *mailbox_get_path(struct mailbox *box)
@@ -2699,8 +2761,7 @@ int mailbox_create_fd(struct mailbox *box, const char *path, int flags,
 	} else if (mail_storage_set_error_from_errno(box->storage)) {
 		return -1;
 	} else {
-		mail_storage_set_critical(box->storage,
-			"open(%s, O_CREAT) failed: %m", path);
+		mailbox_set_critical(box, "open(%s, O_CREAT) failed: %m", path);
 		return -1;
 	}
 
@@ -2708,12 +2769,12 @@ int mailbox_create_fd(struct mailbox *box, const char *path, int flags,
 		if (fchown(fd, (uid_t)-1, perm->file_create_gid) == 0) {
 			/* ok */
 		} else if (errno == EPERM) {
-			mail_storage_set_critical(box->storage, "%s",
+			mailbox_set_critical(box, "%s",
 				eperm_error_get_chgrp("fchown", path,
 					perm->file_create_gid,
 					perm->file_create_gid_origin));
 		} else {
-			mail_storage_set_critical(box->storage,
+			mailbox_set_critical(box,
 				"fchown(%s) failed: %m", path);
 		}
 	}
@@ -2749,8 +2810,7 @@ int mailbox_mkdir(struct mailbox *box, const char *path,
 	} else if (mail_storage_set_error_from_errno(box->storage)) {
 		return -1;
 	} else {
-		mail_storage_set_critical(box->storage,
-					  "mkdir_parents(%s) failed: %m", path);
+		mailbox_set_critical(box, "mkdir_parents(%s) failed: %m", path);
 		return -1;
 	}
 }
@@ -2784,7 +2844,8 @@ int mailbox_create_missing_dir(struct mailbox *box,
 	if (stat(dir, &st) == 0)
 		return 0;
 
-	if (null_strcmp(dir, mail_dir) != 0 &&
+	if ((box->storage->class_flags & MAIL_STORAGE_CLASS_FLAG_NO_ROOT) == 0 &&
+	    null_strcmp(dir, mail_dir) != 0 && mail_dir != NULL &&
 	    stat(mail_dir, &st) < 0 && (errno == ENOENT || errno == ENOTDIR)) {
 		/* Race condition - mail root directory doesn't exist
 		   anymore either. We shouldn't create this directory

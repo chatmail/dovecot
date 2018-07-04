@@ -22,8 +22,10 @@ libmanagesieve_login_settings_la_CFLAGS = \
 	$(AM_CFLAGS) $(LIBDOVECOT_CONFIG_INCLUDE) -DPKG_LIBEXECDIR=\""$(dovecot_pkglibexecdir)"\"
 
 libs = \
-	$(top_builddir)/src/lib-managesieve/libmanagesieve.a
+	$(top_builddir)/src/lib-managesieve/libmanagesieve.la
 
+managesieve_login_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
+managesieve_login_LDFLAGS = $(BINARY_LDFLAGS)
 managesieve_login_LDADD = $(libs) $(LIBDOVECOT_LOGIN) $(LIBDOVECOT)
 managesieve_login_DEPENDENCIES = $(libs) $(LIBDOVECOT_LOGIN_DEPS) $(LIBDOVECOT_DEPS)
 

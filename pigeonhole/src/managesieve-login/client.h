@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __CLIENT_H
-#define __CLIENT_H
+#ifndef CLIENT_H
+#define CLIENT_H
 
 #include "net.h"
 #include "client-common.h"
@@ -34,14 +31,14 @@ struct managesieve_client {
 
 	struct istream *auth_response_input;
 
-	unsigned int cmd_finished:1;
-	unsigned int cmd_parsed_args:1;
-	unsigned int skip_line:1;
-	unsigned int auth_mech_name_parsed:1;
+	bool cmd_finished:1;
+	bool cmd_parsed_args:1;
+	bool skip_line:1;
+	bool auth_mech_name_parsed:1;
 
-	unsigned int proxy_starttls:1;
-	unsigned int proxy_sasl:1;
-	unsigned int proxy_xclient:1;
+	bool proxy_starttls:1;
+	bool proxy_sasl:1;
+	bool proxy_xclient:1;
 };
 
 bool client_skip_line(struct managesieve_client *client);
@@ -74,4 +71,4 @@ void client_send_reply_code(struct client *client,
 	client_send_reply_code(client, MANAGESIEVE_CMD_REPLY_BYE, resp_code, text)
 
 
-#endif /* __CLIENT_H */
+#endif

@@ -1,4 +1,0 @@
-Events (v2.3+)
-==============
-
-(This file was created from the wiki on 2018-05-23 04:42)

@@ -129,7 +129,7 @@ struct mail_keywords {
 	int refcount;
 
         /* variable sized list of keyword indexes */
-	unsigned int idx[1];
+	unsigned int idx[FLEXIBLE_ARRAY_MEMBER];
 };
 
 enum mail_index_transaction_flags {
@@ -223,7 +223,18 @@ struct mail_index_view_sync_rec {
 	enum mail_index_view_sync_type type;
 
 	/* TRUE if this was a hidden transaction. */
-	unsigned int hidden:1;
+	bool hidden:1;
+};
+
+enum mail_index_transaction_change {
+	MAIL_INDEX_TRANSACTION_CHANGE_APPEND	= BIT(0),
+	MAIL_INDEX_TRANSACTION_CHANGE_EXPUNGE	= BIT(1),
+	MAIL_INDEX_TRANSACTION_CHANGE_FLAGS	= BIT(2),
+	MAIL_INDEX_TRANSACTION_CHANGE_KEYWORDS	= BIT(3),
+	MAIL_INDEX_TRANSACTION_CHANGE_MODSEQ	= BIT(4),
+	MAIL_INDEX_TRANSACTION_CHANGE_ATTRIBUTE	= BIT(5),
+
+	MAIL_INDEX_TRANSACTION_CHANGE_OTHERS	= BIT(30),
 };
 
 struct mail_index_transaction_commit_result {
@@ -234,6 +245,7 @@ struct mail_index_transaction_commit_result {
 	   all of it was written to the same file. */
 	uoff_t commit_size;
 
+	enum mail_index_transaction_change changes_mask;
 	unsigned int ignored_modseq_changes;
 };
 
@@ -288,9 +300,12 @@ struct mail_index_transaction;
 struct mail_index_sync_ctx;
 struct mail_index_view_sync_ctx;
 
-struct mail_index *mail_index_alloc(const char *dir, const char *prefix);
+struct mail_index *mail_index_alloc(struct event *parent_event,
+				    const char *dir, const char *prefix);
 void mail_index_free(struct mail_index **index);
 
+/* Change .cache file's directory. */
+void mail_index_set_cache_dir(struct mail_index *index, const char *dir);
 /* Specify how often to do fsyncs. If mode is FSYNC_MODE_OPTIMIZED, the mask
    can be used to specify which transaction types to fsync. */
 void mail_index_set_fsync_mode(struct mail_index *index, enum fsync_mode mode,
@@ -341,7 +356,11 @@ mail_index_refresh(struct mail_index *index);
 /* View can be used to look into index. Sequence numbers inside view change
    only when you synchronize it. The view acquires required locks
    automatically, but you'll have to drop them manually. */
-struct mail_index_view *mail_index_view_open(struct mail_index *index);
+struct mail_index_view *
+mail_index_view_open(struct mail_index *index,
+		     const char *source_filename, unsigned int source_linenum);
+#define mail_index_view_open(index) \
+	mail_index_view_open(index, __FILE__, __LINE__)
 void mail_index_view_close(struct mail_index_view **view);
 
 /* Returns the index for given view. */
@@ -539,7 +558,7 @@ void mail_index_append(struct mail_index_transaction *t, uint32_t uid,
 /* Assign UIDs for mails with uid=0 or uid<first_uid. All the assigned UIDs
    are higher than the highest unassigned UID (i.e. it doesn't try to fill UID
    gaps). Assumes that mailbox is locked in a way that UIDs can be safely
-   assigned. Returns UIDs for all asigned messages, in their sequence order
+   assigned. Returns UIDs for all assigned messages, in their sequence order
    (so UIDs are not necessary ascending). */
 void mail_index_append_finish_uids(struct mail_index_transaction *t,
 				   uint32_t first_uid,

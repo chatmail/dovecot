@@ -9,8 +9,6 @@ struct auth_master_connection {
 	struct auth *auth;
 	int refcount;
 
-	struct timeval create_time, handshake_time;
-
 	int fd;
 	char *path;
 	struct istream *input;
@@ -22,13 +20,10 @@ struct auth_master_connection {
 	   this uid. Don't allow LIST/PASS lookups. */
 	uid_t userdb_restricted_uid;
 
-	unsigned int version_received:1;
-	unsigned int destroyed:1;
-	unsigned int userdb_only:1;
+	bool version_received:1;
+	bool destroyed:1;
+	bool userdb_only:1;
 };
-
-void auth_master_log_error(struct auth_master_connection *conn,
-			   const char *fmt, ...) ATTR_FORMAT(2, 3);
 
 struct auth_master_connection *
 auth_master_connection_create(struct auth *auth, int fd,

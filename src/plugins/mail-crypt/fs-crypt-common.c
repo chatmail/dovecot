@@ -62,7 +62,6 @@ fs_crypt_init(struct fs *_fs, const char *args, const
 	const char *p, *arg, *value, *error, *parent_name, *parent_args;
 	const char *public_key_path = "", *private_key_path = "", *password = "";
 
-	random_init();
 	if (!dcrypt_initialize("openssl", NULL, &error))
 		i_fatal("dcrypt_initialize(): %s", error);
 
@@ -131,18 +130,21 @@ static void fs_crypt_deinit(struct fs *_fs)
 	i_free(fs->private_key_path);
 	i_free(fs->password);
 	i_free(fs);
-	random_deinit();
 }
 
-static struct fs_file *
-fs_crypt_file_init(struct fs *_fs, const char *path,
+static struct fs_file *fs_crypt_file_alloc(void)
+{
+	struct crypt_fs_file *file = i_new(struct crypt_fs_file, 1);
+	return &file->file;
+}
+
+static void
+fs_crypt_file_init(struct fs_file *_file, const char *path,
 		   enum fs_open_mode mode, enum fs_open_flags flags)
 {
-	struct crypt_fs *fs = (struct crypt_fs *)_fs;
-	struct crypt_fs_file *file;
+	struct crypt_fs *fs = (struct crypt_fs *)_file->fs;
+	struct crypt_fs_file *file = (struct crypt_fs_file *)_file;
 
-	file = i_new(struct crypt_fs_file, 1);
-	file->file.fs = _fs;
 	file->file.path = i_strdup(path);
 	file->fs = fs;
 	file->open_mode = mode;
@@ -150,17 +152,16 @@ fs_crypt_file_init(struct fs *_fs, const char *path,
 	/* avoid unnecessarily creating two seekable streams */
 	flags &= ~FS_OPEN_FLAG_SEEKABLE;
 
-	file->file.parent = fs_file_init(_fs->parent, path, mode | flags);
+	file->file.parent = fs_file_init_parent(_file, path, mode | flags);
 	if (mode == FS_OPEN_MODE_READONLY &&
 	    (flags & FS_OPEN_FLAG_ASYNC) == 0) {
 		/* use async stream for super, so fs_read_stream() won't create
-		   another seekable stream unneededly */
-		file->super_read = fs_file_init(_fs->parent, path, mode | flags |
-						FS_OPEN_FLAG_ASYNC);
+		   another seekable stream needlessly */
+		file->super_read = fs_file_init_parent(_file, path,
+			mode | flags | FS_OPEN_FLAG_ASYNC);
 	} else {
 		file->super_read = file->file.parent;
 	}
-	return &file->file;
 }
 
 static void fs_crypt_file_deinit(struct fs_file *_file)
@@ -178,8 +179,7 @@ static void fs_crypt_file_close(struct fs_file *_file)
 {
 	struct crypt_fs_file *file = (struct crypt_fs_file *)_file;
 
-	if (file->input != NULL)
-		i_stream_unref(&file->input);
+	i_stream_unref(&file->input);
 	if (file->super_read != NULL)
 		fs_file_close(file->super_read);
 	if (_file->parent != NULL)
@@ -323,9 +323,7 @@ static int fs_crypt_write_stream_finish(struct fs_file *_file, bool success)
 {
 	struct crypt_fs_file *file = (struct crypt_fs_file *)_file;
 	struct istream *input;
-	ssize_t ret;
-	struct const_iovec iov;
-	const unsigned char *data;
+	int ret;
 
 	if (_file->output != NULL) {
 		if (_file->output == file->super_output)
@@ -338,10 +336,10 @@ static int fs_crypt_write_stream_finish(struct fs_file *_file, bool success)
 			/* no encryption */
 			i_assert(file->temp_output == NULL);
 			fs_write_stream_abort_error(_file->parent, &file->super_output,
-					            "write(%s) failed: %s",
-					            o_stream_get_name(file->super_output),
-					            o_stream_get_error(file->super_output));
-		} else if (file->temp_output != NULL) {
+						    "write(%s) failed: %s",
+						    o_stream_get_name(file->super_output),
+						    o_stream_get_error(file->super_output));
+		} else {
 			o_stream_destroy(&file->temp_output);
 		}
 		return -1;
@@ -361,15 +359,8 @@ static int fs_crypt_write_stream_finish(struct fs_file *_file, bool success)
 	/* finish writing the temporary file */
 	input = iostream_temp_finish(&file->temp_output, IO_BLOCK_SIZE);
 	file->super_output = fs_write_stream(_file->parent);
-
-	while (i_stream_read_more(input, &data, &iov.iov_len) > 0) {
-		iov.iov_base = data;
-		o_stream_nsendv(file->super_output, &iov, 1);
-		i_stream_skip(input, iov.iov_len);
-	}
-
+	o_stream_nsend_istream(file->super_output, input);
 	ret = fs_write_stream_finish(_file->parent, &file->super_output);
 	i_stream_unref(&input);
 	return ret;
 }
-

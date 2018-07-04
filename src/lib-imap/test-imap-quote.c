@@ -7,7 +7,7 @@
 
 static void test_imap_append_string_for_humans(void)
 {
-	static struct {
+	static const struct {
 		const char *input, *output;
 	} tests[] = {
 		{ "", "\"\"" },
@@ -46,7 +46,7 @@ static void test_imap_append_string_for_humans(void)
 
 static void test_imap_append_astring(void)
 {
-	static struct {
+	static const struct {
 		const char *input, *output;
 	} tests[] = {
 		{ "", "\"\"" },
@@ -87,7 +87,7 @@ static void test_imap_append_astring(void)
 
 static void test_imap_append_nstring(void)
 {
-	static struct {
+	static const struct {
 		const char *input, *output;
 	} tests[] = {
 		{ "", "\"\"" },
@@ -160,7 +160,7 @@ static void test_imap_append_nstring_nolf(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_imap_append_string_for_humans,
 		test_imap_append_astring,
 		test_imap_append_nstring,

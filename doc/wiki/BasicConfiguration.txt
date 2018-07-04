@@ -42,9 +42,6 @@ Run as your own non-root user:
 ---%<-------------------------------------------------------------------------
 echo "$USER:{PLAIN}password:$UID:$GID::$HOME" > users
 sudo mv users /etc/dovecot/
-
-# If SELinux is enabled:
-restorecon -v /etc/dovecot/users
 ---%<-------------------------------------------------------------------------
 
 You can (and should) replace the "password" with whatever password you wish to
@@ -154,4 +151,4 @@ mail_privileged_group = mail
 Note: Specifying the privileged user must be done as shown. Simply adding
 'dovecot' user to the 'mail' group does /*not*/ grant write permission.
 
-(This file was created from the wiki on 2018-05-23 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

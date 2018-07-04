@@ -14,11 +14,13 @@ struct dbox_save_context {
 	struct ostream *dbox_output;
 
 	uint32_t highest_pop3_uidl_seq;
-	unsigned int failed:1;
-	unsigned int finished:1;
-	unsigned int have_pop3_uidls:1;
-	unsigned int have_pop3_orders:1;
+	bool failed:1;
+	bool finished:1;
+	bool have_pop3_uidls:1;
+	bool have_pop3_orders:1;
 };
+
+#define DBOX_SAVECTX(s)		container_of(s, struct dbox_save_context, ctx)
 
 void dbox_save_begin(struct dbox_save_context *ctx, struct istream *input);
 int dbox_save_continue(struct mail_save_context *_ctx);

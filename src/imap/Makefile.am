@@ -8,23 +8,23 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-mail \
-	-I$(top_srcdir)/src/lib-lda \
+	-I$(top_srcdir)/src/lib-smtp \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-imap-urlauth \
 	-I$(top_srcdir)/src/lib-imap-storage \
 	-I$(top_srcdir)/src/lib-index \
-	-I$(top_srcdir)/src/lib-storage
+	-I$(top_srcdir)/src/lib-storage \
+	$(BINARY_CFLAGS)
 
-imap_LDFLAGS = -export-dynamic
+imap_LDFLAGS = -export-dynamic \
+	$(BINARY_LDFLAGS)
 
 imap_LDADD = \
 	../lib-imap-urlauth/libimap-urlauth.la \
-	$(LIBDOVECOT_LDA) \
 	$(LIBDOVECOT_STORAGE) \
 	$(LIBDOVECOT)
 imap_DEPENDENCIES = \
 	../lib-imap-urlauth/libimap-urlauth.la \
-	$(LIBDOVECOT_LDA) \
 	$(LIBDOVECOT_STORAGE_DEPS) \
 	$(LIBDOVECOT_DEPS)
 

@@ -26,9 +26,10 @@ static bool drop_to_userdb_privileges = FALSE;
 static void client_connected(struct master_service_connection *conn)
 {
 	enum mail_storage_service_flags flags =
+		MAIL_STORAGE_SERVICE_FLAG_ALLOW_ROOT |
 		MAIL_STORAGE_SERVICE_FLAG_NO_PLUGINS;
 	string_t *instr, *keys;
-	const char **args, *key, *value, *error, *version_line, *data_line;
+	const char *const *args, *key, *value, *error, *version_line, *data_line;
 	struct mail_storage_service_ctx *service_ctx;
 	struct mail_storage_service_input input;
 	struct mail_storage_service_user *user;
@@ -83,7 +84,7 @@ static void client_connected(struct master_service_connection *conn)
 	/* put everything to environment */
 	env_clean();
 	keys = t_str_new(256);
-	args = t_strsplit_tab(data_line);
+	args = t_strsplit_tabescaped(data_line);
 
 	if (str_array_length(args) < 3)
 		i_fatal("Missing input fields");
@@ -102,7 +103,6 @@ static void client_connected(struct master_service_connection *conn)
 	env_put(t_strconcat("USER=", input.username, NULL));
 
 	for (; args[i] != NULL; i++) {
-		args[i] = str_tabunescape(t_strdup_noconst(args[i]));
 		value = strchr(args[i], '=');
 		if (value != NULL) {
 			key = t_str_ucase(t_strdup_until(args[i], value));
@@ -122,7 +122,7 @@ static void client_connected(struct master_service_connection *conn)
 		mail_storage_service_restrict_setenv(service_ctx, user);
 		/* we can't exec anything in a chroot */
 		env_remove("RESTRICT_CHROOT");
-		restrict_access_by_env(getenv("HOME"), TRUE);
+		restrict_access_by_env(0, getenv("HOME"));
 	}
 
 	if (dup2(fd, STDIN_FILENO) < 0)
@@ -218,7 +218,7 @@ int main(int argc, char *argv[])
 	if (!drop_to_userdb_privileges &&
 	    (flags & MASTER_SERVICE_FLAG_STANDALONE) == 0) {
 		/* drop to privileges defined by service settings */
-		restrict_access_by_env(NULL, FALSE);
+		restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 	}
 
 	master_service_init_finish(master_service);

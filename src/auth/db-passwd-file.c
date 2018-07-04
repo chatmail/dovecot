@@ -49,7 +49,7 @@ passwd_file_add(struct passwd_file *pw, const char *username,
 	    pass[len-1] == ']' && pass[len-4] == '[') {
 		/* password[type] - we're being libpam-pwdfile compatible
 		   here. it uses 13 = DES and 34 = MD5. For backwards
-		   comaptibility with ourself, we have also 56 = Digest-MD5. */
+		   compatibility with ourself, we have also 56 = Digest-MD5. */
 		int num = (pass[len-3] - '0') * 10 + (pass[len-2] - '0');
 
 		pass = t_strndup(pass, len-4);
@@ -200,7 +200,7 @@ static int passwd_file_open(struct passwd_file *pw, bool startup,
 	hash_table_create(&pw->users, pw->pool, 0, str_hash, strcmp);
 
 	start_time = time(NULL);
-	input = i_stream_create_fd(pw->fd, (size_t)-1, FALSE);
+	input = i_stream_create_fd(pw->fd, (size_t)-1);
 	i_stream_set_return_partial_line(input, TRUE);
 	while ((line = i_stream_read_next_line(input)) != NULL) {
 		if (*line == '\0' || *line == ':' || *line == '#')
@@ -234,16 +234,11 @@ static int passwd_file_open(struct passwd_file *pw, bool startup,
 
 static void passwd_file_close(struct passwd_file *pw)
 {
-	if (pw->fd != -1) {
-		if (close(pw->fd) < 0)
-			i_error("passwd-file %s: close() failed: %m", pw->path);
-		pw->fd = -1;
-	}
+	i_close_fd_path(&pw->fd, pw->path);
 
 	if (hash_table_is_created(pw->users))
 		hash_table_destroy(&pw->users);
-	if (pw->pool != NULL)
-		pool_unref(&pw->pool);
+	pool_unref(&pw->pool);
 }
 
 static void passwd_file_free(struct passwd_file *pw)
@@ -349,10 +344,12 @@ db_passwd_file_init(const char *path, bool userdb, bool debug)
 		/* just extra escaped % chars. remove them. */
 		struct var_expand_table empty_table[1];
 		string_t *dest;
+		const char *error;
 
 		empty_table[0].key = '\0';
 		dest = t_str_new(256);
-		var_expand(dest, path, empty_table);
+		if (var_expand(dest, path, empty_table, &error) <= 0)
+			i_unreached();
 		path = str_c(dest);
 	}
 
@@ -435,12 +432,19 @@ int db_passwd_file_lookup(struct db_passwd_file *db,
 {
 	struct passwd_file *pw;
 	string_t *username, *dest;
+	const char *error;
 
 	if (!db->vars)
 		pw = db->default_file;
 	else {
 		dest = t_str_new(256);
-		auth_request_var_expand(dest, db->path, request, path_fix);
+		if (auth_request_var_expand(dest, db->path, request, path_fix,
+					    &error) <= 0) {
+			auth_request_log_error(request, AUTH_SUBSYS_DB,
+				"Failed to expand passwd-file path %s: %s",
+				db->path, error);
+			return -1;
+		}
 
 		pw = hash_table_lookup(db->files, str_c(dest));
 		if (pw == NULL) {
@@ -455,8 +459,13 @@ int db_passwd_file_lookup(struct db_passwd_file *db,
 	}
 
 	username = t_str_new(256);
-	auth_request_var_expand(username, username_format, request,
-				auth_request_str_escape);
+	if (auth_request_var_expand(username, username_format, request,
+				    auth_request_str_escape, &error) <= 0) {
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"Failed to expand username_format=%s: %s",
+			username_format, error);
+		return -1;
+	}
 
 	auth_request_log_debug(request, AUTH_SUBSYS_DB,
 			       "lookup: user=%s file=%s",

@@ -5,7 +5,6 @@
 #include "fdpass.h"
 #include "buffer.h"
 #include "hash.h"
-#include "time-util.h"
 #include "master-service-private.h"
 #include "master-auth.h"
 
@@ -13,16 +12,11 @@
 #include <sys/stat.h>
 
 #define SOCKET_CONNECT_RETRY_MSECS 500
-#define SOCKET_CONNECT_RETRY_WARNING_INTERVAL_SECS 2
 #define MASTER_AUTH_REQUEST_TIMEOUT_MSECS (MASTER_LOGIN_TIMEOUT_SECS/2*1000)
 
 struct master_auth_connection {
 	struct master_auth *auth;
 	unsigned int tag;
-
-	unsigned int client_pid, auth_id;
-	struct ip_addr remote_ip;
-	struct timeval create_time;
 
 	char *path;
 	int fd;
@@ -41,7 +35,6 @@ struct master_auth {
 	pool_t pool;
 
 	const char *default_path;
-	time_t last_connect_warning;
 
 	unsigned int tag_counter;
 	HASH_TABLE(void *, struct master_auth_connection *) connections;
@@ -76,10 +69,8 @@ master_auth_connection_deinit(struct master_auth_connection **_conn)
 	if (conn->callback != NULL)
 		conn->callback(NULL, conn->context);
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	timeout_remove(&conn->to);
+	io_remove(&conn->io);
 	if (conn->fd != -1) {
 		if (close(conn->fd) < 0)
 			i_fatal("close(%s) failed: %m", conn->path);
@@ -87,20 +78,6 @@ master_auth_connection_deinit(struct master_auth_connection **_conn)
 	}
 	i_free(conn->path);
 	i_free(conn);
-}
-
-static void ATTR_FORMAT(2, 3)
-conn_error(struct master_auth_connection *conn, const char *fmt, ...)
-{
-	va_list args;
-
-	va_start(args, fmt);
-	i_error("master(%s): %s (client-pid=%u, client-id=%u, rip=%s, created %u msecs ago, received %u/%zu bytes)",
-		conn->path, t_strdup_vprintf(fmt, args),
-		conn->client_pid, conn->auth_id, net_ip2addr(&conn->remote_ip),
-		timeval_diff_msecs(&ioloop_timeval, &conn->create_time),
-		conn->buf_pos, sizeof(conn->buf_pos));
-	va_end(args);
 }
 
 void master_auth_deinit(struct master_auth **_auth)
@@ -131,12 +108,13 @@ static void master_auth_connection_input(struct master_auth_connection *conn)
 		   sizeof(conn->buf) - conn->buf_pos);
 	if (ret <= 0) {
 		if (ret == 0 || errno == ECONNRESET) {
-			conn_error(conn, "read() failed: Remote closed connection "
-				"(destination service { process_limit } reached?)");
+			i_error("read(%s) failed: Remote closed connection "
+				"(destination service { process_limit } reached?)",
+				conn->path);
 		} else {
 			if (errno == EAGAIN)
 				return;
-			conn_error(conn, "read() failed: %m");
+			i_error("read(%s) failed: %m", conn->path);
 		}
 		master_auth_connection_deinit(&conn);
 		return;
@@ -151,7 +129,8 @@ static void master_auth_connection_input(struct master_auth_connection *conn)
 	conn->buf_pos = 0;
 
 	if (conn->tag != reply->tag)
-		conn_error(conn, "Received reply with unknown tag %u", reply->tag);
+		i_error("master(%s): Received reply with unknown tag %u",
+			conn->path, reply->tag);
 	else if (conn->callback == NULL) {
 		/* request aborted */
 	} else {
@@ -163,7 +142,9 @@ static void master_auth_connection_input(struct master_auth_connection *conn)
 
 static void master_auth_connection_timeout(struct master_auth_connection *conn)
 {
-	conn_error(conn, "Auth request timed out");
+	i_error("master(%s): Auth request timed out (received %u/%u bytes)",
+		conn->path, conn->buf_pos,
+		(unsigned int)sizeof(conn->buf));
 	master_auth_connection_deinit(&conn);
 }
 
@@ -183,7 +164,6 @@ void master_auth_request_full(struct master_auth *auth,
 
 	conn = i_new(struct master_auth_connection, 1);
 	conn->auth = auth;
-	conn->create_time = ioloop_timeval;
 	conn->callback = callback;
 	conn->context = context;
 	conn->path = params->socket_path != NULL ?
@@ -194,43 +174,18 @@ void master_auth_request_full(struct master_auth *auth,
 	if (req.tag == 0)
 		req.tag = ++auth->tag_counter;
 
-	conn->client_pid = req.client_pid;
-	conn->auth_id = req.auth_id;
-	conn->remote_ip = req.remote_ip;
-
 	if (fstat(params->client_fd, &st) < 0)
 		i_fatal("fstat(auth dest fd) failed: %m");
 	req.ino = st.st_ino;
 
-	buf = buffer_create_dynamic(pool_datastack_create(),
-				    sizeof(req) + req.data_size);
+	buf = t_buffer_create(sizeof(req) + req.data_size);
 	buffer_append(buf, &req, sizeof(req));
 	buffer_append(buf, params->data, req.data_size);
 
-	conn->fd = net_connect_unix(conn->path);
-	if (conn->fd == -1 && errno == EAGAIN) {
-		/* Couldn't connect to the socket immediately. This will add
-		   a delay that causes hangs to the whole process, which won't
-		   be obvious unless we log a warning. FIXME: The wait could
-		   be asynchronous. */
-		struct timeval start_time;
-
-		io_loop_time_refresh();
-		start_time = ioloop_timeval;
-		conn->fd = net_connect_unix_with_retries(conn->path,
-			SOCKET_CONNECT_RETRY_MSECS);
-		io_loop_time_refresh();
-		if (conn->fd != -1 &&
-		    ioloop_time - auth->last_connect_warning >=
-		    SOCKET_CONNECT_RETRY_WARNING_INTERVAL_SECS) {
-			i_warning("net_connect_unix(%s) succeeded only after retrying - "
-				  "took %lld us", conn->path,
-				  timeval_diff_usecs(&ioloop_timeval, &start_time));
-			auth->last_connect_warning = ioloop_time;
-		}
-	}
+	conn->fd = net_connect_unix_with_retries(conn->path,
+						 SOCKET_CONNECT_RETRY_MSECS);
 	if (conn->fd == -1) {
-		conn_error(conn, "net_connect_unix(%s) failed: %m%s",
+		i_error("net_connect_unix(%s) failed: %m%s",
 			conn->path, errno != EAGAIN ? "" :
 			" - http://wiki2.dovecot.org/SocketUnavailable");
 		master_auth_connection_deinit(&conn);
@@ -239,11 +194,11 @@ void master_auth_request_full(struct master_auth *auth,
 
 	ret = fd_send(conn->fd, params->client_fd, buf->data, buf->used);
 	if (ret < 0) {
-		conn_error(conn, "fd_send(fd=%d) failed: %m",
-			   params->client_fd);
+		i_error("fd_send(%s, %d) failed: %m", conn->path,
+			params->client_fd);
 	} else if ((size_t)ret != buf->used) {
-		conn_error(conn, "fd_send() sent only %d of %d bytes",
-			   (int)ret, (int)buf->used);
+		i_error("fd_send(%s) sent only %d of %d bytes",
+			conn->path, (int)ret, (int)buf->used);
 		ret = -1;
 	}
 	if (ret < 0) {

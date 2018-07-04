@@ -19,7 +19,7 @@ struct client {
 	struct istream *ctrl_input;
 	struct timeout *to_idle;
 
-	char *username;
+	char *username, *service;
 	ARRAY_TYPE(const_string) access_apps;
 
 	/* settings: */
@@ -27,14 +27,14 @@ struct client {
 
 	enum imap_urlauth_worker_state worker_state;
 
-	unsigned int disconnected:1;
+	bool disconnected:1;
 };
 
 extern struct client *imap_urlauth_clients;
 extern unsigned int imap_urlauth_client_count;
 
-int client_create(const char *username, int fd_in, int fd_out,
-		  const struct imap_urlauth_settings *set,
+int client_create(const char *service, const char *username,
+		  int fd_in, int fd_out, const struct imap_urlauth_settings *set,
 		  struct client **client_r);
 void client_destroy(struct client *client, const char *reason);
 

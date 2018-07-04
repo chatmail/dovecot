@@ -15,8 +15,7 @@ struct hash_method;
 #define FS_METADATA_OBJECTID FS_METADATA_INTERNAL_PREFIX"ObjectID"
 /* Calling this before fs_write_stream_finish() allows renaming the filename.
    This can be useful if you don't know the final filename before writing it
-   (e.g. filename contains the file size). The given filename must include the
-   full path also. */
+   (e.g. filename contains the file size). */
 #define FS_METADATA_WRITE_FNAME FS_METADATA_INTERNAL_PREFIX"WriteFilename"
 /* Original path of the file. The path that's eventually visible to a fs
    backend may be something different, e.g. object ID. This allows the backend
@@ -146,6 +145,10 @@ struct fs_settings {
 	   them. */
 	struct dns_client *dns_client;
 
+	/* Parent event to use, unless overridden by
+	   fs_file_init_with_event() */
+	struct event *event;
+
 	/* Enable debugging */
 	bool debug;
 	/* Enable timing statistics */
@@ -189,7 +192,7 @@ struct fs_stats {
 
 	/* Cumulative sum of usecs spent on calls - set only if
 	   fs_settings.enable_timing=TRUE */
-	struct timing *timings[FS_OP_COUNT];
+	struct stats_dist *timings[FS_OP_COUNT];
 };
 
 struct fs_metadata {
@@ -203,6 +206,10 @@ typedef void fs_file_async_callback_t(void *context);
 int fs_init(const char *driver, const char *args,
 	    const struct fs_settings *set,
 	    struct fs **fs_r, const char **error_r);
+/* helper for fs_init, accepts a filesystem string
+   that can come directly from config */
+int fs_init_from_string(const char *str, const struct fs_settings *set,
+			struct fs **fs_r, const char **error_r);
 /* same as fs_unref() */
 void fs_deinit(struct fs **fs);
 
@@ -218,6 +225,8 @@ const char *fs_get_driver(struct fs *fs);
 const char *fs_get_root_driver(struct fs *fs);
 
 struct fs_file *fs_file_init(struct fs *fs, const char *path, int mode_flags);
+struct fs_file *fs_file_init_with_event(struct fs *fs, struct event *event,
+					const char *path, int mode_flags);
 void fs_file_deinit(struct fs_file **file);
 
 /* If the file has an input streams open, close them. */
@@ -243,6 +252,8 @@ int fs_lookup_metadata(struct fs_file *file, const char *key,
 const char *fs_file_path(struct fs_file *file);
 /* Returns the file's fs. */
 struct fs *fs_file_fs(struct fs_file *file);
+/* Returns the file's event. */
+struct event *fs_file_event(struct fs_file *file);
 
 /* Return the error message for the last failed operation. */
 const char *fs_last_error(struct fs *fs);
@@ -271,7 +282,7 @@ int fs_write(struct fs_file *file, const void *data, size_t size);
    fs_write_stream_finish/abort. The returned ostream is already corked and
    it doesn't need to be uncorked. */
 struct ostream *fs_write_stream(struct fs_file *file);
-/* Finish writing via stream, calling also o_stream_nfinish() on the stream and
+/* Finish writing via stream, calling also o_stream_flush() on the stream and
    handling any pending errors. The file will be created/replaced/appended only
    after this call, same as with fs_write(). Anything written to the stream
    won't be visible earlier. Returns 1 if ok, 0 if async write isn't finished
@@ -283,7 +294,6 @@ int fs_write_stream_finish_async(struct fs_file *file);
    doesn't need to do it. This must not be called after
    fs_write_stream_finish(), i.e. it can't be used to abort a pending async
    write. */
-void fs_write_stream_abort(struct fs_file *file, struct ostream **output);
 void fs_write_stream_abort_error(struct fs_file *file, struct ostream **output, const char *error_fmt, ...) ATTR_FORMAT(3, 4);
 
 /* Set a hash to the following write. The storage can then verify that the
@@ -298,9 +308,8 @@ void fs_file_set_async_callback(struct fs_file *file,
 				fs_file_async_callback_t *callback,
 				void *context);
 /* Wait until some file can be read/written to more before returning.
-   It's an error to call this when there are no pending async operations.
-   Returns 0 if ok, -1 if timed out. */
-int fs_wait_async(struct fs *fs);
+   It's an error to call this when there are no pending async operations. */
+void fs_wait_async(struct fs *fs);
 /* Switch the fs to the current ioloop. This can be used to do fs_wait_async()
    among other IO work. Returns TRUE if there is actually some work that can
    be waited on. */
@@ -339,6 +348,9 @@ void fs_unlock(struct fs_lock **lock);
    nonexistent directory. */
 struct fs_iter *
 fs_iter_init(struct fs *fs, const char *path, enum fs_iter_flags flags);
+struct fs_iter *
+fs_iter_init_with_event(struct fs *fs, struct event *event,
+			const char *path, enum fs_iter_flags flags);
 /* Returns 0 if ok, -1 if iteration failed. */
 int fs_iter_deinit(struct fs_iter **iter);
 /* Returns the next filename. */

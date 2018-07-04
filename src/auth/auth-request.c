@@ -186,8 +186,7 @@ void auth_request_success_continue(struct auth_policy_check_ctx *ctx)
 	struct auth_stats *stats;
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
 
-	if (request->to_penalty != NULL)
-		timeout_remove(&request->to_penalty);
+	timeout_remove(&request->to_penalty);
 
 	if (request->failed || !request->passdb_success) {
 		/* password was valid, but some other check failed. */
@@ -267,10 +266,8 @@ void auth_request_unref(struct auth_request **_request)
 
 	if (request->dns_lookup_ctx != NULL)
 		dns_lookup_abort(&request->dns_lookup_ctx->dns_lookup);
-	if (request->to_abort != NULL)
-		timeout_remove(&request->to_abort);
-	if (request->to_penalty != NULL)
-		timeout_remove(&request->to_penalty);
+	timeout_remove(&request->to_abort);
+	timeout_remove(&request->to_penalty);
 
 	if (request->mech != NULL)
 		request->mech->auth_free(request);
@@ -316,7 +313,7 @@ void auth_request_export(struct auth_request *request, string_t *dest)
 		auth_str_add_keyvalue(dest, "master-user",
 				      request->master_user);
 	}
-	auth_str_add_keyvalue(dest, "original_username",
+	auth_str_add_keyvalue(dest, "original-username",
 			      request->original_username);
 	if (request->requested_login_user != NULL) {
 		auth_str_add_keyvalue(dest, "requested-login-user",
@@ -355,8 +352,12 @@ void auth_request_export(struct auth_request *request, string_t *dest)
 		str_printfa(dest, "\tsession=%s", request->session_id);
 	if (request->debug)
 		str_append(dest, "\tdebug");
-	if (request->secured)
-		str_append(dest, "\tsecured");
+	switch(request->secured) {
+	case AUTH_REQUEST_SECURED_NONE: break;
+	case AUTH_REQUEST_SECURED: str_append(dest, "\tsecured"); break;
+	case AUTH_REQUEST_SECURED_TLS: str_append(dest, "\tsecured=tls"); break;
+	default: break;
+	}
 	if (request->skip_password_check)
 		str_append(dest, "\tskip-password-check");
 	if (request->delayed_credentials != NULL)
@@ -381,6 +382,8 @@ void auth_request_export(struct auth_request *request, string_t *dest)
 bool auth_request_import_info(struct auth_request *request,
 			      const char *key, const char *value)
 {
+	i_assert(value != NULL);
+
 	/* authentication and user lookups may set these */
 	if (strcmp(key, "service") == 0)
 		request->service = p_strdup(request->pool, value);
@@ -432,12 +435,18 @@ bool auth_request_import_info(struct auth_request *request,
 bool auth_request_import_auth(struct auth_request *request,
 			      const char *key, const char *value)
 {
+	i_assert(value != NULL);
+
 	if (auth_request_import_info(request, key, value))
 		return TRUE;
 
 	/* auth client may set these */
-	if (strcmp(key, "secured") == 0)
-		request->secured = TRUE;
+	if (strcmp(key, "secured") == 0) {
+		if (strcmp(value, "tls") == 0)
+			request->secured = AUTH_REQUEST_SECURED_TLS;
+		else
+			request->secured = AUTH_REQUEST_SECURED;
+	}
 	else if (strcmp(key, "final-resp-ok") == 0)
 		request->final_resp_ok = TRUE;
 	else if (strcmp(key, "no-penalty") == 0)
@@ -462,6 +471,8 @@ bool auth_request_import_master(struct auth_request *request,
 {
 	pid_t pid;
 
+	i_assert(value != NULL);
+
 	/* master request lookups may set these */
 	if (strcmp(key, "session_pid") == 0) {
 		if (str_to_pid(value, &pid) == 0)
@@ -476,6 +487,8 @@ bool auth_request_import_master(struct auth_request *request,
 bool auth_request_import(struct auth_request *request,
 			 const char *key, const char *value)
 {
+	i_assert(value != NULL);
+
 	if (auth_request_import_auth(request, key, value))
 		return TRUE;
 
@@ -541,6 +554,8 @@ static void auth_request_save_cache(struct auth_request *request,
 	struct auth_passdb *passdb = request->passdb;
 	const char *encoded_password;
 	string_t *str;
+	struct password_generate_params gen_params = {.user = request->user,
+						      .rounds = 0 };
 
 	switch (result) {
 	case PASSDB_RESULT_USER_UNKNOWN:
@@ -582,9 +597,9 @@ static void auth_request_save_cache(struct auth_request *request,
 		   strdup() it so that mech_password doesn't get
 		   cleared too early. */
 		if (!password_generate_encoded(request->mech_password,
-						request->user,
-						CACHED_PASSWORD_SCHEME,
-						&encoded_password))
+					       &gen_params,
+					       CACHED_PASSWORD_SCHEME,
+					       &encoded_password))
 			i_unreached();
 		request->passdb_password =
 			p_strconcat(request->pool, "{"CACHED_PASSWORD_SCHEME"}",
@@ -899,7 +914,14 @@ void
 auth_request_verify_plain_callback_finish(enum passdb_result result,
 					  struct auth_request *request)
 {
-	passdb_template_export(request->passdb->override_fields_tmpl, request);
+	const char *error;
+
+	if (passdb_template_export(request->passdb->override_fields_tmpl,
+				   request, &error) < 0) {
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"Failed to expand override_fields: %s", error);
+		result = PASSDB_RESULT_INTERNAL_FAILURE;
+	}
 	if (!auth_request_handle_passdb_callback(&result, request)) {
 		/* try next passdb */
 		auth_request_verify_plain(request, request->mech_password,
@@ -965,11 +987,11 @@ static bool password_has_illegal_chars(const char *password)
 
 static bool auth_request_is_disabled_master_user(struct auth_request *request)
 {
-	if (request->passdb != NULL)
+	if (request->requested_login_user == NULL ||
+	    request->passdb != NULL)
 		return FALSE;
 
 	/* no masterdbs, master logins not supported */
-	i_assert(request->requested_login_user != NULL);
 	auth_request_log_info(request, AUTH_SUBSYS_MECH,
 			      "Attempted master login with no master passdbs "
 			      "(trying to log in as user: %s)",
@@ -982,8 +1004,7 @@ void auth_request_policy_penalty_finish(void *context)
 {
 	struct auth_policy_check_ctx *ctx = context;
 
-	if (ctx->request->to_penalty != NULL)
-		timeout_remove(&ctx->request->to_penalty);
+	timeout_remove(&ctx->request->to_penalty);
 
 	i_assert(ctx->request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
 
@@ -1052,7 +1073,7 @@ void auth_request_verify_plain_continue(struct auth_request *request,
 
 	struct auth_passdb *passdb;
 	enum passdb_result result;
-	const char *cache_key;
+	const char *cache_key, *error;
 	const char *password = request->mech_password;
 
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
@@ -1102,8 +1123,13 @@ void auth_request_verify_plain_continue(struct auth_request *request,
 			PASSDB_RESULT_INTERNAL_FAILURE, request);
 	} else if (passdb->passdb->blocking) {
 		passdb_blocking_verify_plain(request);
+	} else if (passdb_template_export(passdb->default_fields_tmpl,
+					  request, &error) < 0) {
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"Failed to expand default_fields: %s", error);
+		auth_request_verify_plain_callback(
+			PASSDB_RESULT_INTERNAL_FAILURE, request);
 	} else {
-		passdb_template_export(passdb->default_fields_tmpl, request);
 		passdb->passdb->iface.verify_plain(request, password,
 					   auth_request_verify_plain_callback);
 	}
@@ -1115,7 +1141,14 @@ auth_request_lookup_credentials_finish(enum passdb_result result,
 					size_t size,
 					struct auth_request *request)
 {
-	passdb_template_export(request->passdb->override_fields_tmpl, request);
+	const char *error;
+
+	if (passdb_template_export(request->passdb->override_fields_tmpl,
+				   request, &error) < 0) {
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"Failed to expand override_fields: %s", error);
+		result = PASSDB_RESULT_INTERNAL_FAILURE;
+	}
 	if (!auth_request_handle_passdb_callback(&result, request)) {
 		/* try next passdb */
 		if (request->skip_password_check &&
@@ -1229,7 +1262,7 @@ void auth_request_lookup_credentials_policy_continue(struct auth_request *reques
 						     lookup_credentials_callback_t *callback)
 {
 	struct auth_passdb *passdb;
-	const char *cache_key, *cache_cred, *cache_scheme;
+	const char *cache_key, *cache_cred, *cache_scheme, *error;
 	enum passdb_result result;
 
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
@@ -1273,11 +1306,17 @@ void auth_request_lookup_credentials_policy_continue(struct auth_request *reques
 			"passdb doesn't support credential lookups");
 		auth_request_lookup_credentials_callback(
 					PASSDB_RESULT_SCHEME_NOT_AVAILABLE,
-					&uchar_nul, 0, request);
+					uchar_empty_ptr, 0, request);
 	} else if (passdb->passdb->blocking) {
 		passdb_blocking_lookup_credentials(request);
+	} else if (passdb_template_export(passdb->default_fields_tmpl,
+					  request, &error) < 0) {
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"Failed to expand default_fields: %s", error);
+		auth_request_lookup_credentials_callback(
+					PASSDB_RESULT_INTERNAL_FAILURE,
+					uchar_empty_ptr, 0, request);
 	} else {
-		passdb_template_export(passdb->default_fields_tmpl, request);
 		passdb->passdb->iface.lookup_credentials(request,
 			auth_request_lookup_credentials_callback);
 	}
@@ -1392,6 +1431,7 @@ void auth_request_userdb_callback(enum userdb_result result,
 	struct auth_userdb *userdb = request->userdb;
 	struct auth_userdb *next_userdb;
 	enum auth_db_rule result_rule;
+	const char *error;
 	bool userdb_continue = FALSE;
 
 	switch (result) {
@@ -1443,7 +1483,14 @@ void auth_request_userdb_callback(enum userdb_result result,
 		if (result == USERDB_RESULT_OK) {
 			/* this userdb lookup succeeded, preserve its extra
 			   fields */
-			userdb_template_export(userdb->override_fields_tmpl, request);
+			if (userdb_template_export(userdb->override_fields_tmpl,
+						   request, &error) < 0) {
+				auth_request_log_error(request, AUTH_SUBSYS_DB,
+					"Failed to expand override_fields: %s", error);
+				request->private_callback.userdb(
+					USERDB_RESULT_INTERNAL_FAILURE, request);
+				return;
+			}
 			auth_fields_snapshot(request->userdb_reply);
 		} else {
 			/* this userdb lookup failed, remove any extra fields
@@ -1459,8 +1506,14 @@ void auth_request_userdb_callback(enum userdb_result result,
 	}
 
 	if (request->userdb_success) {
-		result = USERDB_RESULT_OK;
-		userdb_template_export(userdb->override_fields_tmpl, request);
+		if (userdb_template_export(userdb->override_fields_tmpl,
+					   request, &error) < 0) {
+			auth_request_log_error(request, AUTH_SUBSYS_DB,
+				"Failed to expand override_fields: %s", error);
+			result = USERDB_RESULT_INTERNAL_FAILURE;
+		} else {
+			result = USERDB_RESULT_OK;
+		}
 	} else if (request->userdbs_seen_internal_failure ||
 		   result == USERDB_RESULT_INTERNAL_FAILURE) {
 		/* one of the userdb lookups failed. the user might have been
@@ -1506,7 +1559,7 @@ void auth_request_lookup_user(struct auth_request *request,
 			      userdb_callback_t *callback)
 {
 	struct auth_userdb *userdb = request->userdb;
-	const char *cache_key;
+	const char *cache_key, *error;
 
 	request->private_callback.userdb = callback;
 	request->user_changed_by_lookup = FALSE;
@@ -1518,7 +1571,14 @@ void auth_request_lookup_user(struct auth_request *request,
 		/* we still want to set default_fields. these override any
 		   existing fields set by previous userdbs (because if that is
 		   unwanted, ":protected" can be used). */
-		userdb_template_export(userdb->default_fields_tmpl, request);
+		if (userdb_template_export(userdb->default_fields_tmpl,
+					   request, &error) < 0) {
+			auth_request_log_error(request, AUTH_SUBSYS_DB,
+				"Failed to expand default_fields: %s", error);
+			auth_request_userdb_callback(
+				USERDB_RESULT_INTERNAL_FAILURE, request);
+			return;
+		}
 	}
 
 	/* (for now) auth_cache is shared between passdb and userdb */
@@ -1576,6 +1636,7 @@ auth_request_fix_username(struct auth_request *request, const char *username,
 		/* username format given, put it through variable expansion.
 		   we'll have to temporarily replace request->user to get
 		   %u to be the wanted username */
+		const char *error;
 		char *old_username;
 		string_t *dest;
 
@@ -1583,7 +1644,12 @@ auth_request_fix_username(struct auth_request *request, const char *username,
 		request->user = user;
 
 		dest = t_str_new(256);
-		auth_request_var_expand(dest, set->username_format, request, NULL);
+		if (auth_request_var_expand(dest, set->username_format,
+					    request, NULL, &error) <= 0) {
+			*error_r = t_strdup_printf(
+				"Failed to expand username_format=%s: %s",
+				set->username_format, error);
+		}
 		user = p_strdup(request->pool, str_c(dest));
 
 		request->user = old_username;
@@ -1874,7 +1940,7 @@ void auth_request_set_field(struct auth_request *request,
 					"Invalid delay_until randomness number '%s'", p);
 				request->failed = TRUE;
 			} else {
-				extra_secs = rand() % extra_secs;
+				extra_secs = i_rand_limit(extra_secs);
 			}
 		}
 		if (str_to_time(value, &timestamp) < 0) {
@@ -1988,8 +2054,14 @@ void auth_request_set_fields(struct auth_request *request,
 
 void auth_request_init_userdb_reply(struct auth_request *request)
 {
+	const char *error;
+
 	request->userdb_reply = auth_fields_init(request->pool);
-	userdb_template_export(request->userdb->default_fields_tmpl, request);
+	if (userdb_template_export(request->userdb->default_fields_tmpl,
+				   request, &error) < 0) {
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"Failed to expand default_fields: %s", error);
+	}
 }
 
 static void auth_request_set_uidgid_file(struct auth_request *request,
@@ -1997,10 +2069,15 @@ static void auth_request_set_uidgid_file(struct auth_request *request,
 {
 	string_t *path;
 	struct stat st;
+	const char *error;
 
 	path = t_str_new(256);
-	auth_request_var_expand(path, path_template, request, NULL);
-	if (stat(str_c(path), &st) < 0) {
+	if (auth_request_var_expand(path, path_template, request,
+				    NULL, &error) <= 0) {
+		auth_request_log_error(request, AUTH_SUBSYS_DB,
+			"Failed to expand uidgid_file=%s: %s", path_template, error);
+		request->userdb_lookup_tempfailed = TRUE;
+	} else if (stat(str_c(path), &st) < 0) {
 		auth_request_log_error(request, AUTH_SUBSYS_DB,
 					"stat(%s) failed: %m", str_c(path));
 		request->userdb_lookup_tempfailed = TRUE;
@@ -2333,7 +2410,8 @@ void auth_request_proxy_finish_failure(struct auth_request *request)
 static void log_password_failure(struct auth_request *request,
 				 const char *plain_password,
 				 const char *crypted_password,
-				 const char *scheme, const char *user,
+				 const char *scheme,
+				 const struct password_generate_params *params,
 				 const char *subsystem)
 {
 	static bool scheme_ok = FALSE;
@@ -2347,7 +2425,7 @@ static void log_password_failure(struct auth_request *request,
 		/* perhaps the scheme is wrong - see if we can find
 		   a working one */
 		working_scheme = password_scheme_detect(plain_password,
-							crypted_password, user);
+							crypted_password, params);
 		if (working_scheme != NULL) {
 			str_printfa(str, ", try %s scheme instead",
 				    working_scheme);
@@ -2392,34 +2470,29 @@ auth_request_append_password(struct auth_request *request, string_t *str)
 void auth_request_log_password_mismatch(struct auth_request *request,
 					const char *subsystem)
 {
-	string_t *str;
-
-	if (strcmp(request->set->verbose_passwords, "no") == 0) {
-		auth_request_log_info(request, subsystem, "Password mismatch");
-		return;
-	}
-
-	str = t_str_new(128);
-	get_log_prefix(str, request, subsystem);
-	str_append(str, "Password mismatch ");
-
-	auth_request_append_password(request, str);
-	i_info("%s", str_c(str));
+	auth_request_log_login_failure(request, subsystem, AUTH_LOG_MSG_PASSWORD_MISMATCH);
 }
 
 void auth_request_log_unknown_user(struct auth_request *request,
 				   const char *subsystem)
 {
+	auth_request_log_login_failure(request, subsystem, "unknown user");
+}
+
+void auth_request_log_login_failure(struct auth_request *request,
+				    const char *subsystem,
+				    const char *message)
+{
 	string_t *str;
 
-	if (strcmp(request->set->verbose_passwords, "no") == 0 ||
-	    !request->set->verbose) {
-		auth_request_log_info(request, subsystem, "unknown user");
+	if (strcmp(request->set->verbose_passwords, "no") == 0) {
+		auth_request_log_info(request, subsystem, "%s", message);
 		return;
 	}
 	str = t_str_new(128);
 	get_log_prefix(str, request, subsystem);
-	str_append(str, "unknown user ");
+	str_append(str, message);
+	str_append(str, " ");
 
 	auth_request_append_password(request, str);
 
@@ -2438,10 +2511,22 @@ int auth_request_password_verify(struct auth_request *request,
 				 const char *crypted_password,
 				 const char *scheme, const char *subsystem)
 {
+	return auth_request_password_verify_log(request, plain_password,
+			crypted_password, scheme, subsystem, TRUE);
+}
+
+int auth_request_password_verify_log(struct auth_request *request,
+				 const char *plain_password,
+				 const char *crypted_password,
+				 const char *scheme, const char *subsystem,
+				 bool log_password_mismatch)
+{
 	const unsigned char *raw_password;
 	size_t raw_password_size;
 	const char *error;
 	int ret;
+	struct password_generate_params gen_params = {.user = request->original_username,
+						      .rounds = 0};
 
 	if (request->skip_password_check) {
 		/* passdb continue* rule after a successful authentication */
@@ -2476,7 +2561,7 @@ int auth_request_password_verify(struct auth_request *request,
 	/* Use original_username since it may be important for some
 	   password schemes (eg. digest-md5). Otherwise the username is used
 	   only for logging purposes. */
-	ret = password_verify(plain_password, request->original_username,
+	ret = password_verify(plain_password, &gen_params,
 			      scheme, raw_password, raw_password_size, &error);
 	if (ret < 0) {
 		const char *password_str = request->set->debug_passwords ?
@@ -2485,12 +2570,13 @@ int auth_request_password_verify(struct auth_request *request,
 					"Invalid password%s in passdb: %s",
 					password_str, error);
 	} else if (ret == 0) {
-		auth_request_log_password_mismatch(request, subsystem);
+		if (log_password_mismatch)
+			auth_request_log_password_mismatch(request, subsystem);
 	}
 	if (ret <= 0 && request->set->debug_passwords) T_BEGIN {
 		log_password_failure(request, plain_password,
 				     crypted_password, scheme,
-				     request->original_username,
+				     &gen_params,
 				     subsystem);
 	} T_END;
 	return ret;

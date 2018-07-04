@@ -8,6 +8,7 @@ struct message_size;
 #include "guid.h"
 #include "mail-types.h"
 #include "mail-error.h"
+#include "mail-index.h"
 #include "mail-namespace.h"
 #include "mailbox-list.h"
 #include "mailbox-attribute.h"
@@ -64,6 +65,10 @@ enum mailbox_flags {
 	   The backend shouldn't treat it as corruption if a mail body isn't
 	   found. */
 	MAILBOX_FLAG_USE_STUBS		= 0x800,
+	/* Mailbox is created implicitly if it does not exist. */
+	MAILBOX_FLAG_AUTO_CREATE	= 0x1000,
+	/* Mailbox is subscribed to implicitly when it is created automatically */
+	MAILBOX_FLAG_AUTO_SUBSCRIBE	= 0x2000
 };
 
 enum mailbox_feature {
@@ -167,7 +172,6 @@ enum mail_fetch_field {
 	MAIL_FETCH_FROM_ENVELOPE	= 0x00008000,
 	MAIL_FETCH_HEADER_MD5		= 0x00010000,
 	MAIL_FETCH_STORAGE_ID		= 0x00020000,
-#define MAIL_FETCH_UIDL_FILE_NAME MAIL_FETCH_STORAGE_ID /* FIXME: remove in v2.3 */
 	MAIL_FETCH_UIDL_BACKEND		= 0x00040000,
 	MAIL_FETCH_MAILBOX_NAME		= 0x00080000,
 	MAIL_FETCH_SEARCH_RELEVANCY	= 0x00100000,
@@ -266,21 +270,21 @@ struct mailbox_status {
 	enum mail_flags flags;
 
 	/* All keywords can be permanently modified (STATUS_PERMANENT_FLAGS) */
-	unsigned int permanent_keywords:1;
+	bool permanent_keywords:1;
 	/* More keywords can be created (STATUS_PERMANENT_FLAGS) */
-	unsigned int allow_new_keywords:1;
+	bool allow_new_keywords:1;
 	/* Modseqs aren't permanent (index is in memory) (STATUS_HIGHESTMODSEQ) */
-	unsigned int nonpermanent_modseqs:1;
+	bool nonpermanent_modseqs:1;
 	/* Modseq tracking has never been enabled for this mailbox
 	   yet. (STATUS_HIGHESTMODSEQ) */
-	unsigned int no_modseq_tracking:1;
+	bool no_modseq_tracking:1;
 
 	/* Messages have GUIDs (always set) */
-	unsigned int have_guids:1;
+	bool have_guids:1;
 	/* mailbox_save_set_guid() works (always set) */
-	unsigned int have_save_guids:1;
+	bool have_save_guids:1;
 	/* GUIDs are always 128bit (always set) */
-	unsigned int have_only_guid128:1;
+	bool have_only_guid128:1;
 };
 
 struct mailbox_cache_field {
@@ -339,8 +343,8 @@ struct mail_transaction_commit_changes {
 	/* number of modseq changes that couldn't be changed as requested */
 	unsigned int ignored_modseq_changes;
 
-	/* TRUE if anything actually changed with this commit */
-	bool changed;
+	/* Changes that occurred within this transaction */
+	enum mail_index_transaction_change changes_mask;
 	/* User doesn't have read ACL for the mailbox, so don't show the
 	   uid_validity / saved_uids. */
 	bool no_read_perm;
@@ -352,7 +356,7 @@ struct mailbox_sync_rec {
 };
 struct mailbox_sync_status {
 	/* There are expunges that haven't been synced yet */
-	unsigned int sync_delayed_expunges:1;
+	bool sync_delayed_expunges:1;
 };
 
 struct mailbox_expunge_rec {
@@ -388,12 +392,13 @@ struct mail {
 	/* always set */
 	struct mailbox *box;
 	struct mailbox_transaction_context *transaction;
+	struct event *event;
 	uint32_t seq, uid;
 
-	unsigned int expunged:1;
-	unsigned int saving:1; /* This mail is still being saved */
-	unsigned int has_nuls:1; /* message data is known to contain NULs */
-	unsigned int has_no_nuls:1; /* -''- known to not contain NULs */
+	bool expunged:1;
+	bool saving:1; /* This mail is still being saved */
+	bool has_nuls:1; /* message data is known to contain NULs */
+	bool has_no_nuls:1; /* -''- known to not contain NULs */
 
 	/* Mail's header/body stream was opened within this request.
 	   If lookup_abort!=MAIL_LOOKUP_ABORT_NEVER, this can't become TRUE. */
@@ -510,6 +515,10 @@ struct mailbox *mailbox_alloc(struct mailbox_list *list, const char *vname,
 struct mailbox *mailbox_alloc_guid(struct mailbox_list *list,
 				   const guid_128_t guid,
 				   enum mailbox_flags flags);
+/* Initialize mailbox for delivery without actually opening any files or
+   verifying that it exists. */
+struct mailbox *mailbox_alloc_delivery(struct mail_user *user,
+	const char *name, enum mailbox_flags flags);
 /* Set a human-readable reason for why this mailbox is being accessed.
    This is used for logging purposes. */
 void mailbox_set_reason(struct mailbox *box, const char *reason);
@@ -645,16 +654,13 @@ void mailbox_notify_changes_stop(struct mailbox *box);
 
 struct mailbox_transaction_context *
 mailbox_transaction_begin(struct mailbox *box,
-			  enum mailbox_transaction_flags flags);
+			  enum mailbox_transaction_flags flags,
+			  const char *reason);
 int mailbox_transaction_commit(struct mailbox_transaction_context **t);
 int mailbox_transaction_commit_get_changes(
 	struct mailbox_transaction_context **t,
 	struct mail_transaction_commit_changes *changes_r);
 void mailbox_transaction_rollback(struct mailbox_transaction_context **t);
-/* Set a reason for why the transaction is created. This is used for
-   logging purposes. */
-void mailbox_transaction_set_reason(struct mailbox_transaction_context *t,
-				    const char *reason);
 /* Return the number of active transactions for the mailbox. */
 unsigned int mailbox_transaction_get_count(const struct mailbox *box) ATTR_PURE;
 /* When committing transaction, drop flag/keyword updates for messages whose
@@ -797,9 +803,6 @@ void mailbox_save_set_pop3_uidl(struct mail_save_context *ctx,
    of the mailbox. Not all backends support this. */
 void mailbox_save_set_pop3_order(struct mail_save_context *ctx,
 				 unsigned int order);
-/* FIXME: Remove in v2.3. Obsolete - use mailbox_save_get_dest_mail() instead */
-void mailbox_save_set_dest_mail(struct mail_save_context *ctx,
-				struct mail *mail);
 /* Returns the destination mail */
 struct mail *mailbox_save_get_dest_mail(struct mail_save_context *ctx);
 /* Begin saving the message. All mail_save_set_*() calls must have been called
@@ -941,9 +944,6 @@ int mail_get_special(struct mail *mail, enum mail_fetch_field field,
 /* Returns the mail for the physical message. Normally this is the mail itself,
    but in virtual mailboxes it points to the backend mailbox. */
 int mail_get_backend_mail(struct mail *mail, struct mail **real_mail_r);
-/* FIXME: For backwards compatibility for now, use mail_get_backend_mail()
-   instead. */
-struct mail *mail_get_real_mail(struct mail *mail);
 
 /* Update message flags. */
 void mail_update_flags(struct mail *mail, enum modify_type modify_type,
@@ -964,10 +964,9 @@ void mail_expunge(struct mail *mail);
 /* Add missing fields to cache. */
 void mail_precache(struct mail *mail);
 /* Mark a cached field corrupted and have it recalculated. */
-void mail_set_cache_corrupted(struct mail *mail, enum mail_fetch_field field);
-void mail_set_cache_corrupted_reason(struct mail *mail,
-				     enum mail_fetch_field field,
-				     const char *reason);
+void mail_set_cache_corrupted(struct mail *mail,
+			      enum mail_fetch_field field,
+			      const char *reason);
 
 /* Return 128 bit GUID using input string. If guid is already 128 bit hex
    encoded, it's returned as-is. Otherwise SHA1 sum is taken and its last

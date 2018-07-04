@@ -407,7 +407,7 @@ static void search_arg_foreach(struct mail_search_arg *arg,
 			subarg = subarg->next;
 		}
 		if (arg->match_not && arg->result != -1)
-			arg->result = !arg->result;
+			arg->result = arg->result > 0 ? 0 : 1;
 	} else if (arg->type == SEARCH_OR) {
 		/* OR-list of conditions */
 		i_assert(arg->value.subargs != NULL);
@@ -429,7 +429,7 @@ static void search_arg_foreach(struct mail_search_arg *arg,
 			subarg = subarg->next;
 		}
 		if (arg->match_not && arg->result != -1)
-			arg->result = !arg->result;
+			arg->result = arg->result > 0 ? 0 : 1;
 	} else {
 		/* just a single condition */
 		callback(arg, context);
@@ -516,7 +516,7 @@ mail_search_args_analyze(struct mail_search_arg *args,
 
 	*have_headers = *have_body = have_text = FALSE;
 
-	headers = buffer_create_dynamic(pool_datastack_create(), 128);
+	headers = t_buffer_create(128);
 	for (; args != NULL; args = args->next)
 		search_arg_analyze(args, headers, have_body, &have_text);
 
@@ -526,7 +526,7 @@ mail_search_args_analyze(struct mail_search_arg *args,
 		return NULL;
 
 	buffer_append(headers, &null, sizeof(const char *));
-	return buffer_get_data(headers, NULL);
+	return headers->data;
 }
 
 static bool
@@ -665,7 +665,6 @@ bool mail_search_arg_one_equals(const struct mail_search_arg *arg1,
 
 	}
 	i_unreached();
-	return FALSE;
 }
 
 bool mail_search_arg_equals(const struct mail_search_arg *arg1,

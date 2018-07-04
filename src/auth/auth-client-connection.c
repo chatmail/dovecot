@@ -76,8 +76,7 @@ static void auth_client_send(struct auth_client_connection *conn,
 	    OUTBUF_THROTTLE_SIZE) {
 		/* stop reading new requests until client has read the pending
 		   replies. */
-		if (conn->io != NULL)
-			io_remove(&conn->io);
+		io_remove(&conn->io);
 	}
 
 	if (conn->auth->set->debug) {
@@ -270,16 +269,27 @@ static void auth_client_input(struct auth_client_connection *conn)
 			return;
 
 		if (!conn->version_received) {
-			/* make sure the major version matches */
+			unsigned int vmajor, vminor;
+			const char *p;
+
+			/* split the version line */
 			if (strncmp(line, "VERSION\t", 8) != 0 ||
-			    !str_uint_equals(t_strcut(line + 8, '\t'),
-					     AUTH_CLIENT_PROTOCOL_MAJOR_VERSION)) {
+			    str_parse_uint(line + 8, &vmajor, &p) < 0 ||
+			    *(p++) != '\t' || str_to_uint(p, &vminor) < 0) {
+				i_error("Authentication client "
+					"sent invalid VERSION line: %s", line);
+				auth_client_connection_destroy(&conn);
+				return;
+			}
+			/* make sure the major version matches */
+			if (vmajor != AUTH_MASTER_PROTOCOL_MAJOR_VERSION) {
 				i_error("Authentication client "
 					"not compatible with this server "
 					"(mixed old and new binaries?)");
 				auth_client_connection_destroy(&conn);
 				return;
 			}
+			conn->version_minor = vminor;
 			conn->version_received = TRUE;
 			continue;
 		}
@@ -331,9 +341,8 @@ void auth_client_connection_create(struct auth *auth, int fd,
 	random_fill(conn->cookie, sizeof(conn->cookie));
 
 	conn->fd = fd;
-	conn->input = i_stream_create_fd(fd, AUTH_CLIENT_MAX_LINE_LENGTH,
-					 FALSE);
-	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(fd, AUTH_CLIENT_MAX_LINE_LENGTH);
+	conn->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	o_stream_set_flush_callback(conn->output, auth_client_output, conn);
 	conn->io = io_add(fd, IO_READ, auth_client_input, conn);
@@ -372,8 +381,7 @@ void auth_client_connection_destroy(struct auth_client_connection **_conn)
 	i_stream_close(conn->input);
 	o_stream_close(conn->output);
 
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	io_remove(&conn->io);
 
 	net_disconnect(conn->fd);
 	conn->fd = -1;

@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __IMAP_QUOTE_H
-#define __IMAP_QUOTE_H
+#ifndef IMAP_QUOTE_H
+#define IMAP_QUOTE_H
 
 /* Return value suitable for sending to client, either as quoted-string or
    literal. Note that this also converts TABs into spaces, multiple spaces

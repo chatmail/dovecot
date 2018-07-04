@@ -21,7 +21,7 @@ struct passwd_userdb_module {
 	struct userdb_template *tmpl;
 
 	unsigned int fast_count, slow_count;
-	unsigned int slow_warned:1;
+	bool slow_warned:1;
 };
 
 struct passwd_userdb_iterate_context {
@@ -84,6 +84,7 @@ static void passwd_lookup(struct auth_request *auth_request,
 		(struct passwd_userdb_module *)_module;
 	struct passwd pw;
 	struct timeval start_tv;
+	const char *error;
 	int ret;
 
 	auth_request_log_debug(auth_request, AUTH_SUBSYS_DB, "lookup");
@@ -114,7 +115,11 @@ static void passwd_lookup(struct auth_request *auth_request,
 	auth_request_set_userdb_field(auth_request, "gid", dec2str(pw.pw_gid));
 	auth_request_set_userdb_field(auth_request, "home", pw.pw_dir);
 
-	userdb_template_export(module->tmpl, auth_request);
+	if (userdb_template_export(module->tmpl, auth_request, &error) < 0) {
+		auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
+				       "Failed to expand template: %s", error);
+		callback(USERDB_RESULT_INTERNAL_FAILURE, auth_request);
+	}
 
 	callback(USERDB_RESULT_OK, auth_request);
 }
@@ -144,6 +149,10 @@ passwd_iterate_want_pw(struct passwd *pw, const struct auth_settings *set)
 	if (pw->pw_uid < (uid_t)set->first_valid_uid)
 		return FALSE;
 	if (pw->pw_uid > (uid_t)set->last_valid_uid && set->last_valid_uid != 0)
+		return FALSE;
+	if (pw->pw_gid < (gid_t)set->first_valid_gid)
+		return FALSE;
+	if (pw->pw_gid > (gid_t)set->last_valid_gid && set->last_valid_gid != 0)
 		return FALSE;
 	return TRUE;
 }

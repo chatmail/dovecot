@@ -11,7 +11,7 @@
 #include "istream.h"
 #include "istream-header-filter.h"
 #include "ostream.h"
-#include "mail-deliver.h"
+#include "smtp-params.h"
 #include "mail-storage.h"
 #include "message-date.h"
 #include "message-size.h"
@@ -363,10 +363,13 @@ static bool act_store_mailbox_open
 (const struct sieve_action_exec_env *aenv, const char *mailbox,
 	struct mailbox **box_r, enum mail_error *error_code_r, const char **error_r)
 {
+	struct mailbox *box;
 	struct mail_storage **storage = &(aenv->exec_status->last_storage);
-	struct mail_deliver_save_open_context save_ctx;
+	enum mailbox_flags flags = 0;
 
 	*box_r = NULL;
+	*error_code_r = MAIL_ERROR_NONE;
+	*error_r = NULL;
 
 	if ( !uni_utf8_str_is_valid(mailbox) ) {
 		/* Just a precaution; already (supposed to be) checked at
@@ -377,17 +380,18 @@ static bool act_store_mailbox_open
 		return FALSE;
 	}
 
-	i_zero(&save_ctx);
-	save_ctx.user = aenv->scriptenv->user;
-	save_ctx.lda_mailbox_autocreate = aenv->scriptenv->mailbox_autocreate;
-	save_ctx.lda_mailbox_autosubscribe = aenv->scriptenv->mailbox_autosubscribe;
+	if (aenv->scriptenv->mailbox_autocreate)
+		flags |= MAILBOX_FLAG_AUTO_CREATE;
+	if (aenv->scriptenv->mailbox_autosubscribe)
+		flags |= MAILBOX_FLAG_AUTO_SUBSCRIBE;
+	*box_r = box = mailbox_alloc_delivery(
+		aenv->scriptenv->user, mailbox, flags);
+	*storage = mailbox_get_storage(box);
 
-	if ( mail_deliver_save_open
-		(&save_ctx, mailbox, box_r, error_code_r, error_r) < 0 )
-		return FALSE;
-
-	*storage = mailbox_get_storage(*box_r);
-	return TRUE;
+	if (mailbox_open(box) == 0)
+		return TRUE;
+	*error_r = mailbox_get_last_error(box, error_code_r);
+	return FALSE;
 }
 
 static int act_store_start
@@ -566,7 +570,7 @@ static int act_store_execute
 
 	/* Start mail transaction */
 	trans->mail_trans = mailbox_transaction_begin
-		(trans->box, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
+		(trans->box, MAILBOX_TRANSACTION_FLAG_EXTERNAL, __func__);
 
 	/* Store the message */
 	save_ctx = mailbox_save_alloc(trans->mail_trans);
@@ -755,7 +759,8 @@ static void act_store_rollback
 
 int sieve_act_redirect_add_to_result
 (const struct sieve_runtime_env *renv,
-	struct sieve_side_effects_list *seffects, const char *norm_address)
+	struct sieve_side_effects_list *seffects,
+	const struct smtp_address *to_address)
 {
 	struct sieve_instance *svinst = renv->svinst;
 	struct act_redirect_context *act;
@@ -763,7 +768,7 @@ int sieve_act_redirect_add_to_result
 
 	pool = sieve_result_pool(renv->result);
 	act = p_new(pool, struct act_redirect_context, 1);
-	act->to_address = p_strdup(pool, norm_address);
+	act->to_address = smtp_address_clone(pool, to_address);
 
 	if ( sieve_result_add_action
 		(renv, NULL, &act_redirect, seffects, (void *) act,
@@ -816,20 +821,22 @@ void sieve_action_duplicate_flush
 /* Rejecting the mail */
 
 static int sieve_action_do_reject_mail
-(const struct sieve_action_exec_env *aenv, const char *sender,
-	const char *recipient, const char *reason)
+(const struct sieve_action_exec_env *aenv,
+	const struct smtp_address *recipient, const char *reason)
 {
 	struct sieve_instance *svinst = aenv->svinst;
 	const struct sieve_script_env *senv = aenv->scriptenv;
 	const struct sieve_message_data *msgdata = aenv->msgdata;
+	const struct smtp_address *sender, *orig_recipient;
 	struct istream *input;
 	struct ostream *output;
 	struct sieve_smtp_context *sctx;
 	const char *new_msgid, *boundary, *error;
-	const char *orig_recipient =
-		sieve_message_get_orig_recipient(aenv->msgctx);
-	string_t *hdr;
+  string_t *hdr;
 	int ret;
+
+	sender = sieve_message_get_sender(aenv->msgctx);
+	orig_recipient = msgdata->envelope.rcpt_params->orcpt.addr;
 
 	sctx = sieve_smtp_start_single(senv, sender, NULL, &output);
 
@@ -843,13 +850,13 @@ static int sieve_action_do_reject_mail
 	new_msgid = sieve_message_get_new_id(svinst);
 	boundary = t_strdup_printf("%s/%s", my_pid, svinst->hostname);
 
-	hdr = t_str_new(512);
+  hdr = t_str_new(512);
 	rfc2822_header_write(hdr, "X-Sieve", SIEVE_IMPLEMENTATION);
 	rfc2822_header_write(hdr, "Message-ID", new_msgid);
 	rfc2822_header_write(hdr, "Date", message_date_create(ioloop_time));
-	rfc2822_header_printf(hdr, "From", "Mail Delivery Subsystem <%s>",
-		senv->postmaster_address);
-	rfc2822_header_printf(hdr, "To", "<%s>", sender);
+	rfc2822_header_write(hdr, "From", sieve_get_postmaster_address(senv));
+	rfc2822_header_printf(hdr, "To", "<%s>",
+		smtp_address_encode(sender));
 	rfc2822_header_write(hdr, "Subject", "Automatically rejected mail");
 	rfc2822_header_write(hdr, "Auto-Submitted", "auto-replied (rejected)");
 	rfc2822_header_write(hdr, "Precedence", "bulk");
@@ -868,7 +875,7 @@ static int sieve_action_do_reject_mail
 	rfc2822_header_write(hdr, "Content-Transfer-Encoding", "8bit");
 
 	str_printfa(hdr, "\r\nYour message to <%s> was automatically rejected:\r\n"
-		"%s\r\n", recipient, reason);
+		"%s\r\n", smtp_address_encode(recipient), reason);
 
 	/* MDN status report */
 	str_printfa(hdr, "--%s\r\n", boundary);
@@ -878,9 +885,11 @@ static int sieve_action_do_reject_mail
 		svinst->hostname);	
 	if ( orig_recipient != NULL ) {
 		rfc2822_header_printf
-			(hdr, "Original-Recipient", "rfc822; %s", orig_recipient);
+			(hdr, "Original-Recipient", "rfc822; %s",
+				smtp_address_encode(orig_recipient));
 	}
-	rfc2822_header_printf(hdr, "Final-Recipient", "rfc822; %s", recipient);
+	rfc2822_header_printf(hdr, "Final-Recipient", "rfc822; %s",
+		smtp_address_encode(recipient));
 
 	if ( msgdata->id != NULL )
 		rfc2822_header_write(hdr, "Original-Message-ID", msgdata->id);
@@ -892,52 +901,44 @@ static int sieve_action_do_reject_mail
 	str_printfa(hdr, "--%s\r\n", boundary);
 	rfc2822_header_write(hdr, "Content-Type", "message/rfc822");
 	str_append(hdr, "\r\n");
-	o_stream_send(output, str_data(hdr), str_len(hdr));
+	o_stream_nsend(output, str_data(hdr), str_len(hdr));
 
 	if (mail_get_hdr_stream(msgdata->mail, NULL, &input) == 0) {
-		/* Note: If you add more headers, they need to be sorted.
-		   We'll drop Content-Type because we're not including the
-		   message body, and having a multipart Content-Type may confuse
-		   some MIME parsers when they don't see the message boundaries.
-		 */
-		static const char *const exclude_headers[] = {
-			"Content-Type"
-		};
+    /* Note: If you add more headers, they need to be sorted.
+       We'll drop Content-Type because we're not including the message
+       body, and having a multipart Content-Type may confuse some
+       MIME parsers when they don't see the message boundaries. */
+    static const char *const exclude_headers[] = {
+	    "Content-Type"
+    };
 
-		input = i_stream_create_header_filter(input,
-			HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR |
-			HEADER_FILTER_HIDE_BODY, exclude_headers,
-			N_ELEMENTS(exclude_headers),
-			*null_header_filter_callback, (void *)NULL);
+    input = i_stream_create_header_filter(input,
+    		HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR |
+		HEADER_FILTER_HIDE_BODY, exclude_headers,
+		N_ELEMENTS(exclude_headers),
+		*null_header_filter_callback, (void *)NULL);
 
-		ret = o_stream_send_istream(output, input);
-		if (ret < 0 && input->stream_errno != 0) {
-			sieve_result_critical(aenv,
-				"reject action: failed to read input message",
-				"reject action: read(%s) failed: %s",
-				i_stream_get_name(input),
-				i_stream_get_error(input));
-			i_stream_unref(&input);
-			return SIEVE_EXEC_TEMP_FAILURE;
-		}
-		i_stream_unref(&input);
-	}
+    o_stream_nsend_istream(output, input);
+    i_stream_unref(&input);
+  }
 
-	str_truncate(hdr, 0);
-	str_printfa(hdr, "\r\n\r\n--%s--\r\n", boundary);
-	o_stream_send(output, str_data(hdr), str_len(hdr));
+  str_truncate(hdr, 0);
+  str_printfa(hdr, "\r\n\r\n--%s--\r\n", boundary);
+  o_stream_nsend(output, str_data(hdr), str_len(hdr));
 
 	if ( (ret=sieve_smtp_finish(sctx, &error)) <= 0 ) {
 		if ( ret < 0 ) {
 			sieve_result_global_error(aenv,
 				"failed to send rejection message to <%s>: %s "
 				"(temporary failure)",
-				str_sanitize(sender, 256), str_sanitize(error, 512));
+				smtp_address_encode(sender),
+				str_sanitize(error, 512));
 		} else {
 			sieve_result_global_log_error(aenv,
 				"failed to send rejection message to <%s>: %s "
 				"(permanent failure)",
-				str_sanitize(sender, 256), str_sanitize(error, 512));
+				smtp_address_encode(sender),
+				str_sanitize(error, 512));
 		}
 		return SIEVE_EXEC_FAILURE;
 	}
@@ -947,7 +948,7 @@ static int sieve_action_do_reject_mail
 
 int sieve_action_reject_mail
 (const struct sieve_action_exec_env *aenv,
-	const char *sender, const char *recipient, const char *reason)
+	const struct smtp_address *recipient, const char *reason)
 {
 	const struct sieve_script_env *senv = aenv->scriptenv;
 	int result;
@@ -958,7 +959,7 @@ int sieve_action_reject_mail
 				( senv->reject_mail(senv, recipient, reason) >= 0 ?
 					SIEVE_EXEC_OK : SIEVE_EXEC_FAILURE );
 		} else {
-			result = sieve_action_do_reject_mail(aenv, sender, recipient, reason);
+			result = sieve_action_do_reject_mail(aenv, recipient, reason);
 		}
 	} T_END;
 

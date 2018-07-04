@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_DATE_COMMON_H
-#define __EXT_DATE_COMMON_H
+#ifndef EXT_DATE_COMMON_H
+#define EXT_DATE_COMMON_H
 
 #include "sieve-common.h"
 
@@ -80,4 +77,4 @@ struct sieve_stringlist *ext_date_stringlist_create
 
 
 
-#endif /* __EXT_DATE_COMMON_H */
+#endif

@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "hash.h"
+#include "sort.h"
 #include "mail-storage-settings.h"
 #include "mailbox-list.h"
 #include "mail-namespace.h"
@@ -42,7 +43,7 @@ acl_backend_init(const char *data, struct mailbox_list *list,
 	if (user->mail_debug) {
 		i_debug("acl: initializing backend with data: %s", data);
 		i_debug("acl: acl username = %s", acl_username);
-		i_debug("acl: owner = %d", owner);
+		i_debug("acl: owner = %d", owner ? 1 : 0);
 	}
 
 	group_count = str_array_length(groups);
@@ -61,7 +62,7 @@ acl_backend_init(const char *data, struct mailbox_list *list,
 	backend->username = p_strdup(backend->pool, acl_username);
 	backend->owner = owner;
 	backend->globals_only =
-		mail_user_plugin_getenv(user, "acl_globals_only") != NULL;
+		mail_user_plugin_getenv_bool(user, "acl_globals_only");
 
 	if (group_count > 0) {
 		backend->group_count = group_count;
@@ -171,8 +172,7 @@ struct acl_object *acl_backend_get_default_object(struct acl_backend *backend)
 	if (backend->default_aclobj != NULL)
 		return backend->default_aclobj;
 
-	/* FIXME: this should probably be made default in v2.3 */
-	if (mail_user_plugin_getenv(user, "acl_defaults_from_inbox") != NULL) {
+	if (mail_user_plugin_getenv_bool(user, "acl_defaults_from_inbox")) {
 		if (ns->type == MAIL_NAMESPACE_TYPE_PRIVATE ||
 		    ns->type == MAIL_NAMESPACE_TYPE_SHARED)
 			default_name = "INBOX";

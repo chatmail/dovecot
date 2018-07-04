@@ -39,9 +39,9 @@ static void imapc_sync_callback(const struct imapc_command_reply *reply,
 		mail_storage_set_internal_error(&ctx->mbox->storage->storage);
 		ctx->failed = TRUE;
 	} else {
-		mail_storage_set_critical(&ctx->mbox->storage->storage,
-					  "imapc: Sync command '%s' failed: %s",
-					  cmd->cmd_str, reply->text_full);
+		mailbox_set_critical(&ctx->mbox->box,
+				     "imapc: Sync command '%s' failed: %s",
+				     cmd->cmd_str, reply->text_full);
 		ctx->failed = TRUE;
 	}
 	
@@ -499,7 +499,7 @@ static int imapc_sync_finish(struct imapc_sync_context **_ctx)
 		mail_index_sync_rollback(&ctx->index_sync_ctx);
 	}
 	if (ctx->mbox->sync_gmail_pop3_search_tag != NULL) {
-		mail_storage_set_critical(&ctx->mbox->storage->storage,
+		mailbox_set_critical(&ctx->mbox->box,
 			"gmail-pop3 search not successful");
 		i_free_and_null(ctx->mbox->sync_gmail_pop3_search_tag);
 		ret = -1;
@@ -559,7 +559,7 @@ imapc_noop_if_needed(struct imapc_mailbox *mbox, enum mailbox_sync_flags flags)
 struct mailbox_sync_context *
 imapc_mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)box;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(box);
 	struct imapc_mailbox_list *list = mbox->storage->client->_list;
 	bool changes;
 	int ret = 0;
@@ -592,7 +592,7 @@ imapc_mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 int imapc_mailbox_sync_deinit(struct mailbox_sync_context *ctx,
 			      struct mailbox_sync_status *status_r)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)ctx->box;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(ctx->box);
 	int ret;
 
 	ret = index_mailbox_sync_deinit(ctx, status_r);

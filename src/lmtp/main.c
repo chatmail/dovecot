@@ -4,15 +4,15 @@
 #include "array.h"
 #include "ioloop.h"
 #include "hostpid.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "restrict-access.h"
-#include "fd-close-on-exec.h"
 #include "anvil-client.h"
 #include "master-service.h"
 #include "master-service-settings.h"
 #include "master-interface.h"
 #include "mail-deliver.h"
 #include "mail-storage-service.h"
+#include "smtp-submit-settings.h"
 #include "lda-settings.h"
 #include "lmtp-settings.h"
 #include "client.h"
@@ -26,9 +26,19 @@
 #define IS_STANDALONE() \
         (getenv(MASTER_IS_PARENT_ENV) == NULL)
 
-const char *dns_client_socket_path, *base_dir;
+char *dns_client_socket_path, *base_dir;
 struct mail_storage_service_ctx *storage_service;
 struct anvil_client *anvil;
+
+struct smtp_server *lmtp_server;
+
+void lmtp_anvil_init(void)
+{
+	if (anvil == NULL) {
+		const char *path = t_strdup_printf("%s/anvil", base_dir);
+		anvil = anvil_client_init(path, NULL, 0);
+	}
+}
 
 static void client_connected(struct master_service_connection *conn)
 {
@@ -53,18 +63,31 @@ static void drop_privileges(void)
 	if (master_service_settings_read(master_service,
 					 &input, &output, &error) < 0)
 		i_fatal("Error reading configuration: %s", error);
-	restrict_access_by_env(NULL, FALSE);
+	restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 }
 
 static void main_init(void)
 {
 	struct master_service_connection conn;
+	struct smtp_server_settings lmtp_set;
+
+	i_zero(&lmtp_set);
+	lmtp_set.protocol = SMTP_PROTOCOL_LMTP;
+	lmtp_set.auth_optional = TRUE;
+	lmtp_set.rcpt_domain_optional = TRUE;
+
+	lmtp_server = smtp_server_init(&lmtp_set);
 
 	if (IS_STANDALONE()) {
 		i_zero(&conn);
 		(void)client_create(STDIN_FILENO, STDOUT_FILENO, &conn);
 	}
-	dns_client_socket_path = t_abspath(DNS_CLIENT_SOCKET_PATH);
+
+	const char *error, *tmp_socket_path;
+	if (t_abspath(DNS_CLIENT_SOCKET_PATH, &tmp_socket_path, &error) < 0) {
+		i_fatal("t_abspath(%s) failed: %s", DNS_CLIENT_SOCKET_PATH, error);
+	}
+	dns_client_socket_path = i_strdup(tmp_socket_path);
 	mail_deliver_hooks_init();
 }
 
@@ -73,23 +96,28 @@ static void main_deinit(void)
 	clients_destroy();
 	if (anvil != NULL)
 		anvil_client_deinit(&anvil);
+	i_free(dns_client_socket_path);
+	i_free(base_dir);
+	smtp_server_deinit(&lmtp_server);
 }
 
 int main(int argc, char *argv[])
 {
 	const struct setting_parser_info *set_roots[] = {
+		&smtp_submit_setting_parser_info,
 		&lda_setting_parser_info,
 		&lmtp_setting_parser_info,
 		NULL
 	};
 	enum master_service_flags service_flags =
+		MASTER_SERVICE_FLAG_SEND_STATS |
 		MASTER_SERVICE_FLAG_USE_SSL_SETTINGS;
 	enum mail_storage_service_flags storage_service_flags =
-		MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT |
 		MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP |
 		MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP |
 		MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
 		MAIL_STORAGE_SERVICE_FLAG_NO_IDLE_TIMEOUT;
+	const char *tmp_base_dir;
 	int c;
 
 	if (IS_STANDALONE()) {
@@ -112,8 +140,11 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (t_get_current_dir(&base_dir) < 0)
-		i_fatal("getcwd() failed: %m");
+	const char *error;
+	if (t_get_working_dir(&tmp_base_dir, &error) < 0)
+		i_fatal("Could not get working directory: %s", error);
+	base_dir = i_strdup(tmp_base_dir);
+
 	drop_privileges();
 	master_service_init_log(master_service,
 				t_strdup_printf("lmtp(%s): ", my_pid));

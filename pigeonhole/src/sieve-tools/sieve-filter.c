@@ -54,9 +54,9 @@ struct sieve_filter_data {
 	struct sieve_binary *main_sbin;
 	struct sieve_error_handler *ehandler;
 
-	unsigned int execute:1;
-	unsigned int source_write:1;
-	unsigned int default_move:1;
+	bool execute:1;
+	bool source_write:1;
+	bool default_move:1;
 };
 
 struct sieve_filter_context {
@@ -75,14 +75,11 @@ static int filter_message
 	struct sieve_exec_status estatus;
 	struct sieve_binary *sbin;
 	struct sieve_message_data msgdata;
-	const char *recipient = NULL, *sender = NULL;
 	bool execute = sfctx->data->execute;
 	bool source_write = sfctx->data->source_write;
 	const char *subject, *date;
 	uoff_t size = 0;
 	int ret;
-
-	sieve_tool_get_envelope_data(mail, &recipient, &sender);
 
 	/* Initialize execution status */
 	i_zero(&estatus);
@@ -91,11 +88,11 @@ static int filter_message
 	/* Collect necessary message data */
 	i_zero(&msgdata);
 	msgdata.mail = mail;
-	msgdata.return_path = sender;
-	msgdata.orig_envelope_to = recipient;
-	msgdata.final_envelope_to = recipient;
 	msgdata.auth_user = senv->user->username;
 	(void)mail_get_first_header(mail, "Message-ID", &msgdata.id);
+
+	sieve_tool_get_envelope_data
+		(&msgdata, mail, NULL, NULL, NULL);
 
 	if ( mail_get_virtual_size(mail, &size) < 0 ) {
 		if ( mail->expunged )
@@ -131,7 +128,7 @@ static int filter_message
 		sieve_error_handler_unref(&action_ehandler);
 
 	} else {
-		(void)o_stream_send_str(sfctx->teststream,
+		o_stream_nsend_str(sfctx->teststream,
 			t_strdup_printf(">> Filtering message:\n\n"
 				"  ID:      %s\n"
 			  "  Date:    %s\n"
@@ -287,14 +284,17 @@ static int filter_mailbox
 	sfctx.data = sfdata;
 
 	/* Create test stream */
-	if ( !sfdata->execute )
-		sfctx.teststream = o_stream_create_fd(1, 0, FALSE);
+	if ( !sfdata->execute ) {
+		sfctx.teststream = o_stream_create_fd(1, 0);
+		o_stream_set_no_error_handling(sfctx.teststream, TRUE);
+	}
 
 	/* Start move mailbox transaction */
 
 	if ( move_box != NULL ) {
 		sfctx.move_trans = mailbox_transaction_begin
-			(move_box, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
+			(move_box, MAILBOX_TRANSACTION_FLAG_EXTERNAL,
+			 "sieve_filter_data move_box");
 	}
 
 	/* Search non-deleted messages in the source folder */
@@ -302,7 +302,8 @@ static int filter_mailbox
 	search_args = mail_search_build_init();
 	mail_search_build_add_flags(search_args, MAIL_DELETED, TRUE);
 
-	t = mailbox_transaction_begin(src_box, 0);
+	t = mailbox_transaction_begin(src_box, 0,
+				      "sieve_filter_data src_box");
 	search_ctx = mailbox_search_init(t, search_args, NULL, 0, NULL);
 	mail_search_args_unref(&search_args);
 
@@ -365,6 +366,7 @@ int main(int argc, char **argv)
 	struct mailbox *src_box = NULL, *move_box = NULL;
 	enum mailbox_flags open_flags = MAILBOX_FLAG_IGNORE_ACLS;
 	enum mail_error error;
+	const char *errstr;
 	int c;
 
 	sieve_tool = sieve_tool_init("sieve-filter", &argc, &argv,
@@ -540,11 +542,10 @@ int main(int argc, char **argv)
 	}
 
 	/* Compose script environment */
-	i_zero(&scriptenv);
+	if (sieve_script_env_init(&scriptenv, mail_user, &errstr) < 0)
+		i_fatal("Failed to initialize script execution: %s", errstr);
 	scriptenv.mailbox_autocreate = FALSE;
 	scriptenv.default_mailbox = dst_mailbox;
-	scriptenv.user = mail_user;
-	scriptenv.postmaster_address = "postmaster@example.com";
 
 	/* Compose filter context */
 	i_zero(&sfdata);

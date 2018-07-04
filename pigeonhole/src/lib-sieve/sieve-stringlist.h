@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_STRINGLIST_H
-#define __SIEVE_STRINGLIST_H
+#ifndef SIEVE_STRINGLIST_H
+#define SIEVE_STRINGLIST_H
 
 /*
  * Stringlist API
@@ -26,7 +23,7 @@ struct sieve_stringlist {
 	const struct sieve_runtime_env *runenv;
 	int exec_status;
 
-	unsigned int trace:1;
+	bool trace:1;
 };
 
 static inline void sieve_stringlist_set_trace
@@ -74,4 +71,4 @@ struct sieve_stringlist *sieve_index_stringlist_create
 	(const struct sieve_runtime_env *renv, struct sieve_stringlist *source,
 		int index);
 
-#endif /* __SIEVE_STRINGLIST_H */
+#endif

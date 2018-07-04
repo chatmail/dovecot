@@ -30,6 +30,11 @@ userdb_template_build(pool_t pool, const char *userdb_name, const char *args)
 		else
 			key = t_strdup_until(*tmp, value++);
 
+
+		if (*key == '\0')
+			i_fatal("Invalid userdb template %s - key must not be empty",
+				args);
+
 		nonull_value = value == NULL ? "" : value;
 		if (strcasecmp(key, "uid") == 0) {
 			uid = userdb_parse_uid(NULL, nonull_value);
@@ -58,8 +63,9 @@ userdb_template_build(pool_t pool, const char *userdb_name, const char *args)
 	return tmpl;
 }
 
-void userdb_template_export(struct userdb_template *tmpl,
-			    struct auth_request *auth_request)
+int userdb_template_export(struct userdb_template *tmpl,
+			   struct auth_request *auth_request,
+			   const char **error_r)
 {
         const struct var_expand_table *table;
 	string_t *str;
@@ -67,7 +73,7 @@ void userdb_template_export(struct userdb_template *tmpl,
 	unsigned int i, count;
 
 	if (userdb_template_is_empty(tmpl))
-		return;
+		return 0;
 
 	str = t_str_new(256);
 	table = auth_request_get_var_expand_table(auth_request, NULL);
@@ -79,12 +85,14 @@ void userdb_template_export(struct userdb_template *tmpl,
 			value = "";
 		else {
 			str_truncate(str, 0);
-			auth_request_var_expand_with_table(str, args[i+1],
-				auth_request, table, NULL);
+			if (auth_request_var_expand_with_table(str, args[i+1],
+					auth_request, table, NULL, error_r) <= 0)
+				return -1;
 			value = str_c(str);
 		}
 		auth_request_set_userdb_field(auth_request, args[i], value);
 	}
+	return 0;
 }
 
 bool userdb_template_remove(struct userdb_template *tmpl,
@@ -108,4 +116,9 @@ bool userdb_template_remove(struct userdb_template *tmpl,
 bool userdb_template_is_empty(struct userdb_template *tmpl)
 {
 	return array_count(&tmpl->args) == 0;
+}
+
+const char *const *userdb_template_get_args(struct userdb_template *tmpl, unsigned int *count_r)
+{
+	return array_get(&tmpl->args, count_r);
 }

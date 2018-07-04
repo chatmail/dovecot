@@ -142,7 +142,7 @@ static void listeners_init(void)
 		int fd = MASTER_LISTEN_FD_FIRST + i;
 		struct auth_socket_listener *l;
 
-		l = array_idx_modifiable(&listeners, fd);
+		l = array_idx_get_space(&listeners, fd);
 		if (net_getunixname(fd, &path) < 0) {
 			if (errno != ENOTSOCK)
 				i_fatal("getunixname(%d) failed: %m", fd);
@@ -172,9 +172,6 @@ static void main_preinit(void)
 {
 	struct module_dir_load_settings mod_set;
 	const char *const *services;
-
-	/* Open /dev/urandom before chrooting */
-	random_init();
 
 	/* Load built-in SQL drivers (if any) */
 	sql_drivers_init();
@@ -212,7 +209,7 @@ static void main_preinit(void)
 		auth_token_init();
 
 	/* Password lookups etc. may require roots, allow it. */
-	restrict_access_by_env(NULL, FALSE);
+	restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 	restrict_access_allow_coredumps(TRUE);
 }
 
@@ -301,7 +298,6 @@ static void main_deinit(void)
 	auth_request_stats_deinit();
 
 	sql_drivers_deinit();
-	random_deinit();
 	child_wait_deinit();
 
 	array_foreach_modifiable(&listeners, l)

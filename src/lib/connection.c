@@ -79,8 +79,8 @@ int connection_verify_version(struct connection *conn,
 	    strcmp(args[0], "VERSION") != 0 ||
 	    str_to_uint(args[2], &recv_major_version) < 0 ||
 	    str_to_uint(args[3], &conn->minor_version) < 0) {
-		i_error("%s didn't reply with a valid VERSION line",
-			conn->name);
+		i_error("%s didn't reply with a valid VERSION line: %s",
+			conn->name, t_strarray_join(args, "\t"));
 		return -1;
 	}
 
@@ -122,8 +122,7 @@ int connection_input_line_default(struct connection *conn, const char *line)
 
 void connection_input_halt(struct connection *conn)
 {
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	io_remove(&conn->io);
 }
 
 void connection_input_resume(struct connection *conn)
@@ -133,11 +132,11 @@ void connection_input_resume(struct connection *conn)
 	if (conn->io != NULL)
 		return;
 	if (conn->from_streams || set->input_max_size != 0) {
-		conn->io = io_add_istream(conn->input,
-					  *conn->list->v.input, conn);
+		conn->io = io_add_istream_to(conn->ioloop, conn->input,
+					     *conn->list->v.input, conn);
 	} else {
-		conn->io = io_add(conn->fd_in, IO_READ,
-				  *conn->list->v.input, conn);
+		conn->io = io_add_to(conn->ioloop, conn->fd_in, IO_READ,
+				     *conn->list->v.input, conn);
 	}
 }
 
@@ -158,8 +157,9 @@ static void connection_init_streams(struct connection *conn)
 							   set->input_max_size);
 		else
 			conn->input = i_stream_create_fd(conn->fd_in,
-							 set->input_max_size, FALSE);
+							 set->input_max_size);
 		i_stream_set_name(conn->input, conn->name);
+		i_stream_switch_ioloop_to(conn->input, conn->ioloop);
 	}
 	if (set->output_max_size != 0) {
 		if (conn->unix_socket)
@@ -167,14 +167,17 @@ static void connection_init_streams(struct connection *conn)
 							    set->output_max_size);
 		else
 			conn->output = o_stream_create_fd(conn->fd_out,
-							  set->output_max_size, FALSE);
+							  set->output_max_size);
 		o_stream_set_no_error_handling(conn->output, TRUE);
+		o_stream_set_finish_via_child(conn->output, FALSE);
 		o_stream_set_name(conn->output, conn->name);
+		o_stream_switch_ioloop_to(conn->output, conn->ioloop);
 	}
 	connection_input_resume(conn);
 	if (set->input_idle_timeout_secs != 0) {
-		conn->to = timeout_add(set->input_idle_timeout_secs*1000,
-				       connection_idle_timeout, conn);
+		conn->to = timeout_add_to(conn->ioloop,
+					  set->input_idle_timeout_secs*1000,
+					  connection_idle_timeout, conn);
 	}
 	if (set->major_version != 0 && !set->dont_send_version) {
 		o_stream_nsend_str(conn->output, t_strdup_printf(
@@ -209,6 +212,23 @@ static void connection_client_connected(struct connection *conn, bool success)
 	}
 }
 
+void connection_init(struct connection_list *list,
+		     struct connection *conn)
+{
+	conn->ioloop = current_ioloop;
+	conn->fd_in = -1;
+	conn->fd_out = -1;
+	conn->name = NULL;
+
+	if (conn->list != NULL) {
+		i_assert(conn->list == list);
+	} else {
+		conn->list = list;
+		DLLIST_PREPEND(&list->connections, conn);
+		list->connections_count++;
+	}
+}
+
 void connection_init_server(struct connection_list *list,
 			    struct connection *conn, const char *name,
 			    int fd_in, int fd_out)
@@ -216,14 +236,12 @@ void connection_init_server(struct connection_list *list,
 	i_assert(name != NULL);
 	i_assert(!list->set.client);
 
-	conn->list = list;
+	connection_init(list, conn);
+
 	conn->name = i_strdup(name);
 	conn->fd_in = fd_in;
 	conn->fd_out = fd_out;
 	connection_init_streams(conn);
-
-	DLLIST_PREPEND(&list->connections, conn);
-	list->connections_count++;
 }
 
 void connection_init_client_ip(struct connection_list *list,
@@ -232,15 +250,13 @@ void connection_init_client_ip(struct connection_list *list,
 {
 	i_assert(list->set.client);
 
+	connection_init(list, conn);
+
 	conn->fd_in = conn->fd_out = -1;
-	conn->list = list;
 	conn->name = i_strdup_printf("%s:%u", net_ip2addr(ip), port);
 
 	conn->ip = *ip;
 	conn->port = port;
-
-	DLLIST_PREPEND(&list->connections, conn);
-	list->connections_count++;
 }
 
 void connection_init_client_unix(struct connection_list *list,
@@ -248,13 +264,11 @@ void connection_init_client_unix(struct connection_list *list,
 {
 	i_assert(list->set.client);
 
+	connection_init(list, conn);
+
 	conn->fd_in = conn->fd_out = -1;
-	conn->list = list;
 	conn->name = i_strdup(path);
 	conn->unix_socket = TRUE;
-
-	DLLIST_PREPEND(&list->connections, conn);
-	list->connections_count++;
 }
 
 void connection_init_from_streams(struct connection_list *list,
@@ -263,7 +277,8 @@ void connection_init_from_streams(struct connection_list *list,
 {
 	i_assert(name != NULL);
 
-	conn->list = list;
+	connection_init(list, conn);
+
 	conn->name = i_strdup(name);
 	conn->from_streams = TRUE;
 	conn->fd_in = i_stream_get_fd(input);
@@ -285,8 +300,6 @@ void connection_init_from_streams(struct connection_list *list,
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	o_stream_set_name(conn->output, conn->name);
 
-	DLLIST_PREPEND(&list->connections, conn);
-	list->connections_count++;
 	connection_input_resume(conn);
 
 	if (list->v.client_connected != NULL)
@@ -296,8 +309,7 @@ void connection_init_from_streams(struct connection_list *list,
 static void connection_socket_connected(struct connection *conn)
 {
 	io_remove(&conn->io);
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 
 	errno = net_geterror(conn->fd_in);
 	connection_client_connected(conn, errno == 0);
@@ -324,11 +336,12 @@ int connection_client_connect(struct connection *conn)
 
 	if (conn->port != 0 ||
 	    conn->list->set.delayed_unix_client_connected_callback) {
-		conn->io = io_add(conn->fd_out, IO_WRITE,
-				  connection_socket_connected, conn);
+		conn->io = io_add_to(conn->ioloop, conn->fd_out, IO_WRITE,
+				     connection_socket_connected, conn);
 		if (set->client_connect_timeout_msecs != 0) {
-			conn->to = timeout_add(set->client_connect_timeout_msecs,
-					       connection_connect_timeout, conn);
+			conn->to = timeout_add_to(conn->ioloop,
+						  set->client_connect_timeout_msecs,
+						  connection_connect_timeout, conn);
 		}
 	} else {
 		connection_client_connected(conn, TRUE);
@@ -340,18 +353,12 @@ void connection_disconnect(struct connection *conn)
 {
 	conn->last_input = 0;
 	i_zero(&conn->last_input_tv);
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
-	if (conn->io != NULL)
-		io_remove(&conn->io);
-	if (conn->input != NULL) {
-		i_stream_close(conn->input);
-		i_stream_destroy(&conn->input);
-	}
-	if (conn->output != NULL) {
-		o_stream_close(conn->output);
-		o_stream_destroy(&conn->output);
-	}
+	timeout_remove(&conn->to);
+	io_remove(&conn->io);
+	i_stream_close(conn->input);
+	i_stream_destroy(&conn->input);
+	o_stream_close(conn->output);
+	o_stream_destroy(&conn->output);
 	fd_close_maybe_stdio(&conn->fd_in, &conn->fd_out);
 }
 
@@ -443,16 +450,23 @@ const char *connection_input_timeout_reason(struct connection *conn)
 	}
 }
 
+void connection_switch_ioloop_to(struct connection *conn,
+				 struct ioloop *ioloop)
+{
+	conn->ioloop = ioloop;
+	if (conn->io != NULL)
+		conn->io = io_loop_move_io_to(ioloop, &conn->io);
+	if (conn->to != NULL)
+		conn->to = io_loop_move_timeout_to(ioloop, &conn->to);
+	if (conn->input != NULL)
+		i_stream_switch_ioloop_to(conn->input, ioloop);
+	if (conn->output != NULL)
+		o_stream_switch_ioloop_to(conn->output, ioloop);
+}
+
 void connection_switch_ioloop(struct connection *conn)
 {
-	if (conn->io != NULL)
-		conn->io = io_loop_move_io(&conn->io);
-	if (conn->to != NULL)
-		conn->to = io_loop_move_timeout(&conn->to);
-	if (conn->input != NULL)
-		i_stream_switch_ioloop(conn->input);
-	if (conn->output != NULL)
-		o_stream_switch_ioloop(conn->output);
+	connection_switch_ioloop_to(conn, current_ioloop);
 }
 
 struct connection_list *

@@ -29,7 +29,7 @@ struct auth_postfix_connection {
 	struct ostream *output;
 	struct io *io;
 
-	unsigned int destroyed:1;
+	bool destroyed:1;
 };
 
 static void postfix_input(struct auth_postfix_connection *conn);
@@ -39,7 +39,7 @@ static void auth_postfix_connection_unref(struct auth_postfix_connection **_conn
 
 static struct auth_postfix_connection *auth_postfix_connections;
 
-static int
+static bool
 postfix_input_auth_request(struct auth_postfix_connection *conn,
 			   const char *username,
 			   struct auth_request **request_r, const char **error_r)
@@ -176,8 +176,8 @@ auth_postfix_connection_create(struct auth *auth, int fd)
 	conn->refcount = 1;
 	conn->fd = fd;
 	conn->auth = auth;
-	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
-	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE);
+	conn->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	conn->io = io_add(fd, IO_READ, postfix_input, conn);
 	DLLIST_PREPEND(&auth_postfix_connections, conn);
@@ -196,17 +196,10 @@ auth_postfix_connection_destroy(struct auth_postfix_connection **_conn)
 
 	DLLIST_REMOVE(&auth_postfix_connections, conn);
 
-	if (conn->input != NULL)
-		i_stream_close(conn->input);
-	if (conn->output != NULL)
-		o_stream_close(conn->output);
-	if (conn->io != NULL)
-		io_remove(&conn->io);
-	if (conn->fd != -1) {
-		if (close(conn->fd) < 0)
-			i_error("close(%s): %m", conn->path);
-		conn->fd = -1;
-	}
+	i_stream_close(conn->input);
+	o_stream_close(conn->output);
+	io_remove(&conn->io);
+	i_close_fd_path(&conn->fd, conn->path);
 
 	master_service_client_connection_destroyed(master_service);
 	auth_postfix_connection_unref(&conn);
@@ -230,10 +223,8 @@ auth_postfix_connection_unref(struct auth_postfix_connection **_conn)
 	if (--conn->refcount > 0)
 		return;
 
-	if (conn->input != NULL)
-		i_stream_unref(&conn->input);
-	if (conn->output != NULL)
-		o_stream_unref(&conn->output);
+	i_stream_unref(&conn->input);
+	o_stream_unref(&conn->output);
 	i_free(conn);
 }
 

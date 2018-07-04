@@ -59,9 +59,7 @@ struct imapc_storage_client {
 
 	/* Authentication reply was received (success or failure) */
 	bool auth_returned:1;
-	/* Authentication failed */
-	unsigned int auth_failed:1;
-	unsigned int destroying:1;
+	bool destroying:1;
 };
 
 struct imapc_storage {
@@ -77,7 +75,7 @@ struct imapc_storage {
 
 	ARRAY(struct imapc_namespace) remote_namespaces;
 
-	unsigned int namespaces_requested:1;
+	bool namespaces_requested:1;
 };
 
 struct imapc_mail_cache {
@@ -140,19 +138,22 @@ struct imapc_mailbox {
 	const char *guid_fetch_field_name;
 	struct imapc_search_context *search_ctx;
 
-	unsigned int selecting:1;
-	unsigned int syncing:1;
-	unsigned int initial_sync_done:1;
-	unsigned int selected:1;
-	unsigned int exists_received:1;
-	unsigned int state_fetching_uid1:1;
-	unsigned int state_fetched_success:1;
+	bool selecting:1;
+	bool syncing:1;
+	bool initial_sync_done:1;
+	bool selected:1;
+	bool exists_received:1;
+	bool state_fetching_uid1:1;
+	bool state_fetched_success:1;
 };
 
 struct imapc_simple_context {
 	struct imapc_storage_client *client;
 	int ret;
 };
+
+#define IMAPC_STORAGE(s)	container_of(s, struct imapc_storage, storage)
+#define IMAPC_MAILBOX(s)	container_of(s, struct imapc_mailbox, box)
 
 int imapc_storage_client_create(struct mail_namespace *ns,
 				const struct imapc_settings *imapc_set,

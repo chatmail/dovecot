@@ -44,10 +44,10 @@ struct managesieve_parser {
 
 	const char *error;
 
-	unsigned int literal_skip_crlf:1;
-	unsigned int literal_nonsync:1;
-	unsigned int eol:1;
-	unsigned int fatal_error:1;
+	bool literal_skip_crlf:1;
+	bool literal_nonsync:1;
+	bool eol:1;
+	bool fatal_error:1;
 };
 
 static struct istream *quoted_string_istream_create
@@ -70,8 +70,7 @@ managesieve_parser_create(struct istream *input, size_t max_line_size)
 
 void managesieve_parser_destroy(struct managesieve_parser **parser)
 {
-	if ((*parser)->str_stream != NULL)
-		i_stream_unref(&(*parser)->str_stream);
+	i_stream_unref(&(*parser)->str_stream);
 
 	pool_unref(&(*parser)->pool);
 	i_free(*parser);
@@ -99,9 +98,7 @@ void managesieve_parser_reset(struct managesieve_parser *parser)
 	parser->literal_skip_crlf = FALSE;
 	parser->eol = FALSE;
 
-	if ( parser->str_stream != NULL )
-		i_stream_unref(&parser->str_stream);
-	parser->str_stream = NULL;
+	i_stream_unref(&parser->str_stream);
 }
 
 const char *managesieve_parser_get_error
@@ -615,125 +612,122 @@ const char *managesieve_parser_read_word(struct managesieve_parser *parser)
 struct quoted_string_istream {
 	struct istream_private istream;
 
-	struct stat statbuf;
-
-	struct managesieve_parser *parser;
-
-	unsigned int pending_slash:1;
-	unsigned int last_slash:1;
-	unsigned int finished:1;
+	/* The end '"' was found */
+	bool str_end:1;
 };
+
+static int
+quoted_string_istream_read_parent(struct quoted_string_istream *qsstream,
+				  unsigned int min_bytes)
+{
+	struct istream_private *stream = &qsstream->istream;
+	size_t size, avail;
+	ssize_t ret;
+
+	size = i_stream_get_data_size(stream->parent);
+	while (size < min_bytes) {
+		ret = i_stream_read_memarea(stream->parent);
+		if (ret <= 0) {
+			if (ret == -2) {
+				/* tiny parent buffer size - shouldn't happen */
+				return -2;
+			}
+			stream->istream.stream_errno =
+				stream->parent->stream_errno;
+			stream->istream.eof = stream->parent->eof;
+			if (ret == -1 && stream->istream.stream_errno == 0) {
+				io_stream_set_error(&stream->iostream,
+					"Quoted string ends without closing quotes");
+				stream->istream.stream_errno = EPIPE;
+			}
+			return ret;
+		}
+		size = i_stream_get_data_size(stream->parent);
+	}
+
+	if (!i_stream_try_alloc(stream, size, &avail))
+		return -2;
+	return 1;
+}
 
 static ssize_t quoted_string_istream_read(struct istream_private *stream)
 {
 	struct quoted_string_istream *qsstream =
 		(struct quoted_string_istream *)stream;
 	const unsigned char *data;
-	size_t i, dest, size, avail;
-	ssize_t ret = 0;
-	bool slash;
+	unsigned int extra;
+	size_t i, dest, size;
+	ssize_t ret;
 
-	if ( qsstream->finished ) {
+	if (qsstream->str_end) {
 		stream->istream.eof = TRUE;
 		return -1;
 	}
 
-	/* Read from parent */
+	ret = quoted_string_istream_read_parent(qsstream, 1);
+	if (ret <= 0)
+		return ret;
+
+	/* @UNSAFE */
+	dest = stream->pos;
+	extra = 0;
+
 	data = i_stream_get_data(stream->parent, &size);
-	if (size == 0) {
-		ret = i_stream_read(stream->parent);
-		if (ret <= 0 && (ret != -2 || stream->skip == 0)) {
-			if ( stream->parent->eof && stream->parent->stream_errno == 0 ) {
+	for (i = 0; i < size && dest < stream->buffer_size; ) {
+		if (data[i] == '"') {
+			i++;
+			qsstream->str_end = TRUE;
+			if (dest == stream->pos) {
+				i_stream_skip(stream->parent, i);
+				stream->istream.eof = TRUE;
+				return -1;
+			}
+			break;
+		} else if (data[i] == '\\') {
+			if (i+1 == size) {
+				/* not enough input for \x */
+				extra = 1;
+				break;
+			}
+			i++;
+
+			if (!IS_QUOTED_SPECIAL(data[i])) {
+				/* invalid string */
 				io_stream_set_error(&stream->iostream,
-					"Quoted string ends without closing quotes");
+					"Escaped quoted-string character is not a QUOTED-SPECIAL");
+				stream->istream.stream_errno = EINVAL;
+				return -1;
+			}
+			stream->w_buffer[dest++] = data[i];
+			i++;
+		} else {
+			if (data[i] == '\r' || data[i] == '\n') {
+				io_stream_set_error(&stream->iostream,
+					"Quoted string contains an invalid character");
 				stream->istream.stream_errno = EINVAL;
 				return -1;
 			}
 
-			stream->istream.stream_errno = stream->parent->stream_errno;
-			stream->istream.eof = stream->parent->eof;
-			return ret;
+			stream->w_buffer[dest++] = data[i];
+			i++;
 		}
-		data = i_stream_get_data(stream->parent, &size);
-		i_assert(size != 0);
+		i_assert(dest <= stream->buffer_size);
 	}
-
-	/* Allocate buffer space */
-	if (!i_stream_try_alloc(stream, size, &avail))
-		return -2;
-
-	/* Parse quoted string content */
-	dest = stream->pos;
-	slash = qsstream->pending_slash;
-	ret = 0;
-	for (i = 0; i < size && dest < stream->buffer_size; i++) {
-		if ( data[i] == '"' ) {
-			if ( !slash ) {
-				qsstream->finished = TRUE;
-				i++;
-				break;
-			}
-			slash = FALSE;
-		} else if ( data[i] == '\\' ) {
-			if ( !slash ) {
-				slash = TRUE;
-				continue;
-			}
-			slash = FALSE;
-		} else if ( slash ) {
-			if ( !IS_QUOTED_SPECIAL(data[i]) ) {
-				io_stream_set_error(&stream->iostream,
-					"Escaped quoted-string character is not a QUOTED-SPECIAL");
-				stream->istream.stream_errno = EINVAL;
-				ret = -1;
-				break;
-			}
-			slash = FALSE;
-		}
-
-		if ( (data[i] & 0x80) == 0 && ( data[i] == '\r' || data[i] == '\n' ) ) {
-			io_stream_set_error(&stream->iostream,
-				"Quoted string contains an invalid character");
-			stream->istream.stream_errno = EINVAL;
-			ret = -1;
-			break;
-		}
-
-		stream->w_buffer[dest++] = data[i];
-	}
-
 	i_stream_skip(stream->parent, i);
-	qsstream->pending_slash = slash;
-
-	if ( ret < 0 ) {
-		stream->pos = dest;
-		return ret;
-	}
 
 	ret = dest - stream->pos;
 	if (ret == 0) {
-		if ( qsstream->finished ) {
-			stream->istream.eof = TRUE;
-			return -1;
-		}
-		i_assert(qsstream->pending_slash && size == 1);
+		/* not enough input */
+		i_assert(i == 0);
+		i_assert(extra > 0);
+		ret = quoted_string_istream_read_parent(qsstream, extra+1);
+		if (ret <= 0)
+			return ret;
 		return quoted_string_istream_read(stream);
 	}
 	i_assert(ret > 0);
 	stream->pos = dest;
 	return ret;
-}
-
-static int quoted_string_istream_stat
-(struct istream_private *stream, bool exact)
-{
-	const struct stat *st;
-
-	if (i_stream_stat(stream->parent, exact, &st) < 0)
-		return -1;
-
-	stream->statbuf = *st;
-	return 0;
 }
 
 static struct istream *quoted_string_istream_create
@@ -742,21 +736,13 @@ static struct istream *quoted_string_istream_create
 	struct quoted_string_istream *qsstream;
 
 	qsstream = i_new(struct quoted_string_istream, 1);
-	qsstream->parser = parser;
-
 	qsstream->istream.max_buffer_size =
 		parser->input->real_stream->max_buffer_size;
-
 	qsstream->istream.read = quoted_string_istream_read;
-	qsstream->istream.stat = quoted_string_istream_stat;
 
 	qsstream->istream.istream.readable_fd = FALSE;
 	qsstream->istream.istream.blocking = parser->input->blocking;
 	qsstream->istream.istream.seekable = FALSE;
 	return i_stream_create(&qsstream->istream, parser->input,
-			       i_stream_get_fd(parser->input));
+			       i_stream_get_fd(parser->input), 0);
 }
-
-
-
-

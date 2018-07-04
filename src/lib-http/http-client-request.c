@@ -31,28 +31,6 @@ const char *http_request_state_names[] = {
 };
 
 /*
- * Logging
- */
-
-static inline void
-http_client_request_debug(struct http_client_request *req,
-	const char *format, ...) ATTR_FORMAT(2, 3);
-
-static inline void
-http_client_request_debug(struct http_client_request *req,
-	const char *format, ...)
-{
-	va_list args;
-
-	if (req->client->set.debug) {
-		va_start(args, format);	
-		i_debug("http-client: request %s: %s",
-			http_client_request_label(req), t_strdup_vprintf(format, args));
-		va_end(args);
-	}
-}
-
-/*
  * Request
  */
 
@@ -69,6 +47,52 @@ http_client_request_label(struct http_client_request *req)
 			http_url_create_host(&req->origin_url), req->target);
 	}
 	return req->label;
+}
+
+static void
+http_client_request_update_event(struct http_client_request *req)
+{
+	event_add_str(req->event, "method", req->method);
+	event_add_str(req->event, "host", req->origin_url.host.name);
+	event_add_int(req->event, "port", http_url_get_port(&req->origin_url));
+	if (req->target != NULL)
+		event_add_str(req->event, "target", req->target);
+	event_set_append_log_prefix(req->event, t_strdup_printf(
+		"request %s: ", http_client_request_label(req)));
+}
+
+static struct event_passthrough *
+http_client_request_result_event(struct http_client_request *req)
+{
+	struct http_client_connection *conn = req->conn;
+
+	if (conn != NULL) {
+		if (req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT) {
+			/* got here prematurely; use bytes written so far */
+			i_assert(req->request_offset <
+				 conn->conn.output->offset);
+			req->bytes_out = conn->conn.output->offset -
+				req->request_offset;
+		}
+		if (conn->incoming_payload != NULL &&
+			(req->state == HTTP_REQUEST_STATE_GOT_RESPONSE ||
+			 req->state == HTTP_REQUEST_STATE_PAYLOAD_IN)) {
+			/* got here prematurely; use bytes read so far */
+			i_assert(conn->in_req_callback ||
+				 conn->pending_request == req);
+			i_assert(req->response_offset <
+				 conn->conn.input->v_offset);
+			req->bytes_in = conn->conn.input->v_offset -
+				req->response_offset;
+		}
+	}
+
+	return event_create_passthrough(req->event)->
+		add_int("status_code", req->last_status)->
+		add_int("attempts", req->attempts)->
+		add_int("redirects", req->redirects)->
+		add_int("bytes_in", req->bytes_in)->
+		add_int("bytes_out", req->bytes_out);
 }
 
 static struct http_client_request *
@@ -89,6 +113,7 @@ http_client_request_new(struct http_client *client, const char *method,
 	req->callback = callback;
 	req->context = context;
 	req->date = (time_t)-1;
+	req->event = event_create(client->event);
 
 	/* default to client-wide settings: */
 	req->max_attempts = client->set.max_attempts;
@@ -107,8 +132,9 @@ http_client_request(struct http_client *client,
 	struct http_client_request *req;
 
 	req = http_client_request_new(client, method, callback, context);
-	req->origin_url.host_name = p_strdup(req->pool, host);
+	req->origin_url.host.name = p_strdup(req->pool, host);
 	req->target = (target == NULL ? "/" : p_strdup(req->pool, target));
+	http_client_request_update_event(req);
 	return req;
 }
 
@@ -128,6 +154,7 @@ http_client_request_url(struct http_client *client,
 		req->username = p_strdup(req->pool, target_url->user);
 		req->password = p_strdup(req->pool, target_url->password);
 	}
+	http_client_request_update_event(req);
 	return req;
 }
 
@@ -151,6 +178,7 @@ http_client_request_url_str(struct http_client *client,
 		http_client_request_error(&tmpreq,
 			HTTP_CLIENT_REQUEST_ERROR_INVALID_URL,
 			t_strdup_printf("Invalid HTTP URL: %s", error));
+		http_client_request_update_event(req);
 		return req;
 	}
 
@@ -161,6 +189,7 @@ http_client_request_url_str(struct http_client *client,
 		req->username = p_strdup(req->pool, target_url->user);
 		req->password = p_strdup(req->pool, target_url->password);
 	}
+	http_client_request_update_event(req);
 	return req;
 }
 
@@ -174,11 +203,11 @@ http_client_request_connect(struct http_client *client,
 	struct http_client_request *req;
 
 	req = http_client_request_new(client, "CONNECT", callback, context);
-	req->origin_url.host_name = p_strdup(req->pool, host);
+	req->origin_url.host.name = p_strdup(req->pool, host);
 	req->origin_url.port = port;
-	req->origin_url.have_port = TRUE;
 	req->connect_tunnel = TRUE;
-	req->target = req->origin_url.host_name;
+	req->target = req->origin_url.host.name;
+	http_client_request_update_event(req);
 	return req;
 }
 
@@ -190,13 +219,25 @@ http_client_request_connect_ip(struct http_client *client,
 				void *context)
 {
 	struct http_client_request *req;
-	const char *hostname = net_ip2addr(ip);
+	const char *hostname;
+
+	i_assert(ip->family != 0);
+	hostname = net_ip2addr(ip);
 
 	req = http_client_request_connect
 		(client, hostname, port, callback, context);
-	req->origin_url.host_ip = *ip;
-	req->origin_url.have_host_ip = TRUE;
+	req->origin_url.host.ip = *ip;
 	return req;
+}
+
+void http_client_request_set_event(struct http_client_request *req,
+				   struct event *event)
+{
+	event_unref(&req->event);
+	req->event = event_create(event);
+	if (req->client->set.debug)
+		event_set_forced_debug(req->event, TRUE);
+	http_client_request_update_event(req);
 }
 
 static void
@@ -214,6 +255,10 @@ http_client_request_remove(struct http_client_request *req)
 {
 	struct http_client *client = req->client;
 
+	if (client == NULL) {
+		i_assert(!req->listed);
+		return;
+	}
 	if (req->listed) {
 		/* only decrease pending request counter if this request was submitted */
 		DLLIST_REMOVE(&client->requests_list, req);
@@ -221,7 +266,7 @@ http_client_request_remove(struct http_client_request *req)
 	}
 	req->listed = FALSE;
 
-	if (client->requests_count == 0 && client->ioloop != NULL)
+	if (client->requests_count == 0 && client->waiting)
 		io_loop_stop(client->ioloop);
 }
 
@@ -243,8 +288,12 @@ bool http_client_request_unref(struct http_client_request **_req)
 	if (--req->refcount > 0)
 		return TRUE;
 
-	http_client_request_debug(req, "Free (requests left=%d)",
-		client->requests_count);
+	if (client == NULL) {
+		e_debug(req->event, "Free (client already destroyed)");
+	} else {
+		e_debug(req->event, "Free (requests left=%d)",
+			client->requests_count);
+	}
 
 	/* cannot be destroyed while it is still pending */
 	i_assert(req->conn == NULL);
@@ -259,30 +308,34 @@ bool http_client_request_unref(struct http_client_request **_req)
 
 	http_client_request_remove(req);
 
-	if (client->requests_count == 0 && client->ioloop != NULL)
-		io_loop_stop(client->ioloop);
-
-	if (req->delayed_error != NULL)
-		http_client_remove_request_error(req->client, req);
-	if (req->payload_input != NULL)
-		i_stream_unref(&req->payload_input);
-	if (req->payload_output != NULL)
-		o_stream_unref(&req->payload_output);
-	if (req->headers != NULL)
-		str_free(&req->headers);
+	if (client != NULL) {
+		if (client->requests_count == 0 && client->waiting)
+			io_loop_stop(client->ioloop);
+		if (req->delayed_error != NULL)
+			http_client_remove_request_error(req->client, req);
+	}
+	i_stream_unref(&req->payload_input);
+	o_stream_unref(&req->payload_output);
+	str_free(&req->headers);
+	event_unref(&req->event);
 	pool_unref(&req->pool);
 	return FALSE;
 }
 
 void http_client_request_destroy(struct http_client_request **_req)
 {
-	struct http_client_request *req = *_req;
+	struct http_client_request *req = *_req, *tmp_req;
 	struct http_client *client = req->client;
 
 	*_req = NULL;
 
-	http_client_request_debug(req, "Destroy (requests left=%d)",
-		client->requests_count);
+	if (client == NULL) {
+		e_debug(req->event, "Destroy (client already destroyed)");
+	} else {
+		e_debug(req->event, "Destroy (requests left=%d)",
+			client->requests_count);
+	}
+
 
 	if (req->state < HTTP_REQUEST_STATE_FINISHED)
 		req->state = HTTP_REQUEST_STATE_ABORTED;
@@ -290,8 +343,10 @@ void http_client_request_destroy(struct http_client_request **_req)
 
 	if (req->queue != NULL)
 		http_client_queue_drop_request(req->queue, req);
-	if (req->delayed_error != NULL)
+		
+	if (client != NULL && req->delayed_error != NULL)
 		http_client_remove_request_error(req->client, req);
+	req->delayed_error = NULL;
 
 	if (req->destroy_callback != NULL) {
 		void (*callback)(void *) = req->destroy_callback;
@@ -303,8 +358,10 @@ void http_client_request_destroy(struct http_client_request **_req)
 	if (req->conn != NULL)
 		http_client_connection_request_destroyed(req->conn, req);
 
+	tmp_req = req;
 	http_client_request_remove(req);
-	http_client_request_unref(&req);
+	if (http_client_request_unref(&tmp_req))
+		req->client = NULL;
 }
 
 void http_client_request_set_port(struct http_client_request *req,
@@ -312,7 +369,7 @@ void http_client_request_set_port(struct http_client_request *req,
 {
 	i_assert(req->state == HTTP_REQUEST_STATE_NEW);
 	req->origin_url.port = port;
-	req->origin_url.have_port = TRUE;
+	event_add_int(req->event, "port", port);
 }
 
 void http_client_request_set_ssl(struct http_client_request *req,
@@ -559,6 +616,8 @@ int http_client_request_delay_from_response(struct http_client_request *req,
 	time_t retry_after = response->retry_after;
 	unsigned int max;
 
+	i_assert(req->client != NULL);
+
 	if (retry_after == (time_t)-1)
 		return 0;  /* no delay */
 	if (retry_after < ioloop_time)
@@ -625,7 +684,7 @@ void http_client_request_get_stats(struct http_client_request *req,
 			(ioloop_global_wait_usecs - req->sent_global_ioloop_usecs + 999) / 1000;
 
 		/* time spent in the http-client's own ioloop */
-		if (client->ioloop != NULL) {
+		if (client != NULL && client->waiting) {
 			wait_usecs = io_wait_timer_get_usecs(req->conn->io_wait_timer);
 			i_assert(wait_usecs >= req->sent_http_ioloop_usecs);
 			stats_r->http_ioloop_msecs = (unsigned int)
@@ -724,6 +783,7 @@ static void http_client_request_do_submit(struct http_client_request *req)
 
 	if (req->state == HTTP_REQUEST_STATE_ABORTED)
 		return;
+	i_assert(client != NULL);
 	i_assert(req->state == HTTP_REQUEST_STATE_NEW);
 
 	authority = http_url_create_authority(&req->origin_url);
@@ -789,21 +849,26 @@ static void http_client_request_do_submit(struct http_client_request *req)
 		}
 	}
 
-	host = http_client_host_get(req->client, req->host_url);
+	host = http_client_host_get(client, req->host_url);
 	req->state = HTTP_REQUEST_STATE_QUEUED;
+	req->last_status = 0;
 
 	http_client_host_submit_request(host, req);
 }
 
 void http_client_request_submit(struct http_client_request *req)
 {
+	i_assert(req->client != NULL);
+
 	req->submit_time = ioloop_timeval;
 
 	http_client_request_do_submit(req);
-	http_client_request_debug(req, "Submitted");
 
 	req->submitted = TRUE;
 	http_client_request_add(req);
+
+	e_debug(req->event, "Submitted (requests left=%d)",
+		req->client->requests_count);
 }
 
 void
@@ -822,33 +887,30 @@ http_client_request_get_peer_addr(const struct http_client_request *req,
 		addr->a.un.path = host_socket;		
 	} else if (req->connect_direct) {
 		addr->type = HTTP_CLIENT_PEER_ADDR_RAW;
-		if (host_url->have_host_ip)
-			addr->a.tcp.ip = host_url->host_ip;
+		addr->a.tcp.ip = host_url->host.ip;
 		addr->a.tcp.port =
-			(host_url->have_port ? host_url->port : HTTPS_DEFAULT_PORT);
+			http_url_get_port_default(host_url, HTTPS_DEFAULT_PORT);
 	} else if (host_url->have_ssl) {
 		if (req->ssl_tunnel)
 			addr->type = HTTP_CLIENT_PEER_ADDR_HTTPS_TUNNEL;
 		else
 			addr->type = HTTP_CLIENT_PEER_ADDR_HTTPS;
-		if (host_url->have_host_ip)
-			addr->a.tcp.ip = host_url->host_ip;
-		addr->a.tcp.https_name = host_url->host_name;
- 		addr->a.tcp.port =
-			(host_url->have_port ? host_url->port : HTTPS_DEFAULT_PORT);
+		addr->a.tcp.ip = host_url->host.ip;
+		addr->a.tcp.https_name = host_url->host.name;
+		addr->a.tcp.port = http_url_get_port(host_url);
 	} else {
 		addr->type = HTTP_CLIENT_PEER_ADDR_HTTP;
-		if (host_url->have_host_ip)
-			addr->a.tcp.ip = host_url->host_ip;
-		addr->a.tcp.port =
-			(host_url->have_port ? host_url->port : HTTP_DEFAULT_PORT);
+		addr->a.tcp.ip = host_url->host.ip;
+		addr->a.tcp.port = http_url_get_port(host_url);
 	}
 }
 
 static void
 http_client_request_finish_payload_out(struct http_client_request *req)
 {
-	i_assert(req->conn != NULL);
+	struct http_client_connection *conn = req->conn;
+
+	i_assert(conn != NULL);
 
 	/* drop payload output stream */
 	if (req->payload_output != NULL) {
@@ -856,19 +918,22 @@ http_client_request_finish_payload_out(struct http_client_request *req)
 		req->payload_output = NULL;
 	}
 
+	i_assert(req->request_offset < conn->conn.output->offset);
+	req->bytes_out = conn->conn.output->offset - req->request_offset;
+
 	/* advance state only when request didn't get aborted in the mean time */
 	if (req->state != HTTP_REQUEST_STATE_ABORTED) {
 		i_assert(req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT);
 
 		/* we're now waiting for a response from the server */
 		req->state = HTTP_REQUEST_STATE_WAITING;
-		http_client_connection_start_request_timeout(req->conn);
+		http_client_connection_start_request_timeout(conn);
 	}
 
 	/* release connection */
-	req->conn->output_locked = FALSE;
+	conn->output_locked = FALSE;
 
-	http_client_request_debug(req, "Finished sending%s payload",
+	e_debug(req->event, "Finished sending%s payload",
 		(req->state == HTTP_REQUEST_STATE_ABORTED ? " aborted" : ""));
 }
 
@@ -876,12 +941,13 @@ static int
 http_client_request_continue_payload(struct http_client_request **_req,
 	const unsigned char *data, size_t size)
 {
-	struct ioloop *prev_ioloop = current_ioloop;
+	struct ioloop *prev_ioloop, *client_ioloop, *prev_client_ioloop;
 	struct http_client_request *req = *_req;
 	struct http_client_connection *conn = req->conn;
 	struct http_client *client = req->client;
 	int ret;
 
+	i_assert(client != NULL);
 	i_assert(req->state == HTTP_REQUEST_STATE_NEW ||
 		req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT);
 	i_assert(req->payload_input == NULL);
@@ -915,24 +981,26 @@ http_client_request_continue_payload(struct http_client_request **_req,
 			   http_client_request_send_payload() finishes, since its return
 			   value is not always checked.
 			 */
-			http_client_remove_request_error(req->client, req);
+			http_client_remove_request_error(client, req);
 			http_client_request_error_delayed(&tmpreq);
 		}
 	} else {
 		/* Wait for payload data to be written */
 
-		i_assert(client->ioloop == NULL);
-		client->ioloop = io_loop_create();
-		http_client_switch_ioloop(client);
+		prev_ioloop = current_ioloop;
+		client_ioloop = io_loop_create();
+		prev_client_ioloop = http_client_switch_ioloop(client);
 		if (client->set.dns_client != NULL)
 			dns_client_switch_ioloop(client->set.dns_client);
 
+		client->waiting = TRUE;
 		while (req->state < HTTP_REQUEST_STATE_PAYLOAD_IN) {
-			http_client_request_debug(req, "Waiting for request to finish");
+			e_debug(req->event, "Waiting for request to finish");
 		
 			if (req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT)
 				o_stream_set_flush_pending(req->payload_output, TRUE);
-			io_loop_run(client->ioloop);
+
+			io_loop_run(client_ioloop);
 
 			if (req->state == HTTP_REQUEST_STATE_PAYLOAD_OUT &&
 				req->payload_input->eof) {
@@ -940,14 +1008,18 @@ http_client_request_continue_payload(struct http_client_request **_req,
 				req->payload_input = NULL;
 				break;
 			}
-		}
+		}	
+		client->waiting = FALSE;
 
-		io_loop_set_current(prev_ioloop);
-		http_client_switch_ioloop(client);
+		if (prev_client_ioloop != NULL)
+			io_loop_set_current(prev_client_ioloop);
+		else
+			io_loop_set_current(prev_ioloop);
+		(void)http_client_switch_ioloop(client);
 		if (client->set.dns_client != NULL)
 			dns_client_switch_ioloop(client->set.dns_client);
-		io_loop_set_current(client->ioloop);
-		io_loop_destroy(&client->ioloop);
+		io_loop_set_current(client_ioloop);
+		io_loop_destroy(&client_ioloop);
 	}
 
 	switch (req->state) {
@@ -1016,63 +1088,48 @@ static void http_client_request_payload_input(struct http_client_request *req)
 {	
 	struct http_client_connection *conn = req->conn;
 
-	if (conn->io_req_payload != NULL)
-		io_remove(&conn->io_req_payload);
+	io_remove(&conn->io_req_payload);
 
 	(void)http_client_connection_output(conn);
 }
 
 int http_client_request_send_more(struct http_client_request *req,
-				  bool pipelined, const char **error_r)
+				  bool pipelined)
 {
 	struct http_client_connection *conn = req->conn;
+	struct http_client_context *cctx = conn->ppool->peer->cctx;
 	struct ostream *output = req->payload_output;
-	off_t ret;
+	enum ostream_send_istream_result res;
+	const char *error;
+	uoff_t offset;
 
 	i_assert(req->payload_input != NULL);
 	i_assert(req->payload_output != NULL);
 
-	if (conn->io_req_payload != NULL)
-		io_remove(&conn->io_req_payload);
+	io_remove(&conn->io_req_payload);
 
 	/* chunked ostream needs to write to the parent stream's buffer */
+	offset = req->payload_input->v_offset;
 	o_stream_set_max_buffer_size(output, IO_BLOCK_SIZE);
-	ret = o_stream_send_istream(output, req->payload_input);
+	res = o_stream_send_istream(output, req->payload_input);
 	o_stream_set_max_buffer_size(output, (size_t)-1);
 
-	if (req->payload_input->stream_errno != 0) {
-		/* we're in the middle of sending a request, so the connection
-		   will also have to be aborted */
-		errno = req->payload_input->stream_errno;
-		*error_r = t_strdup_printf("read(%s) failed: %s",
-					   i_stream_get_name(req->payload_input),
-					   i_stream_get_error(req->payload_input));
-		
-		/* the payload stream assigned to this request is broken,
-		   fail this the request immediately */
-		http_client_request_error(&req,
-			HTTP_CLIENT_REQUEST_ERROR_BROKEN_PAYLOAD,
-			"Broken payload stream");
-		return -1;
-	} else if (output->stream_errno != 0) {
-		/* failed to send request */
-		errno = output->stream_errno;
-		*error_r = t_strdup_printf("write(%s) failed: %s",
-					   o_stream_get_name(output),
-					   o_stream_get_error(output));
-		return -1;
-	}
-	i_assert(ret >= 0);
+	i_assert(req->payload_input->v_offset >= offset);
+	e_debug(req->event, "Send more (sent %"PRIuUOFF_T", buffered=%"PRIuSIZE_T")",
+		(uoff_t)(req->payload_input->v_offset - offset),
+		o_stream_get_buffer_used_size(output));
 
-	if (i_stream_is_eof(req->payload_input)) {
+	switch (res) {
+	case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
 		/* finished sending */
 		if (!req->payload_chunked &&
 		    req->payload_input->v_offset - req->payload_offset != req->payload_size) {
-			*error_r = t_strdup_printf("BUG: stream '%s' input size changed: "
+			error = t_strdup_printf("BUG: stream '%s' input size changed: "
 				"%"PRIuUOFF_T"-%"PRIuUOFF_T" != %"PRIuUOFF_T,
 				i_stream_get_name(req->payload_input),
 				req->payload_input->v_offset, req->payload_offset, req->payload_size);
-			i_error("%s", *error_r); //FIXME: remove?
+			i_error("%s", error); //FIXME: remove?
+			http_client_connection_lost(&conn, error);
 			return -1;
 		}
 
@@ -1082,39 +1139,59 @@ int http_client_request_send_more(struct http_client_request *req,
 			i_assert(!pipelined);
 			conn->output_locked = TRUE;
 			http_client_connection_stop_request_timeout(conn);
-			if (req->client->ioloop != NULL)
+			if (req->client != NULL && req->client->waiting)
 				io_loop_stop(req->client->ioloop);
 		} else {
 			/* finished sending payload */
 			http_client_request_finish_payload_out(req);
 		}
-	} else if (i_stream_have_bytes_left(req->payload_input)) {
-		/* output is blocking (server needs to act; enable timeout) */
-		conn->output_locked = TRUE;
-		if (!pipelined)
-			http_client_connection_start_request_timeout(conn);
-		o_stream_set_flush_pending(output, TRUE);
-		http_client_request_debug(req, "Partially sent payload");
-	} else {
+		return 0;
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
 		/* input is blocking (client needs to act; disable timeout) */
 		conn->output_locked = TRUE;	
 		if (!pipelined)
 			http_client_connection_stop_request_timeout(conn);
-		conn->io_req_payload = io_add_istream(req->payload_input,
+		conn->io_req_payload = io_add_istream_to(
+			cctx->ioloop, req->payload_input,
 			http_client_request_payload_input, req);
+		return 0;
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
+		/* output is blocking (server needs to act; enable timeout) */
+		conn->output_locked = TRUE;
+		if (!pipelined)
+			http_client_connection_start_request_timeout(conn);
+		e_debug(req->event, "Partially sent payload");
+		return 0;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
+		/* we're in the middle of sending a request, so the connection
+		   will also have to be aborted */
+		error = t_strdup_printf("read(%s) failed: %s",
+					i_stream_get_name(req->payload_input),
+					i_stream_get_error(req->payload_input));
+
+		/* the payload stream assigned to this request is broken,
+		   fail this the request immediately */
+		http_client_request_error(&req,
+			HTTP_CLIENT_REQUEST_ERROR_BROKEN_PAYLOAD,
+			"Broken payload stream");
+
+		http_client_connection_lost(&conn, error);
+		return -1;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+		/* failed to send request */
+		http_client_connection_handle_output_error(conn);
+		return -1;
 	}
-	return 0;
+	i_unreached();
 }
 
 static int http_client_request_send_real(struct http_client_request *req,
-					 bool pipelined, const char **error_r)
+					 bool pipelined)
 {
 	const struct http_client_settings *set = &req->client->set;
 	struct http_client_connection *conn = req->conn;
-	struct ostream *output = conn->conn.output;
 	string_t *rtext = t_str_new(256);
 	struct const_iovec iov[3];
-	int ret = 0;
 
 	i_assert(!req->conn->output_locked);
 	i_assert(req->payload_output == NULL);
@@ -1171,7 +1248,7 @@ static int http_client_request_send_real(struct http_client_request *req,
 		if (!req->have_hdr_body_spec)
 			str_append(rtext, "Transfer-Encoding: chunked\r\n");
 		req->payload_output =
-			http_transfer_chunked_ostream_create(output);
+			http_transfer_chunked_ostream_create(conn->conn.output);
 	} else if (req->payload_input != NULL ||
 		req->payload_empty ||
 		strcasecmp(req->method, "POST") == 0 ||
@@ -1185,8 +1262,8 @@ static int http_client_request_send_real(struct http_client_request *req,
 				req->payload_size);
 		}
 		if (req->payload_input != NULL) {
-			req->payload_output = output;
-			o_stream_ref(output);
+			req->payload_output = conn->conn.output;
+			o_stream_ref(conn->conn.output);
 		}
 	}
 	if (!req->have_hdr_connection &&
@@ -1224,54 +1301,49 @@ static int http_client_request_send_real(struct http_client_request *req,
 	req->sent_global_ioloop_usecs = ioloop_global_wait_usecs;
 	req->sent_http_ioloop_usecs =
 		io_wait_timer_get_usecs(req->conn->io_wait_timer);
-	o_stream_cork(output);
-	if (o_stream_sendv(output, iov, N_ELEMENTS(iov)) < 0) {
-		*error_r = t_strdup_printf("write(%s) failed: %s",
-					   o_stream_get_name(output),
-					   o_stream_get_error(output));
-		ret = -1;
-	} else {
-		http_client_request_debug(req, "Sent header");
+	o_stream_cork(conn->conn.output);
+	req->request_offset = conn->conn.output->offset;
+	if (o_stream_sendv(conn->conn.output, iov, N_ELEMENTS(iov)) < 0) {
+		http_client_connection_handle_output_error(conn);
+		return -1;
+	}
 
-		if (req->payload_output != NULL) {
-			if (!req->payload_sync) {
-				if (http_client_request_send_more
-					(req, pipelined, error_r) < 0)
-					ret = -1;
-			} else {
-				http_client_request_debug(req, "Waiting for 100-continue");
-				conn->output_locked = TRUE;
-			}
+	e_debug(req->event, "Sent header");
+
+	if (req->payload_output != NULL) {
+		if (!req->payload_sync) {
+			if (http_client_request_send_more(req, pipelined) < 0)
+				return -1;
 		} else {
-			req->state = HTTP_REQUEST_STATE_WAITING;
-			if (!pipelined)
-				http_client_connection_start_request_timeout(req->conn);
-			conn->output_locked = FALSE;
+			e_debug(req->event, "Waiting for 100-continue");
+			conn->output_locked = TRUE;
 		}
-		if (ret >= 0 && o_stream_flush(output) < 0) {
-			*error_r = t_strdup_printf("flush(%s) failed: %s",
-   	                   o_stream_get_name(output),
-           	           o_stream_get_error(output));
-			ret = -1;
+	} else {
+		req->state = HTTP_REQUEST_STATE_WAITING;
+		if (!pipelined)
+			http_client_connection_start_request_timeout(req->conn);
+		conn->output_locked = FALSE;
+	}
+	if (conn->conn.output != NULL) {
+		i_assert(req->request_offset < conn->conn.output->offset);
+		req->bytes_out = conn->conn.output->offset - req->request_offset;
+		if (o_stream_uncork_flush(conn->conn.output) < 0) {
+			http_client_connection_handle_output_error(conn);
+			return -1;
 		}
 	}
-	o_stream_uncork(output);
-	return ret;
+	return 0;
 }
 
 int http_client_request_send(struct http_client_request *req,
-			     bool pipelined, const char **error_r)
+			     bool pipelined)
 {
-	char *errstr = NULL;
 	int ret;
 
 	T_BEGIN {
-		ret = http_client_request_send_real(req, pipelined, error_r);
-		if (ret < 0)
-			errstr = i_strdup(*error_r);
+		ret = http_client_request_send_real(req, pipelined);
 	} T_END;
-	*error_r = t_strdup(errstr);
-	i_free(errstr);
+
 	return ret;
 }
 
@@ -1282,6 +1354,7 @@ bool http_client_request_callback(struct http_client_request *req,
 	unsigned int orig_attempts = req->attempts;
 
 	req->state = HTTP_REQUEST_STATE_GOT_RESPONSE;
+	req->last_status = response->status;
 
 	req->callback = NULL;
 	if (callback != NULL) {
@@ -1304,8 +1377,7 @@ bool http_client_request_callback(struct http_client_request *req,
 			return FALSE;
 		} else {
 			/* release payload early (prevents server/client deadlock in proxy) */
-			if (req->payload_input != NULL)
-				i_stream_unref(&req->payload_input);
+			i_stream_unref(&req->payload_input);
 		}
 	}
 	return TRUE;
@@ -1340,8 +1412,10 @@ http_client_request_send_error(struct http_client_request *req,
 				i_stream_unref(&req->payload_input);
 		}
 	}
-	if (req->payload_wait && req->client->ioloop != NULL)
+	if (req->payload_wait) {
+		i_assert(req->client != NULL);
 		io_loop_stop(req->client->ioloop);
+	}
 	return TRUE;
 }
 
@@ -1375,13 +1449,19 @@ void http_client_request_error(struct http_client_request **_req,
 
 	i_assert(req->delayed_error_status == 0);
 	i_assert(req->state < HTTP_REQUEST_STATE_FINISHED);
+
 	req->state = HTTP_REQUEST_STATE_ABORTED;
+	req->last_status = status;
+
+	e_debug(http_client_request_result_event(req)->
+		set_name("http_request_finished")->event(),
+		"Error: %u %s", status, error);
 
 	if (req->queue != NULL)
 		http_client_queue_drop_request(req->queue, req);
 
-	if (!req->submitted ||
-		req->state == HTTP_REQUEST_STATE_GOT_RESPONSE) {
+	if (req->client != NULL && (!req->submitted ||
+		req->state == HTTP_REQUEST_STATE_GOT_RESPONSE)) {
 		/* we're still in http_client_request_submit() or in the callback
 		   during a retry attempt. delay reporting the error, so the caller
 		   doesn't have to handle immediate or nested callbacks. */
@@ -1407,6 +1487,15 @@ void http_client_request_abort(struct http_client_request **_req)
 
 	req->callback = NULL;
 	req->state = HTTP_REQUEST_STATE_ABORTED;
+	if (req->last_status == 0)
+		req->last_status = HTTP_CLIENT_REQUEST_ERROR_ABORTED;
+
+	if (req->state > HTTP_REQUEST_STATE_NEW &&
+	    req->delayed_error_status == 0) {
+		e_debug(http_client_request_result_event(req)->
+			set_name("http_request_finished")->event(),
+			"Aborted");
+	}
 
 	/* release payload early (prevents server/client deadlock in proxy) */
 	if (!sending && req->payload_input != NULL)
@@ -1414,8 +1503,11 @@ void http_client_request_abort(struct http_client_request **_req)
 
 	if (req->queue != NULL)
 		http_client_queue_drop_request(req->queue, req);
-	if (req->payload_wait && req->client->ioloop != NULL)
+	if (req->payload_wait) {
+		i_assert(req->client != NULL);
+		i_assert(req->client->ioloop != NULL);
 		io_loop_stop(req->client->ioloop);
+	}
 	http_client_request_destroy(&req);
 }
 
@@ -1426,15 +1518,20 @@ void http_client_request_finish(struct http_client_request *req)
 
 	i_assert(req->refcount > 0);
 
-	http_client_request_debug(req, "Finished");
+	e_debug(http_client_request_result_event(req)->
+		set_name("http_request_finished")->event(),
+		"Finished");
 
 	req->callback = NULL;
 	req->state = HTTP_REQUEST_STATE_FINISHED;
 
 	if (req->queue != NULL)
 		http_client_queue_drop_request(req->queue, req);
-	if (req->payload_wait && req->client->ioloop != NULL)
+	if (req->payload_wait) {
+		i_assert(req->client != NULL);
+		i_assert(req->client->ioloop != NULL);
 		io_loop_stop(req->client->ioloop);
+	}
 	http_client_request_unref(&req);
 }
 
@@ -1444,7 +1541,10 @@ void http_client_request_redirect(struct http_client_request *req,
 	struct http_url *url;
 	const char *error, *target, *origin_url;
 
+	i_assert(req->client != NULL);
 	i_assert(!req->payload_wait);
+
+	req->last_status = status;
 
 	/* parse URL */
 	if (http_url_parse(location, NULL, 0,
@@ -1454,6 +1554,7 @@ void http_client_request_redirect(struct http_client_request *req,
 		return;
 	}
 
+	i_assert(req->redirects <= req->client->set.max_redirects);
 	if (++req->redirects > req->client->set.max_redirects) {
 		if (req->client->set.max_redirects > 0) {
 			http_client_request_error(&req,
@@ -1482,8 +1583,7 @@ void http_client_request_redirect(struct http_client_request *req,
 	}
 
 	/* drop payload output stream from previous attempt */
-	if (req->payload_output != NULL)
-		o_stream_unref(&req->payload_output);
+	o_stream_unref(&req->payload_output);
 
 	target = http_url_create_target(url);
 
@@ -1494,8 +1594,10 @@ void http_client_request_redirect(struct http_client_request *req,
 
 	origin_url = http_url_create(&req->origin_url);
 
-	http_client_request_debug(req, "Redirecting to %s%s",
-		origin_url, target);
+	e_debug(http_client_request_result_event(req)->
+		set_name("http_request_redirected")->event(),
+		"Redirecting to %s%s (redirects=%u)",
+		origin_url, target, req->redirects);
 
 	req->label = p_strdup_printf(req->pool, "[%s %s%s]",
 		req->method, origin_url, req->target);
@@ -1513,8 +1615,7 @@ void http_client_request_redirect(struct http_client_request *req,
 		req->method = p_strdup(req->pool, "GET");
 
 		/* drop payload */
-		if (req->payload_input != NULL)
-			i_stream_unref(&req->payload_input);
+		i_stream_unref(&req->payload_input);
 		req->payload_size = 0;
 		req->payload_offset = 0;
 	}
@@ -1528,7 +1629,7 @@ void http_client_request_resubmit(struct http_client_request *req)
 {
 	i_assert(!req->payload_wait);
 
-	http_client_request_debug(req, "Resubmitting request");
+	e_debug(req->event, "Resubmitting request");
 
 	/* rewind payload stream */
 	if (req->payload_input != NULL && req->payload_size > 0) {
@@ -1544,11 +1645,12 @@ void http_client_request_resubmit(struct http_client_request *req)
 	}
 
 	/* drop payload output stream from previous attempt */
-	if (req->payload_output != NULL)
-		o_stream_unref(&req->payload_output);
+	o_stream_unref(&req->payload_output);
 
 	req->peer = NULL;
 	req->state = HTTP_REQUEST_STATE_QUEUED;
+	req->redirects = 0;
+	req->last_status = 0;
 	http_client_host_submit_request(req->host, req);
 }
 
@@ -1573,12 +1675,16 @@ bool http_client_request_try_retry(struct http_client_request *req)
 		return FALSE;
 	req->attempts++;
 
-	http_client_request_debug(req, "Retrying (attempts=%d)", req->attempts);
+	e_debug(http_client_request_result_event(req)->
+		set_name("http_request_retried")->event(),
+		"Retrying (attempts=%d)", req->attempts);
+
 	if (req->callback != NULL)
 		http_client_request_resubmit(req);
 	return TRUE;
 }
 
+#undef http_client_request_set_destroy_callback
 void http_client_request_set_destroy_callback(struct http_client_request *req,
 					      void (*callback)(void *),
 					      void *context)

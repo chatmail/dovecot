@@ -42,8 +42,8 @@ struct pool_vfuncs {
 struct pool {
 	const struct pool_vfuncs *v;
 
-	unsigned int alloconly_pool:1;
-	unsigned int datastack_pool:1;
+	bool alloconly_pool:1;
+	bool datastack_pool:1;
 };
 
 /* system_pool uses calloc() + realloc() + free() */
@@ -67,6 +67,14 @@ pool_t pool_alloconly_create_clean(const char *name, size_t size);
    the same as it was when calling this function. pool_unref() also checks
    that the stack frame is the same. This should make it quite safe to use. */
 pool_t pool_datastack_create(void);
+
+/* Create new alloc pool. This is very similar to system pool, but it
+   will deallocate all memory on deinit. */
+pool_t pool_allocfree_create(const char *name);
+
+/* Like alloc pool, but all memory is cleaned before freeing.
+   See pool_alloconly_create_clean. */
+pool_t pool_allocfree_create_clean(const char *name);
 
 /* Similar to nearest_power(), but try not to exceed buffer's easy
    allocation size. If you don't have any explicit minimum size, use
@@ -97,17 +105,13 @@ p_realloc(pool_t pool, void *mem, size_t old_size, size_t new_size)
 	return pool->v->realloc(pool, mem, old_size, new_size);
 }
 
-/* Free the memory. Currently it also sets memory to NULL, but that shouldn't
-   be relied on as it's only an extra safety check. It might as well be later
-   changed to some invalid pointer causing a segfault, or removed completely
-   in some "optimization".. */
+/* Free the memory. p_free() and p_free_and_null() are now guaranteed to both
+   set mem=NULL, so either one of them can be used. */
 #define p_free(pool, mem) \
 	STMT_START { \
 		p_free_internal(pool, mem);	\
 		(mem) = NULL;			\
 	} STMT_END
-
-/* A macro that's guaranteed to set mem = NULL. */
 #define p_free_and_null(pool, mem) p_free(pool, mem)
 
 static inline void p_free_internal(pool_t pool, void *mem)
@@ -137,7 +141,8 @@ static inline void pool_ref(pool_t pool)
 
 static inline void pool_unref(pool_t *pool)
 {
-	(*pool)->v->unref(pool);
+	if (*pool != NULL)
+		(*pool)->v->unref(pool);
 }
 
 /* These functions are only for pools created with pool_alloconly_create(): */
@@ -146,5 +151,13 @@ static inline void pool_unref(pool_t *pool)
 size_t pool_alloconly_get_total_used_size(pool_t pool);
 /* Returns how much system memory has been allocated for this pool. */
 size_t pool_alloconly_get_total_alloc_size(pool_t pool);
+
+/* Returns how much memory has been allocated from this pool. */
+size_t pool_allocfree_get_total_used_size(pool_t pool);
+/* Returns how much system memory has been allocated for this pool. */
+size_t pool_allocfree_get_total_alloc_size(pool_t pool);
+
+/* private: */
+void pool_system_free(pool_t pool, void *mem);
 
 #endif

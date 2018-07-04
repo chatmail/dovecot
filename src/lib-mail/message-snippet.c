@@ -137,10 +137,8 @@ int message_snippet_generate(struct istream *input,
 	}
 	i_assert(ret != 0);
 	message_decoder_deinit(&decoder);
-	if (message_parser_deinit(&parser, &parts) < 0)
-		i_unreached();
-	if (ctx.html2text != NULL)
-		mail_html2text_deinit(&ctx.html2text);
+	message_parser_deinit(&parser, &parts);
+	mail_html2text_deinit(&ctx.html2text);
 	pool_unref(&pool);
 	return input->stream_errno == 0 ? 0 : -1;
 }

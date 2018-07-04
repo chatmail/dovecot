@@ -69,10 +69,7 @@ int test_mail_attribute_get(struct mailbox *box, bool user_key, bool shared,
 
 	int ret;
 
-	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(box, 0);
-
-	if ((ret = mailbox_attribute_get(t, attr_type,
+	if ((ret = mailbox_attribute_get(box, attr_type,
 					 attr_name, &value)) <= 0) {
 		if (ret < 0) {
 			*error_r = t_strdup_printf("mailbox_attribute_get(%s, %s) failed: %s",
@@ -83,9 +80,6 @@ int test_mail_attribute_get(struct mailbox *box, bool user_key, bool shared,
 	} else {
 		*value_r = t_strdup(value.value);
 	}
-
-	(void)mailbox_transaction_commit(&t);
-
 	return ret;
 }
 
@@ -119,11 +113,13 @@ test_mail_attribute_set(struct mailbox_transaction_context *t,
 	attr_value.value = value;
 
 	if ((ret = mailbox_attribute_set(t, attr_type,
-					 attr_name, &attr_value)) < 0) {
-		*error_r = t_strdup_printf("mailbox_attribute_set(%s, %s) failed: %s",
-					   mailbox_get_vname(mailbox_transaction_get_mailbox(t)),
-					   attr_name,
-					   mailbox_get_last_internal_error(mailbox_transaction_get_mailbox(t), NULL));
+					 attr_name, &attr_value)) <= 0) {
+		if (ret < 0) {
+			*error_r = t_strdup_printf("mailbox_attribute_set(%s, %s) failed: %s",
+						   mailbox_get_vname(mailbox_transaction_get_mailbox(t)),
+						   attr_name,
+						   mailbox_get_last_internal_error(mailbox_transaction_get_mailbox(t), NULL));
+		}
 	}
 
 	return ret;
@@ -149,7 +145,7 @@ int init_test_mail_user(void)
 			t_strdup_printf("mail_crypt_curve=prime256v1"),
 			NULL
 		},
-		.username = "mcp_test",
+		.username = "mcp_test@example.com",
 		.no_userdb_lookup = TRUE,
 		.debug = TRUE,
 	};
@@ -178,9 +174,9 @@ int init_test_mail_user(void)
 	}
 
 	if (mail_storage_service_next(mail_storage_service, test_service_user,
-				      &test_mail_user) < 0)
+				      &test_mail_user, &error) < 0)
 	{
-		 i_error("Cannot lookup test user");
+		 i_error("Cannot lookup test user: %s", error);
 		 return -1;
 	}
 
@@ -190,11 +186,13 @@ int init_test_mail_user(void)
 static
 void deinit_test_mail_user()
 {
+	const char *error;
 	mail_user_unref(&test_mail_user);
 	mail_storage_service_user_unref(&test_service_user);
 	mail_storage_service_deinit(&mail_storage_service);
-	if (unlink_directory(mail_home, UNLINK_DIRECTORY_FLAG_RMDIR) < 0)
-		i_error("unlink_directory(%s) failed", mail_home);
+	if (unlink_directory(mail_home, UNLINK_DIRECTORY_FLAG_RMDIR,
+			     &error) < 0)
+		i_error("unlink_directory(%s) failed: %s", mail_home, error);
 }
 
 static void test_generate_user_key(void)
@@ -296,7 +294,7 @@ static void test_cache_reset(void)
 
 static void test_verify_keys(void)
 {
-	const char *value, *error = NULL;
+	const char *value = "", *error = NULL;
 
 	const char *enc_id;
 	enum dcrypt_key_encryption_type enc_type;
@@ -411,7 +409,8 @@ static void test_old_key(void)
 		i_fatal("mailbox_open(INBOX) failed: %s",
 			mailbox_get_last_internal_error(box, NULL));
 
-	struct mailbox_transaction_context *t = mailbox_transaction_begin(box, 0);
+	struct mailbox_transaction_context *t =
+		mailbox_transaction_begin(box, 0, __func__);
 
 	test_mail_attribute_set(t, TRUE, FALSE, mcp_old_user_key_id,
 				mcp_old_user_key, &error);
@@ -420,15 +419,11 @@ static void test_old_key(void)
 
 	(void)mailbox_transaction_commit(&t);
 
-	t = mailbox_transaction_begin(box, 0);
-
 	error = NULL;
 
 	/* try to load old key */
-	test_assert(mail_crypt_get_private_key(t, mcp_old_box_key_id, FALSE, FALSE,
-					       &privkey, &error) > 0);
-
-	(void)mailbox_transaction_commit(&t);
+	test_assert(mail_crypt_get_private_key(box, mcp_old_box_key_id, FALSE, FALSE,
+						&privkey, &error) > 0);
 
 	if (error != NULL)
 		i_error("mail_crypt_get_private_key(%s) failed: %s",
@@ -438,7 +433,7 @@ static void test_old_key(void)
 	test_assert(privkey != NULL);
 
 	if (privkey != NULL) {
-		buffer_t *key_id = buffer_create_dynamic(pool_datastack_create(), 32);
+		buffer_t *key_id = t_buffer_create(32);
 		test_assert(dcrypt_key_id_private_old(privkey, key_id, &error));
 		test_assert(strcmp(binary_to_hex(key_id->data, key_id->used), mcp_old_box_key_id) == 0);
 		dcrypt_key_unref_private(&privkey);
@@ -494,9 +489,9 @@ int main(int argc, char **argv)
 	master_service = master_service_init("test-mail-key",
 					     MASTER_SERVICE_FLAG_STANDALONE |
 					     MASTER_SERVICE_FLAG_NO_CONFIG_SETTINGS |
-					     MASTER_SERVICE_FLAG_NO_SSL_INIT,
+					     MASTER_SERVICE_FLAG_NO_SSL_INIT |
+					     MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME,
 					     &argc, &argv, "");
-	random_init();
 	int ret = test_run(tests);
 	master_service_deinit(&master_service);
 	return ret;

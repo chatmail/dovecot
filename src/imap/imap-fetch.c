@@ -246,8 +246,7 @@ get_expunges_fallback(struct mailbox *box,
 	i_array_init(&search_args->args->value.seqset, count);
 	array_append_array(&search_args->args->value.seqset, uid_filter_arr);
 
-	trans = mailbox_transaction_begin(box, 0);
-	mailbox_transaction_set_reason(trans, "FETCH send VANISHED");
+	trans = mailbox_transaction_begin(box, 0, "FETCH send VANISHED");
 	search_ctx = mailbox_search_init(trans, search_args, NULL, 0, NULL);
 	mail_search_args_unref(&search_args);
 
@@ -398,8 +397,8 @@ void imap_fetch_begin(struct imap_fetch_context *ctx, struct mailbox *box,
 		   are added, other flag changes are also hidden.) */
 		trans_flags |= MAILBOX_TRANSACTION_FLAG_HIDE;
 	}
-	ctx->state.trans = mailbox_transaction_begin(box, trans_flags);
-	mailbox_transaction_set_reason(ctx->state.trans, ctx->reason);
+	ctx->state.trans = mailbox_transaction_begin(box, trans_flags,
+						     ctx->reason);
 
 	mail_search_args_init(search_args, box, TRUE,
 			      &ctx->client->search_saved_uidset);
@@ -409,8 +408,7 @@ void imap_fetch_begin(struct imap_fetch_context *ctx, struct mailbox *box,
 	ctx->state.cur_str = str_new(default_pool, 8192);
 	ctx->state.fetching = TRUE;
 
-	if (wanted_headers != NULL)
-		mailbox_header_lookup_unref(&wanted_headers);
+	mailbox_header_lookup_unref(&wanted_headers);
 }
 
 static int imap_fetch_flush_buffer(struct imap_fetch_context *ctx)
@@ -518,7 +516,6 @@ static int imap_fetch_more_int(struct imap_fetch_context *ctx, bool cancel)
 		}
 
 		state->cont_handler = NULL;
-		state->cur_offset = 0;
                 state->cur_handler++;
 		if (state->cur_input != NULL)
 			i_stream_unref(&state->cur_input);
@@ -543,6 +540,7 @@ static int imap_fetch_more_int(struct imap_fetch_context *ctx, bool cancel)
 
 			str_printfa(state->cur_str, "* %u FETCH (",
 				    state->cur_mail->seq);
+			ctx->fetched_mails_count++;
 			state->cur_first = TRUE;
 			state->cur_str_prefix_size = str_len(state->cur_str);
 			i_assert(!state->line_partial);
@@ -584,7 +582,6 @@ static int imap_fetch_more_int(struct imap_fetch_context *ctx, bool cancel)
 			}
 
 			state->cont_handler = NULL;
-			state->cur_offset = 0;
 			if (state->cur_input != NULL)
 				i_stream_unref(&state->cur_input);
 		}
@@ -668,11 +665,9 @@ int imap_fetch_end(struct imap_fetch_context *ctx)
 	}
 	ctx->client->output_cmd_lock = NULL;
 
-	if (state->cur_str != NULL)
-		str_free(&state->cur_str);
+	str_free(&state->cur_str);
 
-	if (state->cur_input != NULL)
-		i_stream_unref(&state->cur_input);
+	i_stream_unref(&state->cur_input);
 
 	if (state->search_ctx != NULL) {
 		if (mailbox_search_deinit(&state->search_ctx) < 0)
@@ -865,8 +860,7 @@ static int fetch_modseq(struct imap_fetch_context *ctx, struct mail *mail,
 	modseq = mail_get_modseq(mail);
 	if (ctx->client->highest_fetch_modseq < modseq)
 		ctx->client->highest_fetch_modseq = modseq;
-	str_printfa(ctx->state.cur_str, "MODSEQ (%llu) ",
-		    (unsigned long long)modseq);
+	str_printfa(ctx->state.cur_str, "MODSEQ (%"PRIu64") ", modseq);
 	return 1;
 }
 

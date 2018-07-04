@@ -10,17 +10,21 @@ Build-Depends: debhelper (>= 11~),
                dh-exec,
                dpkg-dev (>= 1.16.1),
                krb5-multidev,
+               libapparmor-dev,
                libbz2-dev,
                libclucene-dev (>= 2.3),
                libdb-dev,
+               libicu-dev,
                libexpat-dev,
                libexttextcat-dev,
                libldap2-dev,
                liblz4-dev,
                liblzma-dev,
+               liblua5.3-dev,
                libpam0g-dev,
                libpq-dev,
                libsasl2-dev,
+               libsodium-dev,
                libsqlite3-dev,
                libssl-dev,
                libstemmer-dev,
@@ -55,6 +59,7 @@ Suggests: dovecot-gssapi,
           dovecot-sieve,
           dovecot-solr,
           dovecot-sqlite,
+          dovecot-submissiond,
           ntp
 Provides: dovecot-abi-${dovecot:ABI-Version}, dovecot-common
 Replaces: dovecot-common (<< 1:2.0.14-2~), mailavenger (<< 0.8.1-4)
@@ -257,3 +262,36 @@ Description: secure POP3/IMAP server - Lucene support
  fast, extensible, and portable.
  .
  This package provides Lucene full text search support for Dovecot.
+
+Package: dovecot-submissiond
+Architecture: any
+Depends: dovecot-core (= ${binary:Version}),
+         ucf (>= 2.0020),
+         ${misc:Depends},
+         ${shlibs:Depends}
+Breaks: dovecot-submission (<< 1:2.3.1-2~)
+Replaces: dovecot-submission (<< 1:2.3.1-2~)
+Description: secure POP3/IMAP server - mail submission agent
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package contains the Dovecot Mail Submission Agent which implements a
+ basic SMTP submission service with BURL support.
+
+Package: dovecot-auth-lua
+Architecture: any
+Depends: dovecot-core (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends}
+Description: secure POP3/IMAP server - Lua authentication plugin
+ Dovecot is a mail server whose major goals are security and extreme
+ reliability. It tries very hard to handle all error conditions and verify
+ that all data is valid, making it nearly impossible to crash. It supports
+ mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
+ fast, extensible, and portable.
+ .
+ This package contains an authentication plugin allowing password and user
+ databases to be implemented in Lua.

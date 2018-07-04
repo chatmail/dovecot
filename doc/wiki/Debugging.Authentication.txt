@@ -88,4 +88,4 @@ python -c "import base64;
 print(base64.encodestring('myusername@domain.tld\0myusername@domain.tld\0mypassword'));"
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-05-23 04:42)
+(This file was created from the wiki on 2017-10-24 04:42)

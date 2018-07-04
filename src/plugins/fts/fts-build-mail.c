@@ -217,7 +217,7 @@ fts_build_body_begin(struct fts_mail_build_context *ctx,
 		     struct message_part *part, bool *binary_body_r)
 {
 	struct mail_storage *storage;
-	const char *content_type;
+	struct fts_parser_context parser_context;
 	struct fts_backend_build_key key;
 
 	i_assert(ctx->body_parser == NULL);
@@ -227,23 +227,24 @@ fts_build_body_begin(struct fts_mail_build_context *ctx,
 	key.uid = ctx->mail->uid;
 	key.part = part;
 
-	content_type = ctx->content_type != NULL ?
+	i_zero(&parser_context);
+	parser_context.content_type = ctx->content_type != NULL ?
 		ctx->content_type : "text/plain";
-	if (strncmp(content_type, "multipart/", 10) == 0) {
+	if (strncmp(parser_context.content_type, "multipart/", 10) == 0) {
 		/* multiparts are never indexed, only their contents */
 		return FALSE;
 	}
+	storage = mailbox_get_storage(ctx->mail->box);
+	parser_context.user = mail_storage_get_user(storage);
+	parser_context.content_disposition = ctx->content_disposition;
 
 	
-	storage = mailbox_get_storage(ctx->mail->box);
-	if (fts_parser_init(mail_storage_get_user(storage),
-			    content_type, ctx->content_disposition,
-			    &ctx->body_parser)) {
+	if (fts_parser_init(&parser_context, &ctx->body_parser)) {
 		/* extract text using the the returned parser */
 		*binary_body_r = TRUE;
 		key.type = FTS_BACKEND_BUILD_KEY_BODY_PART;
-	} else if (strncmp(content_type, "text/", 5) == 0 ||
-		   strncmp(content_type, "message/", 8) == 0) {
+	} else if (strncmp(parser_context.content_type, "text/", 5) == 0 ||
+		   strncmp(parser_context.content_type, "message/", 8) == 0) {
 		/* text body parts */
 		key.type = FTS_BACKEND_BUILD_KEY_BODY_PART;
 		ctx->body_parser = fts_parser_text_init();
@@ -255,12 +256,12 @@ fts_build_body_begin(struct fts_mail_build_context *ctx,
 		*binary_body_r = TRUE;
 		key.type = FTS_BACKEND_BUILD_KEY_BODY_PART_BINARY;
 	}
-	key.body_content_type = content_type;
+	key.body_content_type = parser_context.content_type;
 	key.body_content_disposition = ctx->content_disposition;
 	ctx->cur_user_lang = NULL;
 	if (!fts_backend_update_set_build_key(ctx->update_ctx, &key)) {
 		if (ctx->body_parser != NULL)
-			(void)fts_parser_deinit(&ctx->body_parser);
+			(void)fts_parser_deinit(&ctx->body_parser, NULL);
 		return FALSE;
 	}
 	return TRUE;
@@ -435,10 +436,15 @@ static int fts_build_body_block(struct fts_mail_build_context *ctx,
 	return fts_build_data(ctx, block->data, block->size, last);
 }
 
-static int fts_body_parser_finish(struct fts_mail_build_context *ctx)
+static int fts_body_parser_finish(struct fts_mail_build_context *ctx,
+				  const char **retriable_err_msg_r,
+				  bool *may_need_retry_r)
 {
 	struct message_block block;
+	const char *retriable_error;
 	int ret = 0;
+	int deinit_ret;
+	*may_need_retry_r = FALSE;
 
 	do {
 		i_zero(&block);
@@ -449,14 +455,27 @@ static int fts_body_parser_finish(struct fts_mail_build_context *ctx)
 		}
 	} while (block.size > 0);
 
-	if (fts_parser_deinit(&ctx->body_parser) < 0)
-		ret = -1;
-	return ret;
+	deinit_ret = fts_parser_deinit(&ctx->body_parser, &retriable_error);
+	if (ret < 0) {
+		/* indexing already failed - we don't want to retry
+		   in any case */
+		return -1;
+	}
+
+	if (deinit_ret == 0) {
+		/* retry the parsing */
+		*may_need_retry_r = TRUE;
+		*retriable_err_msg_r = retriable_error;
+		return -1;
+	}
+	return deinit_ret < 0 ? -1 : 0;
 }
 
 static int
 fts_build_mail_real(struct fts_backend_update_context *update_ctx,
-		    struct mail *mail)
+		    struct mail *mail,
+		    const char **retriable_err_msg_r,
+		    bool *may_need_retry_r)
 {
 	struct fts_mail_build_context ctx;
 	struct istream *input;
@@ -469,6 +488,7 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 	const char *error;
 	int ret;
 
+	*may_need_retry_r = FALSE;
 	if (mail_get_stream_because(mail, NULL, NULL, "fts indexing", &input) < 0) {
 		if (mail->expunged)
 			return 0;
@@ -508,7 +528,8 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 			/* body part changed. we're now parsing the end of
 			   boundary, possibly followed by message epilogue */
 			if (ctx.body_parser != NULL) {
-				if (fts_body_parser_finish(&ctx) < 0) {
+				if (fts_body_parser_finish(&ctx, retriable_err_msg_r,
+							   may_need_retry_r) < 0) {
 					ret = -1;
 					break;
 				}
@@ -565,9 +586,10 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 	}
 	if (ctx.body_parser != NULL) {
 		if (ret == 0)
-			ret = fts_body_parser_finish(&ctx);
+			ret = fts_body_parser_finish(&ctx, retriable_err_msg_r,
+						     may_need_retry_r);
 		else
-			(void)fts_parser_deinit(&ctx.body_parser);
+			(void)fts_parser_deinit(&ctx.body_parser, NULL);
 	}
 	if (ret == 0 && body_part && !skip_body && !body_added) {
 		/* make sure body is added even when it doesn't exist */
@@ -579,10 +601,8 @@ fts_build_mail_real(struct fts_backend_update_context *update_ctx,
 	message_decoder_deinit(&decoder);
 	i_free(ctx.content_type);
 	i_free(ctx.content_disposition);
-	if (ctx.word_buf != NULL)
-		buffer_free(&ctx.word_buf);
-	if (ctx.pending_input != NULL)
-		buffer_free(&ctx.pending_input);
+	buffer_free(&ctx.word_buf);
+	buffer_free(&ctx.pending_input);
 	return ret < 0 ? -1 : 1;
 }
 
@@ -590,9 +610,25 @@ int fts_build_mail(struct fts_backend_update_context *update_ctx,
 		   struct mail *mail)
 {
 	int ret;
+	/* Number of attempts to be taken if retry is needed */
+	unsigned int attempts = 2;
+	const char *retriable_err_msg;
+	bool may_need_retry;
 
 	T_BEGIN {
-		ret = fts_build_mail_real(update_ctx, mail);
+		while ((ret = fts_build_mail_real(update_ctx, mail,
+						  &retriable_err_msg,
+						  &may_need_retry)) < 0 &&
+		       may_need_retry) {
+			if (--attempts == 0) {
+				/* Log this as info instead of as error,
+				   because e.g. Tika doesn't differentiate
+				   between temporary errors and invalid
+				   document input. */
+				i_info("%s - ignoring", retriable_err_msg);
+				break;
+			}
+		}
 	} T_END;
 	return ret;
 }

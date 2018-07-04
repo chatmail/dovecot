@@ -21,10 +21,14 @@
 
 #define FTS_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, fts_storage_module)
+#define FTS_CONTEXT_REQUIRE(obj) \
+	MODULE_CONTEXT_REQUIRE(obj, fts_storage_module)
 #define FTS_MAIL_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, fts_mail_module)
+	MODULE_CONTEXT_REQUIRE(obj, fts_mail_module)
 #define FTS_LIST_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, fts_mailbox_list_module)
+#define FTS_LIST_CONTEXT_REQUIRE(obj) \
+	MODULE_CONTEXT_REQUIRE(obj, fts_mailbox_list_module)
 
 #define INDEXER_SOCKET_NAME "indexer"
 #define INDEXER_HANDSHAKE "VERSION\tindexer\t1\t0\n"
@@ -54,17 +58,16 @@ struct fts_transaction_context {
 	uint32_t highest_virtual_uid;
 	unsigned int precache_extra_count;
 
-	unsigned int indexing:1;
-	unsigned int precached:1;
-	unsigned int mails_saved:1;
-	unsigned int failed:1;
+	bool precached:1;
+	bool mails_saved:1;
+	bool failed:1;
 };
 
 struct fts_mail {
 	union mail_module_context module_ctx;
 	char score[30];
 
-	unsigned int virtual_mail:1;
+	bool virtual_mail:1;
 };
 
 static MODULE_CONTEXT_DEFINE_INIT(fts_storage_module,
@@ -75,7 +78,7 @@ static MODULE_CONTEXT_DEFINE_INIT(fts_mailbox_list_module,
 
 static int fts_mailbox_get_last_cached_seq(struct mailbox *box, uint32_t *seq_r)
 {
-	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(box->list);
+	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT_REQUIRE(box->list);
 	uint32_t seq1, seq2, last_uid;
 
 	if (fts_backend_get_last_uid(flist->backend, box, &last_uid) < 0) {
@@ -96,7 +99,7 @@ static int
 fts_mailbox_get_status(struct mailbox *box, enum mailbox_status_items items,
 		       struct mailbox_status *status_r)
 {
-	struct fts_mailbox *fbox = FTS_CONTEXT(box);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(box);
 	uint32_t seq;
 
 	if (fbox->module_ctx.super.get_status(box, items, status_r) < 0)
@@ -198,9 +201,9 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 			enum mail_fetch_field wanted_fields,
 			struct mailbox_header_lookup_ctx *wanted_headers)
 {
-	struct fts_transaction_context *ft = FTS_CONTEXT(t);
-	struct fts_mailbox *fbox = FTS_CONTEXT(t->box);
-	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(t->box->list);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(t);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(t->box);
+	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT_REQUIRE(t->box->list);
 	struct mail_search_context *ctx;
 	struct fts_search_context *fctx;
 
@@ -219,8 +222,8 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	fctx->orig_matches = buffer_create_dynamic(default_pool, 64);
 	fctx->virtual_mailbox = t->box->virtual_vfuncs != NULL;
 	fctx->enforced =
-		mail_user_plugin_getenv(t->box->storage->user,
-					"fts_enforced") != NULL;
+		mail_user_plugin_getenv_bool(t->box->storage->user,
+					"fts_enforced");
 	i_array_init(&fctx->levels, 8);
 	fctx->scores = i_new(struct fts_scores, 1);
 	fctx->scores->refcount = 1;
@@ -230,8 +233,8 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	/* FIXME: we'll assume that all the args are fuzzy. not good,
 	   but would require much more work to fix it. */
 	if (!fts_args_have_fuzzy(args->args) &&
-	    mail_user_plugin_getenv(t->box->storage->user,
-				    "fts_no_autofuzzy") != NULL)
+	    mail_user_plugin_getenv_bool(t->box->storage->user,
+				    "fts_no_autofuzzy"))
 		fctx->flags |= FTS_LOOKUP_FLAG_NO_AUTO_FUZZY;
 	/* transaction contains the last search's scores. they can be
 	   queried later with mail_get_special() */
@@ -249,7 +252,7 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 
 static bool fts_mailbox_build_continue(struct mail_search_context *ctx)
 {
-	struct fts_search_context *fctx = FTS_CONTEXT(ctx);
+	struct fts_search_context *fctx = FTS_CONTEXT_REQUIRE(ctx);
 	int ret;
 
 	ret = fts_indexer_more(fctx->indexer_ctx);
@@ -280,9 +283,9 @@ static bool
 fts_mailbox_search_next_nonblock(struct mail_search_context *ctx,
 				 struct mail **mail_r, bool *tryagain_r)
 {
-	struct fts_mailbox *fbox = FTS_CONTEXT(ctx->transaction->box);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(ctx->transaction->box);
 	struct fts_search_context *fctx = FTS_CONTEXT(ctx);
-	struct fts_transaction_context *ft = FTS_CONTEXT(ctx->transaction);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(ctx->transaction);
 
 	if (fctx == NULL && ft->failed) {
 		/* precaching already failed - stop now instead of potentially
@@ -312,7 +315,7 @@ static void
 fts_search_apply_results_level(struct mail_search_context *ctx,
 			       struct mail_search_arg *args, unsigned int *idx)
 {
-	struct fts_search_context *fctx = FTS_CONTEXT(ctx);
+	struct fts_search_context *fctx = FTS_CONTEXT_REQUIRE(ctx);
 	const struct fts_search_level *level;
 
 	level = array_idx(&fctx->levels, *idx);
@@ -335,7 +338,7 @@ fts_search_apply_results_level(struct mail_search_context *ctx,
 
 static bool fts_mailbox_search_next_update_seq(struct mail_search_context *ctx)
 {
-	struct fts_mailbox *fbox = FTS_CONTEXT(ctx->transaction->box);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(ctx->transaction->box);
 	struct fts_search_context *fctx = FTS_CONTEXT(ctx);
 	unsigned int idx;
 
@@ -365,8 +368,8 @@ static bool fts_mailbox_search_next_update_seq(struct mail_search_context *ctx)
 
 static int fts_mailbox_search_deinit(struct mail_search_context *ctx)
 {
-	struct fts_mailbox *fbox = FTS_CONTEXT(ctx->transaction->box);
-	struct fts_transaction_context *ft = FTS_CONTEXT(ctx->transaction);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(ctx->transaction->box);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(ctx->transaction);
 	struct fts_search_context *fctx = FTS_CONTEXT(ctx);
 	int ret = 0;
 
@@ -409,7 +412,7 @@ static int fts_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 {
 	struct mail_private *mail = (struct mail_private *)_mail;
 	struct fts_mail *fmail = FTS_MAIL_CONTEXT(mail);
-	struct fts_transaction_context *ft = FTS_CONTEXT(_mail->transaction);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(_mail->transaction);
 	const struct fts_score_map *scores;
 
 	if (field != MAIL_FETCH_SEARCH_RELEVANCY || ft->scores == NULL)
@@ -463,8 +466,8 @@ fts_mail_precache_range(struct mailbox_transaction_context *trans,
 
 static int fts_mail_precache_init(struct mail *_mail)
 {
-	struct fts_transaction_context *ft = FTS_CONTEXT(_mail->transaction);
-	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(_mail->box->list);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(_mail->transaction);
+	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT_REQUIRE(_mail->box->list);
 	uint32_t last_seq;
 
 	if (fts_mailbox_get_last_cached_seq(_mail->box, &last_seq) < 0)
@@ -480,9 +483,8 @@ static int fts_mail_precache_init(struct mail *_mail)
 
 static void fts_mail_index(struct mail *_mail)
 {
-	struct fts_transaction_context *ft = FTS_CONTEXT(_mail->transaction);
-	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(_mail->box->list);
-	struct mail_private *pmail = (struct mail_private *)_mail;
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(_mail->transaction);
+	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT_REQUIRE(_mail->box->list);
 
 	if (ft->failed)
 		return;
@@ -493,30 +495,9 @@ static void fts_mail_index(struct mail *_mail)
 			return;
 		}
 	}
-	if (pmail->vmail != NULL) {
-		/* Indexing via virtual mailbox: Index all the mails in this
-		   same real mailbox. */
-		uint32_t msgs_count =
-			mail_index_view_get_messages_count(_mail->box->view);
-
-		fts_backend_update_set_mailbox(flist->update_ctx, _mail->box);
-		if (ft->next_index_seq > msgs_count) {
-			/* everything indexed already */
-		} else if (fts_mail_precache_range(_mail->transaction,
-						   flist->update_ctx,
-						   ft->next_index_seq,
-						   msgs_count,
-						   &ft->precache_extra_count) < 0) {
-			ft->failed = TRUE;
-		} else {
-			ft->next_index_seq = msgs_count+1;
-		}
-		return;
-	}
-
 	if (ft->next_index_seq < _mail->seq) {
-		/* we'll first need to index all the missing mails up to the
-		   current one. */
+		/* most likely a virtual mailbox. we'll first need to
+		   index all mails up to the current one. */
 		fts_backend_update_set_mailbox(flist->update_ctx, _mail->box);
 		if (fts_mail_precache_range(_mail->transaction,
 					    flist->update_ctx,
@@ -526,7 +507,6 @@ static void fts_mail_index(struct mail *_mail)
 			ft->failed = TRUE;
 			return;
 		}
-		ft->next_index_seq = _mail->seq;
 	}
 
 	if (ft->next_index_seq == _mail->seq) {
@@ -543,18 +523,14 @@ static void fts_mail_precache(struct mail *_mail)
 {
 	struct mail_private *mail = (struct mail_private *)_mail;
 	struct fts_mail *fmail = FTS_MAIL_CONTEXT(mail);
-	struct fts_transaction_context *ft = FTS_CONTEXT(_mail->transaction);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(_mail->transaction);
 
 	fmail->module_ctx.super.precache(_mail);
 	if (fmail->virtual_mail) {
 		if (ft->highest_virtual_uid < _mail->uid)
 			ft->highest_virtual_uid = _mail->uid;
-	} else if (!ft->indexing) T_BEGIN {
-		/* avoid recursing here from fts_mail_precache_range() */
-		ft->indexing = TRUE;
+	} else T_BEGIN {
 		fts_mail_index(_mail);
-		i_assert(ft->indexing);
-		ft->indexing = FALSE;
 	} T_END;
 }
 
@@ -580,23 +556,24 @@ void fts_mail_allocated(struct mail *_mail)
 
 static struct mailbox_transaction_context *
 fts_transaction_begin(struct mailbox *box,
-		      enum mailbox_transaction_flags flags)
+		      enum mailbox_transaction_flags flags,
+		      const char *reason)
 {
-	struct fts_mailbox *fbox = FTS_CONTEXT(box);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(box);
 	struct mailbox_transaction_context *t;
 	struct fts_transaction_context *ft;
 
 	ft = i_new(struct fts_transaction_context, 1);
 
-	t = fbox->module_ctx.super.transaction_begin(box, flags);
+	t = fbox->module_ctx.super.transaction_begin(box, flags, reason);
 	MODULE_CONTEXT_SET(t, fts_storage_module, ft);
 	return t;
 }
 
 static int fts_transaction_end(struct mailbox_transaction_context *t, const char **error_r)
 {
-	struct fts_transaction_context *ft = FTS_CONTEXT(t);
-	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(t->box->list);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(t);
+	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT_REQUIRE(t->box->list);
 	int ret = ft->failed ? -1 : 0;
 
 	if (ft->failed)
@@ -633,7 +610,7 @@ static int fts_transaction_end(struct mailbox_transaction_context *t, const char
 
 static void fts_transaction_rollback(struct mailbox_transaction_context *t)
 {
-	struct fts_mailbox *fbox = FTS_CONTEXT(t->box);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(t->box);
 	const char *error;
 
 	(void)fts_transaction_end(t, &error);
@@ -677,16 +654,16 @@ static int
 fts_transaction_commit(struct mailbox_transaction_context *t,
 		       struct mail_transaction_commit_changes *changes_r)
 {
-	struct fts_transaction_context *ft = FTS_CONTEXT(t);
-	struct fts_mailbox *fbox = FTS_CONTEXT(t->box);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(t);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(t->box);
 	struct mailbox *box = t->box;
 	bool autoindex;
 	int ret = 0;
 	const char *error;
 
 	autoindex = ft->mails_saved && !fbox->fts_mailbox_excluded &&
-		mail_user_plugin_getenv(box->storage->user,
-					"fts_autoindex") != NULL;
+		mail_user_plugin_getenv_bool(box->storage->user,
+					"fts_autoindex");
 
 	if (fts_transaction_end(t, &error) < 0) {
 		mail_storage_set_error(t->box->storage, MAIL_ERROR_TEMP,
@@ -707,8 +684,8 @@ fts_transaction_commit(struct mailbox_transaction_context *t,
 static void fts_mailbox_sync_notify(struct mailbox *box, uint32_t uid,
 				    enum mailbox_sync_type sync_type)
 {
-	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(box->list);
-	struct fts_mailbox *fbox = FTS_CONTEXT(box);
+	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT_REQUIRE(box->list);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(box);
 
 	if (fbox->module_ctx.super.sync_notify != NULL)
 		fbox->module_ctx.super.sync_notify(box, uid, sync_type);
@@ -738,7 +715,7 @@ static int fts_sync_deinit(struct mailbox_sync_context *ctx,
 			   struct mailbox_sync_status *status_r)
 {
 	struct mailbox *box = ctx->box;
-	struct fts_mailbox *fbox = FTS_CONTEXT(box);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(box);
 	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(box->list);
 	bool optimize;
 	int ret = 0;
@@ -750,10 +727,9 @@ static int fts_sync_deinit(struct mailbox_sync_context *ctx,
 	ctx = NULL;
 
 	if (optimize) {
+		i_assert(flist != NULL);
 		if (fts_backend_optimize(flist->backend) < 0) {
-			mail_storage_set_critical(box->storage,
-				"FTS optimize for mailbox %s failed",
-				box->vname);
+			mailbox_set_critical(box, "FTS optimize failed");
 			ret = -1;
 		}
 	}
@@ -762,8 +738,8 @@ static int fts_sync_deinit(struct mailbox_sync_context *ctx,
 
 static int fts_save_finish(struct mail_save_context *ctx)
 {
-	struct fts_transaction_context *ft = FTS_CONTEXT(ctx->transaction);
-	struct fts_mailbox *fbox = FTS_CONTEXT(ctx->transaction->box);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(ctx->transaction);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(ctx->transaction->box);
 
 	if (fbox->module_ctx.super.save_finish(ctx) < 0)
 		return -1;
@@ -773,8 +749,8 @@ static int fts_save_finish(struct mail_save_context *ctx)
 
 static int fts_copy(struct mail_save_context *ctx, struct mail *mail)
 {
-	struct fts_transaction_context *ft = FTS_CONTEXT(ctx->transaction);
-	struct fts_mailbox *fbox = FTS_CONTEXT(ctx->transaction->box);
+	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(ctx->transaction);
+	struct fts_mailbox *fbox = FTS_CONTEXT_REQUIRE(ctx->transaction->box);
 
 	if (fbox->module_ctx.super.copy(ctx, mail) < 0)
 		return -1;
@@ -869,7 +845,7 @@ void fts_mailbox_allocated(struct mailbox *box)
 
 static void fts_mailbox_list_deinit(struct mailbox_list *list)
 {
-	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(list);
+	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT_REQUIRE(list);
 
 	if (flist->backend != NULL)
 		fts_backend_deinit(&flist->backend);
@@ -939,7 +915,7 @@ fts_mailbox_list_created(struct mailbox_list *list)
 
 struct fts_backend *fts_mailbox_backend(struct mailbox *box)
 {
-	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT(box->list);
+	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT_REQUIRE(box->list);
 
 	return flist->backend;
 }

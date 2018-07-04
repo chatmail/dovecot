@@ -11,7 +11,6 @@
 #include "var-expand.h"
 #include "message-address.h"
 #include "mail-storage.h"
-#include "mail-deliver.h"
 
 #include "sieve-common.h"
 #include "sieve-limits.h"
@@ -87,8 +86,8 @@ struct sieve_result {
 	HASH_TABLE(const struct sieve_action_def *,
 			   struct sieve_result_action_context *) action_contexts;
 
-	unsigned int executed:1;
-	unsigned int executed_delivery:1;
+	bool executed:1;
+	bool executed_delivery:1;
 };
 
 struct sieve_result *sieve_result_create
@@ -729,7 +728,7 @@ void sieve_result_vprintf
 
 	str_vprintfa(outbuf, fmt, args);
 
-	o_stream_send(penv->stream, str_data(outbuf), str_len(outbuf));
+	o_stream_nsend(penv->stream, str_data(outbuf), str_len(outbuf));
 }
 
 void sieve_result_printf
@@ -754,7 +753,7 @@ void sieve_result_action_printf
 	str_append_c(outbuf, '\n');
 	va_end(args);
 
-	o_stream_send(penv->stream, str_data(outbuf), str_len(outbuf));
+	o_stream_nsend(penv->stream, str_data(outbuf), str_len(outbuf));
 }
 
 void sieve_result_seffect_printf
@@ -769,7 +768,7 @@ void sieve_result_seffect_printf
 	str_append_c(outbuf, '\n');
 	va_end(args);
 
-	o_stream_send(penv->stream, str_data(outbuf), str_len(outbuf));
+	o_stream_nsend(penv->stream, str_data(outbuf), str_len(outbuf));
 }
 
 static void sieve_result_print_side_effects
@@ -1059,8 +1058,6 @@ static int _sieve_result_implicit_keep
 			(&act_keep, aenv, tr_context, status);
 	}
 
-	if (status == SIEVE_EXEC_FAILURE)
-		status = SIEVE_EXEC_KEEP_FAILED;
 	return status;
 }
 
@@ -1287,13 +1284,6 @@ static int sieve_result_action_commit_or_rollback
 			return status;
 
 		sieve_result_action_rollback(result, rac);
-	}
-
-	if (rac->keep) {
-		if (status == SIEVE_EXEC_FAILURE)
-			status = SIEVE_EXEC_KEEP_FAILED;
-		if (*commit_status == SIEVE_EXEC_FAILURE)
-			*commit_status = SIEVE_EXEC_KEEP_FAILED;
 	}
 
 	return status;

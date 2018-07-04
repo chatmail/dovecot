@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_ACTIONS_H
-#define __SIEVE_ACTIONS_H
+#ifndef SIEVE_ACTIONS_H
+#define SIEVE_ACTIONS_H
 
 #include "lib.h"
 #include "mail-types.h"
@@ -235,9 +232,9 @@ struct act_store_transaction {
 	enum mail_flags flags;
 	ARRAY_TYPE(const_string) keywords;
 
-	unsigned int flags_altered:1;
-	unsigned int disabled:1;
-	unsigned int redundant:1;
+	bool flags_altered:1;
+	bool disabled:1;
+	bool redundant:1;
 };
 
 int sieve_act_store_add_to_result
@@ -256,12 +253,13 @@ void sieve_act_store_get_storage_error
  */
 
 struct act_redirect_context {
-	const char *to_address;
+	const struct smtp_address *to_address;
 };
 
 int sieve_act_redirect_add_to_result
 (const struct sieve_runtime_env *renv,
-	struct sieve_side_effects_list *seffects, const char *norm_address);
+	struct sieve_side_effects_list *seffects,
+	const struct smtp_address *to_address);
 
 /*
  * Action utility functions
@@ -283,7 +281,7 @@ void sieve_action_duplicate_flush
 
 int sieve_action_reject_mail
 (const struct sieve_action_exec_env *aenv,
-	const char *sender, const char *recipient, const char *reason);
+	const struct smtp_address *recipient, const char *reason);
 
 /*
  * Mailbox
@@ -292,4 +290,4 @@ int sieve_action_reject_mail
 // FIXME: move this to a more appropriate location
 bool sieve_mailbox_check_name(const char *mailbox, const char **error_r);
 
-#endif /* __SIEVE_ACTIONS_H */
+#endif

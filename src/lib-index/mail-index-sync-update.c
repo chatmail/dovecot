@@ -839,8 +839,7 @@ void mail_index_sync_map_deinit(struct mail_index_sync_map_ctx *sync_map_ctx)
 {
 	i_assert(sync_map_ctx->modseq_ctx == NULL);
 
-	if (sync_map_ctx->unknown_extensions != NULL)
-		buffer_free(&sync_map_ctx->unknown_extensions);
+	buffer_free(&sync_map_ctx->unknown_extensions);
 	if (sync_map_ctx->expunge_handlers_used)
 		mail_index_sync_deinit_expunge_handlers(sync_map_ctx);
 	mail_index_sync_deinit_handlers(sync_map_ctx);
@@ -880,11 +879,11 @@ void mail_index_map_check(struct mail_index_map *map)
 		i_assert(rec->uid > prev_uid);
 		prev_uid = rec->uid;
 
-		if (rec->flags & MAIL_DELETED) {
+		if ((rec->flags & MAIL_DELETED) != 0) {
 			i_assert(rec->uid >= hdr->first_deleted_uid_lowwater);
 			del++;
 		}
-		if (rec->flags & MAIL_SEEN)
+		if ((rec->flags & MAIL_SEEN) != 0)
 			seen++;
 		else
 			i_assert(rec->uid >= hdr->first_unseen_uid_lowwater);
@@ -992,7 +991,7 @@ int mail_index_sync_map(struct mail_index_map **_map,
 		   and updates hdr_base to hdr_copy_buf. so the buffer must
 		   initially contain a valid header or we'll break it when
 		   writing it. */
-		buffer_reset(map->hdr_copy_buf);
+		buffer_set_used_size(map->hdr_copy_buf, 0);
 		buffer_append(map->hdr_copy_buf, map->hdr_base,
 			      map->hdr.header_size);
 		map->hdr_base = map->hdr_copy_buf->data;
@@ -1029,9 +1028,14 @@ int mail_index_sync_map(struct mail_index_map **_map,
 		if (LOG_IS_BEFORE(prev_seq, prev_offset,
 				  view->map->hdr.log_file_seq,
 				  view->map->hdr.log_file_head_offset)) {
-			/* this has been synced already. */
+			/* this has been synced already. we're here only to call
+			   expunge handlers and extension update handlers. */
 			i_assert(type == MAIL_INDEX_SYNC_HANDLER_FILE);
-			continue;
+
+			if ((thdr->type & MAIL_TRANSACTION_EXTERNAL) != 0)
+				continue;
+			if ((thdr->type & MAIL_TRANSACTION_EXT_MASK) == 0)
+				continue;
 		}
 
 		/* we'll just skip over broken entries */

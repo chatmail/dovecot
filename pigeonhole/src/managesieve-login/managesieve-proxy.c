@@ -69,7 +69,7 @@ static int proxy_write_auth
 {
 	struct dsasl_client_settings sasl_set;
 	const unsigned char *output;
-	unsigned int len;
+	size_t len;
 	const char *mech_name, *error;
 
 	i_assert(client->common.proxy_ttl > 1);
@@ -178,7 +178,7 @@ static int proxy_write_auth_response
 	const char *challenge, string_t *str)
 {
 	const unsigned char *data;
-	unsigned int data_len;
+	size_t data_len;
 	const char *error;
 	int ret;
 
@@ -393,7 +393,7 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 				msieve_client->proxy_state = MSIEVE_PROXY_STATE_AUTH;
 			}
 
-			(void)o_stream_send(output, str_data(command), str_len(command));
+			o_stream_nsend(output, str_data(command), str_len(command));
 		}
 		return 0;
 
@@ -445,7 +445,7 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 				}
 				msieve_client->proxy_state = MSIEVE_PROXY_STATE_AUTH;
 			}
-			(void)o_stream_send(output, str_data(command), str_len(command));
+			o_stream_nsend(output, str_data(command), str_len(command));
 		}
 		return 0;
 
@@ -458,7 +458,7 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 				client_proxy_failed(client, TRUE);
 				return -1;
 			}
-			(void)o_stream_send(output, str_data(command), str_len(command));
+			o_stream_nsend(output, str_data(command), str_len(command));
 			msieve_client->proxy_state = MSIEVE_PROXY_STATE_AUTH;
 			return 0;
 		}
@@ -485,7 +485,7 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 				client_proxy_failed(client, TRUE);
 				return -1;
 			}
-			(void)o_stream_send(output, str_data(command), str_len(command));
+			o_stream_nsend(output, str_data(command), str_len(command));
 			return 0;
 		}
 
@@ -501,7 +501,7 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 			/* Send this line to client. */
 			str_append(str, line );
 			str_append(str, "\r\n");
-			(void)o_stream_send(client->output, str_data(str), str_len(str));
+			o_stream_nsend(client->output, str_data(str), str_len(str));
 
 			(void)client_skip_line(msieve_client);
 			client_proxy_finish_destroy_client(client);

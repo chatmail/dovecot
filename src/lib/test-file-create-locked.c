@@ -102,8 +102,8 @@ static void test_file_create_locked_mkdir(void)
 	test_begin("file_create_locked() with mkdir");
 
 	dir = ".test-temp-file-create-locked-dir";
-	if (unlink_directory(dir, UNLINK_DIRECTORY_FLAG_RMDIR) < 0)
-		i_fatal("unlink_directory(%s) failed: %m", dir);
+	if (unlink_directory(dir, UNLINK_DIRECTORY_FLAG_RMDIR, &error) < 0)
+		i_fatal("unlink_directory(%s) failed: %s", dir, error);
 	path = t_strconcat(dir, "/lockfile", NULL);
 
 	/* try without mkdir enabled */
@@ -124,8 +124,8 @@ static void test_file_create_locked_mkdir(void)
 	i_unlink(path);
 	file_lock_free(&lock);
 
-	if (unlink_directory(dir, UNLINK_DIRECTORY_FLAG_RMDIR) < 0)
-		i_fatal("unlink_directory(%s) failed: %m", dir);
+	if (unlink_directory(dir, UNLINK_DIRECTORY_FLAG_RMDIR, &error) < 0)
+		i_fatal("unlink_directory(%s) failed: %s", dir, error);
 
 	test_end();
 }

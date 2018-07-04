@@ -48,7 +48,7 @@ static struct dsync_mailbox_node *
 random_node_create(struct dsync_mailbox_tree *tree, unsigned int counter,
 		   const char *name)
 {
-	return node_create(tree, counter, name, rand() % 10);
+	return node_create(tree, counter, name, i_rand_limit(10));
 }
 
 static void nodes_create(struct dsync_mailbox_tree *tree, unsigned int *counter,
@@ -76,7 +76,7 @@ static void
 create_random_nodes(struct dsync_mailbox_tree *tree, const char *parent_name,
 		    unsigned int depth, unsigned int *counter)
 {
-	unsigned int parent_len, i, nodes_count = 1 + rand() % 3;
+	unsigned int parent_len, i, nodes_count = i_rand_minmax(1, 3);
 	string_t *str;
 
 	if (depth == MAX_DEPTH)
@@ -149,7 +149,7 @@ static void nodes_dump(const struct dsync_mailbox_node *node, unsigned int depth
 		for (i = 0; i < depth; i++) printf(" ");
 		printf("%-*s guid:%.5s uidv:%u %d%d %ld\n", 40-depth, node->name,
 		       guid_128_to_string(node->mailbox_guid), node->uid_validity,
-		       node->existence, node->subscribed,
+		       node->existence, node->subscribed ? 1 : 0,
 		       (long)node->last_renamed_or_created);
 		nodes_dump(node->first_child, depth+1);
 	}
@@ -738,7 +738,7 @@ static void test_dsync_mailbox_tree_sync_random(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_dsync_mailbox_tree_sync_creates,
 		test_dsync_mailbox_tree_sync_deletes,
 		test_dsync_mailbox_tree_sync_renames1,

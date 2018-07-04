@@ -9,8 +9,13 @@
 
 #define USER_DIR_TIMEOUT 1000000
 
-unsigned int mail_user_hash(const char *username ATTR_UNUSED,
-			    const char *format ATTR_UNUSED) { return 0; }
+bool mail_user_hash(const char *username ATTR_UNUSED,
+		    const char *format ATTR_UNUSED,
+		    unsigned int *hash_r, const char **error_r ATTR_UNUSED)
+{
+	*hash_r = 0;
+	return TRUE;
+}
 
 static void
 verify_user_directory(struct user_directory *dir, unsigned int user_count)
@@ -73,15 +78,15 @@ static void test_user_directory_random(void)
 	struct user_directory *dir;
 	struct mail_host *host = t_new(struct mail_host, 1);
 	time_t timestamp;
-	unsigned int i, count = 10000 + rand()%10000;
+	unsigned int i, count = i_rand_minmax(10000, 19999);
 
 	test_begin("user directory random");
 	dir = user_directory_init(USER_DIR_TIMEOUT, NULL);
 	for (i = 0; i < count; i++) {
-		if (rand() % 10 == 0)
+		if (i_rand_limit(10) == 0)
 			timestamp = ioloop_time;
 		else
-			timestamp = ioloop_time-rand()%100;
+			timestamp = ioloop_time-i_rand_limit(100);
 		(void)user_directory_add(dir, i+1, host, timestamp);
 	}
 	verify_user_directory(dir, count);
@@ -91,7 +96,7 @@ static void test_user_directory_random(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_user_directory_ascending,
 		test_user_directory_descending,
 		test_user_directory_random,

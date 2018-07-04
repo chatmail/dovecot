@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __EXT_VACATION_COMMON_H
-#define __EXT_VACATION_COMMON_H
+#ifndef EXT_VACATION_COMMON_H
+#define EXT_VACATION_COMMON_H
 
 #include "sieve-common.h"
 
@@ -13,13 +10,11 @@
 #define EXT_VACATION_DEFAULT_PERIOD (7*24*60*60)
 #define EXT_VACATION_DEFAULT_MIN_PERIOD (24*60*60)
 #define EXT_VACATION_DEFAULT_MAX_PERIOD 0
-#define EXT_VACATION_DEFAULT_MAX_SUBJECT_CODEPOINTS 256
 
 struct ext_vacation_config {
 	unsigned int min_period;
 	unsigned int max_period;
 	unsigned int default_period;
-	unsigned long long max_subject_codepoints;
 	bool use_original_recipient;
 	bool dont_check_recipient;
 	bool send_from_recipient;
@@ -58,4 +53,4 @@ extern const struct sieve_extension_def vacation_seconds_extension;
 bool ext_vacation_register_seconds_tag
 	(struct sieve_validator *valdtr, const struct sieve_extension *vacation_ext);
 
-#endif /* __EXT_VACATION_COMMON_H */
+#endif

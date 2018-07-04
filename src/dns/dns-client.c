@@ -93,8 +93,8 @@ static struct dns_client *dns_client_create(int fd)
 
 	client = i_new(struct dns_client, 1);
 	client->fd = fd;
-	client->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
-	client->output = o_stream_create_fd(fd, MAX_OUTBUF_SIZE, FALSE);
+	client->input = i_stream_create_fd(fd, MAX_INBUF_SIZE);
+	client->output = o_stream_create_fd(fd, MAX_OUTBUF_SIZE);
 	o_stream_set_no_error_handling(client->output, TRUE);
 	client->io = io_add(fd, IO_READ, dns_client_input, client);
 	return client;
@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
 		return FATAL_DEFAULT;
 
 	master_service_init_log(master_service, "dns-client: ");
-	restrict_access_by_env(NULL, FALSE);
+	restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 	restrict_access_allow_coredumps(TRUE);
 
 	master_service_init_finish(master_service);

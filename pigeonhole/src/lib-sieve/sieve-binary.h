@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_BINARY_H
-#define __SIEVE_BINARY_H
+#ifndef SIEVE_BINARY_H
+#define SIEVE_BINARY_H
 
 #include "lib.h"
 

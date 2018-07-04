@@ -36,8 +36,8 @@ struct http_message {
 	ARRAY_TYPE(http_transfer_coding) transfer_encoding;
 	ARRAY_TYPE(const_string) connection_options;
 
-	unsigned int connection_close:1;
-	unsigned int have_content_length:1;
+	bool connection_close:1;
+	bool have_content_length:1;
 };
 
 struct http_message_parser {
@@ -47,7 +47,7 @@ struct http_message_parser {
 	uoff_t max_payload_size;
 	enum http_message_parse_flags flags;
 
-	const unsigned char *cur, *end;
+	const unsigned char *begin, *cur, *end;
 
 	const char *error;
 	enum http_message_parse_error error_code;

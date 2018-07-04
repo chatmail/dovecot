@@ -1,8 +1,5 @@
-/* Copyright (c) 2002-2018 Pigeonhole authors, see the included COPYING file
- */
-
-#ifndef __SIEVE_BINARY_DUMPER_H
-#define __SIEVE_BINARY_DUMPER_H
+#ifndef SIEVE_BINARY_DUMPER_H
+#define SIEVE_BINARY_DUMPER_H
 
 #include "sieve-common.h"
 
@@ -45,4 +42,4 @@ bool sieve_binary_dumper_run
 void sieve_binary_dumper_hexdump
 (struct sieve_binary_dumper *dumper, struct ostream *stream);
 
-#endif /* __SIEVE_BINARY_DUMPER_H */
+#endif
