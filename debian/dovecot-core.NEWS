@@ -2,7 +2,7 @@ dovecot (1:2.3.0.1-1) experimental; urgency=medium
 
   Upgrading to the 2.3 series may require manual configuration changes.
   Some settings have been removed, while others have had their defaults
-  changed. See
+  changed. Please see
 
     /usr/share/doc/dovecot-core/wiki/Upgrading.2.3.txt.gz
 
