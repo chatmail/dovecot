@@ -7,4 +7,3 @@ exampledir.patch
 mboxlocking.patch
 dovecot_name.patch
 ssl-dh-params-location.patch
-murmur3-big-endian.patch
