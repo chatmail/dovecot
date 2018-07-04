@@ -1,3 +1,29 @@
+dovecot (1:2.3.2-1) unstable; urgency=medium
+
+  * [bb03669] New upstream version 2.3.2
+    + Upload to unstable
+  * [d29da3a] Merge 2.3 package changes from experimental. Important changes:
+    + [b3d1e17] Enable AppArmor support, see
+      https://wiki2.dovecot.org/Plugins/Apparmor
+      • B-D on libapparmor-dev
+    + [c0c55bd] Enable Lua scripting support for authdb/passdb.
+      • B-D on liblua5.3-dev
+      • New binary package, dovecot-auth-lua
+    + [4f6792e] Build with sodium support, enabling the ARGON2I and ARGON2ID
+      password schemes.
+      • B-D on libsodium-dev
+    + [54347e7] Build with ICU support enabling FTS unicode normalization
+      • B-D on libicu-dev
+    + New dovecot-submissiond binary package for the dovecot submission agent;
+      see https://wiki2.dovecot.org/Submission.
+  * [4db4813] Change maintainer address to dovecot@packages.d.o
+  * [5118354] Update pigeonhole to 0.5.2
+  * [52a7af4] Drop murmur3-big-endian.patch; merged upstream
+  * [22a6eee] Refresh dovecot_name.patch
+  * [3af7568] dovecot_name.patch: apply to submissiond as well
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Wed, 04 Jul 2018 08:57:45 +0300
+
 dovecot (1:2.2.36-1) unstable; urgency=medium
 
   * [19f2274] d/gbp.conf: set merge-mode to "merge" to preserve pigeonhole/
