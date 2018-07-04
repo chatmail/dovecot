@@ -110,7 +110,7 @@ static const char *sieve_storage_get_relative_link_path
 	} else {
 		pathlen = p - active_path;
 
-		if ( strncmp( active_path, storage_dir, pathlen ) == 0 &&
+		if ( strncmp( storage_dir, active_path, pathlen ) == 0 &&
 			(storage_dir[pathlen] == '/' || storage_dir[pathlen] == '\0') )
 		{
 			if ( storage_dir[pathlen] == '\0' )
@@ -220,7 +220,7 @@ static struct sieve_storage *sieve_file_storage_alloc(void)
 	struct sieve_file_storage *fstorage;
 	pool_t pool;
 
-	pool = pool_alloconly_create("sieve_file_storage", 1024);
+	pool = pool_alloconly_create("sieve_file_storage", 2048);
 	fstorage = p_new(pool, struct sieve_file_storage, 1);
 	fstorage->storage = sieve_file_storage;
 	fstorage->storage.pool = pool;

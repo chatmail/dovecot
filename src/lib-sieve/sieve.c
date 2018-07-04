@@ -730,7 +730,7 @@ bool sieve_multiscript_run
 bool sieve_multiscript_will_discard
 (struct sieve_multiscript *mscript)
 {
-	return ( !mscript->active &&
+	return ( !mscript->active && mscript->status == SIEVE_EXEC_OK &&
 		!sieve_result_executed_delivery(mscript->result) );
 }
 
@@ -761,6 +761,9 @@ void sieve_multiscript_run_discard
 			sieve_multiscript_execute(mscript,
 				action_ehandler, flags, &mscript->keep);
 		}
+		if (mscript->status == SIEVE_EXEC_FAILURE)
+			mscript->status = SIEVE_EXEC_KEEP_FAILED;
+		mscript->active = FALSE;
 	}
 
 	mscript->discard_handled = TRUE;
@@ -1108,6 +1111,18 @@ sieve_get_postmaster(const struct sieve_script_env *senv)
 {
 	i_assert(senv->postmaster_address != NULL);
 	return senv->postmaster_address;
+}
+
+const struct smtp_address *
+sieve_get_postmaster_smtp(const struct sieve_script_env *senv)
+{
+	struct smtp_address *addr;
+	int ret;
+
+	ret = smtp_address_create_from_msg_temp(
+		sieve_get_postmaster(senv), &addr);
+	i_assert(ret >= 0);
+	return addr;
 }
 
 const char *

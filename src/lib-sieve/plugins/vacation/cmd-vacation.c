@@ -838,7 +838,7 @@ static inline bool _is_system_address
 	if ( strstr(address->localpart, "-request") != NULL )
 		return TRUE;
 
-	if ( strncmp(address->localpart, "owner-", 6) == 0 )
+	if ( str_begins(address->localpart, "owner-") )
 		return TRUE;
 
 	return FALSE;
@@ -863,8 +863,8 @@ static inline bool _contains_my_address
 					struct smtp_address addr;
 
 					i_assert(msg_addr->mailbox != NULL);
-					smtp_address_init_from_msg(&addr, msg_addr);
-					if ( smtp_address_equals(&addr, my_address) ) {
+					if ( smtp_address_init_from_msg(&addr, msg_addr) >= 0 &&
+						smtp_address_equals(&addr, my_address) ) {
 						result = TRUE;
 						break;
 					}
@@ -926,8 +926,8 @@ static int _get_full_reply_recipient
 					if (!matched) {
 						i_assert(addr->mailbox != NULL);
 
-						smtp_address_init_from_msg(&saddr, addr);
-						matched = smtp_address_equals(smtp_to, &saddr);
+						matched = ( smtp_address_init_from_msg(&saddr, addr) >= 0 &&
+							smtp_address_equals(smtp_to, &saddr) );
 					}
 
 					if (matched) {
@@ -990,7 +990,7 @@ static int act_vacation_send
 		subject = ctx->subject;
 	}
 
-	subject = str_sanitize(subject, 256);
+	subject = str_sanitize_utf8(subject, config->max_subject_codepoints);
 
 	/* Obtain full To address for reply */
 
@@ -1126,6 +1126,12 @@ static int act_vacation_commit
 	struct message_address reply_from;
 	const char *const *hdsp, *const *headers;
 	int ret;
+
+	if ((aenv->flags & SIEVE_EXECUTE_FLAG_SKIP_RESPONSES) != 0) {
+		sieve_result_global_log(aenv,
+			"not sending vacation reply (skipped)");
+		return SIEVE_EXEC_OK;
+	}
 
 	sender = sieve_message_get_sender(aenv->msgctx);
 	recipient = sieve_message_get_final_recipient(aenv->msgctx);
