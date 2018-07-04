@@ -102,4 +102,10 @@ The logs will indicated execute command(s) and also Apache access.log format
 strings on requests. In case of fatal errors, the access.log string might be
 missing.
 
-(This file was created from the wiki on 2017-10-24 04:42)
+Example clients
+---------------
+
+A PoC API client/library written in Python is available at
+https://github.com/hnsk/doveadm-http-cli
+
+(This file was created from the wiki on 2018-06-28 04:42)

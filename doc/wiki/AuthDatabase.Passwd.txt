@@ -50,4 +50,4 @@ With FreeBSD, passwd doesn't work as a password database because the password
 field is replaced by a '*'. But you can use <Passwd-file>
 [AuthDatabase.PasswdFile.txt].
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

@@ -221,12 +221,12 @@ From version 2.3, you must specify path to DH parameters file using:
 ssl_dh=</path/to/dh.pem
 ---%<-------------------------------------------------------------------------
 
-To generate new parameters file, you can use openssl gendh 4096 (this will take
-*very long* time, run it on machine with sufficient entropy). You can also
+To generate new parameters file, you can use 'openssl dhparam 4096' (this will
+take *very long* time, run it on machine with sufficient entropy). You can also
 convert old parameters file v2.2 with command
 
 ---%<-------------------------------------------------------------------------
-dd if=/path/to/ssl-parameters.dat bs=1 skip=88 | openssl dh -inform der
+dd if=/path/to/ssl-parameters.dat bs=1 skip=88 | openssl dhparam -inform DER
 ---%<-------------------------------------------------------------------------
 
 This should work most of the times. If not, generate new file.
@@ -453,4 +453,4 @@ Testing CA Success
     Verify return code: 0 (ok)
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

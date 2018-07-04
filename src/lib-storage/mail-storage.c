@@ -225,7 +225,7 @@ mail_storage_get_class(struct mail_namespace *ns, const char *driver,
 	if (ns->set->location == NULL || *ns->set->location == '\0') {
 		*error_r = t_strdup_printf(
 			"Mail storage autodetection failed with home=%s", home);
-	} else if (strncmp(ns->set->location, "auto:", 5) == 0) {
+	} else if (str_begins(ns->set->location, "auto:")) {
 		*error_r = t_strdup_printf(
 			"Autodetection failed for %s (home=%s)",
 			ns->set->location, home);
@@ -434,6 +434,8 @@ int mail_storage_create_full(struct mail_namespace *ns, const char *driver,
 		hook_mail_storage_created(storage);
 	} T_END;
 
+	i_assert(storage->unique_root_dir != NULL ||
+		 (storage->class_flags & MAIL_STORAGE_CLASS_FLAG_UNIQUE_ROOT) == 0);
 	DLLIST_PREPEND(&ns->user->storages, storage);
 	mail_namespace_add_storage(ns, storage);
 	*storage_r = storage;
@@ -814,7 +816,7 @@ struct mailbox *mailbox_alloc(struct mailbox_list *list, const char *vname,
 	i_assert(uni_utf8_str_is_valid(vname));
 
 	if (strncasecmp(vname, "INBOX", 5) == 0 &&
-	    strncmp(vname, "INBOX", 5) != 0) {
+	    !str_begins(vname, "INBOX")) {
 		/* make sure INBOX shows up in uppercase everywhere. do this
 		   regardless of whether we're in inbox=yes namespace, because
 		   clients expect INBOX to be case insensitive regardless of
@@ -824,7 +826,7 @@ struct mailbox *mailbox_alloc(struct mailbox_list *list, const char *vname,
 		else if (vname[5] != mail_namespace_get_sep(list->ns))
 			/* not INBOX prefix */ ;
 		else if (strncasecmp(list->ns->prefix, vname, 6) == 0 &&
-			 strncmp(list->ns->prefix, "INBOX", 5) != 0) {
+			 !str_begins(list->ns->prefix, "INBOX")) {
 			mailbox_list_set_critical(list,
 				"Invalid server configuration: "
 				"Namespace prefix=%s must be uppercase INBOX",
@@ -2480,8 +2482,6 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 {
 	struct mail_save_context *ctx = *_ctx;
 	struct mailbox_transaction_context *t = ctx->transaction;
-	const struct mail_storage_settings *mail_set =
-		mailbox_get_settings(t->box);
 	/* we need to keep a copy of this because save_finish implementations
 	   will likely zero the data structure during cleanup */
 	struct mail_keywords *keywords = ctx->data.keywords;
@@ -2511,10 +2511,6 @@ int mailbox_save_finish(struct mail_save_context **_ctx)
 			mailbox_save_add_pvt_flags(t, pvt_flags);
 		t->save_count++;
 	}
-
-	if (mail_set->parsed_mail_attachment_detection_add_flags_on_save &&
-	    !mail_has_attachment_keywords(ctx->dest_mail))
-		mail_set_attachment_keywords(ctx->dest_mail);
 
 	if (keywords != NULL)
 		mailbox_keywords_unref(&keywords);

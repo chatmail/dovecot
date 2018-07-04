@@ -44,6 +44,7 @@ static const struct setting_define master_service_setting_defines[] = {
 	DEF(SET_STR, debug_log_path),
 	DEF(SET_STR, log_timestamp),
 	DEF(SET_STR, log_debug),
+	DEF(SET_STR, log_core_filter),
 	DEF(SET_STR, syslog_facility),
 	DEF(SET_STR, import_environment),
 	DEF(SET_STR, stats_writer_socket_path),
@@ -79,6 +80,7 @@ static const struct master_service_settings master_service_default_settings = {
 	.debug_log_path = "",
 	.log_timestamp = DEFAULT_FAILURE_STAMP_FORMAT,
 	.log_debug = "",
+	.log_core_filter = "",
 	.syslog_facility = "mail",
 	.import_environment = "TZ CORE_OUTOFMEM CORE_ERROR" ENV_SYSTEMD ENV_GDB,
 	.stats_writer_socket_path = "stats-writer",
@@ -104,8 +106,8 @@ const struct setting_parser_info master_service_setting_parser_info = {
 };
 
 /* <settings checks> */
-int master_service_log_debug_parse(struct event_filter *filter, const char *str,
-				   const char **error_r)
+int master_service_log_filter_parse(struct event_filter *filter, const char *str,
+				    const char **error_r)
 {
 	const char *categories[2] = { NULL, NULL };
 	struct event_filter_query query = {
@@ -120,6 +122,26 @@ int master_service_log_debug_parse(struct event_filter *filter, const char *str,
 	}
 	*error_r = NULL;
 	return 0;
+}
+
+static bool
+log_filter_parse(const char *set_name, const char *set_value,
+		 struct event_filter **filter_r, const char **error_r)
+{
+	const char *error;
+
+	if (set_value[0] == '\0') {
+		*filter_r = NULL;
+		return TRUE;
+	}
+
+	*filter_r = event_filter_create();
+	if (master_service_log_filter_parse(*filter_r, set_value, &error) < 0) {
+		*error_r = t_strdup_printf("Invalid %s: %s", set_name, error);
+		event_filter_unref(filter_r);
+		return FALSE;
+	}
+	return TRUE;
 }
 
 static bool
@@ -138,17 +160,26 @@ master_service_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 					   set->syslog_facility);
 		return FALSE;
 	}
-	struct event_filter *filter = event_filter_create();
-	const char *error;
-	if (master_service_log_debug_parse(filter, set->log_debug, &error) < 0) {
-		*error_r = t_strdup_printf("Invalid log_debug: %s", error);
-		event_filter_unref(&filter);
+
+	struct event_filter *filter;
+	if (!log_filter_parse("log_debug", set->log_debug, &filter, error_r))
 		return FALSE;
-	}
+	if (filter != NULL) {
 #ifndef CONFIG_BINARY
-	event_set_global_debug_log_filter(filter);
+		event_set_global_debug_log_filter(filter);
 #endif
-	event_filter_unref(&filter);
+		event_filter_unref(&filter);
+	}
+
+	if (!log_filter_parse("log_core_filter", set->log_core_filter,
+			      &filter, error_r))
+		return FALSE;
+	if (filter != NULL) {
+#ifndef CONFIG_BINARY
+		event_set_global_core_log_filter(filter);
+#endif
+		event_filter_unref(&filter);
+	}
 	return TRUE;
 }
 /* </settings checks> */
@@ -413,7 +444,7 @@ config_read_reply_header(struct istream *istream, const char *path, pool_t pool,
 				output_r->used_local = TRUE;
 			else if (strcmp(*arg, "used-remote") == 0)
 				output_r->used_remote = TRUE;
-			else if (strncmp(*arg, "service=", 8) == 0) {
+			else if (str_begins(*arg, "service=")) {
 				const char *name = p_strdup(pool, *arg + 8);
 				array_append(&services, &name, 1);
 			 }
@@ -484,7 +515,7 @@ int master_service_settings_get_filters(struct master_service *service,
 		while((line = i_stream_read_next_line(is)) != NULL) {
 			if (*line == '\0')
 				break;
-			if (strncmp(line, "FILTER\t", 7) == 0) {
+			if (str_begins(line, "FILTER\t")) {
 				line = t_strdup(line+7);
 				array_append(&filters_tmp, &line, 1);
 			}
@@ -578,7 +609,8 @@ int master_service_settings_read(struct master_service *service,
 				ret = settings_parse_stream_read(parser,
 								 istream);
 				if (ret < 0)
-					*error_r = settings_parser_get_error(parser);
+					*error_r = t_strdup(
+						settings_parser_get_error(parser));
 			}
 			alarm(0);
 			if (ret <= 0)

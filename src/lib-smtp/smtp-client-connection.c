@@ -1405,19 +1405,25 @@ smtp_client_connection_do_connect(struct smtp_client_connection *conn)
 static void
 smtp_client_connection_connect_next_ip(struct smtp_client_connection *conn)
 {
-	const struct ip_addr *ip;
+	const struct ip_addr *ip, *my_ip = &conn->set.my_ip;
 
 	timeout_remove(&conn->to_connect);
 
 	conn->prev_connect_idx = (conn->prev_connect_idx+1) % conn->ips_count;
 	ip = &conn->ips[conn->prev_connect_idx];
 
-	smtp_client_connection_debug(conn,
-		"Connecting to %s:%u",
-		net_ip2addr(ip), conn->port);
+	if (my_ip->family != 0) {
+		smtp_client_connection_debug(conn,
+			"Connecting to %s:%u (from %s)",
+			net_ip2addr(ip), conn->port, net_ip2addr(my_ip));
+	} else {
+		smtp_client_connection_debug(conn,
+			"Connecting to %s:%u",
+			net_ip2addr(ip), conn->port);
+	}
 
-	connection_init_client_ip
-		(conn->client->conn_list, &conn->conn, ip, conn->port);
+	connection_init_client_ip_from(conn->client->conn_list,
+				       &conn->conn, ip, conn->port, my_ip);
 
 	smtp_client_connection_do_connect(conn);
 }
@@ -1465,28 +1471,20 @@ smtp_client_connection_dns_callback(const struct dns_lookup_result *result,
 	smtp_client_connection_connect_next_ip(conn);
 }
 
-void smtp_client_connection_connect(struct smtp_client_connection *conn,
-	smtp_client_command_callback_t login_callback, void *login_context)
+static void
+smtp_client_connection_lookup_ip(struct smtp_client_connection *conn)
 {
 	struct dns_lookup_settings dns_set;
 	struct ip_addr ip, *ips;
 	unsigned int ips_count;
 	int ret;
 
-	if (conn->state != SMTP_CLIENT_CONNECTION_STATE_DISCONNECTED) {
-		i_assert(login_callback == NULL);
+	if (conn->ips_count != 0)
 		return;
-	}
-	i_assert(conn->login_callback == NULL);
-	conn->login_callback = login_callback;
-	conn->login_context = login_context;
 
 	smtp_client_connection_debug(conn, "Looking up IP address");
 
-	smtp_client_connection_set_state(conn,
-		SMTP_CLIENT_CONNECTION_STATE_CONNECTING);
-	if (conn->ips_count == 0 &&
-	    net_addr2ip(conn->host, &ip) == 0) {
+	if (net_addr2ip(conn->host, &ip) == 0) {
 		/* IP address */
 		conn->ips_count = 1;
 		conn->ips = i_new(struct ip_addr, conn->ips_count);
@@ -1527,7 +1525,23 @@ void smtp_client_connection_connect(struct smtp_client_connection *conn,
 		conn->ips = i_new(struct ip_addr, ips_count);
 		memcpy(conn->ips, ips, ips_count * sizeof(*ips));
 	}
+}
 
+void smtp_client_connection_connect(struct smtp_client_connection *conn,
+	smtp_client_command_callback_t login_callback, void *login_context)
+{
+	if (conn->state != SMTP_CLIENT_CONNECTION_STATE_DISCONNECTED) {
+		i_assert(login_callback == NULL);
+		return;
+	}
+	i_assert(conn->login_callback == NULL);
+	conn->login_callback = login_callback;
+	conn->login_context = login_context;
+
+	smtp_client_connection_set_state(conn,
+		SMTP_CLIENT_CONNECTION_STATE_CONNECTING);
+
+	smtp_client_connection_lookup_ip(conn);
 	if (conn->ips_count == 0)
 		return;
 
@@ -1578,8 +1592,7 @@ void smtp_client_connection_disconnect(struct smtp_client_connection *conn)
 	timeout_remove(&conn->to_trans);
 	timeout_remove(&conn->to_commands);
 
-	if (conn->ssl_iostream != NULL)
-		ssl_iostream_unref(&conn->ssl_iostream);
+	ssl_iostream_destroy(&conn->ssl_iostream);
 	if (conn->ssl_ctx != NULL)
 		ssl_iostream_context_unref(&conn->ssl_ctx);
 	if (conn->sasl_client != NULL)
@@ -1624,6 +1637,8 @@ smtp_client_connection_create(struct smtp_client *client,
 
 	conn->set = client->set;
 	if (set != NULL) {
+		if (set->my_ip.family != 0)
+			conn->set.my_ip = set->my_ip;
 		if (set->my_hostname != NULL && *set->my_hostname != '\0')
 			conn->set.my_hostname = p_strdup(pool, set->my_hostname);
 
@@ -1693,6 +1708,25 @@ smtp_client_connection_create(struct smtp_client *client,
 
 	smtp_client_connection_debug(conn, "Connection created");
 
+	return conn;
+}
+
+struct smtp_client_connection *
+smtp_client_connection_create_ip(struct smtp_client *client,
+	enum smtp_protocol protocol, const struct ip_addr *ip, in_port_t port,
+	const char *hostname, enum smtp_client_connection_ssl_mode ssl_mode,
+	const struct smtp_client_settings *set)
+{
+	struct smtp_client_connection *conn;
+
+	if (hostname == NULL)
+		hostname = net_ip2addr(ip);
+
+	conn = smtp_client_connection_create(client, protocol, hostname, port,
+					     ssl_mode, set);
+	conn->ips_count = 1;
+	conn->ips = i_new(struct ip_addr, conn->ips_count);
+	conn->ips[0] = *ip;
 	return conn;
 }
 

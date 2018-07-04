@@ -288,7 +288,7 @@ smtp_server_connection_ready(struct smtp_server_connection *conn)
 	smtp_server_connection_update_rawlog(conn);
 
 	conn->smtp_parser = smtp_command_parser_init(conn->conn.input,
-		&conn->server->set.command_limits);
+		&conn->set.command_limits);
 	o_stream_set_flush_callback(conn->conn.output,
 		smtp_server_connection_output, conn);
 
@@ -794,6 +794,8 @@ smtp_server_connection_alloc(struct smtp_server *server,
 		}
 		if (set->capabilities != 0)
 			conn->set.capabilities = set->capabilities;
+		conn->set.workarounds |= set->workarounds;
+
 		if (set->max_client_idle_time_msecs > 0) {
 			conn->set.max_client_idle_time_msecs =
 				set->max_client_idle_time_msecs;
@@ -809,6 +811,24 @@ smtp_server_connection_alloc(struct smtp_server *server,
 			conn->set.max_recipients = set->max_recipients;
 		smtp_command_limits_merge(&conn->set.command_limits,
 					  &set->command_limits);
+
+		conn->set.max_message_size = set->max_message_size;
+		if (set->max_message_size == 0 ||
+		    set->max_message_size == (uoff_t)-1) {
+			conn->set.command_limits.max_data_size = UOFF_T_MAX;
+		} else if (conn->set.command_limits.max_data_size != 0) {
+			/* explicit limit given */
+		} else if (set->max_message_size >
+			(UOFF_T_MAX - SMTP_SERVER_DEFAULT_MAX_SIZE_EXCESS_LIMIT)) {
+			/* very high limit */
+			conn->set.command_limits.max_data_size = UOFF_T_MAX;
+		} else {
+			/* absolute maximum before connection is closed in DATA
+			   command */
+			conn->set.command_limits.max_data_size =
+				set->max_message_size +
+					SMTP_SERVER_DEFAULT_MAX_SIZE_EXCESS_LIMIT;
+		}
 
 		if (set->xclient_extensions != NULL) {
 			server->set.xclient_extensions =

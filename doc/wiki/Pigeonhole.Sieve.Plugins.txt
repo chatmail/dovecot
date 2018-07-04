@@ -28,6 +28,13 @@ interpeter:
    the 'IMAPSIEVE' capability in IMAP. With these plugins it is possible to use
    Sieve filtering in IMAP, operating when messages are created or their
    attributes are changed.
+ * <IMAP FILTER=SIEVE> [Pigeonhole.Sieve.Plugins.IMAPFilterSieve.txt]
+   [*Pigeonhole v0.4.24* and beyond, *Pigeonhole v0.5.2* and beyond] /(custom
+   language extension, experimental)/
+ * This plugin provides a vendor-defined IMAP extension called FILTER=SIEVE. It
+   adds a new FILTER command that allows applying a mail filter (a Sieve
+   script) on a set of messages that match the specified IMAP searching
+   criteria.
  * <Pipe> [Pigeonhole.Sieve.Plugins.Pipe.txt] [*Pigeonhole v0.2*] /(custom
    language extension, deprecated)/
  * This plugin adds support for the Dovecot-specific 'vnd.dovecot.pipe'
@@ -35,4 +42,4 @@ interpeter:
    programs. For Pigeonhole v0.3, the same functionality (and more) is provided
    by the extprograms plugin.
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

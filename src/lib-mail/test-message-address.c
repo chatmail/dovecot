@@ -25,8 +25,7 @@ test_parse_address(const char *input, bool fill_missing)
 	/* duplicate the input (without trailing NUL) so valgrind notices
 	   if there's any out-of-bounds access */
 	size_t input_len = strlen(input);
-	unsigned char *input_dup = i_malloc(input_len);
-	memcpy(input_dup, input, input_len);
+	unsigned char *input_dup = i_memdup(input, input_len);
 	const struct message_address *addr =
 		message_address_parse(pool_datastack_create(),
 				      input_dup, input_len, UINT_MAX, fill_missing);
@@ -324,16 +323,19 @@ static int
 test_parse_path(const char *input, const struct message_address **addr_r)
 {
 	struct message_address *addr;
+	char *input_dup;
 	int ret;
 
 	/* duplicate the input (without trailing NUL) so valgrind notices
 	   if there's any out-of-bounds access */
 	size_t input_len = strlen(input);
-	unsigned char *input_dup = i_malloc(input_len);
-	memcpy(input_dup, input, input_len);
+	if (input_len > 0)
+		input = input_dup = i_memdup(input, input_len);
 	ret = message_address_parse_path(pool_datastack_create(),
-					 input_dup, input_len, &addr);
-	i_free(input_dup);
+					 (unsigned char *)input, input_len,
+					 &addr);
+	if (input_len > 0)
+		i_free(input_dup);
 	*addr_r = addr;
 	return ret;
 }
@@ -352,6 +354,10 @@ static void test_message_address_path(void)
 		{ "<user@domain>", NULL,
 		  { NULL, NULL, NULL, "user", "domain", FALSE } },
 		{ "  <user@domain>  ", "<user@domain>",
+		  { NULL, NULL, NULL, "user", "domain", FALSE } },
+		{ "user@domain", "<user@domain>",
+		  { NULL, NULL, NULL, "user", "domain", FALSE } },
+		{ "  user@domain  ", "<user@domain>",
 		  { NULL, NULL, NULL, "user", "domain", FALSE } },
 		{ "<\"user\"@domain>", "<user@domain>",
 		  { NULL, NULL, NULL, "user", "domain", FALSE } },
@@ -395,11 +401,50 @@ static void test_message_address_path(void)
 	test_end();
 }
 
+static void test_message_address_path_invalid(void)
+{
+	static const char *tests[] = {
+		"",
+		"<",
+		" < ",
+		">",
+		" > ",
+		"<user@domain",
+		"  <user@domain  ",
+		"user@domain>",
+		"  user@domain>  ",
+		"<user>",
+		"<@route@route2:user>",
+		"<@domain>",
+		"@domain",
+		"  @domain  ",
+		"<user@>",
+		"user@",
+		"  user@  ",
+		"<user@domain>bladiebla",
+		"user@domain@"
+	};
+	const struct message_address *addr;
+	unsigned int i;
+
+	test_begin("message address path invalid");
+
+	for (i = 0; i < N_ELEMENTS(tests); i++) {
+		const char *test = tests[i];
+		int ret;
+
+		ret = test_parse_path(test, &addr);
+		test_assert_idx(ret < 0, i);
+	}
+	test_end();
+}
+
 int main(void)
 {
 	static void (*const test_functions[])(void) = {
 		test_message_address,
 		test_message_address_path,
+		test_message_address_path_invalid,
 		NULL
 	};
 	return test_run(test_functions);

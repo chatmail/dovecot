@@ -43,6 +43,8 @@ dovecot_lmtp:
         socket = /var/run/dovecot/lmtp
         #maximum number of deliveries per batch, default 1
         batch_max = 200
+        #allow suffixes/prefixes (default unset)
+        rcpt_include_affixes
 ---%<-------------------------------------------------------------------------
 
 Using LMTP over TCP Socket
@@ -67,6 +69,8 @@ Example transport:
 ---%<-------------------------------------------------------------------------
 dovecot_lmtp:
         driver = smtp
+        #allow suffixes/prefixes (default unset)
+        rcpt_include_affixes
         protocol = lmtp
         port = 2525
 ---%<-------------------------------------------------------------------------
@@ -146,4 +150,4 @@ lowercase_local:
 Make sure to reference the name you have chosen for your local delivery router
 within /redirect_router/.
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

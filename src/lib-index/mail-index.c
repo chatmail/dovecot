@@ -330,31 +330,6 @@ void mail_index_unregister_expunge_handler(struct mail_index *index,
 	rext->expunge_handler = NULL;
 }
 
-void mail_index_register_sync_handler(struct mail_index *index, uint32_t ext_id,
-				      mail_index_sync_handler_t *cb,
-				      enum mail_index_sync_handler_type type)
-{
-	struct mail_index_registered_ext *rext;
-
-	rext = array_idx_modifiable(&index->extensions, ext_id);
-	i_assert(rext->sync_handler.callback == NULL);
-
-	rext->sync_handler.callback = cb;
-	rext->sync_handler.type = type;
-}
-
-void mail_index_unregister_sync_handler(struct mail_index *index,
-					uint32_t ext_id)
-{
-	struct mail_index_registered_ext *rext;
-
-	rext = array_idx_modifiable(&index->extensions, ext_id);
-	i_assert(rext->sync_handler.callback != NULL);
-
-	rext->sync_handler.callback = NULL;
-	rext->sync_handler.type = 0;
-}
-
 void mail_index_register_sync_lost_handler(struct mail_index *index,
 					   mail_index_sync_lost_handler_t *cb)
 {
@@ -1092,7 +1067,7 @@ void mail_index_file_set_syscall_error(struct mail_index *index,
 	if (errno == EACCES) {
 		function = t_strcut(function, '(');
 		if (strcmp(function, "creat") == 0 ||
-		    strncmp(function, "file_dotlock_", 13) == 0)
+		    str_begins(function, "file_dotlock_"))
 			errstr = eacces_error_get_creating(function, filepath);
 		else
 			errstr = eacces_error_get(function, filepath);

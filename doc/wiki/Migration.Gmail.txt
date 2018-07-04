@@ -70,4 +70,4 @@ purpose. For v2.2.19+ use:
 doveadm backup -a 'virtual/All' -O '-$GmailHaveLabels' -R -u user@domain imapc:
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

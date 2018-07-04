@@ -21,6 +21,8 @@ in the userdb, and these are called 'extra fields'. Possibilities are:
    quota_rule to set per-user quota limits or also plugin-settings).
  * *user*: User can be overriden (normally set in <passdb>
    [PasswordDatabase.txt]).
+ * *noreplicate*: User will not be replicated using replicator (see
+   <Replication.txt>)
  * The extra fields are also passed to <post-login scripts>
    [PostLoginScripting.txt].
 
@@ -110,4 +112,4 @@ user2:{plain}pass2:1001:1001::/home/user2::userdb_mail=maildir:~/Maildir
 userdb_quota_rule=*:storage=200M
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

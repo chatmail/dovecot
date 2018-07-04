@@ -8,6 +8,7 @@
 #include "hostpid.h"
 #include "settings-parser.h"
 #include "message-address.h"
+#include "smtp-address.h"
 #include "mail-index.h"
 #include "mail-user.h"
 #include "mail-namespace.h"
@@ -537,13 +538,15 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 
 			if (strcmp(opt, "add-flags-on-save") == 0) {
 				set->parsed_mail_attachment_detection_add_flags_on_save = TRUE;
-			} else if (strcmp(opt, "add-flags-on-fetch") == 0) {
-				set->parsed_mail_attachment_detection_add_flags_on_fetch = TRUE;
 			} else if (strcmp(opt, "exclude-inlined") == 0) {
 				set->parsed_mail_attachment_exclude_inlined = TRUE;
-			} else if (strncmp(opt, "content-type=", 13) == 0) {
+			} else if (str_begins(opt, "content-type=")) {
 				const char *value = p_strdup(pool, opt+13);
 				array_append(&content_types, &value, 1);
+			} else {
+				*error_r = t_strdup_printf("mail_attachment_detection_options: "
+					"Unknown option: %s", opt);
+				return FALSE;
 			}
 			options++;
 		}
@@ -557,15 +560,17 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 
 #ifndef CONFIG_BINARY
 static bool parse_postmaster_address(const char *address, pool_t pool,
-				     const struct message_address **addr_r,
-				     const char **error_r)
+				     struct mail_storage_settings *set,
+				     const char **error_r) ATTR_NULL(3)
 {
 	struct message_address *addr;
+	struct smtp_address *smtp_addr;
 
 	addr = message_address_parse(pool,
 		(const unsigned char *)address,
 		strlen(address), 2, FALSE);
-	if (addr == NULL || addr->domain == NULL || addr->invalid_syntax) {
+	if (addr == NULL || addr->domain == NULL || addr->invalid_syntax ||
+	    smtp_address_create_from_msg(pool, addr, &smtp_addr) < 0) {
 		*error_r = t_strdup_printf(
 			"invalid address `%s' specified for the "
 			"postmaster_address setting", address);
@@ -578,7 +583,10 @@ static bool parse_postmaster_address(const char *address, pool_t pool,
 	}
 	if (addr->name == NULL || *addr->name == '\0')
 		addr->name = "Postmaster";
-	*addr_r = addr;
+	if (set != NULL) {
+		set->_parsed_postmaster_address = addr;
+		set->_parsed_postmaster_address_smtp = smtp_addr;
+	}
 	return TRUE;
 }
 
@@ -590,8 +598,7 @@ static bool mail_storage_settings_expand_check(void *_set,
 
 	/* Parse if possible. Perform error handling later. */
 	(void)parse_postmaster_address(set->postmaster_address, pool,
-				       &set->_parsed_postmaster_address,
-				       &error);
+				       set, &error);
 	return TRUE;
 }
 #endif
@@ -730,6 +737,16 @@ static bool mail_user_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 }
 /* </settings checks> */
 
+static void
+get_postmaster_address_error(const struct mail_storage_settings *set,
+			     const char **error_r)
+{
+	if (parse_postmaster_address(set->postmaster_address,
+				     pool_datastack_create(), NULL, error_r))
+		i_panic("postmaster_address='%s' parsing succeeded unexpectedly after it had already failed",
+			set->postmaster_address);
+}
+
 bool mail_storage_get_postmaster_address(const struct mail_storage_settings *set,
 					 const struct message_address **address_r,
 					 const char **error_r)
@@ -737,12 +754,20 @@ bool mail_storage_get_postmaster_address(const struct mail_storage_settings *set
 	*address_r = set->_parsed_postmaster_address;
 	if (*address_r != NULL)
 		return TRUE;
-
 	/* parsing failed - do it again to get the error */
-	const struct message_address *addr;
-	if (parse_postmaster_address(set->postmaster_address,
-				     pool_datastack_create(), &addr, error_r))
-		i_panic("postmaster_address='%s' parsing succeeded unexpectedly after it had already failed",
-			set->postmaster_address);
+	get_postmaster_address_error(set, error_r);
 	return FALSE;
 }
+
+bool mail_storage_get_postmaster_smtp(const struct mail_storage_settings *set,
+				      const struct smtp_address **address_r,
+				      const char **error_r)
+{
+	*address_r = set->_parsed_postmaster_address_smtp;
+	if (*address_r != NULL)
+		return TRUE;
+	/* parsing failed - do it again to get the error */
+	get_postmaster_address_error(set, error_r);
+	return FALSE;
+}
+

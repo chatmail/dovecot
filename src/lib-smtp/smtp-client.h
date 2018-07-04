@@ -12,7 +12,7 @@ struct smtp_client_request;
 #define SMTP_DEFAULT_CONNECT_TIMEOUT_MSECS (1000*30)
 #define SMTP_DEFAULT_COMMAND_TIMEOUT_MSECS (1000*60*5)
 #define SMTP_DEFAULT_MAX_REPLY_SIZE ((size_t)-1)
-#define SMTP_DEFAULT_MAX_DATA_CHUNK_SIZE IO_BLOCK_SIZE
+#define SMTP_DEFAULT_MAX_DATA_CHUNK_SIZE NET_BLOCK_SIZE
 #define SMTP_DEFAULT_MAX_DATA_CHUNK_PIPELINE 4
 
 enum smtp_client_command_error {
@@ -38,6 +38,7 @@ enum smtp_client_command_error {
 };
 
 struct smtp_client_settings {
+	struct ip_addr my_ip;
 	const char *my_hostname;
 	const char *temp_path_prefix;
 

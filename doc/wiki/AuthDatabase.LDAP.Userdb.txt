@@ -1,7 +1,7 @@
 Userdb LDAP
 ===========
 
-Usually your LDAP database contains also the <userdb information>
+Usually your LDAP database also contains the <userdb information>
 [UserDatabase.txt]. If your home directory can be specified with a template and
 you're using only a single <UID and GID> [UserIds.txt], you should use <static
 userdb> [UserDatabase.Static.txt] instead to avoid an unnecessary LDAP lookup.
@@ -178,4 +178,4 @@ will be used for
  * %u and %d variables in other parts of the configuration (e.g. quota file
    names)
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

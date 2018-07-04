@@ -81,7 +81,7 @@ void process_exec(const char *cmd)
 	/* prefix with dovecot/ */
 	argv[0] = t_strdup_printf("%s/%s", services->set->instance_name,
 				  argv[0]);
-	if (strncmp(argv[0], PACKAGE, strlen(PACKAGE)) != 0)
+	if (!str_begins(argv[0], PACKAGE))
 		argv[0] = t_strconcat(PACKAGE"-", argv[0], NULL);
 	execv_const(executable, argv);
 }
@@ -755,7 +755,7 @@ int main(int argc, char *argv[])
 	/* drop -- prefix from all --args. ugly, but the only way that it
 	   works with standard getopt() in all OSes.. */
 	for (i = 1; i < argc; i++) {
-		if (strncmp(argv[i], "--", 2) == 0) {
+		if (str_begins(argv[i], "--")) {
 			if (argv[i][2] == '\0')
 				break;
 			argv[i] += 2;

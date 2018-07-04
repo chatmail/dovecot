@@ -33,6 +33,11 @@ The settings related to the authentication cache are:
    data (i.e. the user doesn't exist), it's also stored in the cache as a
    negative entry. This setting allows you to give negative entries a different
    TTL. 0 disables negative caching completely.
+ * 'auth_cache_verify_password_with_worker': Password hash verifications are
+   done by the auth master process by default. Setting this to "yes" moves the
+   verification to auth-worker processes. This allows distributing the hash
+   calculations to multiple CPU cores, which could make sense if strong hashes
+   are used. (v2.2.34+)
 
 It should be pretty safe to set very high TTLs, because the only field that
 usually can change is the user's password, and Dovecot attempts to catch those
@@ -99,4 +104,4 @@ Early change scenario:
     previous authentication was unsuccessful, so Dovecot doesn't bother doing
     another backend passdb lookup (until cache TTL expires). The login fails.
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

@@ -75,7 +75,7 @@
 /* How to define flexible array members in structs */
 #undef FLEXIBLE_ARRAY_MEMBER
 
-/* Define this if you arc4random() */
+/* Define this if you have arc4random_buf() */
 #undef HAVE_ARC4RANDOM
 
 /* Build with ASN1_STRING_get0_data() support */
@@ -451,8 +451,14 @@
 /* Build with SSL_COMP_free_compression_methods() support */
 #undef HAVE_SSL_COMP_FREE_COMPRESSION_METHODS
 
+/* Define if you have SSL_CTX_add0_chain_cert */
+#undef HAVE_SSL_CTX_ADD0_CHAIN_CERT
+
 /* Define if you have SSL_CTX_set1_curves_list */
 #undef HAVE_SSL_CTX_SET1_CURVES_LIST
+
+/* Define if you have SSL_CTX_set_current_cert */
+#undef HAVE_SSL_CTX_SET_CURRENT_CERT
 
 /* Define if you have SSL_CTX_set_min_proto_version */
 #undef HAVE_SSL_CTX_SET_MIN_PROTO_VERSION
@@ -643,8 +649,7 @@
 /* Define if you have ldap_start_tls_s */
 #undef LDAP_HAVE_START_TLS_S
 
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
+/* Define to the sub-directory where libtool stores uninstalled libraries. */
 #undef LT_OBJDIR
 
 /* Required memory alignment */
@@ -784,6 +789,9 @@
 
 /* Define if off_t is long long */
 #undef UOFF_T_LONG_LONG
+
+/* Maximum value of uoff_t */
+#undef UOFF_T_MAX
 
 /* Build with checkpassword userdb support */
 #undef USERDB_CHECKPASSWORD

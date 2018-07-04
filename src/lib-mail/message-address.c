@@ -139,39 +139,40 @@ static int parse_domain_list(struct message_address_parser_context *ctx)
 	return 1;
 }
 
-static int parse_angle_addr(struct message_address_parser_context *ctx)
+static int parse_angle_addr(struct message_address_parser_context *ctx,
+			    bool parsing_path)
 {
-	int ret;
-
 	/* "<" [ "@" route ":" ] local-part "@" domain ">" */
 	i_assert(*ctx->parser.data == '<');
 	ctx->parser.data++;
 
-	if ((ret = rfc822_skip_lwsp(&ctx->parser)) <= 0)
-		return ret;
+	if (rfc822_skip_lwsp(&ctx->parser) <= 0)
+		return -1;
 
 	if (*ctx->parser.data == '@') {
-		if (parse_domain_list(ctx) <= 0 || *ctx->parser.data != ':') {
+		if (parse_domain_list(ctx) > 0 && *ctx->parser.data == ':') {
+			ctx->parser.data++;
+		} else if (parsing_path && *ctx->parser.data != ':') {
+			return -1;
+		} else {
 			if (ctx->fill_missing)
 				ctx->addr.route = "INVALID_ROUTE";
 			if (ctx->parser.data >= ctx->parser.end)
 				return -1;
 			/* try to continue anyway */
-		} else {
-			ctx->parser.data++;
 		}
-		if ((ret = rfc822_skip_lwsp(&ctx->parser)) <= 0)
-			return ret;
+		if (rfc822_skip_lwsp(&ctx->parser) <= 0)
+			return -1;
 	}
 
 	if (*ctx->parser.data == '>') {
 		/* <> address isn't valid */
 	} else {
-		if ((ret = parse_local_part(ctx)) <= 0)
-			return ret;
+		if (parse_local_part(ctx) <= 0)
+			return -1;
 		if (*ctx->parser.data == '@') {
-			if ((ret = parse_domain(ctx)) <= 0)
-				return ret;
+			if (parse_domain(ctx) <= 0)
+				return -1;
 		}
 	}
 
@@ -198,7 +199,7 @@ static int parse_name_addr(struct message_address_parser_context *ctx)
 		/* Cope with "<address>" without display name */
 		ctx->addr.name = NULL;
 	}
-	if (parse_angle_addr(ctx) < 0) {
+	if (parse_angle_addr(ctx, FALSE) < 0) {
 		/* broken */
 		if (ctx->fill_missing)
 			ctx->addr.domain = "SYNTAX_ERROR";
@@ -386,6 +387,36 @@ static int parse_address_list(struct message_address_parser_context *ctx,
 	return ret;
 }
 
+static int parse_path(struct message_address_parser_context *ctx)
+{
+	int ret;
+
+	if (rfc822_skip_lwsp(&ctx->parser) <= 0)
+		return -1;
+	if (*ctx->parser.data != '<') {
+		/* Cope with paths that omit < and >. This is a syntax
+		   violation, but we allow it to account for a rather wide
+		   selection of software that does not follow the standards.
+		 */
+		if ((ret=parse_local_part(ctx)) > 0 &&
+		    *ctx->parser.data == '@') {
+			ret = parse_domain(ctx);
+		}
+	} else {
+		ret = parse_angle_addr(ctx, TRUE);
+	}
+	if (ret < 0 || (ret=rfc822_skip_lwsp(&ctx->parser)) < 0 ||
+	    ctx->parser.data != ctx->parser.end ||
+	    (ctx->addr.mailbox != NULL &&
+	     (ctx->addr.domain == NULL || *ctx->addr.domain == '\0')) ||
+	    (ctx->addr.mailbox == NULL && ctx->addr.domain != NULL)) {
+		ctx->addr.invalid_syntax = TRUE;
+		ret = -1;
+	}
+	add_address(ctx);
+	return ret;
+}
+
 static struct message_address *
 message_address_parse_real(pool_t pool, const unsigned char *data, size_t size,
 			   unsigned int max_addresses, bool fill_missing)
@@ -422,14 +453,9 @@ message_address_parse_path_real(pool_t pool, const unsigned char *data,
 	ctx.pool = pool;
 	ctx.str = t_str_new(128);
 
-	if (rfc822_skip_lwsp(&ctx.parser) <= 0)
-		return -1;
-	if ((ret=parse_angle_addr(&ctx)) < 0 ||
-		(ctx.addr.mailbox != NULL && ctx.addr.domain == NULL)) {
-		ctx.addr.invalid_syntax = TRUE;
-		ret = -1;
-	}
-	add_address(&ctx);
+	ret = parse_path(&ctx);
+
+	rfc822_parser_deinit(&ctx.parser);
 	*addr_r = ctx.first_addr;
 	return (ret < 0 ? -1 : 0);
 }

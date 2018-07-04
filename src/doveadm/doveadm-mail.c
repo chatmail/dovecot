@@ -732,7 +732,7 @@ doveadm_mail_cmd_try_find_multi_word(const struct doveadm_mail_cmd *cmd,
 	*argv += 1;
 
 	len = strlen((*argv)[0]);
-	if (strncmp(cmdname, (*argv)[0], len) != 0)
+	if (!str_begins(cmdname, (*argv)[0]))
 		return FALSE;
 
 	if (cmdname[len] == ' ') {
@@ -918,7 +918,10 @@ static struct doveadm_cmd_ver2 *mail_commands_ver2[] = {
 	&doveadm_cmd_purge_ver2,
 	&doveadm_cmd_search_ver2,
 	&doveadm_cmd_copy_ver2,
-	&doveadm_cmd_move_ver2
+	&doveadm_cmd_move_ver2,
+	&doveadm_cmd_mailbox_cache_decision,
+	&doveadm_cmd_mailbox_cache_remove,
+	&doveadm_cmd_rebuild_attachments,
 };
 
 void doveadm_mail_init(void)
@@ -1052,7 +1055,23 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 			const char *short_opt_str = p_strdup_printf(
 				mctx->pool, "-%c", arg->short_opt);
 
-			optarg = (char*)arg->value.v_string;
+			switch(arg->type) {
+			case CMD_PARAM_BOOL:
+				optarg = NULL;
+				break;
+			case CMD_PARAM_INT64:
+				optarg = (char*)dec2str(arg->value.v_int64);
+				break;
+			case CMD_PARAM_IP:
+				optarg = (char*)net_ip2addr(&arg->value.v_ip);
+				break;
+			case CMD_PARAM_STR:
+				optarg = (char*)arg->value.v_string;
+				break;
+			default:
+				i_panic("Cannot convert parameter %s to short opt",
+					arg->name);
+			}
 			if (!mctx->v.parse_arg(mctx, arg->short_opt)) {
 				i_error("Invalid parameter %c", arg->short_opt);
 				doveadm_mail_cmd_free(mctx);

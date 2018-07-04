@@ -52,9 +52,13 @@ protocols = imap pop3 lmtp sieve
 listen = *, ::
 ---%<-------------------------------------------------------------------------
 
-If the protocols setting shouldn't contain 'imap' so add it. Also make sure,
-that relevant '!include' or '!try_include' configuration lines are not
-commented.
+If the protocols setting don't contain 'imap' then add it. Also make sure, that
+relevant '!include' or '!include_try' configuration lines are not commented.
+
+If the telnet fails and dovecot emits a log "/auth: Fatal: Support not compiled
+in for passdb driver 'pam'/", then rebuild dovecot with package libpam0g-dev
+installed. In that case you have to re-run the configure script, possibly
+including option *--with-pam* to the configure command line.
 
 Next check that it also works from remote host:
 
@@ -232,4 +236,4 @@ e logout
 e OK Logout completed.
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

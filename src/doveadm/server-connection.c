@@ -366,7 +366,7 @@ static void server_connection_input(struct server_connection *conn)
 		   because v2.2.33 sent the version after and newer
 		   versions send before. */
 		if (!conn->version_received &&
-		    strncmp(line, "VERSION\t", 8) == 0) {
+		    str_begins(line, "VERSION\t")) {
 			if (!version_string_verify_full(line, "doveadm-client",
 							DOVEADM_SERVER_PROTOCOL_VERSION_MAJOR,
 							&conn->minor)) {
@@ -603,8 +603,7 @@ void server_connection_destroy(struct server_connection **_conn)
 	i_stream_destroy(&conn->cmd_input);
 	/* close cmd_output after its parent, so the "." isn't sent */
 	o_stream_destroy(&conn->cmd_output);
-	if (conn->ssl_iostream != NULL)
-		ssl_iostream_unref(&conn->ssl_iostream);
+	ssl_iostream_destroy(&conn->ssl_iostream);
 	io_remove(&conn->io_log);
 	/* make sure all logs got consumed */
 	if (conn->log_input != NULL)
