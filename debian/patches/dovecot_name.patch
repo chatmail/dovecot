@@ -30,10 +30,10 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
  
 --- a/src/lmtp/lmtp-settings.c
 +++ b/src/lmtp/lmtp-settings.c
-@@ -76,7 +76,7 @@
- 	.lmtp_rcpt_check_quota = FALSE,
- 	.lmtp_user_concurrency_limit = 0,
- 	.lmtp_hdr_delivery_address = "final:none:original",
+@@ -82,7 +82,7 @@
+ 	.lmtp_rawlog_dir = "",
+ 	.lmtp_proxy_rawlog_dir = "",
+ 
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
  	.login_trusted_networks = ""
@@ -41,7 +41,7 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
  
 --- a/src/login-common/login-settings.c
 +++ b/src/login-common/login-settings.c
-@@ -51,7 +51,7 @@
+@@ -48,7 +48,7 @@
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
