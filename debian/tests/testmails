@@ -35,6 +35,13 @@ def login_exists(login):
         return False
 
 
+def get_distribution():
+    '''Return the name of the Linux Distribution we are running.'''
+    cmd = ['lsb_release', '-si']
+    output = subprocess.check_output(cmd)
+    return output.strip()
+
+
 class TestUser:
     '''Create a temporary test user and remove it again on close.'''
 
@@ -81,6 +88,7 @@ class DovecotBasics(unittest.TestCase):
         We want to test the default setup, but pre-setup an mbox on a tmp user
         '''
 
+        self.distribution = get_distribution()
         self.user = TestUser()
 
         # create fresh test mailbox with one new and one old mail
@@ -153,7 +161,8 @@ Get cracking!''')
         '''Test POP3 protocol.'''
 
         pop = poplib.POP3('localhost')
-        self.assertEqual(pop.getwelcome(), b'+OK Dovecot (Ubuntu) ready.')
+        self.assertEqual(pop.getwelcome(),
+                         b'+OK Dovecot (%s) ready.' % self.distribution)
 
         self._test_pop3_proto(pop)
 
@@ -161,7 +170,8 @@ Get cracking!''')
         '''Test POP3S protocol.'''
 
         pop = poplib.POP3_SSL('localhost')
-        self.assertEqual(pop.getwelcome(), b'+OK Dovecot (Ubuntu) ready.')
+        self.assertEqual(pop.getwelcome(),
+                         b'+OK Dovecot (%s) ready.' % self.distribution)
 
         self._test_pop3_proto(pop)
 
