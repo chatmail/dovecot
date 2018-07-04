@@ -77,4 +77,4 @@ gpg -e -r $USER tempfile
 rm -f tempfile
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

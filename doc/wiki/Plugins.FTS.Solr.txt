@@ -99,7 +99,7 @@ doveadm fts rescan -u <username>
 ---%<-------------------------------------------------------------------------
 
 If you want to index a single mailbox/all mailboxes you can run the command
-shown, this will happen immediately and will blocking until action is
+shown, this will happen immediately and will block until the action is
 completed.
 
 ---%<-------------------------------------------------------------------------
@@ -174,16 +174,16 @@ External Tutorials
 
 External sites with tutorials on using Solr under Dovecot
 
- * Installing Apache Solr with Dovecot for fulltext search results
-   [http://atmail.com/kb/2009/installing-apache-solr-with-dovecot-for-fulltext-search-results/]
-   - Guide for installing all the dependencies for Solr to work under
-   CentOS/Fedora. Step by step tutorial.
  * Installing Apache Solr with Dovecot for fulltext search results (ATmail
    support guide)
-   [http://support.atmail.com/display/AKB/Installing+Apache+Solr+with+Dovecot+for+fulltext+search+results]
+   [https://help.atmail.com/hc/en-us/articles/201566404-Installing-Apache-Solr-with-Dovecot-for-fulltext-search-results]
+ * Linux: http://things.m31.ch/?p=379
+ * FreeBSD: http://mor-pah.net/2016/08/15/dovecot-2-2-with-solr-6-or-5/
+ * Substring searches with ngrams:
+   https://www.dovecot.org/list/dovecot/2011-May/059338.html
 
-Tipps
------
+Tips
+----
 
 Some additional things which might help you configuring Solr search:
 
@@ -192,16 +192,7 @@ Some additional things which might help you configuring Solr search:
    query strings (iPhones tend to send multi-kilobyte-sized queries)
  * Set 'df' to 'hdr' in '/etc/solr/conf/solrconfig.xml' ('/select' request
    handler) to avoid strange 'undefined field text' errors.
+ * Please keep in mind that you will have to change the Solr URL to include the
+   core name (ie:'dovecot': 'http://localhost:8939/solr/dovecot').
 
-Recent versions of Solr
------------------------
-
-With recent versions of Solr (5+), you should have a look at these guides:
-
- * Linux: http://things.m31.ch/?p=379
- * FreeBSD: http://mor-pah.net/2016/08/15/dovecot-2-2-with-solr-6-or-5/
-
-Please keep in mind that you will have to change the Solr URL to include the
-core name (ie:'dovecot': 'http://localhost:8939/solr/dovecot').
-
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

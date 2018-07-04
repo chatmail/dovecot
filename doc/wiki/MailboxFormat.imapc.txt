@@ -47,7 +47,7 @@ For SSL, use either:
 For testing you may want to disable all SSL certificate checks:
 
 ---%<-------------------------------------------------------------------------
-imapc_ssl_verify = yes
+imapc_ssl_verify = no
 ---%<-------------------------------------------------------------------------
 
 You can use other SASL mechanisms besides PLAIN by specifying (the first one
@@ -175,4 +175,4 @@ fetch-fix-broken-mails:
   a permanent error rather than a temporary error. This feature should be
   enabled only for specific users who have been determined to be broken.
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

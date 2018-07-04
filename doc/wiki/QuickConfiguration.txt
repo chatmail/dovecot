@@ -9,7 +9,9 @@ Contents
 
  1. Quick Configuration
 
-     1. Configuration file
+     1. TLDR; Just want it running
+
+     2. Configuration file
 
          1. Installing from sources
 
@@ -17,21 +19,60 @@ Contents
 
          3. Hints about writing configuration files
 
-     2. Authentication
+     3. Authentication
 
-     3. Mail Location
+     4. Mail Location
 
-     4. Mbox
+     5. Mbox
 
-     5. Maildir
+     6. Maildir
 
-     6. Client Workarounds
+     7. Client Workarounds
 
-     7. SSL and Plaintext Authentication
+     8. SSL and Plaintext Authentication
 
-     8. NFS
+     9. NFS
 
-     9. Running
+     10. Running
+
+TLDR; Just want it running
+--------------------------
+
+Here is a very simple basic configuration with single vmail user to be placed
+as dovecot.conf. Please note that some distros split configuration under
+/etc/dovecot/conf.d, which, while it can be useful, is not required.
+
+You need to create group vmail and user vmail.
+
+---%<-------------------------------------------------------------------------
+mail_home=/srv/mail/%Lu
+mail_location=sdbox:~/Mail
+
+## this is sometimes needed
+#first_valid_uid = uid-of-vmail-user
+
+# if you want to use system users
+passdb {
+  driver = pam
+}
+
+userdb {
+  driver = passwd
+  args = blocking=no
+  override_fields = uid=vmail gid=vmail
+}
+
+ssl=yes
+ssl_cert=</path/to/cert.pem
+ssl_key=</path/to/key.pem
+# if you are using v2.3+
+#ssl_dh=</path/to/dh.pem
+
+namespace {
+  inbox = yes
+  separator = /
+}
+---%<-------------------------------------------------------------------------
 
 Configuration file
 ------------------
@@ -160,4 +201,4 @@ Running
 
 See <RunningDovecot.txt> and <Logging.txt>.
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

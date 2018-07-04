@@ -92,11 +92,11 @@ struct mail_storage_settings {
 	/* May be NULL - use mail_storage_get_postmaster_address() instead of
 	   directly accessing this. */
 	const struct message_address *_parsed_postmaster_address;
+	const struct smtp_address *_parsed_postmaster_address_smtp;
 
 	const char *const *parsed_mail_attachment_content_type_filter;
 	bool parsed_mail_attachment_exclude_inlined;
 	bool parsed_mail_attachment_detection_add_flags_on_save;
-	bool parsed_mail_attachment_detection_add_flags_on_fetch;
 };
 struct mail_namespace_settings {
 	const char *name;
@@ -353,6 +353,8 @@ struct master_service_ssl_settings {
 	const char *ssl_key_password;
 	const char *ssl_client_ca_file;
 	const char *ssl_client_ca_dir;
+	const char *ssl_client_cert;
+	const char *ssl_client_key;
 	const char *ssl_dh;
 	const char *ssl_cipher_list;
 	const char *ssl_curve_list;
@@ -382,6 +384,7 @@ struct master_service_settings {
 	const char *debug_log_path;
 	const char *log_timestamp;
 	const char *log_debug;
+	const char *log_core_filter;
 	const char *syslog_facility;
 	const char *import_environment;
 	const char *stats_writer_socket_path;
@@ -564,13 +567,15 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 
 			if (strcmp(opt, "add-flags-on-save") == 0) {
 				set->parsed_mail_attachment_detection_add_flags_on_save = TRUE;
-			} else if (strcmp(opt, "add-flags-on-fetch") == 0) {
-				set->parsed_mail_attachment_detection_add_flags_on_fetch = TRUE;
 			} else if (strcmp(opt, "exclude-inlined") == 0) {
 				set->parsed_mail_attachment_exclude_inlined = TRUE;
-			} else if (strncmp(opt, "content-type=", 13) == 0) {
+			} else if (str_begins(opt, "content-type=")) {
 				const char *value = p_strdup(pool, opt+13);
 				array_append(&content_types, &value, 1);
+			} else {
+				*error_r = t_strdup_printf("mail_attachment_detection_options: "
+					"Unknown option: %s", opt);
+				return FALSE;
 			}
 			options++;
 		}
@@ -584,15 +589,17 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 
 #ifndef CONFIG_BINARY
 static bool parse_postmaster_address(const char *address, pool_t pool,
-				     const struct message_address **addr_r,
-				     const char **error_r)
+				     struct mail_storage_settings *set,
+				     const char **error_r) ATTR_NULL(3)
 {
 	struct message_address *addr;
+	struct smtp_address *smtp_addr;
 
 	addr = message_address_parse(pool,
 		(const unsigned char *)address,
 		strlen(address), 2, FALSE);
-	if (addr == NULL || addr->domain == NULL || addr->invalid_syntax) {
+	if (addr == NULL || addr->domain == NULL || addr->invalid_syntax ||
+	    smtp_address_create_from_msg(pool, addr, &smtp_addr) < 0) {
 		*error_r = t_strdup_printf(
 			"invalid address `%s' specified for the "
 			"postmaster_address setting", address);
@@ -605,7 +612,10 @@ static bool parse_postmaster_address(const char *address, pool_t pool,
 	}
 	if (addr->name == NULL || *addr->name == '\0')
 		addr->name = "Postmaster";
-	*addr_r = addr;
+	if (set != NULL) {
+		set->_parsed_postmaster_address = addr;
+		set->_parsed_postmaster_address_smtp = smtp_addr;
+	}
 	return TRUE;
 }
 
@@ -617,8 +627,7 @@ static bool mail_storage_settings_expand_check(void *_set,
 
 	/* Parse if possible. Perform error handling later. */
 	(void)parse_postmaster_address(set->postmaster_address, pool,
-				       &set->_parsed_postmaster_address,
-				       &error);
+				       set, &error);
 	return TRUE;
 }
 #endif
@@ -1473,8 +1482,15 @@ const struct setting_parser_info lda_setting_parser_info = {
 #define DEF_UINT(name) DEF_STRUCT_UINT(name ,dict_ldap_map)
 /* ../../src/submission/submission-settings.h */
 extern const struct setting_parser_info submission_setting_parser_info;
+/* <settings checks> */
+enum submission_client_workarounds {
+	WORKAROUND_WHITESPACE_BEFORE_PATH	= BIT(0),
+	WORKAROUND_MAILBOX_FOR_PATH		= BIT(1),
+};
+/* </settings checks> */
 struct submission_settings {
 	bool verbose_proctitle;
+	const char *rawlog_dir;
 
 	const char *hostname;
 
@@ -1484,6 +1500,7 @@ struct submission_settings {
 	/* submission: */
 	size_t submission_max_mail_size;
 	unsigned int submission_max_recipients;
+	const char *submission_client_workarounds;
 	const char *submission_logout_format;
 
 	/* submission relay: */
@@ -1507,6 +1524,8 @@ struct submission_settings {
 	/* imap urlauth: */
 	const char *imap_urlauth_host;
 	in_port_t imap_urlauth_port;
+
+	enum submission_client_workarounds parsed_workarounds;
 };
 /* ../../src/submission-login/submission-login-settings.h */
 extern const struct setting_parser_info *submission_login_setting_roots[];
@@ -1647,9 +1666,6 @@ struct login_settings {
 	unsigned int login_proxy_max_disconnect_delay;
 	const char *director_username_hash;
 
-	const char *ssl_client_cert;
-	const char *ssl_client_key;
-	bool ssl_require_crl;
 	bool auth_ssl_require_client_cert;
 	bool auth_ssl_username_from_cert;
 
@@ -1679,6 +1695,9 @@ struct lmtp_settings {
 	bool lmtp_rcpt_check_quota;
 	unsigned int lmtp_user_concurrency_limit;
 	const char *lmtp_hdr_delivery_address;
+	const char *lmtp_rawlog_dir;
+	const char *lmtp_proxy_rawlog_dir;
+
 	const char *login_greeting;
 	const char *login_trusted_networks;
 
@@ -1950,6 +1969,66 @@ static buffer_t submission_unix_listeners_buf = {
 	submission_unix_listeners, sizeof(submission_unix_listeners), { 0, }
 };
 /* </settings checks> */
+/* <settings checks> */
+struct submission_client_workaround_list {
+	const char *name;
+	enum submission_client_workarounds num;
+};
+
+static const struct submission_client_workaround_list
+submission_client_workaround_list[] = {
+	{ "whitespace-before-path", WORKAROUND_WHITESPACE_BEFORE_PATH },
+	{ "mailbox-for-path", WORKAROUND_MAILBOX_FOR_PATH },
+	{ NULL, 0 }
+};
+
+static int
+submission_settings_parse_workarounds(struct submission_settings *set,
+				const char **error_r)
+{
+	enum submission_client_workarounds client_workarounds = 0;
+        const struct submission_client_workaround_list *list;
+	const char *const *str;
+
+        str = t_strsplit_spaces(set->submission_client_workarounds, " ,");
+	for (; *str != NULL; str++) {
+		list = submission_client_workaround_list;
+		for (; list->name != NULL; list++) {
+			if (strcasecmp(*str, list->name) == 0) {
+				client_workarounds |= list->num;
+				break;
+			}
+		}
+		if (list->name == NULL) {
+			*error_r = t_strdup_printf(
+				"submission_client_workarounds: "
+				"Unknown workaround: %s", *str);
+			return -1;
+		}
+	}
+	set->parsed_workarounds = client_workarounds;
+	return 0;
+}
+
+static bool
+submission_settings_verify(void *_set, pool_t pool ATTR_UNUSED, const char **error_r)
+{
+	struct submission_settings *set = _set;
+
+	if (submission_settings_parse_workarounds(set, error_r) < 0)
+		return FALSE;
+
+#ifndef CONFIG_BINARY
+	if (set->submission_relay_max_idle_time == 0) {
+		*error_r = "submission_relay_max_idle_time must not be 0";
+		return FALSE;
+	}
+	if (*set->hostname == '\0')
+		set->hostname = p_strdup(pool, my_hostdomain());
+#endif
+	return TRUE;
+}
+/* </settings checks> */
 struct service_settings submission_service_settings = {
 	.name = "submission",
 	.protocol = "submission",
@@ -1980,6 +2059,7 @@ struct service_settings submission_service_settings = {
 	{ type, #name, offsetof(struct submission_settings, name), NULL }
 static const struct setting_define submission_setting_defines[] = {
 	DEF(SET_BOOL, verbose_proctitle),
+	DEF(SET_STR_VARS, rawlog_dir),
 
 	DEF(SET_STR, hostname),
 
@@ -1988,6 +2068,7 @@ static const struct setting_define submission_setting_defines[] = {
 
 	DEF(SET_SIZE, submission_max_mail_size),
 	DEF(SET_UINT, submission_max_recipients),
+	DEF(SET_STR, submission_client_workarounds),
 	DEF(SET_STR, submission_logout_format),
 
 	DEF(SET_STR, submission_relay_host),
@@ -2001,7 +2082,7 @@ static const struct setting_define submission_setting_defines[] = {
 	DEF(SET_ENUM, submission_relay_ssl),
 	DEF(SET_BOOL, submission_relay_ssl_verify),
 
-	DEF(SET_STR, submission_relay_rawlog_dir),
+	DEF(SET_STR_VARS, submission_relay_rawlog_dir),
 	DEF(SET_TIME, submission_relay_max_idle_time),
 
 	DEF(SET_TIME_MSECS, submission_relay_connect_timeout),
@@ -2014,14 +2095,16 @@ static const struct setting_define submission_setting_defines[] = {
 };
 static const struct submission_settings submission_default_settings = {
 	.verbose_proctitle = FALSE,
+	.rawlog_dir = "",
 
 	.hostname = "",
 
 	.login_greeting = PACKAGE_NAME" ready.",
 	.login_trusted_networks = "",
 
-	.submission_max_mail_size = 0,
+	.submission_max_mail_size = 40*1024*1024,
 	.submission_max_recipients = 0,
+	.submission_client_workarounds = "",
 	.submission_logout_format = "in=%i out=%o",
 
 	.submission_relay_host = "",
@@ -2058,9 +2141,7 @@ const struct setting_parser_info submission_setting_parser_info = {
 
 	.parent_offset = (size_t)-1,
 
-#ifndef CONFIG_BINARY
-	.check_func = submission_settings_check,
-#endif
+	.check_func = submission_settings_verify,
 	.dependencies = submission_setting_dependencies
 };
 /* ../../src/submission-login/submission-login-settings.c */
@@ -3394,9 +3475,6 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_TIME, login_proxy_max_disconnect_delay),
 	DEF(SET_STR, director_username_hash),
 
-	DEF(SET_STR, ssl_client_cert),
-	DEF(SET_STR, ssl_client_key),
-	DEF(SET_BOOL, ssl_require_crl),
 	DEF(SET_BOOL, auth_ssl_require_client_cert),
 	DEF(SET_BOOL, auth_ssl_username_from_cert),
 
@@ -3422,9 +3500,6 @@ static const struct login_settings login_default_settings = {
 	.login_proxy_max_disconnect_delay = 0,
 	.director_username_hash = "%u",
 
-	.ssl_client_cert = "",
-	.ssl_client_key = "",
-	.ssl_require_crl = TRUE,
 	.auth_ssl_require_client_cert = FALSE,
 	.auth_ssl_username_from_cert = FALSE,
 
@@ -3556,6 +3631,9 @@ static const struct setting_define lmtp_setting_defines[] = {
 	DEF(SET_BOOL, lmtp_rcpt_check_quota),
 	DEF(SET_UINT, lmtp_user_concurrency_limit),
 	DEF(SET_ENUM, lmtp_hdr_delivery_address),
+	DEF(SET_STR_VARS, lmtp_rawlog_dir),
+	DEF(SET_STR_VARS, lmtp_proxy_rawlog_dir),
+
 	DEF(SET_STR_VARS, login_greeting),
 	DEF(SET_STR, login_trusted_networks),
 
@@ -3567,6 +3645,9 @@ static const struct lmtp_settings lmtp_default_settings = {
 	.lmtp_rcpt_check_quota = FALSE,
 	.lmtp_user_concurrency_limit = 0,
 	.lmtp_hdr_delivery_address = "final:none:original",
+	.lmtp_rawlog_dir = "",
+	.lmtp_proxy_rawlog_dir = "",
+
 	.login_greeting = PACKAGE_NAME" ready.",
 	.login_trusted_networks = ""
 };
@@ -5226,36 +5307,36 @@ const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
 	&smtp_submit_setting_parser_info,
-	&master_setting_parser_info, 
-	&stats_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&imap_setting_parser_info, 
+	&quota_status_setting_parser_info, 
+	&submission_login_setting_parser_info, 
+	&pop3_setting_parser_info, 
 	&imapc_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&dict_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&old_stats_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&director_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
 	&imap_login_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&login_setting_parser_info, 
+	&old_stats_setting_parser_info, 
+	&director_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&lmtp_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&maildir_setting_parser_info, 
+	&submission_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&fs_crypt_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&master_setting_parser_info, 
 	&replicator_setting_parser_info, 
 	&mail_user_setting_parser_info, 
 	&mdbox_setting_parser_info, 
-	&maildir_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&submission_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&login_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&submission_login_setting_parser_info, 
-	&quota_status_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&fs_crypt_setting_parser_info, 
-	&mbox_setting_parser_info, 
+	&stats_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

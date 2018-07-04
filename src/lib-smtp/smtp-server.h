@@ -226,9 +226,15 @@ struct smtp_server_callbacks {
  * Server
  */
 
+enum smtp_server_workarounds {
+	SMTP_SERVER_WORKAROUND_WHITESPACE_BEFORE_PATH   = BIT(0),
+	SMTP_SERVER_WORKAROUND_MAILBOX_FOR_PATH         = BIT(1)
+};
+
 struct smtp_server_settings {
 	enum smtp_protocol protocol;
 	enum smtp_capability capabilities;
+	enum smtp_server_workarounds workarounds;
 
 	const char *hostname;
 	const char *login_greeting;
@@ -251,6 +257,9 @@ struct smtp_server_settings {
 
 	/* command limits */
 	struct smtp_command_limits command_limits;
+
+	/* message size limit */
+	uoff_t max_message_size;
 
 	/* accept these additional custom XCLIENT fields */
 	const char *const *xclient_extensions;
@@ -447,6 +456,10 @@ void smtp_server_cmd_auth_send_challenge(struct smtp_server_cmd_ctx *cmd,
 void smtp_server_cmd_auth_success(struct smtp_server_cmd_ctx *cmd,
 	const char *username, const char *success_msg)
 	ATTR_NULL(3);
+
+/* DATA */
+
+bool smtp_server_cmd_data_check_size(struct smtp_server_cmd_ctx *cmd);
 
 /*
  * Reply

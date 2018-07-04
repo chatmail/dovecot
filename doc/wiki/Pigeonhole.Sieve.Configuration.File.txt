@@ -49,4 +49,37 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-10-24 04:42)
+On <Pigeonhole.Sieve.txt> 2.2.13-12~deb8u4 combined with <ManageSieve>
+[Pigeonhole.ManageSieve.txt] on Debian the active option didn't worked and it
+lead to following errors/warnings:
+
+---%<-------------------------------------------------------------------------
+Warning: sieve-storage: Active sieve script symlink /var/mail/xxx/xxx/xxx/sieve
+is no symlink
+---%<-------------------------------------------------------------------------
+
+---%<-------------------------------------------------------------------------
+Error: sieve: sieve file backend: invalid option `active=~/.dovecot.sieve'
+---%<-------------------------------------------------------------------------
+
+---%<-------------------------------------------------------------------------
+managesieve(<MAILBOX>): Error: sieve-storage: Active sieve script file
+'/var/mail/xxx/xxx/xxx/sieve' is no symlink nor a regular file. This needs to
+be fixed manually.
+---%<-------------------------------------------------------------------------
+
+Therefore we just used it without the active option as follows and then it
+worked:
+
+(We adjusted of course the file paths to our needs)
+
+---%<-------------------------------------------------------------------------
+plugin {
+        ...
+  sieve = file:~/sieve;
+
+  sieve_default = file:/var/lib/dovecot/;name=default
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2018-06-28 04:42)

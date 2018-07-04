@@ -187,7 +187,7 @@ to the 'ipc' socket. Make sure the director process can do it:
 ---%<-------------------------------------------------------------------------
 service ipc {
   unix_listener ipc {
-    user = dovecot
+    user = dovecot # This is already the default in v2.3.1+
   }
 }
 ---%<-------------------------------------------------------------------------
@@ -363,4 +363,4 @@ The user-flush.sh will receive as parameters:
  * old host's IP
  * new host's IP
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

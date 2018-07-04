@@ -303,6 +303,8 @@ openssl_iostream_create(struct ssl_iostream_context *ctx, const char *host,
 	o_stream_uncork(ssl_io->plain_output);
 
 	*input = openssl_i_stream_create_ssl(ssl_io);
+	ssl_io->ssl_input = *input;
+
 	*output = openssl_o_stream_create_ssl(ssl_io);
 	i_stream_set_name(*input, t_strconcat("SSL ",
 		i_stream_get_name(ssl_io->plain_input), NULL));
@@ -312,7 +314,6 @@ openssl_iostream_create(struct ssl_iostream_context *ctx, const char *host,
 	if (ssl_io->plain_output->real_stream->error_handling_disabled)
 		o_stream_set_no_error_handling(*output, TRUE);
 
-	ssl_io->ssl_input = *input;
 	ssl_io->ssl_output = *output;
 	*iostream_r = ssl_io;
 	return 0;
@@ -344,7 +345,8 @@ static void openssl_iostream_unref(struct ssl_iostream *ssl_io)
 
 static void openssl_iostream_destroy(struct ssl_iostream *ssl_io)
 {
-	if (SSL_shutdown(ssl_io->ssl) != 1) {
+	ssl_io->destroyed = TRUE;
+	if (ssl_io->handshaked && SSL_shutdown(ssl_io->ssl) != 1) {
 		/* if bidirectional shutdown fails we need to clear
 		   the error queue */
 		openssl_iostream_clear_errors();
@@ -613,8 +615,6 @@ static bool
 openssl_iostream_cert_match_name(struct ssl_iostream *ssl_io,
 				 const char *verify_name, const char **reason_r)
 {
-	if (ssl_io->allow_invalid_cert)
-		return TRUE;
 	if (!ssl_iostream_has_valid_client_cert(ssl_io)) {
 		*reason_r = "Invalid certificate";
 		return FALSE;
@@ -629,6 +629,10 @@ static int openssl_iostream_handshake(struct ssl_iostream *ssl_io)
 	int ret;
 
 	i_assert(!ssl_io->handshaked);
+
+	/* we are being destroyed, so do not do any more handshaking */
+	if (ssl_io->destroyed)
+		return 0;
 
 	if (ssl_io->ctx->client_ctx) {
 		while ((ret = SSL_connect(ssl_io->ssl)) <= 0) {
@@ -654,7 +658,8 @@ static int openssl_iostream_handshake(struct ssl_iostream *ssl_io)
 			openssl_iostream_set_error(ssl_io, error);
 			ssl_io->handshake_failed = TRUE;
 		}
-	} else if (ssl_io->connected_host != NULL && !ssl_io->handshake_failed) {
+       } else if (ssl_io->connected_host != NULL && !ssl_io->handshake_failed &&
+		  !ssl_io->allow_invalid_cert) {
 		if (!ssl_iostream_cert_match_name(ssl_io, ssl_io->connected_host, &reason)) {
 			openssl_iostream_set_error(ssl_io, t_strdup_printf(
 				"SSL certificate doesn't match expected host name %s: %s",

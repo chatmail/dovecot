@@ -52,6 +52,8 @@ Caveats and possible pitfalls
 
 Changes:
 
+ * 2017/11/20 - Possibility of using spamc with <SpamAssassin.txt> to mitigate
+   multi-message delays
  * 2017/05/05 - Recommendation about Virtual Users and using an SQL Backend.
    Added brief info about <RoundCube.txt>.
  * 2017/04/01 - Pass imap user to scripts.
@@ -59,6 +61,8 @@ Changes:
  * 2017/02/13 - Improved documentation and added instructions for Spam->Trash.
    (Thanks for everyone who commented on mailing list)
  * 2017/02/10 - Removed imap_stats (it's not needed).
+ * 2018/04/11 - Added notes about sa-learn/spamc and warning about sieve script
+   location.
 
 Dovecot configuration
 ---------------------
@@ -90,6 +94,12 @@ plugin {
 
 Sieve scripts
 -------------
+
+*You cannot run scripts anywhere you want*
+
+Sieve allows you to only run scripts under sieve_pipe_bin_dir. You can't use
+/usr/local/bin/my-sieve-filter.sh, you have to put the script under
+sieve_pipe_bin_dir and use my-sieve-filter.sh instead.
 
 Create directory /usr/lib/dovecot/sieve and put following files to that:
 
@@ -131,32 +141,66 @@ Shell scripts
 For spamassassin
 ----------------
 
+*Untested*
+
+spamc interaction scripts are not tested yet.
+
 sa-learn-spam.sh
 
----%<-------------------------------------------------------------------------
-exec /usr/bin/sa-learn -u ${1} --spam
----%<-------------------------------------------------------------------------
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
+# you can also use tcp/ip here, consult spamc(1)    2
+exec /usr/bin/spamc -u ${1} -L spam -C report    3
+---CodeArea-------------------------------------------------------------------
 
 sa-learn-ham.sh
 
----%<-------------------------------------------------------------------------
-exec /usr/bin/sa-learn -u ${1} --ham
----%<-------------------------------------------------------------------------
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
+# you can also use tcp/ip here, consult spamc(1)    2
+exec /usr/bin/spamc -u ${1} -L ham -C report    3
+---CodeArea-------------------------------------------------------------------
+
+You can also use sa-learn.
+
+Note that using sa-learn often incurs significant start-up time for every
+message. This can cause "lockout" of the user until all the processes
+sequentially complete, potentially tens of seconds or minutes. If spamd is
+being used and the administrator is willing to accept the potential security
+issues of allowing unauthenticated learning of spam/ham, spamd can be envoked
+with the --allow-tell option and spamc with the --learntype= option. Please
+consult the man pages of spamd and spamc for further details.
+
+sa-learn-spam.sh
+
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
+exec /usr/bin/sa-learn -u ${1} --spam    2
+---CodeArea-------------------------------------------------------------------
+
+sa-learn-ham.sh
+
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
+exec /usr/bin/sa-learn -u ${1} --ham    2
+---CodeArea-------------------------------------------------------------------
 
 For dspam
 ---------
 
 sa-learn-spam.sh
 
----%<-------------------------------------------------------------------------
-exec /usr/bin/dspam --client --user ${1} --class=spam --source=error
----%<-------------------------------------------------------------------------
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
+exec /usr/bin/dspam --client --user ${1} --class=spam --source=error    2
+---CodeArea-------------------------------------------------------------------
 
 sa-learn-ham.sh
 
----%<-------------------------------------------------------------------------
-exec /usr/bin/dspam --client --user ${1} --class=innocent --source=error
----%<-------------------------------------------------------------------------
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
+exec /usr/bin/dspam --client --user ${1} --class=innocent --source=error    2
+---CodeArea-------------------------------------------------------------------
 
 *CRLF handling*
 
@@ -172,17 +216,19 @@ https://rspamd.com/doc/configuration/statistic.html
 
 sa-learn-spam.sh
 
----%<-------------------------------------------------------------------------
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
 exec /usr/bin/rspamc -h /run/rspamd/worker-controller.socket -P <secret>
-learn_spam
----%<-------------------------------------------------------------------------
+learn_spam    2
+---CodeArea-------------------------------------------------------------------
 
 sa-learn-ham.sh
 
----%<-------------------------------------------------------------------------
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
 exec /usr/bin/rspamc -h /run/rspamd/worker-controller.socket -P <secret>
-learn_ham
----%<-------------------------------------------------------------------------
+learn_ham    2
+---CodeArea-------------------------------------------------------------------
 
 Before running following commands, make sure dovecot.conf has all the sieve
 configuration you want. Then run following commands:
@@ -211,8 +257,9 @@ variables are supported in this.
 RoundCube
 ---------
 
-Recent versions of RoundCube [https://roundcube.net/] include a plugin (located
-in 'plugins/markasjunk') for allowing users to mark Spam/Ham in a convenient
-way. Please make sure the Junk/Spam folder matches your configuration.
+Recent versions of RoundCube [https://roundcube.net/] include a markasjunk2
+plugin [https://plugins.roundcube.net/packages/johndoh/markasjunk2] for
+allowing users to mark Spam/Ham in a convenient way. Please make sure the
+Junk/Spam folder matches your configuration.
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)

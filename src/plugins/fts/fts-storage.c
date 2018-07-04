@@ -58,6 +58,7 @@ struct fts_transaction_context {
 	uint32_t highest_virtual_uid;
 	unsigned int precache_extra_count;
 
+	bool indexing:1;
 	bool precached:1;
 	bool mails_saved:1;
 	bool failed:1;
@@ -485,6 +486,7 @@ static void fts_mail_index(struct mail *_mail)
 {
 	struct fts_transaction_context *ft = FTS_CONTEXT_REQUIRE(_mail->transaction);
 	struct fts_mailbox_list *flist = FTS_LIST_CONTEXT_REQUIRE(_mail->box->list);
+	struct mail_private *pmail = (struct mail_private *)_mail;
 
 	if (ft->failed)
 		return;
@@ -495,9 +497,30 @@ static void fts_mail_index(struct mail *_mail)
 			return;
 		}
 	}
+	if (pmail->vmail != NULL) {
+		/* Indexing via virtual mailbox: Index all the mails in this
+		   same real mailbox. */
+		uint32_t msgs_count =
+			mail_index_view_get_messages_count(_mail->box->view);
+
+		fts_backend_update_set_mailbox(flist->update_ctx, _mail->box);
+		if (ft->next_index_seq > msgs_count) {
+			/* everything indexed already */
+		} else if (fts_mail_precache_range(_mail->transaction,
+						   flist->update_ctx,
+						   ft->next_index_seq,
+						   msgs_count,
+						   &ft->precache_extra_count) < 0) {
+			ft->failed = TRUE;
+		} else {
+			ft->next_index_seq = msgs_count+1;
+		}
+		return;
+	}
+
 	if (ft->next_index_seq < _mail->seq) {
-		/* most likely a virtual mailbox. we'll first need to
-		   index all mails up to the current one. */
+		/* we'll first need to index all the missing mails up to the
+		   current one. */
 		fts_backend_update_set_mailbox(flist->update_ctx, _mail->box);
 		if (fts_mail_precache_range(_mail->transaction,
 					    flist->update_ctx,
@@ -507,6 +530,7 @@ static void fts_mail_index(struct mail *_mail)
 			ft->failed = TRUE;
 			return;
 		}
+		ft->next_index_seq = _mail->seq;
 	}
 
 	if (ft->next_index_seq == _mail->seq) {
@@ -529,8 +553,12 @@ static void fts_mail_precache(struct mail *_mail)
 	if (fmail->virtual_mail) {
 		if (ft->highest_virtual_uid < _mail->uid)
 			ft->highest_virtual_uid = _mail->uid;
-	} else T_BEGIN {
+	} else if (!ft->indexing) T_BEGIN {
+		/* avoid recursing here from fts_mail_precache_range() */
+		ft->indexing = TRUE;
 		fts_mail_index(_mail);
+		i_assert(ft->indexing);
+		ft->indexing = FALSE;
 	} T_END;
 }
 

@@ -20,6 +20,9 @@ put it in "quotes". The mailbox settings are:
    mailbox. There are no validity checks, so you could specify anything you
    want in here, but it's not a good idea to use other than the standard ones
    specified in the RFC.
+    * NOTE: Due to a bug in Dovecot v2.2.30+ if special-use flags are used,
+      SPECIAL-USE needs to be added to post-login CAPABILITY response as RFC
+      6154 mandates. You can do this with 'imap_capability = +SPECIAL-USE'
  * autoexpunge=<time>: (v2.2.20+) Automatically at user deinitialization
    expunge all mails in this mailbox whose saved-timestamp is older than<time>
    (e.g. autoexpunge=30d). This removes the need for <expire plugin>
@@ -75,4 +78,4 @@ names.
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2017-10-24 04:42)
+(This file was created from the wiki on 2018-06-28 04:42)
