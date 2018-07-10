@@ -126,4 +126,4 @@ Using LMTP with different MTAs
  * <Exim> [LMTP.Exim.txt]
  * HALON [http://wiki.halon.se/LMTP]
 
-(This file was created from the wiki on 2018-06-28 04:42)
+(This file was created from the wiki on 2018-07-09 04:42)

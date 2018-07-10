@@ -161,4 +161,4 @@ backend servers. The <proxy configuration wiki page>
 [PasswordDatabase.ExtraFields.Proxy.txt] for POP3 and IMAP applies
 automatically to Submission as well.
 
-(This file was created from the wiki on 2018-06-28 04:42)
+(This file was created from the wiki on 2018-07-09 04:42)

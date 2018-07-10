@@ -23,4 +23,4 @@ sieve_variables_max_variable_size = 4k (v0.5.0+) :
   for this setting is 4000 bytes. The value is in bytes, unless followed by a
   k(ilo).
 
-(This file was created from the wiki on 2018-06-28 04:42)
+(This file was created from the wiki on 2018-07-09 04:42)

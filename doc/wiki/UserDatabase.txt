@@ -123,4 +123,4 @@ The result values that can be used:
  * continue: Continue to the next userdb without changing the user existence
    state. The initial state is "not found".
 
-(This file was created from the wiki on 2018-06-28 04:42)
+(This file was created from the wiki on 2018-07-09 04:42)
