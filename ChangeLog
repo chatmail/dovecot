@@ -1,3 +1,50 @@
+2018-07-09 10:47:03 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (0719df592)
+
+    Released v2.3.2.1.
+
+
+M	NEWS
+M	configure.ac
+
+2018-07-02 11:52:14 +0100 Paul Howarth <paul@city-fan.org> (f7c56d4b1)
+
+    lib-compression: Fix assert-crash in test suite on 32bit systems
+
+    Fix compilation warnings in test-compression.c due to mismatches between
+    size_t and uoff_t, which then manifests in assert-crashes running the test
+    suite on 32bit systems.
+
+M	src/lib-compression/test-compression.c
+
+2018-07-06 11:25:07 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6c7efd9dd)
+
+    lib-ssl-iostream: Shutdown connection cleanly whenever i/ostream is
+    destroyed
+
+    Do this while both istream and ostream still exist. Fixes crash where 
+    openssl_iostream_destroy() attempts to flush the shutdown, but ssl_input is
+    NULL and it crashes.
+
+M	src/lib-ssl-iostream/istream-openssl.c
+M	src/lib-ssl-iostream/ostream-openssl.c
+
+2018-07-06 11:24:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c6d7e0d24)
+
+    lib-ssl-iostream: Split code to openssl_iostream_shutdown()
+
+
+M	src/lib-ssl-iostream/iostream-openssl.c
+M	src/lib-ssl-iostream/iostream-openssl.h
+
+2018-06-12 16:07:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (bc10a45e9)
+
+    lib-storage: Fix memory leak when mail_storage_service_next() is called
+    multiple times
+
+    dsync uses it twice for the same mail_storage_service_user.
+
+M	src/lib-storage/mail-storage-service.c
+
 2018-06-28 17:52:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (582970113)
 
     Released v2.3.2.

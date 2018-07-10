@@ -11,4 +11,4 @@ specific configuration and usage information:
 
  * <vacation and vacation-seconds> [Pigeonhole.Sieve.Extensions.Vacation.txt]
 
-(This file was created from the wiki on 2018-06-28 04:42)
+(This file was created from the wiki on 2018-07-09 04:42)

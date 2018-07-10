@@ -640,4 +640,4 @@ From Dovecot Sieve v0.1.x (Dovecot v1.2)
    compatibility, it is recommended to update the setting to the new name,
    since the <LMTP.txt> service also uses the 'recipient_delimiter' setting.
 
-(This file was created from the wiki on 2018-06-28 04:42)
+(This file was created from the wiki on 2018-07-09 04:42)

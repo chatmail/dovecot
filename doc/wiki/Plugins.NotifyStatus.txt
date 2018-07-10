@@ -65,4 +65,4 @@ These fields can be used as %%{variables} in notify_status_value setting:
  * highest_modseq - higest modification sequence number
  * highest_pvt_modseq - highest private modification sequence number
 
-(This file was created from the wiki on 2018-06-28 04:42)
+(This file was created from the wiki on 2018-07-09 04:42)
