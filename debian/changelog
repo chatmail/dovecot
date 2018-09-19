@@ -1,3 +1,9 @@
+dovecot (1:2.3.2.1-2) UNRELEASED; urgency=medium
+
+  * Trim trailing whitespace.
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 19 Sep 2018 01:33:42 +0100
+
 dovecot (1:2.3.2.1-1) unstable; urgency=medium
 
   * [40ba9f0] New upstream bugfix release 2.3.2.1
@@ -462,7 +468,7 @@ dovecot (1:2.2.13-3) unstable; urgency=medium
 
 dovecot (1:2.2.13-2) unstable; urgency=medium
 
-  * [bd5e34b] Patches from upstreams' hg repo to fix BYE and LOGOUT not being 
+  * [bd5e34b] Patches from upstreams' hg repo to fix BYE and LOGOUT not being
     sent. (Closes: #751682)
   * [452e336] Czech translation for debconf.
     Thanks to Michal Šimůnek (Closes: #751389)
@@ -634,7 +640,7 @@ dovecot (1:2.1.7-6) unstable; urgency=high
     from the previous release had to be removed.  Namely:
     - TCP Wrappers support
     - Hurd compatability support
-    - Triggers  
+    - Triggers
     All this will be coming back in the next version but for now, if you need
     any of it, stick with -5.
   * [1f869e0] NEWS.Debian was not getting added to the package (Closes: #693621)
@@ -645,7 +651,7 @@ dovecot (1:2.1.7-6) unstable; urgency=high
 
 dovecot (1:2.1.7-5) unstable; urgency=high
 
-  * [132bc3b] Remove call to ntp-wait in init script.  Dovecot handles a 
+  * [132bc3b] Remove call to ntp-wait in init script.  Dovecot handles a
     skewed clock much better now.  (Closes: #693225)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 14 Nov 2012 14:45:29 -0500
@@ -1160,7 +1166,7 @@ dovecot (1:1.2.2-2) unstable; urgency=high
 
   * Er that should be fcntl not fnctl.  (Closes: #539474, #539486)
   * For the sake of completeness, fixed some errors in the example config file.
-    (They are in the !include statements which are commented out by default 
+    (They are in the !include statements which are commented out by default
     so it is unlikely that most users will actually be affected.)
     (Closes: #539391)
 
@@ -1629,7 +1635,7 @@ dovecot (1.0.rc30-2) unstable; urgency=low
 dovecot (1.0.rc30-1) unstable; urgency=low
 
   * New upstream release.
-  * 
+  *
 
  -- Fabio Tranchitella <kobold@debian.org>  Sat, 07 Apr 2007 11:17:45 +0200
 
@@ -1864,9 +1870,9 @@ dovecot (1.0.rc2-1) unstable; urgency=high
 dovecot (1.0.rc1-1) unstable; urgency=low
 
   * New upstream release.
-  * Add a build-dependency on linux-kernel-headers for the xfs quotas 
+  * Add a build-dependency on linux-kernel-headers for the xfs quotas
     stuff.  Make it higher than the version in sarge because sarges xfs
-    includes are too old.  If any knowledgeable person would like to 
+    includes are too old.  If any knowledgeable person would like to
     give me a patch for this, please do.  (Closes: #374793)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 28 Jun 2006 11:42:07 -0400
@@ -1874,7 +1880,7 @@ dovecot (1.0.rc1-1) unstable; urgency=low
 dovecot (1.0.beta9-1) unstable; urgency=low
 
   * New upstream release
-  * Added XFS quota support.  Thanks  Pawel Jarosz <pj@rsi.pl> 
+  * Added XFS quota support.  Thanks  Pawel Jarosz <pj@rsi.pl>
     (Closes: #373936)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 19 Jun 2006 16:55:20 -0400
@@ -1910,7 +1916,7 @@ dovecot (1.0.beta8-1) unstable; urgency=high
 
   * New upstream release.
   * [SECURITY] Fixes a directory traversal vulnerability.
-    (see: http://www.dovecot.org/list/dovecot-news/2006-May/000006.html 
+    (see: http://www.dovecot.org/list/dovecot-news/2006-May/000006.html
     and CVE-2006-2414)
   * Set urgency to high: this version fixes a security bug
   * Standards-Version: 3.7.2, no changes needed.
@@ -1943,7 +1949,7 @@ dovecot (1.0.beta3-2) unstable; urgency=low
   * debian/control: added build-depends on byacc.
   * debian/rules: removed --with-vpopmail option, because libvpopmail-dev
     is in contrib and we don't wanto to have dovecot build-depends on it.
-  * debian/patches/dovecot-example.dpatch: added two small commented 
+  * debian/patches/dovecot-example.dpatch: added two small commented
     block of configuration for dovecot-lda.
 
  -- Fabio Tranchitella <kobold@debian.org>  Sun, 26 Feb 2006 20:59:06 +0000
@@ -1959,7 +1965,7 @@ dovecot (1.0.beta3-1) unstable; urgency=high
   * Removed the code for upgrading impad.pem.  This might bite if you if
     you try and upgrade a woody version of dovecot to this one.  So
     don't do that.  (Closes: #337715)
-  * dovecot-imapd,dovecot-pop3d: depend on dovecot-common >= 1.0beta3-1 
+  * dovecot-imapd,dovecot-pop3d: depend on dovecot-common >= 1.0beta3-1
     as the way SSL parameters are generated has changed.  (Closes: #353404)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 17 Feb 2006 22:06:21 -0500
@@ -1982,7 +1988,7 @@ dovecot (1.0.alpha5-1) unstable; urgency=low
   * Added man page for maildirmake.dovecot, thanks to Henry Precheur.
     (Closes: #340498)
   * Use /usr/lib/dovecot/modules as basedir for dynamic modules.
-    Upstream suggests /usr/lib/dovecot, but we already use it as 
+    Upstream suggests /usr/lib/dovecot, but we already use it as
     libexec directory.
 
  -- Fabio Tranchitella <kobold@debian.org>  Wed, 21 Dec 2005 13:44:38 +0000
@@ -2010,7 +2016,7 @@ dovecot (1.0.alpha3-2) unstable; urgency=low
     the --ingroup option to adduser to add dovecot to group
     mail isn't used anymore.
     (Closes: #330960, #331106)
-  * commented out userdb passdb from default configuration.  Most 
+  * commented out userdb passdb from default configuration.  Most
     people won't need that. (Closes: #330978)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu,  6 Oct 2005 14:25:33 -0400
@@ -2037,7 +2043,7 @@ dovecot (0.99.20050712-2) unstable; urgency=low
     + debian/patches/documentation.dpatch: some cosmetic fixes about mysql
       backend.
   * Jaldhar H. Vyas <jaldhar@debian.org>
-    + debian/control: tighten dovecot-imapd and dovecot-pop3d's dependency on 
+    + debian/control: tighten dovecot-imapd and dovecot-pop3d's dependency on
       dovecot-common (Closes: #319465)
     + debian/patches/dovecot-example.dpatch: some more fixes to default
       configuration.  (Closes: #319413, #319941)
@@ -2084,8 +2090,8 @@ dovecot (0.99.13-5) unstable; urgency=high
 
   * dovecot-common: typo in postinst resulted in incorrect generation of
     keys for first-time installers.  Hence urgency high.
-  * dovecot-common: In init script, make extra check to make sure an 
-    IMAP or POP3 server called from inetd is dovecot and not some other 
+  * dovecot-common: In init script, make extra check to make sure an
+    IMAP or POP3 server called from inetd is dovecot and not some other
     random inferior product.  (Closes: #293348)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat,  5 Feb 2005 13:56:31 -0500
@@ -2115,10 +2121,10 @@ dovecot (0.99.13-3) unstable; urgency=high
 
 dovecot (0.99.13-2) unstable; urgency=low
 
-  * dovecot-imapd, dovecot-pop3d:  It occurred to me that the effects of 
-    fixing #288391 will cause confusion in the minds of new installers so I 
-    should add a warning in README.Debian and NEWS.Debian in a vain 
-    effort to stave off swarms of bug reports.  (Vain, because no one 
+  * dovecot-imapd, dovecot-pop3d:  It occurred to me that the effects of
+    fixing #288391 will cause confusion in the minds of new installers so I
+    should add a warning in README.Debian and NEWS.Debian in a vain
+    effort to stave off swarms of bug reports.  (Vain, because no one
     actually reads documentation anyway.)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Sat,  8 Jan 2005 11:29:59 -0500
@@ -2150,7 +2156,7 @@ dovecot (0.99.12-1) unstable; urgency=low
 
 dovecot (0.99.11-3) unstable; urgency=medium
 
-  * applied dovecot-large-header-fix patch to prevent 100% CPU 
+  * applied dovecot-large-header-fix patch to prevent 100% CPU
     utilization when dealing with really large headers.
     (Closes: #271458)
 
@@ -2209,7 +2215,7 @@ dovecot (0.99.10.6-3) unstable; urgency=low
 
 dovecot (0.99.10.6-2) unstable; urgency=high
 
-  * I needed to enable one more parameter in the configuration in order 
+  * I needed to enable one more parameter in the configuration in order
     to get dot-locking working.  Hence this should still be high urgency.
     (Really Closes: #185335)
 
@@ -2228,7 +2234,7 @@ dovecot (0.99.10.6-1) unstable; urgency=high
 
 dovecot (0.99.10.5-4) unstable; urgency=high
 
-  * Crap, typo in dovecot-common.postinst sorry.  This should only 
+  * Crap, typo in dovecot-common.postinst sorry.  This should only
     affect new installs though.
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 11 Jun 2004 22:30:41 -0400
@@ -2274,7 +2280,7 @@ dovecot (0.99.10.4-4) unstable; urgency=low
 
 dovecot (0.99.10.4-3) unstable; urgency=high
 
-  * dovecot-common: Fix postinst to no longer delete /etc/pam.d/imap 
+  * dovecot-common: Fix postinst to no longer delete /etc/pam.d/imap
     (Closes: #232832)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 15 Mar 2004 10:27:52 -0500
@@ -2292,7 +2298,7 @@ dovecot (0.99.10.4-1) unstable; urgency=low
     + This fixes the curruption of .subscriptions files wth folders in
       maildir format. (Closes: #222272)
   * Some extra information included in dovecot-common.README.Debian.
-    (Closes: #221106)  There should probaly be more so if you have ideas 
+    (Closes: #221106)  There should probaly be more so if you have ideas
     let me know.
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon,  1 Dec 2003 23:41:00 -0500
@@ -2311,7 +2317,7 @@ dovecot (0.99.10-11) unstable; urgency=low
 
 dovecot (0.99.10-10) unstable; urgency=low
 
-  * maildirmake.dovecot will now let you create maildirs whose names 
+  * maildirmake.dovecot will now let you create maildirs whose names
    have spaces in them and chown them to a specified user.  Thanks Paul
    Slootman (Closes: #219168)
 
@@ -2346,15 +2352,15 @@ dovecot (0.99.10-6) unstable; urgency=low
 
 dovecot (0.99.10-5) unstable; urgency=high
 
-  * dovecot-pop3d, dovecot-imapd: make sure init script doesn't 
-    attempt to start the daemons if unconfigured thus preventing 
+  * dovecot-pop3d, dovecot-imapd: make sure init script doesn't
+    attempt to start the daemons if unconfigured thus preventing
     segfault on startup.  (Closes: #206992, #207140)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 25 Aug 2003 16:40:53 -0400
 
 dovecot (0.99.10-4) unstable; urgency=low
 
-  * Updated PAM configuration to the new scheme and added appropriate 
+  * Updated PAM configuration to the new scheme and added appropriate
     dependency.
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 22 Aug 2003 12:54:54 -0400
@@ -2362,8 +2368,8 @@ dovecot (0.99.10-4) unstable; urgency=low
 dovecot (0.99.10-3) unstable; urgency=low
 
   * dovecot-pop3d: Patch for proper PAM service name.
-  * dovecot-imapd, dovecot-pop3d: Make sure there is an appropriate 
-    entry in the protocol = line in /etc/dovecot.conf so the service 
+  * dovecot-imapd, dovecot-pop3d: Make sure there is an appropriate
+    entry in the protocol = line in /etc/dovecot.conf so the service
     will start up without errors. (Closes: #204213)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 21 Aug 2003 13:47:00 -0400
@@ -2387,8 +2393,8 @@ dovecot (0.99.10-2) unstable; urgency=low
 dovecot (0.99.10-1) unstable; urgency=low
 
   * New upstream release.
-  * PAM service name has changed to dovecot (for IMAP and POP3.)  I've included 
-    code to move /etc/pam.d/imap to /etc/pam.d/dovecot but if things suddenly 
+  * PAM service name has changed to dovecot (for IMAP and POP3.)  I've included
+    code to move /etc/pam.d/imap to /etc/pam.d/dovecot but if things suddenly
     stop working, this is the first thing to check.
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Thu, 26 Jun 2003 22:31:07 -0400
@@ -2397,7 +2403,7 @@ dovecot (0.99.10-0.rc2) unstable; urgency=low
 
   * New upstream release.  Fixes broken imaps support.
   * Typo in configure options that broke LDAP support on woody corrected.
-  * Only start /usr/sbin/dovecot if either the IMAP or POP3 servers are 
+  * Only start /usr/sbin/dovecot if either the IMAP or POP3 servers are
     installed. (Closes: #192066)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon, 23 Jun 2003 23:26:04 -0400
@@ -2413,7 +2419,7 @@ dovecot (0.99.9-1) unstable; urgency=low
   * New upstream release.
   * The IMAP and POP3 servers have been split into seperate package so you
     don't have to install both.  There is also a dovecot-common package
-    for the parts they share.  The dovecot package is now a dummy just for 
+    for the parts they share.  The dovecot package is now a dummy just for
     transitioning to this new scheme.  (Closes: #187826)
   * Allow chmod in maildirmake.dovecot to fail gracefully (Closes: #191244)
 
@@ -2449,7 +2455,7 @@ dovecot (0.99.8.1-2) unstable; urgency=low
 
   * Make a seperate check for /etc/ssl/private/imapd.pem in case we don't
     have it. (Closes: #185334)
-  * Move check for dovecot user and creation code to postinsts' configure 
+  * Move check for dovecot user and creation code to postinsts' configure
     phase. (Closes: #185333)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 19 Mar 2003 01:50:10 -0500
@@ -2477,8 +2483,8 @@ dovecot (0.99.7-3) unstable; urgency=low
 
 dovecot (0.99.7-2) unstable; urgency=low
 
-  * Added two upstream patches to fix broken plain authentication and 
-    building with vpopmail support (which is not enabled in the Debian 
+  * Added two upstream patches to fix broken plain authentication and
+    building with vpopmail support (which is not enabled in the Debian
     package yet.)
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Fri, 17 Jan 2003 14:24:22 -0500
