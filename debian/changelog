@@ -1,8 +1,14 @@
-dovecot (1:2.3.2.1-2) UNRELEASED; urgency=medium
+dovecot (1:2.3.3-1) unstable; urgency=medium
 
+  [ Jelmer Vernooĳ ]
   * Trim trailing whitespace.
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Wed, 19 Sep 2018 01:33:42 +0100
+  [ Apollon Oikonomopoulos ]
+  * [6591a99] New upstream version 2.3.3
+  * [3d718ec] Bump Standards-Version to 4.2.1; no changes needed
+  * [123bd32] Update pigeonhole to 0.5.3
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 04 Oct 2018 17:29:40 +0300
 
 dovecot (1:2.3.2.1-1) unstable; urgency=medium
 
