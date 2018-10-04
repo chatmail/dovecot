@@ -12,10 +12,10 @@ prefixes. For example if a userdb typically returns 'uid', 'gid' and 'home'
 fields, the passdb would have to return 'userdb_uid', 'userdb_gid' and
 'userdb_home' fields.
 
-If you're using <LDA.txt>, you still need a valid userdb which can be used to
-locate the users. You can do this by adding a normal SQL/LDAP userdb *after the
-userdb prefetch*. The order of definitions is significant. See below for
-examples.
+If you're using <LDA.txt> or <LMTP.txt>, you still need a valid userdb which
+can be used to locate the users. You can do this by adding a normal SQL/LDAP
+userdb *after the userdb prefetch*. The order of definitions is significant.
+See below for examples.
 
 LDAP: 'auth_bind=yes' with 'auth_bind_userdn'-template is incompatible with
 prefetch, because no passdb lookup is done then. If you want zero LDAP lookups,
@@ -84,4 +84,4 @@ pass_attrs = uid=user, userPassword=password, \
 user_attrs = homeDirectory=home, uidNumber=uid, gidNumber=gid
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

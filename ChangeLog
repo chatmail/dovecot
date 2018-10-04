@@ -1,12 +1,2485 @@
-2018-07-09 10:47:03 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (0719df592)
+2018-10-01 13:36:56 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (dcead646b)
 
-    Released v2.3.2.1.
+    Released v2.3.3.
 
 
 M	NEWS
 M	configure.ac
 
-2018-07-02 11:52:14 +0100 Paul Howarth <paul@city-fan.org> (f7c56d4b1)
+2018-08-23 20:29:58 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (b96be88f9)
+
+    submission: Reorder initialization code
+
+    login_set socket paths get invalidated when master_service_init_finish is
+    called, so we need to run the code that uses them before this.
+
+M	src/submission/main.c
+
+2018-08-23 19:15:50 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (3413ea118)
+
+    lib-smtp: Increase memory pool initial sizes
+
+    This reduces malloc traffic
+
+M	src/lib-http/test-http-client-errors.c
+M	src/lib-smtp/smtp-client-connection.c
+M	src/lib-smtp/smtp-client-transaction.c
+M	src/lib-smtp/smtp-reply-parser.c
+M	src/lib-smtp/smtp-server-command.c
+M	src/lib-smtp/smtp-server-connection.c
+M	src/lib-smtp/smtp-server-transaction.c
+
+2018-06-20 00:22:47 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (999c74680)
+
+    lib-smtp: server: Fix memory leak occurring when an error occurs early for
+    BDAT/BURL.
+
+
+M	src/lib-smtp/smtp-server-cmd-data.c
+M	src/lib-smtp/smtp-server-connection.c
+
+2018-06-20 15:54:21 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (2636474cc)
+
+    lib-smtp: server: connection: Rely on i_stream_destroy(NULL) being a no-op.
+
+
+M	src/lib-smtp/smtp-server-connection.c
+
+2018-06-20 00:31:43 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (d25951928)
+
+    lib-smtp: server: Restructure reference counting of BDAT/BURL chain stream.
+
+    It is now dereferenced directly, rather than via a local variable; thereby 
+    making sure it is reset to NULL.
+
+M	src/lib-smtp/smtp-server-cmd-data.c
+
+2018-06-29 14:37:36 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (0c22bd104)
+
+    director: Fix assert-crash when doveadm disconnects immediately after
+    sending command
+
+    Any command that requires a ring sync should cause the doveadm connection to 
+    wait until the ring is synced. However, if the disconnection happened early 
+    enough the connection is deinitialized before the ring sync is finished.
+
+    Fixes: Panic: file doveadm-connection.c: line 1097
+    (doveadm_connection_deinit): assertion failed: (conn->to_ring_sync_abort ==
+    NULL)
+
+M	src/director/doveadm-connection.c
+
+2018-09-19 11:32:08 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2fbbccc0a)
+
+    director: Add assert to make sure doveadm connection's IO isn't added
+    multiple times
+
+
+M	src/director/doveadm-connection.c
+
+2018-09-07 20:04:48 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ae44bab08)
+
+    doveadm: Make sure to stop running commands requiring synced ring when ring
+    is no longer synced
+
+    A command could desync the ring, and no more commands should be run 
+    afterwards.
+
+    This also fixes a bug where a command that desyncs the ring is supposed to 
+    wait for the ring being synced before returning OK, but returns it 
+    immediately instead.
+
+M	src/director/doveadm-connection.c
+M	src/director/doveadm-connection.h
+M	src/director/main.c
+
+2018-01-03 15:54:15 +0200 Phil Carmody <phil@dovecot.fi> (14e4920d8)
+
+    lib/printf-format-fix: fix rejection of "%.0f" as a valid string
+
+    Sometimes you want to calculate in floats, but don't want the decimals 
+    printed.
+
+    Signed-off-by: Phil Carmody <phil@dovecot.fi>
+
+M	src/lib/printf-format-fix.c
+M	src/lib/test-printf-format-fix.c
+
+2018-09-19 22:26:08 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (8b8464b5d)
+
+    lib-smtp: reply-parser: Fix closing the text_lines array with NULL sentinel.
+
+    For (EHLO) replies with more than 7 lines, the text_lines array of the reply
+    did not end in NULL, causing a segfault.
+
+M	src/lib-smtp/smtp-reply-parser.c
+
+2018-09-20 19:34:33 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (1e1acce32)
+
+    Released v2.3.3.rc1.
+
+
+M	NEWS
+M	configure.ac
+
+2018-09-13 15:30:22 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8561dd773)
+
+    lib: i_zero*() - Give compiler error if it's wrongly used on an array
+
+
+M	src/lib/macros.h
+
+2018-09-13 15:29:45 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (fafbf8400)
+
+    lib-master, auth: Fix clearing memory
+
+    It doesn't look like these being wrong were causing any bugs.
+
+M	src/auth/password-scheme-sodium.c
+M	src/lib-master/master-service-haproxy.c
+
+2018-09-11 15:54:39 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c19068daf)
+
+    doveadm stats dump: Fix potentially not writing all stats output
+
+    It depended on whether uninitialized stack memory was 0 or not.
+
+M	src/doveadm/doveadm-stats.c
+
+2018-08-17 11:34:02 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (313be4a02)
+
+    lib: Mark signal waiting IO as "never wait alone"
+
+    This signal is being automatically moved to nested ioloops. It can't be the 
+    only IO being waited, since there's no code that simply wants to wait for a 
+    signal.
+
+M	src/lib/lib-signals.c
+
+2018-08-17 11:33:17 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (658e58b02)
+
+    lib: ioloop-epoll/kqueue: Remove now unnecessary infinite wait check.
+
+    The previous change adds this globally to io_loop_run_get_wait_time().
+
+M	src/lib/ioloop-epoll.c
+M	src/lib/ioloop-kqueue.c
+
+2018-08-17 11:32:10 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e73415715)
+
+    lib: Add io_set_never_wait_alone()
+
+    If ioloop is run without any timeouts and without IOs that don't have this 
+    flag, assert-crash rather than going to infinite wait.
+
+M	src/lib/ioloop-private.h
+M	src/lib/ioloop.c
+M	src/lib/ioloop.h
+
+2018-08-17 11:29:30 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (16fd1766d)
+
+    lib: Add and use io_loop_run_get_wait_time()
+
+    This is going to be called just before running an ioloop iteration. The next
+    commit improves its behavior.
+
+M	src/lib/ioloop-epoll.c
+M	src/lib/ioloop-kqueue.c
+M	src/lib/ioloop-poll.c
+M	src/lib/ioloop-private.h
+M	src/lib/ioloop-select.c
+M	src/lib/ioloop.c
+
+2018-09-07 10:43:43 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (3ecffb14a)
+
+    lib-storage: Don't try to deserialize bodystructure if we already have it
+
+    Fixes: Panic: file message-part-data.c: line 37
+    (message_part_data_is_plain_7bit): assertion failed: (data != NULL)
+
+M	src/lib-storage/index/index-mail.c
+
+2018-09-06 11:07:22 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (97e8c8279)
+
+    lib-storage: Simplify an assertion condition
+
+    Since the i_assert() is guarded by a check for save_bodystructure_header 
+    being true, the whole condition can be simplified.
+
+M	src/lib-storage/index/index-mail-headers.c
+
+2018-09-06 11:06:17 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (8c87b9417)
+
+    lib-storage: Don't try to process header if we haven't parsed the body
+    structure
+
+    Fixes: Panic: file index-mail-headers.c: line 294 (index_mail_parse_header):
+    assertion failed: (part != NULL)
+
+M	src/lib-storage/index/index-mail-headers.c
+
+2018-08-31 15:06:09 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d54d97c06)
+
+    lib: Move log type to be written before appended log prefix
+
+    This changes the logging format back to how it used to be before the event 
+    logging changes.
+
+M	src/lib/event-log.c
+M	src/lib/lib-event.h
+M	src/lib/test-event-log.c
+
+2018-08-31 15:03:37 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a50f08645)
+
+    lib: Add failure_context.log_prefix_type_pos
+
+    If non-zero, this specifies where the log type (e.g. "Info: ") is written 
+    within the log prefix. By default it's appended.
+
+M	src/lib/failures.c
+M	src/lib/failures.h
+
+2018-08-31 15:01:38 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f69253fd4)
+
+    lib, log: Add log prefix length to internal logging protocol
+
+    This way log process knows which part of the text is the log prefix, and 
+    which part is the logged text.
+
+M	src/lib/failures.c
+M	src/lib/failures.h
+M	src/log/log-connection.c
+
+2018-08-31 14:57:13 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6571120bd)
+
+    log: Move data stack frame allocation to parent function
+
+    This simplifies the next commit, which requires data stack nearly always 
+    when logging. The data stack frames are cheap enough that we don't really 
+    need to optimize for avoiding the cases when they're not needed.
+
+M	src/log/log-connection.c
+
+2018-08-31 14:54:18 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (83a59a536)
+
+    log: Avoid unnecessary global log prefix changes
+
+    If the context specifies a log prefix, the global prefix isn't going to be 
+    used.
+
+M	src/log/log-connection.c
+
+2018-08-31 14:50:52 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (38dade51b)
+
+    lib: failures - Use common log_prefix_add() for default and syslog
+    formatters
+
+
+M	src/lib/failures.c
+
+2018-08-28 12:45:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d0a7f6c69)
+
+    lib: Add unit test for event log prefix handling
+
+    Some of the tests are commented out until they're fixed in a following 
+    commit.
+
+M	src/lib/Makefile.am
+A	src/lib/test-event-log.c
+M	src/lib/test-lib.inc
+
+2018-08-31 14:30:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (da55b6a75)
+
+    lib: failures - Move adding LF from default_format() to default_write()
+
+    This makes it similar to internal_format/write()
+
+M	src/lib/failures.c
+
+2018-08-31 14:21:06 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (7ebce7728)
+
+    lib: Move failure handler structs and typedefs to failures-private.h
+
+    Also change the function typedefs to be non-pointers, like they usually are 
+    in Dovecot code.
+
+M	src/lib/Makefile.am
+A	src/lib/failures-private.h
+M	src/lib/failures.c
+
+2018-08-31 14:19:32 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4576851ee)
+
+    lib: Make failure handler variables static
+
+
+M	src/lib/failures.c
+
+2018-08-31 14:18:34 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (136ecaeb0)
+
+    lib: Rename handler_config variable to failure_handler
+
+    It's a global variable, so it needs to have a proper prefix.
+
+M	src/lib/failures.c
+
+2018-06-14 15:54:03 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (00f94a425)
+
+    lib: Implement vfuncs for logging to stderr
+
+
+M	src/lib/failures.c
+
+2018-06-14 15:49:41 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (723a84238)
+
+    lib: Implement vfuncs for logging to syslog
+
+
+M	src/lib/failures.c
+
+2018-08-05 04:00:17 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (7867f9f33)
+
+    lib: Implement vfuncs for logging to default location and common failure
+    logging handling
+
+
+M	src/lib/failures.c
+
+2018-06-12 15:56:46 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (236276026)
+
+    lib: Introduce abstraction for failure logging implementations.
+
+
+M	src/lib/failures.c
+
+2018-09-03 14:15:07 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (0574f9fa2)
+
+    lib-master: Fix crash when stats events are merged all the way to the root
+
+
+M	src/lib-master/stats-client.c
+
+2018-09-03 13:14:39 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4ae56d07e)
+
+    lib-master: stats_event_get_merged() - Remove unnecessary variable
+    assignment
+
+    Fixes scan-build complaint.
+
+M	src/lib-master/stats-client.c
+
+2018-01-16 12:51:53 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (334f0390b)
+
+    lib-master: stats_event_write use BEGIN only when event and parent_event
+    create timestamps differ
+
+
+M	src/lib-master/stats-client.c
+
+2018-02-26 16:33:19 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (43f458007)
+
+    lib: Add some event handling functions.
+
+    event_has_all_categories() - checks if given event contains all the 
+    categories of an another event. event_has_all_fields() - checks if given
+    event contains all the fields of an another event. event_dup() - duplicates
+    an event. event_copy_categories_fields() - copies all categories and fields
+    from source to dest.
+
+M	src/lib/lib-event.c
+M	src/lib/lib-event.h
+
+2018-09-06 03:40:55 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (97ef926ed)
+
+    lib-http: client: peer: Log the number of pending connections consistently
+    in relevant debug messages.
+
+    Use the same style everywhere and log it where it makes sense.
+
+M	src/lib-http/http-client-peer.c
+
+2018-09-06 03:33:59 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (652724a2a)
+
+    lib-http: client: peer: Maintain a list of connections pending on behalf of
+    a peer.
+
+    Before, pending connections were only listed in the peer pool.
+
+M	src/lib-http/http-client-connection.c
+M	src/lib-http/http-client-peer.c
+M	src/lib-http/http-client-private.h
+
+2018-09-06 03:23:26 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (a5d4658dc)
+
+    lib-http: client: connection: Unlist the connection as pending immediately
+    in http_client_connection_failure().
+
+
+M	src/lib-http/http-client-connection.c
+M	src/lib-http/http-client-peer.c
+
+2018-09-06 01:57:43 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (71120b664)
+
+    lib-http: client: connection: Remove the connection from the peer pool
+    pending list in a separate function.
+
+
+M	src/lib-http/http-client-connection.c
+
+2018-09-06 15:22:30 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (4031ea3f4)
+
+    lib-http: client: peer: Notify all peers in a peer pool about a successful
+    connection.
+
+    This allows peers for which the last connection attempt failed (which was
+    not the last pending attempt in the pool) to try again. This solves a
+    problem that could potentially cause a hang with multiple parallel clients
+    creating serveral new connections at once.
+
+M	src/lib-http/http-client-peer.c
+M	src/lib-http/http-client-private.h
+
+2018-09-06 16:03:58 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (e73699af4)
+
+    lib-http: client: peer: Add debug message for
+    http_client_peer_connection_failure().
+
+
+M	src/lib-http/http-client-peer.c
+
+2018-09-06 15:56:44 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (715338bcc)
+
+    lib-http: client: peer: Clarify debug message in
+    http_client_peer_connection_failed_pool().
+
+
+M	src/lib-http/http-client-peer.c
+
+2018-09-06 15:54:02 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (ab2c55469)
+
+    lib-http: client: peer: Log debug message before calling peer pool in
+    http_client_peer_connection_success().
+
+
+M	src/lib-http/http-client-peer.c
+
+2018-09-06 15:50:36 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (6ce5436ad)
+
+    lib-http: client: peer: Rename http_client_peer_connection_failed_any() to
+    http_client_peer_connection_failed_pool().
+
+
+M	src/lib-http/http-client-peer.c
+
+2018-09-06 03:11:18 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (985cd1ebf)
+
+    lib-http: client: peer: Always run http_client_queue_connection_failure()
+    upon definitive connection failure.
+
+    The recorded peer->connecting flag was highly unreliable in a scenario
+    involving starting parallel connections. This way, the linked queues can
+    update their state accordingly. Also, this will not cause empty queues to
+    initiate new connection, because empty queues will do nothing after updating
+    the connection state.
+
+    This problem caused a client ioloop hang in high-load conditions.
+
+M	src/lib-http/http-client-peer.c
+M	src/lib-http/http-client-private.h
+
+2018-09-06 14:57:28 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (57f8094d6)
+
+    lib-http: client: peer: Move http_client_peer_connection_failure().
+
+
+M	src/lib-http/http-client-peer.c
+
+2018-09-06 03:02:16 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (a8f17f33f)
+
+    lib-http: client: queue: Do not fail claimed requests unless the queue is
+    being destroyed.
+
+    Before, connection failure would also abort requests already being sent on 
+    another connection, which is premature at best.
+
+M	src/lib-http/http-client-queue.c
+
+2018-09-06 02:57:24 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (4675367e9)
+
+    lib-http: client: queue: Fix the number of pending requests listed in
+    http_client_queue_connection_failure() debug message.
+
+
+M	src/lib-http/http-client-queue.c
+
+2018-09-06 02:51:09 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (e8f137bb3)
+
+    lib-http: client: peer: Determine number of pending peers in
+    http_client_peer_shared_connection_failure() itself.
+
+    Before, the number of pending peers was a parameter, but that was only for a 
+    single peer pool. This is wrong, since the one peer can have many different 
+    pools (depending on how many clients with incompatible configs share this 
+    peer).
+
+M	src/lib-http/http-client-peer.c
+
+2018-09-06 14:49:59 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (0a6397833)
+
+    lib-http: client: peer: Notify definitive connection failure only within a
+    peer pool.
+
+    Other peer pools have different configuration, which may actually succeed
+    and will arrive at this point when their own connections fail anyway.
+
+M	src/lib-http/http-client-peer.c
+
+2018-07-24 14:47:47 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (6c7a7b286)
+
+    quota: Mark noenforcing quotas with unlimited quota
+
+    This allows quota to be properly updated for unenforced quotas so they can
+    be used for tracking only.
+
+    This fixes issue where using noenforcing would not update quota during mail
+    save, but requires a manual quota update.
+
+M	src/plugins/quota/quota.c
+
+2018-07-24 14:38:18 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (3eb689841)
+
+    quota: Cleanup - Move enforce checking out of quota_root_visible()
+
+    Non-enforcing quota roots need to be visible even when enforcing quotas, 
+    otherwise we cannot update them.
+
+M	src/plugins/quota/quota.c
+
+2018-08-27 15:06:44 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5bf2f17a1)
+
+    fts: Optimize replacing NULs in header
+
+
+M	src/plugins/fts/fts-build-mail.c
+
+2018-08-23 14:33:59 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4afa42b8e)
+
+    fts: Fix indexing mails with NULs in headers
+
+    After the first NUL all the rest of the string was converted to spaces. This
+    was broken already in the initial commit that attempted to fix this: 
+    4d27f95c76bd008bb38f9c442567046da2b6ce14
+
+M	src/plugins/fts/fts-build-mail.c
+
+2018-08-20 12:51:28 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (17f8c0b8c)
+
+    lib-index: mail_cache_lookup_headers() - Allow using datastack pool
+
+    This fixes assert caused by 53712af0e7f357e7279d9ff03831428aae85aa45: Panic:
+    pool_data_stack_realloc(): stack frame changed
+
+M	src/lib-index/mail-cache-lookup.c
+
+2018-08-17 14:39:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (34d826b4c)
+
+    lib-storage: Fix NUL handling in mail_get_first_header*(),
+    mail_get_headers*()
+
+    These functions return NUL-terminated values, so they got truncated whenever 
+    a header value contained a NUL. Fix this by converting NULs to unicode 
+    replacement characters in the output.
+
+M	src/lib-storage/index/index-mail-headers.c
+
+2018-08-17 14:33:50 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d309654ac)
+
+    lib-mail: Make message_header_strdup() public
+
+    Also move it to a better file.
+
+M	src/lib-mail/message-header-parser.c
+M	src/lib-mail/message-header-parser.h
+M	src/lib-mail/message-part-data.c
+
+2018-08-17 20:16:29 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9f222e06c)
+
+    lib-mail: Cleanup - Rename internal hdr_strdup() to message_header_strdup()
+
+
+M	src/lib-mail/message-part-data.c
+
+2018-08-17 14:12:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5f65ff7bf)
+
+    lib-mail: rfc822-parser - Handle \<NUL> in quoted-string and domain-literal
+
+    It was already handled in comments. Previously this caused the strings and 
+    domain-literals to be truncated at that position.
+
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/test-message-address.c
+
+2018-08-17 13:42:35 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (db9b51176)
+
+    lib-mail: test-message-address - Test NULs in display-name
+
+
+M	src/lib-mail/test-message-address.c
+
+2018-05-04 19:53:27 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c95e5cbdb)
+
+    lib-mail: Change MESSAGE_ADDRESS_PARSE_FLAG_NON_STRICT_DOTS to
+    _FLAG_STRICT_DOTS
+
+    Generally we want it to be enabled everywhere, so it's easier to just enable 
+    it by default.
+
+    (This is kept as a separate commit from the previous one so it'll be easy to 
+    revert this in case we actually don't want this to be the default.)
+
+M	src/lib-mail/message-address.c
+M	src/lib-mail/message-address.h
+M	src/lib-mail/test-message-address.c
+
+2018-05-04 19:49:57 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d103d4f89)
+
+    lib-mail: Add MESSAGE_ADDRESS_PARSE_FLAG_NON_STRICT_DOTS
+
+    This code is somewhat copy&pasted from parse_local_part() in Pigeonhole.
+
+M	src/lib-mail/message-address.c
+M	src/lib-mail/message-address.h
+M	src/lib-mail/test-message-address.c
+
+2018-05-04 19:31:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d4aa3ee9b)
+
+    lib-mail: message_address_parse() - Change fill_missing parameter to flags
+
+    This change allows adding more flags. The API is also backwards compatible 
+    in a way that the old FALSE/TRUE values still map to compatible 0/1 flags.
+
+M	src/doveadm/doveadm-mail-fetch.c
+M	src/lib-lda/mail-deliver.c
+M	src/lib-mail/message-address.c
+M	src/lib-mail/message-address.h
+M	src/lib-mail/message-part-data.c
+M	src/lib-mail/test-message-address.c
+M	src/lib-smtp/smtp-params.c
+M	src/lib-storage/index/index-search.c
+M	src/lib-storage/index/index-sort.c
+M	src/lib-storage/mail-storage-settings.c
+M	src/plugins/fts/fts-build-mail.c
+
+2018-05-04 19:21:52 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b835b4d09)
+
+    lib-mail: Fix rfc822_parse_dot_atom() to reject if dot isn't followed by
+    atom
+
+
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/test-rfc822-parser.c
+
+2018-04-25 14:19:27 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (56a43b7ce)
+
+    lib-mail: Remove MESSAGE_HEADER_REPLACE_NULS_WITH_0x80 flag
+
+    As mentioned in previous commit, 0x80 isn't valid UTF-8 and we shouldn't 
+    encourage using it. This implementation also can't be easily changed to use
+    unicode replacement character without larger changes to istream-nonuls.
+
+    Reverts 95fba2c295bb84639dc64ca5c9f2ccb9edc00ba7.
+
+M	src/lib-mail/message-header-parser.c
+M	src/lib-mail/message-header-parser.h
+
+2018-04-25 14:17:34 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (cb716afd3)
+
+    lib-mail: Change NUL -> 0x80 replacement to use unicode replacement char
+    instead
+
+    Using 0x80 produces invalid UTF-8 output, which we should avoid. Some places 
+    in Dovecot code already requires that input is valid UTF-8, so it's also 
+    safer and easier to use the unicode replacement character.
+
+    Fixes: Panic: file fts-tokenizer-generic.c: line 210
+    (fts_tokenizer_generic_simple_next): assertion failed: (char_size > 0)
+
+M	src/lib-mail/message-part-data.c
+M	src/lib-mail/rfc2231-parser.h
+M	src/lib-mail/rfc822-parser.h
+M	src/lib-mail/test-message-address.c
+M	src/lib-mail/test-rfc2231-parser.c
+
+2018-04-25 14:11:43 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2ed851d65)
+
+    lib-mail: Change rfc822_parser_context.nul_replacement_char to string
+
+
+M	src/lib-mail/message-address.c
+M	src/lib-mail/rfc2231-parser.c
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/rfc822-parser.h
+M	src/lib-mail/test-rfc822-parser.c
+
+2018-04-24 18:01:03 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6b3d0a3c8)
+
+    lib-mail: message_part_*_parse_from_header() - Replace NULs with 0x80
+
+    This avoids truncation of Content-*, Subject, Message-ID, In-Reply-To and 
+    Date headers in IMAP ENVELOPE, BODY and BODYSTRUCTURE replies. Of course, 
+    NULs in headers are violating RFCs already, so the previous behavior wasn't 
+    really wrong either.
+
+M	src/lib-mail/message-part-data.c
+
+2018-04-21 16:21:33 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (0663cd573)
+
+    lib: Mark str_append_n() deprecated
+
+    It was almost always used wrongly. Most of the time str_append_data() should
+    have been used instead. str_append_max() has the old functionality.
+
+M	src/lib/str.h
+
+2018-04-21 16:19:43 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (847a4fe9c)
+
+    lib: Add ATTR_DEPRECATED macro
+
+
+M	src/lib/compat.h
+M	src/lib/macros.h
+
+2018-04-21 16:17:03 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d6afcb8e9)
+
+    global: Replace str_append_n() with str_append_max()
+
+
+M	src/config/doveconf.c
+M	src/doveadm/dsync/dsync-mailbox-tree-sync.c
+M	src/lib/failures.c
+M	src/lib/var-expand.c
+
+2018-04-21 16:07:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6689030b0)
+
+    lib-fts: fts-tokenizer-address - Cleanup NUL handling in parent_data
+
+    The end result is anyway that the token will be truncated at the first NUL. 
+    This change just makes the code a bit more understandable on where the 
+    truncation will happen.
+
+M	src/lib-fts/fts-tokenizer-address.c
+
+2018-04-21 15:44:11 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f37afa6d8)
+
+    lib: str_append_[tab]unescaped(): Don't truncate input at NULs
+
+    For str_append_tabunescaped() the input is supposed to have NULs already 
+    escaped though, so it was truncating only with invalid input.
+
+M	src/lib/strescape.c
+
+2018-04-21 15:24:28 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d396d01f8)
+
+    global: Replace str_append_n() with str_append_data() wherever possible
+
+    It shouldn't be possible for input to have NULs in any of these places. This
+    makes the extra NUL-check in str_append_n() unnecessary.
+
+M	src/auth/auth-cache.c
+M	src/auth/db-dict-cache-key.c
+M	src/auth/db-ldap.c
+M	src/auth/password-scheme-md5crypt.c
+M	src/config/config-parser.c
+M	src/config/doveconf.c
+M	src/lib-dict-backend/dict-ldap.c
+M	src/lib-dict/dict.c
+M	src/lib-fs/fs-posix.c
+M	src/lib-fs/fs-sis.c
+M	src/lib-fts/fts-tokenizer-address.c
+M	src/lib-http/http-auth.c
+M	src/lib-http/http-header-parser.c
+M	src/lib-http/http-parser.c
+M	src/lib-http/http-url.c
+M	src/lib-imap/imap-quote.c
+M	src/lib-imap/imap-url.c
+M	src/lib-imap/imap-utf7.c
+M	src/lib-mail/message-header-parser.c
+M	src/lib-mail/message-snippet.c
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/test-istream-dot.c
+M	src/lib-mail/test-istream-header-filter.c
+M	src/lib-mail/test-istream-qp-decoder.c
+M	src/lib-mail/test-istream-qp-encoder.c
+M	src/lib-mail/test-message-header-parser.c
+M	src/lib-mail/test-message-parser.c
+M	src/lib-settings/settings-parser.c
+M	src/lib-settings/settings.c
+M	src/lib-smtp/smtp-address.c
+M	src/lib-smtp/smtp-parser.c
+M	src/lib-smtp/smtp-reply-parser.c
+M	src/lib-smtp/smtp-server-reply.c
+M	src/lib-smtp/smtp-syntax.c
+M	src/lib-storage/index/index-mail-headers.c
+M	src/lib-storage/index/maildir/maildir-uidlist.c
+M	src/lib-storage/index/mbox/mbox-save.c
+M	src/lib-storage/index/mbox/mbox-sync-parse.c
+M	src/lib-storage/mailbox-attribute.c
+M	src/lib-storage/mailbox-list.c
+M	src/lib-storage/mailbox-tree.c
+M	src/lib/failures.c
+M	src/lib/file-dotlock.c
+M	src/lib/istream.c
+M	src/lib/str-sanitize.c
+M	src/lib/strescape.c
+M	src/lib/test-path-util.c
+M	src/lib/uri-util.c
+M	src/plugins/fts-solr/fts-backend-solr-old.c
+M	src/plugins/fts-solr/fts-backend-solr.c
+
+2018-04-21 16:11:48 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (90a8fad77)
+
+    lib: Add str_append_max()
+
+    It's otherwise the same as str_append_n(), except it takes const char* as 
+    input instead of const void*. This, as well as its name, should make it less
+    likely to be used wrong when the input may legitimately have NULs.
+
+    The unit test is changed from str_append_n() to str_append_max(), because 
+    str_append_n() will be deprecated.
+
+M	src/lib/str.c
+M	src/lib/str.h
+M	src/lib/test-str.c
+
+2018-04-21 16:10:03 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (dbd99e76a)
+
+    lib: Improve str_append_n() comment
+
+
+M	src/lib/str.h
+
+2018-04-11 14:41:45 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (ee1a1f544)
+
+    lib-mail: Add MESSAGE_HEADER_REPLACE_NULS_WITH_0x80 flag
+
+    The flag signals that input stream for message_parse_header() should replace 
+    0x0 symbols with 0x80.
+
+M	src/lib-mail/message-header-parser.c
+M	src/lib-mail/message-header-parser.h
+
+2018-04-21 16:47:16 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4b6bf5290)
+
+    lib-mail: rfc2231_parse() - Replace NULs with 0x80
+
+    Instead of truncating the strings at NULs.
+
+M	src/lib-mail/rfc2231-parser.c
+M	src/lib-mail/rfc2231-parser.h
+M	src/lib-mail/test-rfc2231-parser.c
+
+2018-04-21 16:34:05 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f3139c4b0)
+
+    lib-mail: message_address_parse*() - Replace NULs with 0x80
+
+    Instead of truncating the strings at NULs.
+
+M	src/lib-mail/message-address.c
+M	src/lib-mail/test-message-address.c
+
+2018-04-21 16:27:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4729a2765)
+
+    lib-mail: rfc822-parser: Add nul_replacement_char
+
+
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/rfc822-parser.h
+M	src/lib-mail/test-rfc822-parser.c
+
+2018-04-21 13:46:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (83059eb6f)
+
+    lib-mail: rfc822-parser: Strip away folding whitespace from comments
+
+
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/test-rfc822-parser.c
+
+2018-04-21 13:28:34 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5991d3518)
+
+    lib-mail: rfc822-parser: Improve domain-literal parsing
+
+    Strip away folding whitespace. Treat any extra '[' as an error.
+
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/test-rfc822-parser.c
+
+2018-04-21 13:05:49 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (bf9c2696a)
+
+    lib-mail: rfc822-parser: Don't allow preserving escaped [CR]LF
+
+    It's not valid to have "\<CR>" or "\<LF>", so the old behavior isn't really 
+    wrong either. However, rfc822_parse_quoted_string() callers are more likely 
+    to expect that the output won't contain any [CR]LF so this new behavior is a
+    bit better.
+
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/test-rfc822-parser.c
+
+2018-04-21 12:47:22 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (43d38f423)
+
+    lib-mail: Change rfc822_parse_content_param() API to allow NULs in value
+
+    This was the only function in rfc822-parser.h that wasn't NUL-safe. This
+    won't fix anything, but it makes the rfc822-parser.h API fully consistent
+    with the NUL handling.
+
+    Normally rfc2231_parse() should be called instead of calling 
+    rfc822_parse_content_param() directly, so this shouldn't break any plugins.
+
+M	src/lib-mail/rfc2231-parser.c
+M	src/lib-mail/rfc822-parser.c
+M	src/lib-mail/rfc822-parser.h
+M	src/lib-mail/test-rfc822-parser.c
+
+2018-04-21 16:05:16 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6285cce30)
+
+    fts-squat: Fix truncating headers at NULs while indexing
+
+
+M	src/plugins/fts-squat/fts-backend-squat.c
+
+2018-04-21 16:03:42 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d1e71fadb)
+
+    login-common: Consistently truncate client SASL input at first NUL
+
+    The input is supposed to be base64-encoded, so there's no need to support 
+    actual NUL characters. The previous code truncated at NULs, but could have 
+    kept appending more data to the value. This could have produced somewhat 
+    random results.
+
+M	src/login-common/client-common-auth.c
+
+2018-04-21 15:58:15 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (217c2c091)
+
+    lib-master, util: Consistently truncate tabescaped input at the first NUL
+
+    The NULs are supposed to come tab-escaped, so there's no need to support 
+    actual NUL characters. The previous code truncated at NULs, but could have
+    kept appending more data to the value. This could have produced somewhat
+    random results.
+
+M	src/lib-master/master-login.c
+M	src/util/script-login.c
+
+2018-04-21 15:53:42 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (505a449db)
+
+    config: Consistently truncate value at the first NUL in value input file
+
+    When value contained "<file", the file was added as a value. The setting 
+    values don't currently support NULs, so the value gets truncated at the 
+    first NUL. However, the previous code could have appended more data to the
+    value. This could have produced somewhat confusing results.
+
+M	src/config/config-parser.c
+
+2018-04-21 15:50:08 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (92836cfe2)
+
+    dict-fs/memcached-ascii/redis: Consistently truncate value at NULs
+
+    The dict API currently doesn't support NULs in values, so they have to be 
+    truncated. However, previously they were truncated at NULs, but more data 
+    may have still been appended to the value. This could have produced somewhat
+    random results.
+
+M	src/lib-dict-extra/dict-fs.c
+M	src/lib-dict/dict-memcached-ascii.c
+M	src/lib-dict/dict-redis.c
+
+2018-04-21 15:47:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (aa40bd118)
+
+    auth: checkpassword - Fail if input from script contains NULs
+
+    Previously the input was just silently truncated at NULs.
+
+M	src/auth/db-checkpassword.c
+
+2018-04-21 15:42:53 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (7f94502ce)
+
+    doveadm: Fix table printer to not truncate output at NULs
+
+
+M	src/doveadm/doveadm-print-table.c
+
+2018-04-21 15:41:44 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f9775668e)
+
+    doveadm dump: Don't truncate dovecot.index.cache values at NULs
+
+
+M	src/doveadm/doveadm-dump-index.c
+
+2018-04-21 14:56:43 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (064750966)
+
+    lib-mail: rfc822-parser: Don't truncate comment/quoted-string/domain-literal
+    at NUL
+
+    The other tokens couldn't have contained NULs in the first place.
+
+M	src/lib-mail/rfc822-parser.c
+
+2018-04-21 14:53:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (163d14ed0)
+
+    lib-mail: message_snippet_generate() - Ignore NULs without shrinking snippet
+    size
+
+    Previously the NULs also weren't in the snippet content, but they were 
+    included in the snippet size.
+
+M	src/lib-mail/message-snippet.c
+M	src/lib-mail/test-message-snippet.c
+
+2018-04-21 14:31:08 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f39f0a198)
+
+    lib-storage: Fix truncating header values at NUL when adding to cache
+
+    For example FETCH BODY.PEEK[HEADER.FIELDS (Subject)] could have returned the
+    NUL on the first fetch when the mail wasn't in dovecot.index.cache, but the
+    second FETCH would have returned it truncated at the NUL.
+
+M	src/lib-storage/index/index-mail-headers.c
+
+2018-05-27 15:42:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (600d85e35)
+
+    lib: Fix filtering by event name in log_core_filter
+
+    event->sending_name was already cleared by the time it was checked, so any 
+    event:* filters never matched.
+
+M	src/lib/event-log.c
+
+2018-08-20 18:07:30 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (21c899aaf)
+
+    master: Wait 1 second for SIGQUITs to get handled
+
+    The delay (previously 100ms, now 1s) is intended to delay our exit enough so 
+    that the child processes have a chance to receive & handle the SIGQUITs we 
+    just sent.  If we don't wait long enough, it is possible that we'll get 
+    restarted before our children had the chance to stop listening on their 
+    sockets and we'll hit "address already in use" type errors.
+
+    Increasing the delay does not fix the issue, but it masks it better.
+
+M	src/master/service-monitor.c
+
+2018-05-18 17:04:36 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6919d08d7)
+
+    *-login: Fix non-global ssl=no configuration
+
+    For example local 127.0.0.2 { ssl=no } wasn't working.
+
+M	src/login-common/client-common.c
+
+2018-06-28 11:51:22 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (1022c021c)
+
+    dict-file: If write failed, file was left locked
+
+
+M	src/lib-dict/dict-file.c
+
+2018-06-28 11:50:36 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b1e1da29a)
+
+    dict-file: Fix memory leak when file is recreated during lock wait
+
+
+M	src/lib-dict/dict-file.c
+
+2018-06-27 18:28:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a5291c276)
+
+    lda: Deinitialize cleanly if user doesn't exist in userdb
+
+
+M	src/lda/main.c
+
+2018-06-27 18:24:06 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5b4790122)
+
+    lda: Deinitialize cleanly if mail delivery fails
+
+
+M	src/lda/main.c
+
+2018-06-27 18:22:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d628a0f9c)
+
+    lda: Cleanup - move code to lda_deliver() function
+
+    No functional changes.
+
+M	src/lda/main.c
+
+2018-06-27 18:17:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b26ecb24d)
+
+    lda: Cleanup - reorder code
+
+    Makes the next commit cleaner.
+
+M	src/lda/main.c
+
+2018-06-27 13:22:03 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (613c46b98)
+
+    lib-storage: Fix memory leak in mail_storage_set_internal_error()
+
+
+M	src/lib-storage/mail-storage.c
+
+2018-06-19 17:42:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (087bcbb43)
+
+    lib: Fix memory leak at deinit if log_core_filter is set
+
+
+M	src/lib/lib-event.c
+
+2018-06-13 20:09:32 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (cb3e7b8ea)
+
+    doveadm dump: Fix dumping "vsize" header in dovecot.index
+
+    It was trying to print it as the "vsize" header in dovecot.list.index. This
+    caused confusing output, as well as potentially accessing memory out of
+    bounds.
+
+M	src/doveadm/doveadm-dump-index.c
+
+2018-06-13 20:08:08 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (818791b1d)
+
+    doveadm log find: Fix memory leak
+
+
+M	src/doveadm/doveadm-log.c
+
+2018-06-13 20:07:52 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d8bf63494)
+
+    doveadm user: Fix memory leak
+
+
+M	src/doveadm/doveadm-auth.c
+
+2018-06-13 20:07:28 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6799c8677)
+
+    dsync: Fix memory leak - unreference iostreams at deinit
+
+    Only some of the code paths need unreferencing, so also add a reference to 
+    the other code paths.
+
+M	src/doveadm/doveadm-dsync.c
+
+2018-06-13 20:06:11 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9705af1fa)
+
+    dsync: ibc - reference iostreams internally
+
+    This makes it clearer who needs to reference and unreference the streams.
+
+M	src/doveadm/doveadm-dsync.c
+M	src/doveadm/dsync/dsync-ibc-stream.c
+
+2018-06-13 00:58:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4f290b892)
+
+    lib-master: Allow calling master_service_deinit() without _init_finish()
+
+
+M	src/lib-master/master-service-private.h
+M	src/lib-master/master-service.c
+
+2018-06-12 22:05:52 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (af212405a)
+
+    lib: restrict-access: Free chroot_dir at deinit
+
+
+M	src/lib/lib.c
+M	src/lib/restrict-access.c
+M	src/lib/restrict-access.h
+
+2018-06-12 22:05:35 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e7dd8e44d)
+
+    lib: Free global_event_stack array at deinit
+
+
+M	src/lib/lib-event.c
+
+2018-06-12 18:01:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (0449b581e)
+
+    virtual: Fix memory leak when selecting mailboxes with '-' or /metadata
+
+
+M	src/plugins/virtual/virtual-config.c
+
+2018-06-12 17:23:35 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (035b9c3ab)
+
+    mail-crypt-acl: Fix memory leak when updating ACLs
+
+
+M	src/plugins/mail-crypt/mail-crypt-acl-plugin.c
+
+2018-06-12 17:08:04 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8cbc2c1c1)
+
+    lib-dcrypt, mail-crypt: Fix leaking memory when using non-global keys
+
+    The users' private keys had one reference too much. Because of key cache, 
+    most likely the keys were leaked only once at deinit.
+
+    Changed the i_stream_create_decrypt_callback() API so that it allows the 
+    callback to create the key itself without having to store it anywhere.
+
+    In this case the key was already added to cache, which increased its 
+    refcount. So an alternative fix would have been to simply unreferenced the 
+    key before returning it. It's a bit ugly though to rely on such caches, 
+    since without the cache the code would be buggy.
+
+M	src/lib-dcrypt/istream-decrypt.c
+M	src/lib-dcrypt/istream-decrypt.h
+M	src/plugins/mail-crypt/fs-crypt-common.c
+M	src/plugins/mail-crypt/mail-crypt-plugin.c
+
+2018-06-12 16:56:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d5dccffc2)
+
+    mail-crypt: Fix memory leak in "doveadm mailbox cryptokey generate"
+
+
+M	src/plugins/mail-crypt/doveadm-mail-crypt.c
+
+2018-06-12 16:49:36 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (bb813051d)
+
+    lib-smtp: server: Fix memory leak when handling BDAT command
+
+
+M	src/lib-smtp/smtp-command-parser.c
+
+2018-06-12 16:45:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (413dfa5b4)
+
+    imapc: Fix leaking memory when sending imapc commands after authentication
+    failure
+
+
+M	src/lib-storage/index/imapc/imapc-list.c
+M	src/lib-storage/index/imapc/imapc-storage.c
+M	src/lib-storage/index/imapc/imapc-storage.h
+M	src/plugins/quota/quota-imapc.c
+
+2018-08-06 11:34:35 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (efdd30284)
+
+    lib: test-strfuncs - Rename test i_strbegins to str_begins
+
+    Matches the real name
+
+M	src/lib/test-strfuncs.c
+
+2018-08-06 11:36:41 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (9fde31dee)
+
+    doveconf: Fix compiler nit
+
+    Ensure secret_r cannot be NULL unless none was found.
+
+M	src/config/doveconf.c
+
+2018-08-14 15:25:40 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (d79f6b110)
+
+    doveconf: Improve secret hiding
+
+    Hide with more wide filtering.
+
+M	src/config/doveconf.c
+
+2018-08-14 15:24:56 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (bf11f4dc3)
+
+    doveconf: Use key_ends_with to compare suffixes
+
+    Fixes key hiding.
+
+    Broken in 1518e085
+
+M	src/config/doveconf.c
+
+2018-08-01 08:47:34 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (5bd69c6e2)
+
+    doveconf: Do not skip over secrets when hiding them
+
+    All candidates for hiding need to be considered, otherwise it might skip
+    over some of them and leave them unhidden.
+
+M	src/config/doveconf.c
+
+2018-05-30 14:10:41 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (57d83da4f)
+
+    doveconf: Hide URL userpart
+
+
+M	src/config/doveconf.c
+
+2018-06-19 14:26:29 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (20f3be300)
+
+    doveconf: Add find_next_secret
+
+    Find start of possible next secret, and return what the found secret was.
+    Makes next commit easier.
+
+M	src/config/doveconf.c
+
+2018-05-09 10:19:02 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (86294b107)
+
+    config: Fix crash in doveconf -n when hiding sensitive information
+
+    Broken by fc02343f
+
+M	src/config/doveconf.c
+
+2018-05-09 10:18:39 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (4a45ccea7)
+
+    lib: Add str_append_escaped and use it with str_escape
+
+
+M	src/lib/strescape.c
+M	src/lib/strescape.h
+
+2018-04-12 16:07:31 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9ea342b7b)
+
+    doveconf: Fix infinite loop when hiding sensitive information
+
+    For example with "nopassword=y". Broken in 
+    fc02343fd81a6fab272ac0366b15fc60ec44a8b6
+
+M	src/config/doveconf.c
+
+2018-03-12 09:11:53 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (18b3f83be)
+
+    config: Hide more sensitive information
+
+    Hide parts of values where we can see a key that has word key, secret or
+    pass as prefix and is a key-value pair separated by =.
+
+M	src/config/doveconf.c
+
+2018-03-12 09:11:14 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (0225967c0)
+
+    config: Move sensitive value hiding to own function
+
+    Simplifies next change
+
+M	src/config/doveconf.c
+
+2018-03-10 18:20:32 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (b27489cd8)
+
+    lib: Add str_nescape
+
+    For partial escaping
+
+M	src/lib/strescape.c
+M	src/lib/strescape.h
+M	src/lib/test-strescape.c
+
+2018-03-10 17:56:33 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (df48e6a8d)
+
+    lib: Add i_strstr_arr for searching string for multiple needles
+
+
+M	src/lib/strfuncs.c
+M	src/lib/strfuncs.h
+
+2018-03-09 17:09:28 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (6a4d482e5)
+
+    man: doveconf - Document -P flag
+
+
+M	doc/man/doveconf.1.in
+
+2018-05-28 10:32:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2e1f46151)
+
+    imap: Fix assert-crash when client is disconnected during a long COPY/MOVE
+
+    Similar fix than 481992bfe2740bdec70fcd7366dea50ed9128966
+
+    Fixes: Panic: file cmd-copy.c: line 50 (fetch_and_copy): assertion failed:
+    (o_stream_is_corked(client->output))
+
+M	src/imap/cmd-copy.c
+
+2017-12-15 00:44:51 +0200 Phil Carmody <phil@dovecot.fi> (08d35272c)
+
+    lib/data-stack  - in panic scenarios, use the panic memory buffer
+
+    Signed-off-by: Phil Carmody <phil@dovecot.fi>
+
+M	src/lib/data-stack.c
+
+2017-12-15 00:35:39 +0200 Phil Carmody <phil@dovecot.fi> (a58d5b080)
+
+    lib/datastack - remove useless thing
+
+    It was useless.
+
+    Signed-off-by: Phil Carmody <phil@dovecot.fi>
+
+M	src/lib/data-stack.c
+
+2016-07-21 08:32:52 -0600 Timo Sirainen <timo.sirainen@dovecot.fi> (fea6c3e11)
+
+    lib-storage: Deduplicate headers in struct mailbox_header_lookup_ctx
+
+    This might slightly improve performance.
+
+M	src/lib-storage/mailbox-header.c
+
+2018-07-31 17:40:08 -0600 Michael M Slusarz <michael.slusarz@dovecot.fi> (bcd48b208)
+
+    man: Add missing commands to doveadm
+
+
+M	doc/man/doveadm.1.in
+
+2018-06-30 10:13:10 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (47418f3ab)
+
+    global: Start relying on event_set_forced_debug(e, FALSE) being a no-op
+
+    Converted using the following semantic patch:
+
+    	@@
+    expression event;
+    expression cond;
+    @@
+
+    	- if (cond) {
+    - 	event_set_forced_debug(event,
+    (
+    - TRUE
+    |
+    - cond
+    )
+    - );
+    - }
+    + event_set_forced_debug(event, cond);
+
+M	src/auth/auth-client-connection.c
+M	src/auth/auth-request.c
+M	src/auth/auth.c
+M	src/imap-urlauth/imap-urlauth-client.c
+M	src/lib-http/http-client-request.c
+M	src/lib-http/http-client.c
+M	src/lib-storage/mail-storage-service.c
+M	src/login-common/main.c
+
+2018-06-30 10:08:27 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (c5dc248e7)
+
+    lib: Change event_set_forced_debug(e, FALSE) to be a no-op
+
+
+M	src/lib/event-log.c
+M	src/lib/event-log.h
+
+2018-06-30 10:06:04 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (ff4ab7caa)
+
+    lib: Add event_unset_forced_debug()
+
+
+M	src/lib/event-log.c
+M	src/lib/event-log.h
+
+2018-06-27 17:16:24 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (48e3a1954)
+
+    lib-storage: Initialize reset_id in index_index_copy_cache
+
+    Makes valgrind happy with clang's optimizations.
+
+M	src/lib-storage/index/index-rebuild.c
+
+2018-06-20 10:49:46 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d03413efb)
+
+    lmtp, submission: Remove extra spaces from "state = X" in disconnect log
+    line
+
+    Other Dovecot log messages don't have spaces in key=value.
+
+M	src/lmtp/client.c
+M	src/submission/submission-client.c
+
+2018-06-11 14:22:38 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (944e0e801)
+
+    doveadm-dict: Initialize set variable in cmd_dict_init
+
+    Makes valgrind happy with clang's optimizations
+
+M	src/doveadm/doveadm-dict.c
+
+2018-06-11 14:06:20 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (1b34e02e1)
+
+    doveadm-dict: Remove spurious `key =` debug logging
+
+    Was added in 42db3821
+
+M	src/doveadm/doveadm-dict.c
+
+2018-07-31 12:40:28 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ee194004b)
+
+    lib-dict-backend: Fix linking order for test-dict-sql
+
+
+M	src/lib-dict-backend/Makefile.am
+
+2018-05-25 14:44:10 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d82d80113)
+
+    lib-dict-backend: Fix building --with-cdb --without-shared-libs
+
+
+M	src/lib-dict-backend/Makefile.am
+
+2018-05-22 10:24:33 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (241cee9c8)
+
+    log: Fix the default prefix
+
+    "listen_fd(123): foo" is better than "listen_fd 14foo"
+
+M	src/log/log-connection.c
+
+2018-05-20 15:56:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (fcc1bf46f)
+
+    lib-index: fsck: Fix small log offsets to file's correct header size
+
+    Use the file's actual current header size, not 
+    MAIL_TRANSACTION_LOG_HEADER_MIN_SIZE, which is nowadays smaller. This 
+    resulted in unnecessary errors like:
+
+    Corrupted transaction log file ...: Invalid min_file_offset: ...,
+    min_file_offset (24) < hdr_size (40)
+
+M	src/lib-index/mail-index-fsck.c
+
+2018-05-20 15:55:03 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (79168d056)
+
+    lib-index: fsck: Don't change log_file_tail_offset=0
+
+
+M	src/lib-index/mail-index-fsck.c
+
+2018-04-22 13:11:16 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d54b20562)
+
+    imap-hibernate: Log error when connect(imap-master) fails
+
+    It was previously logged only with info-level.
+
+M	src/imap-hibernate/imap-client.c
+
+2018-05-21 01:30:36 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a098ab8f9)
+
+    lib-index: Remove #if'ed out code
+
+    Originally added by 0b2d4626c6fb4e40bc81c56d8227191f3c7e1ea3. Possibly 
+    accidentally.
+
+M	src/lib-index/mail-index-sync-ext.c
+
+2018-06-28 00:34:14 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (9fbab16a9)
+
+    indexer: Don't log error when getting path to nonexistent mailbox fails
+
+
+M	src/indexer/master-connection.c
+
+2018-06-28 00:05:26 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (cf471fd4d)
+
+    indexer: Don't log mailbox was deleted under us error
+
+
+M	src/indexer/master-connection.c
+
+2018-06-27 23:58:11 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (43d1451ed)
+
+    indexer: Don't log error when mailbox was not found
+
+
+M	src/indexer/master-connection.c
+
+2018-06-27 17:19:38 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (cc92bce8d)
+
+    fts-solr: Properly URL encode quotes for empty string
+
+    Invalid URL encoding of empty string made Solr server give 400 Bad Request
+    HTTP responses for searches like SEARCH HEADER FROM "".
+
+M	src/plugins/fts-solr/fts-backend-solr.c
+
+2018-06-27 17:27:15 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (280c8a52b)
+
+    fts-solr: Fix default_ns parameter parsing
+
+    This version makes it possible to specify a value to the setting as well.
+
+M	src/plugins/fts-solr/fts-solr-plugin.c
+
+2018-06-26 12:38:50 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (ec4592e61)
+
+    fts-solr: Append '/' to URL path when missing in configuration
+
+    This fixes a crash when url parameter has empty path like 
+    http://localhost:8080 instead of http://localhost:8080/ and makes using url
+    like http://localhost:8080/solr behave the same as 
+    http://localhost:8080/solr/
+
+M	src/plugins/fts-solr/solr-connection.c
+
+2018-07-31 08:45:29 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (f88610824)
+
+    lib-master: Copy ssl_curve_list setting
+
+    Otherwise it won't get used.
+
+    Broken in 30dca95419
+
+M	src/lib-master/master-service-ssl-settings.c
+
+2018-07-31 12:26:35 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (b9cf3d7cc)
+
+    lib-ssl-iostream: Remove unused DH members
+
+    These are not being used anywhere.
+
+M	src/lib-ssl-iostream/iostream-openssl.h
+
+2018-07-30 20:26:19 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (a43b54fe9)
+
+    lib-ssl-iostream: Make DH parameters optional
+
+    Since a lot of connections use elliptic curve Diffie-Hellman these days,
+    make it possible to use dovecot without providing Diffie-Hellman parameters.
+    This reduces setup cost as the parameters do not need to be generated, which 
+    can be a time consuming task.
+
+M	src/lib-master/master-service-ssl-settings.c
+M	src/lib-ssl-iostream/iostream-openssl-context.c
+
+2018-07-09 11:39:59 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (920369da7)
+
+    m4, quota: Support rquota using libtirpc
+
+
+M	m4/quota.m4
+M	src/plugins/quota/Makefile.am
+
+2018-07-09 11:33:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (75a4b80f7)
+
+    m4: Enable rquota only if rpc/rpc.h exists
+
+    It's been removed in glibc 2.26
+
+M	m4/quota.m4
+
+2018-06-27 09:10:39 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (4b13e3ead)
+
+    lib-ssl-iostream: Turn on SSL_OP_SINGLE_DH_USE
+
+    Improves forward secrecy in case a DH cipher is used.
+
+M	src/lib-ssl-iostream/iostream-openssl-context.c
+
+2018-06-13 17:26:57 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b25ab36ca)
+
+    lib: Assert-crash if duplicate event categories are tried to be registered
+
+
+M	src/lib/lib-event.c
+
+2018-06-21 22:55:50 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (31ab72c49)
+
+    lib-smtp: server: data command: Hold a reference to the connection while
+    handling input.
+
+    Makes sure connection object remains available while command is handled.
+    Fixes a valgrind error reported for accessing the connection object after it
+    is freed, which happens for the destroy debug message of the command (even
+    when debugging is not enabled).
+
+M	src/lib-smtp/smtp-server-cmd-data.c
+
+2018-06-21 22:51:26 +0200 Stephan Bosch <stephan.bosch@dovecot.fi> (eff8c5ebf)
+
+    lib-smtp: server: data command: Dereference command at single place during
+    input handling.
+
+
+M	src/lib-smtp/smtp-server-cmd-data.c
+
+2018-06-26 13:18:20 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (5a460b7ee)
+
+    lib-storage: Turn on debug early if MAIL_STORAGE_SERVICE_FLAG_DEBUG set
+
+
+M	src/lib-storage/mail-storage-service.c
+
+2018-06-26 13:22:20 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (08b76654d)
+
+    lib-storage: Use provided flags in mail_storage_service_first_init
+
+
+M	src/lib-storage/mail-storage-service.c
+
+2018-06-26 13:18:00 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (d87ce31b6)
+
+    lib-storage: Fix MAIL_STORAGE_SERVICE_FLAG_DEBUG work again
+
+
+M	src/lib-storage/mail-storage-service.c
+
+2018-05-23 14:39:44 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (d3afdadc8)
+
+    auth: pass overriden auth_debug setting to auth process
+
+
+M	src/auth/auth-request.c
+
+2018-03-20 11:22:43 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (b1a34a6d4)
+
+    lib-storage: Replace "if(mail_debug)" with "if(event_want_debug_log)"
+
+
+M	src/lib-storage/list/subscription-file.c
+M	src/lib-storage/mail-storage.c
+
+2018-03-20 11:20:44 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (f4922ff56)
+
+    plugins: replace "if(mail_debug){i_debug}" with "e_debug"
+
+
+M	src/plugins/acl/acl-backend.c
+M	src/plugins/acl/acl-lookup-dict.c
+M	src/plugins/acl/acl-mailbox-list.c
+M	src/plugins/acl/acl-storage.c
+M	src/plugins/apparmor/apparmor-plugin.c
+M	src/plugins/charset-alias/charset-alias-plugin.c
+M	src/plugins/expire/expire-plugin.c
+M	src/plugins/fts/fts-parser-tika.c
+M	src/plugins/fts/fts-storage.c
+M	src/plugins/lazy-expunge/lazy-expunge-plugin.c
+M	src/plugins/mail-crypt/mail-crypt-plugin.c
+M	src/plugins/mail-crypt/mail-crypt-userenv.c
+M	src/plugins/mail-filter/mail-filter-plugin.c
+M	src/plugins/notify-status/notify-status-plugin.c
+M	src/plugins/pop3-migration/pop3-migration-plugin.c
+M	src/plugins/push-notification/push-notification-drivers.c
+M	src/plugins/quota-clone/quota-clone-plugin.c
+M	src/plugins/quota/quota-storage.c
+M	src/plugins/replication/replication-plugin.c
+M	src/plugins/trash/trash-plugin.c
+M	src/plugins/virtual/virtual-storage.c
+M	src/plugins/welcome/welcome-plugin.c
+
+2018-03-20 11:05:13 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (1fa6289e1)
+
+    lib-storage: Replace "if(mail_debug){i_debug}" "e_debug"
+
+
+M	src/lib-storage/index/index-mail.c
+M	src/lib-storage/index/index-status.c
+M	src/lib-storage/index/index-storage.c
+M	src/lib-storage/index/mbox/mbox-storage.c
+M	src/lib-storage/index/shared/shared-storage.c
+M	src/lib-storage/mail-namespace.c
+M	src/lib-storage/mail-storage-service.c
+M	src/lib-storage/mail-storage.c
+M	src/lib-storage/mailbox-list.c
+
+2018-05-24 15:18:30 +0300 Sergey Kitov <sergey.kitov@open-xchange.com> (4b2389fa1)
+
+    lib-storage: Force mail_storage_service_user event debug when mail_debug=yes
+
+
+M	src/lib-storage/mail-storage-service.c
+
+2018-03-20 10:51:21 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (4bf907ebf)
+
+    lda & lib-lda: "if(mail_debug){i_debug}" with "e_debug"
+
+
+M	src/lda/main.c
+M	src/lib-lda/mail-send.c
+
+2018-03-20 10:49:08 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (92b4d9440)
+
+    indexer: Replace "if(mail_debug){i_debug}" with "e_debug"
+
+
+M	src/indexer/master-connection.c
+
+2018-03-20 10:46:19 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (79ecdaea8)
+
+    imap: Replace "if(mail_debug){i_debug}" with "e_debug"
+
+
+M	src/imap/cmd-urlfetch.c
+M	src/imap/imap-client-hibernate.c
+M	src/imap/imap-master-client.c
+M	src/imap/imap-state.c
+
+2018-03-20 10:17:27 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (aef4bf628)
+
+    lib-imap-urlauth & imap-urlauth: replace "if(mail_debug){i_debug}" with
+    "e_debug(client->event)"
+
+
+M	src/imap-urlauth/imap-urlauth-client.c
+M	src/lib-imap-urlauth/imap-urlauth-backend.c
+M	src/lib-imap-urlauth/imap-urlauth-connection.c
+M	src/lib-imap-urlauth/imap-urlauth-fetch.c
+
+2018-03-20 09:52:38 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (9db0b7b12)
+
+    imap-urlauth: Add event with "imap-urlauth" category to struct client of
+    imap-urlauth
+
+
+M	src/imap-urlauth/imap-urlauth-client.c
+M	src/imap-urlauth/imap-urlauth-client.h
+
+2018-03-20 09:05:26 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (b103d44fc)
+
+    global: Replace check for auth_debug with event_want_debug_log in
+    doveadm-auth::auth_connected()
+
+    These functions will create event with "auth" category and unref it in the
+    end.
+
+M	src/doveadm/doveadm-auth.c
+
+2018-03-19 16:10:49 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (aa509b955)
+
+    global: Replace "if(auth_debug){i_debug(...)}" with e_debug(event, ...)
+
+    event is one of: global auth::auth_event, auth_client_connection->event,
+    auth_request->event, login-common::event_auth. These event have category
+    "auth".
+
+M	src/auth/auth-client-connection.c
+M	src/auth/auth-master-connection.c
+M	src/auth/auth-postfix-connection.c
+M	src/auth/auth-request.c
+M	src/auth/auth-token.c
+M	src/auth/userdb-ldap.c
+M	src/login-common/client-common-auth.c
+
+2018-03-19 14:50:31 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (c0c8e87ff)
+
+    global: Remove unnecessary checks for mail_debug and auth_request->debug
+
+    These checks are performed before calling auth_request_log_debug() and 
+    push_notification_driver_debug(), while the same checks are performed inside
+    of these functions, and they return without doing anything.
+
+M	src/auth/db-oauth2.c
+M	src/auth/userdb-prefetch.c
+M	src/plugins/push-notification/push-notification-driver-ox.c
+
+2018-03-19 13:53:33 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (3bbc48ee8)
+
+    auth: Add event with category "auth" to struct auth_request.
+
+
+M	src/auth/auth-request-handler.c
+M	src/auth/auth-request.c
+M	src/auth/auth-request.h
+
+2018-03-19 12:16:23 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (b2f113588)
+
+    auth: Add event with category "auth" to struct auth_client_connection.
+
+
+M	src/auth/auth-client-connection.c
+M	src/auth/auth-client-connection.h
+
+2018-03-19 11:44:59 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (c903a54fb)
+
+    login-common: Add global event_auth with "auth" category.
+
+
+M	src/login-common/login-common.h
+M	src/login-common/main.c
+
+2018-03-19 11:20:58 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (c99dc72e2)
+
+    lib: Add event_want_debug and event_want_debug_log macros
+
+
+M	src/lib/event-log.c
+M	src/lib/event-log.h
+
+2018-03-19 11:14:22 +0200 Sergey Kitov <sergey.kitov@open-xchange.com> (39f0972a3)
+
+    auth: Add global auth_event with category "auth".
+
+
+M	src/auth/auth-common.h
+M	src/auth/auth.c
+
+2018-05-24 21:43:42 -0600 Michael Slusarz <michael.slusarz@dovecot.fi> (516d9657a)
+
+    push-notification: Add SSL support for OX driver
+
+
+M	src/plugins/push-notification/Makefile.am
+M	src/plugins/push-notification/push-notification-driver-ox.c
+
+2018-07-31 16:32:48 -0600 Michael M Slusarz <michael.slusarz@dovecot.fi> (4d4b1f2a8)
+
+    config: generation of clean config should copy sensitive data
+
+    Add -P parameter to the CLI warning doveconf example
+
+M	src/config/old-set-parser.c
+
+2018-05-11 09:19:21 +0300 Phil Carmody <phil@dovecot.fi> (899807f46)
+
+    lib: bits - macros to simplify expressions when using -Wstrict-bool
+
+    To be strict-bool compliant, your expressions need to be a bit verbose, 
+    these might simplify things.
+
+    There are presently over 400 instances matching HAS_NO_BITS(), and nearly 
+    1300 instances matching HAS_ANY_BITS(), so it's a very common pattern.
+
+    Signed-off-by: Phil Carmody <phil@dovecot.fi>
+
+M	src/lib/bits.h
+M	src/lib/test-bits.c
+
+2018-05-11 10:53:46 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (6bda3e3fa)
+
+    lib-storage: Harden check for imapdir list name
+
+    Comparing char pointers to determine string equality is asking for trouble. 
+    Use strcmp() instead.
+
+M	src/lib-storage/list/mailbox-list-maildir.c
+
+2018-05-11 10:41:01 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (3c6030bfc)
+
+    auth: Use PRIuUOFF_t to print process VSZ limit
+
+    This doesn't change the behavior, but it makes it more obviously correct.
+
+M	src/auth/passdb-cache.c
+
+2018-05-11 10:38:32 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (c9bda0efc)
+
+    auth: Avoid comparison of ints of different signs on FreeBSD
+
+    For legacy reasons, rlim_t on FreeBSD is defined as int64_t.
+
+M	src/auth/passdb-cache.c
+
+2018-05-11 10:50:16 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (3b117f83f)
+
+    lib-storage: Return correct root path for PATH_TYPE_ALT_MAILBOX
+
+    mailbox_list_set_get_root_path(..., MAILBOX_LIST_PATH_TYPE_ALT_MAILBOX, ...) 
+    must return one of three values:
+
+    1. if there is no alt storage, return NULL 2. if there is alt storage and
+    MAILBOXDIR is set,
+    return ${alt_dir}/${mailbox_dir_name} 3. if there is alt storage but
+    MAILBOXDIR is not set, return ${alt_dir}
+
+    Case number 3 was broken, and it mistakenly returned ${root_dir} - in other 
+    words, it behaved as MAILBOX_LIST_PATH_TYPE_MAILBOX.
+
+    This correction changes the behavior, but this shouldn't cause 
+    incompatibilities since:
+
+    1. it affects only storages that support alternate storage 2. it affects
+    only configurations that use empty MAILBOXDIR
+
+    The only storage that supports alternate storage setting is dbox but dbox 
+    defaults to MAILBOXDIR=mailboxes.  Additionally, it appears to be impossible 
+    to override it to an empty string (setting it to an empty strings causes 
+    dbox to override it with the default - "mailboxes").  Therefore, nobody 
+    should be affected by this change.
+
+M	src/lib-storage/mailbox-list.c
+
+2018-04-24 17:22:00 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9113edbed)
+
+    doveadm stats dump: Add stddev field
+
+    Include it in default output as well.
+
+M	src/doveadm/Makefile.am
+M	src/doveadm/doveadm-stats.c
+
+2018-04-24 16:29:49 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c7c7cd410)
+
+    doveadm stats dump: Add -f <fields> parameter
+
+    This allows specifying which fields are wanted to be dumped.
+
+M	src/doveadm/doveadm-stats.c
+
+2018-04-24 17:32:21 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (023a023d7)
+
+    stats: Support dumping any given percentile
+
+
+M	src/stats/client-reader.c
+
+2018-04-24 09:52:32 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (d2ec5072a)
+
+    stats: Support dumping variance
+
+
+M	src/stats/client-reader.c
+
+2018-03-25 19:54:48 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (03a166b2c)
+
+    lib: Add test for rng
+
+
+M	src/lib/Makefile.am
+M	src/lib/test-lib.inc
+A	src/lib/test-random.c
+
+2018-03-25 21:04:49 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (4bd4daca2)
+
+    lib: stats-dist - Add accessor for samples
+
+
+M	src/lib/stats-dist.c
+M	src/lib/stats-dist.h
+
+2018-03-25 19:59:15 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (4720956fe)
+
+    lib: stats-dist - Add variance
+
+
+M	src/lib/stats-dist.c
+M	src/lib/stats-dist.h
+
+2018-03-25 19:49:13 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (75c248efb)
+
+    lib: rand - Fix potential modulo bias
+
+
+M	src/lib/rand.c
+
+2018-04-26 21:35:15 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8c6c5abc4)
+
+    example-config: Add log_debug and log_core_filter
+
+
+M	doc/example-config/conf.d/10-logging.conf
+
+2018-04-16 15:00:27 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f82f62442)
+
+    lib-master: Add improved log filter parsing
+
+    It now supports parenthesis to perform ANDs within a query. For example:
+    "(ruleA1 ruleA2) ruleB (ruleC1 ruleC2 ruleC3)" has 3 ORed rules.
+
+    Rules can contain:
+
+     - event:<name>
+    - source:<filename>[:<line number>]
+    - field:<key>=<value> can be used multiple times
+    - cat[egory]:<value> can be used multiple times
+
+    For example:
+
+    event:http_request_finished (cat:error cat:storage)
+
+    This matches either the "http_request_finished" named event, or 
+    alternatively any error event that belongs to "storage" category.
+
+M	src/lib-master/master-service-settings.c
+
+2018-04-26 21:29:23 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (82ab59cc0)
+
+    lib: Event filter - Source line number 0 now means "any"
+
+
+M	src/lib/event-filter.c
+
+2018-04-26 21:21:40 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ec36bacc3)
+
+    lib: Event filter - Support wildcards in event names
+
+    This allows for example log_debug=event:*
+
+M	src/lib/event-filter.c
+M	src/lib/event-filter.h
+
+2018-05-24 14:55:59 +0300 Martti Rannanjärvi <martti.rannanjarvi@dovecot.fi> (728fa5d61)
+
+    lib-master: Move const char *error declaration inside ifdef HAVE_SSL
+
+    This is so you can compile dovecot without ssl.
+
+M	src/lib-master/master-service.c
+
+2018-04-11 15:27:42 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (1c717024b)
+
+    lib-master: Add own boolean for SSL module loading
+
+    want_ssl_settings isn't reliable enough.
+
+M	src/lib-master/master-service-private.h
+M	src/lib-master/master-service.c
+
+2018-04-10 16:00:38 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (946dd1bf6)
+
+    lib-master: Do not attempt to load SSL module if no SSL support is compiled
+    in
+
+    Fixes imap-login: Error: imap-login(init): Fatal: Cannot load SSL module:
+    SSL support not compiled in
+
+    Broken in 754896551f0422cda5d78500b26700eec5343c5b
+
+    Found by bjornar
+
+M	src/lib-master/master-service.c
+
+2018-02-27 10:45:26 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (3bb4224d1)
+
+    lib-http: client: Fix request statistics text to properly report send
+    attempts.
+
+    If the request was first sent in the same ioloop cycle in which the text is 
+    generated, the text would claim it was not sent at all yet.
+
+    With this commit the text now explicitly makes the distinction between
+    request attempts and actual send attempts. The number of attempts is
+    increased at each retry, while the send attempts are increased each time the
+    request is actually being sent to a server.
+
+M	src/lib-http/http-client-private.h
+M	src/lib-http/http-client-request.c
+M	src/lib-http/http-client.h
+
+2018-02-17 14:28:48 -0500 codarrenvelvindron <codarren@hackers.mu> (9a90f5a2a)
+
+    configure: Add spectre variant 2 mitigations
+
+    --enable-hardening adds -mfunction-return=thunk and -mindirect-branch=thunk 
+    compiler options if supported.
+
+M	configure.ac
+A	m4/cc_retpoline.m4
+
+2018-02-22 15:55:20 +0200 Timo Sirainen <timo.sirainen@dovecot.fi> (1333d1d42)
+
+    imapc: Avoid duplicate FETCH BODY.PEEK[] when mail is already expunged
+
+    When the first FETCH (e.g. as part of mail_prefetch()) indicated that the 
+    mail is already expunged, there's no need to do it again.
+
+M	src/lib-storage/index/imapc/imapc-mail.c
+
+2018-02-13 09:14:37 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (589156cae)
+
+    lib: Fix usec comparison in timeout_update_next
+
+    When tv_usec is exactly 1000000, call to kevent() will fail because tv_sec
+    does not get incremented.
+
+    Found by Adrian Gonzalez <adrianglz@globalpc.net>
+
+M	src/lib/ioloop.c
+
+2018-05-21 01:42:27 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (978fa8c66)
+
+    lib: Fix ioloop-poll and ioloop-select to work with io_add_istream()
+
+
+M	src/lib/ioloop-poll.c
+M	src/lib/ioloop-select.c
+
+2018-04-16 15:22:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (da5f06dd9)
+
+    lib-storage: Add mail_storage.event and use it wherever possible
+
+
+M	src/lib-storage/index/dbox-multi/mdbox-map.c
+M	src/lib-storage/index/index-rebuild.c
+M	src/lib-storage/index/index-storage.c
+M	src/lib-storage/mail-storage-private.h
+M	src/lib-storage/mail-storage.c
+M	src/lib-storage/test-mail-storage.c
+
+2018-05-20 21:32:12 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b689d7111)
+
+    auth: Fix assert-crash if auth client sends 0 as ID
+
+    This could be triggered by anyone having (local) write access to the auth 
+    socket.
+
+M	src/auth/auth-request-handler.c
+
+2018-07-24 15:00:19 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (cebf45d73)
+
+    lib-imap: Remove content_subtype==NULL checks
+
+    This can never happen after the previous commit. This also changes the 
+    BODYSTRUCTURE output for invalid Content-Types, but since they're invalid 
+    anyway it doesn't really matter what the output is.
+
+M	src/lib-imap/imap-bodystructure.c
+
+2018-07-24 14:55:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8ad6de3dc)
+
+    lib-mail: If message_part_data.content_type is set, make sure
+    content_subtype isn't NULL
+
+    This fixes a crash in index_mail_find_first_text_mime_part() where snippet 
+    generation assumed that content_subtype isn't NULL.
+
+M	src/lib-mail/message-part-data.c
+
+2018-07-25 13:17:45 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (11fb30857)
+
+    lib-storage: Fix bodystructure parsing crash if header is parsed twice
+
+    The second parsing will recreate the parser_ctx, discarding the old parsed 
+    message_part.data for the header. On the second parsing 
+    save_bodystructure_header=FALSE so the message_part.data isn't filled for 
+    the header. Later on the bodystructure parsing assumes the data is set, and
+    crashes.
+
+    This only happened with mail_attachment_detection_options=add-flags-on-save 
+    and Sieve script that first accessed a non-cached header and then used the
+    "body" extension.
+
+    Fixes segfault and also: Panic: file imap-bodystructure.c: line 116
+    (part_write_body_multipart): assertion failed: (part->data != NULL)
+
+M	src/lib-storage/index/index-mail-headers.c
+M	src/lib-storage/index/index-mail.c
+M	src/lib-storage/index/index-mail.h
+
+2018-07-25 13:17:05 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b9dbe12ba)
+
+    lib-mail: Add asserts to message_part_*() to make sure part->data isn't NULL
+
+    This makes it easier to debug the crashes than just having a segfault.
+
+M	src/lib-mail/message-part-data.c
+
+2018-06-20 08:52:52 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (d4e4240cb)
+
+    lib-ssl-iostream: Enable partial writes and moving buffers
+
+    Dovecot is able to provide same content to SSL_write, and can also take care
+    of consuming written data from the buffer.
+
+    Fixes SSL_write failed:error:1409F07F:SSL routines:SSL3_WRITE_PENDING:bad
+    write retry
+
+M	src/lib-ssl-iostream/iostream-openssl-context.c
+
+2018-06-26 22:33:33 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (13b36eb23)
+
+    quota-clone: Fix assert-crash at deinit if quota_clone update fails
+
+    The timeout isn't removed on failure, so it crashed with: Panic: file
+    quota-clone-plugin.c: line 257 (quota_clone_mail_user_deinit_pre): assertion
+    failed: (quser->to_quota_flush == NULL)
+
+M	src/plugins/quota-clone/quota-clone-plugin.c
+
+2018-06-19 15:46:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ea26c32b7)
+
+    quota-clone: Send quota clone data to dict asynchronously
+
+    Based on patch by Michael Slusarz
+
+M	src/plugins/quota-clone/quota-clone-plugin.c
+
+2018-06-19 15:00:02 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4e5e57d01)
+
+    quota-clone: Move state tracking to user context
+
+    This way there's no need to do multiple flushes when e.g. multiple mailboxes
+    change.
+
+    The flush had to be removed from close(), because the code path recurses:
+
+     * mailbox_transaction_commit() when mail is saved
+    * quota_count() starts counting the quota, which opens and closes mailbox
+    * quota_clone_mailbox_close() attempts to flush quota, which again recurses 
+    into quota_count(), which returns 0 for the quota value.
+
+    Based on patch by Michael Slusarz
+
+M	src/plugins/quota-clone/quota-clone-plugin.c
+
+2018-06-19 14:12:45 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (311728518)
+
+    quota: Add quota_root_iter_init_user()
+
+
+M	src/plugins/quota/quota.c
+M	src/plugins/quota/quota.h
+
+2018-05-28 12:57:03 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (924fca6a4)
+
+    quota-clone: Fix CONTEXT_REQUIRE use
+
+    Fixes Panic: Module context quota_clone_user_module missing
+
+    Broken in 7f7e7c16d956de8e92376a0633ca6e4cb85e8d84
+
+M	src/plugins/quota-clone/quota-clone-plugin.c
+
+2018-06-25 13:13:43 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (0d8506363)
+
+    virtual: Clamp backend uids to available uids in virtual_get_virtual_uids
+
+
+M	src/plugins/virtual/virtual-storage.c
+
+2018-05-24 12:48:58 +0000 Aki Tuomi <aki.tuomi@dovecot.fi> (237217ef1)
+
+    acl: Fix return value of acl_attribute_get_acl
+
+    If matching acl entry is not found, it must return 0 and not 1 because it
+    did not find anything.
+
+    Fixes dsync: Panic: file mailbox-attribute.c: line 362
+    (mailbox_attribute_get_stream): assertion failed: (value_r->value != NULL ||
+    value_r->value_stream != NULL)
+
+    Broken in 37c72fa0cd3f1d74d79b64afb3fb6da5ffd4fe3a
+
+    Found by @dl8bh
+
+M	src/plugins/acl/acl-attributes.c
+
+2018-05-30 00:38:45 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ed1e20155)
+
+    man: doveadm-search-query.7 - Add sequence-set and update UID
+
+
+M	doc/man/doveadm-search-query.7
+
+2018-04-16 10:38:21 -0600 Michael Slusarz <michael.slusarz@dovecot.fi> (f1c9aab97)
+
+    last-login: Remove superfluous semicolon
+
+
+M	src/plugins/last-login/last-login-plugin.c
+
+2018-04-16 10:37:32 -0600 Michael Slusarz <michael.slusarz@dovecot.fi> (32ceb4a7b)
+
+    last-login: Username is already output as part of log prefix
+
+
+M	src/plugins/last-login/last-login-plugin.c
+
+2018-05-20 18:20:47 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (170bd2673)
+
+    director: Make sure host's last_updown_change never shrinks.
+
+    Otherwise the ring might get into a loop where two HOST updates keep 
+    fighting each others. This could probably happen if one update comes at
+    "desynced" state and other one in non-desynced state.
+
+    I'm not entirely sure if this is fixing such a loop or not, but it at least 
+    shouldn't hurt.
+
+M	src/director/director-connection.c
+
+2018-06-25 14:04:31 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (c65501c62)
+
+    lib: event-filter - Increase initial allocation
+
+    Reduces reallocations on startup.
+
+M	src/lib/event-filter.c
+
+2018-06-26 13:45:54 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9bcbd7c55)
+
+    lib-http: Add/fix default value comments in http_client_settings
+
+
+M	src/lib-http/http-client.h
+
+2018-03-20 18:14:39 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (3611b0413)
+
+    lib-http: server: Properly handle corrupt payload while finishing a request.
+
+    The HTTP_REQUEST_PARSE_ERROR_BROKEN_REQUEST was not handled, causing an 
+    assertion panic. This situation occurred when the chunked transfer encoding
+    was invalid.
+
+M	src/lib-http/http-server-connection.c
+
+2018-03-20 18:10:42 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (5f54a3ae0)
+
+    lib-http: server: Properly handle payload stream errors while finishing a
+    request.
+
+    Errors from the (chunked) payload stream would cause assertion panics at
+    that point.
+
+M	src/lib-http/http-server-connection.c
+
+2018-03-20 18:04:36 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7644d4ef6)
+
+    lib-http: server: Allow resubmitting a response, as long as it is not sent
+    yet.
+
+
+M	src/lib-http/http-server-request.c
+M	src/lib-http/http-server-response.c
+
+2018-05-23 15:14:50 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (7e5171207)
+
+    lib-master: If stats process wants no events, send nothing to it
+
+    Instead of sending everything to it..
+
+M	src/lib-master/stats-client.c
+
+2018-06-08 23:17:04 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5e6b52393)
+
+    lib: istream-try - Don't assert-crash with empty parent istream
+
+    Fixes: Panic: file istream.c: line 327 (i_stream_read_memarea): assertion
+    failed: (stream->eof)
+
+M	src/lib/istream-try.c
+M	src/lib/test-istream-try.c
+
+2018-05-29 10:29:50 +0300 Hannu Ylitalo <hannu.ylitalo@dovecot.fi> (beebf64fe)
+
+    dovecot.service: Update LimitNOFILE=65535
+
+    Current value of 8192 is too low for most production setups and it needs to
+    be changed every time something is deployed. Setting the default to 65535 is
+    enough for most production environments so this would be one task less when
+    deploying a production platform.
+
+M	dovecot.service.in
+
+2018-04-23 15:05:06 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ba1c32cdd)
+
+    doveadm save: Fix using <file without panic
+
+    When getting input with <file with Linux/epoll, it crashed with:
+
+    Panic: epoll_ctl(add, 0) failed: Operation not permitted (fd doesn't support
+    epoll - instead of '<file', try 'cat file|')
+
+M	src/doveadm/doveadm-mail.c
+
+2018-01-02 13:57:45 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (b547590da)
+
+    dsync: Set brain->failed to TRUE when UIDVALIDITY changes
+
+    This happens if UIDVALIDITY changes during stateful sync.
+
+    Fixes Panic: doveadm: file dsync-brain-mailbox.c: line 377
+    (dsync_brain_sync_mailbox_deinit): assertion failed: (brain->failed)
+
+M	src/doveadm/dsync/dsync-brain-mailbox.c
+
+2018-07-02 11:52:14 +0100 Paul Howarth <paul@city-fan.org> (64f446438)
 
     lib-compression: Fix assert-crash in test suite on 32bit systems
 
@@ -16,7 +2489,7 @@ M	configure.ac
 
 M	src/lib-compression/test-compression.c
 
-2018-07-06 11:25:07 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6c7efd9dd)
+2018-07-06 11:25:07 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (81e5ec150)
 
     lib-ssl-iostream: Shutdown connection cleanly whenever i/ostream is
     destroyed
@@ -28,7 +2501,7 @@ M	src/lib-compression/test-compression.c
 M	src/lib-ssl-iostream/istream-openssl.c
 M	src/lib-ssl-iostream/ostream-openssl.c
 
-2018-07-06 11:24:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c6d7e0d24)
+2018-07-06 11:24:41 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9dba039be)
 
     lib-ssl-iostream: Split code to openssl_iostream_shutdown()
 
@@ -36,7 +2509,7 @@ M	src/lib-ssl-iostream/ostream-openssl.c
 M	src/lib-ssl-iostream/iostream-openssl.c
 M	src/lib-ssl-iostream/iostream-openssl.h
 
-2018-06-12 16:07:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (bc10a45e9)
+2018-06-12 16:07:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (4436b0fc0)
 
     lib-storage: Fix memory leak when mail_storage_service_next() is called
     multiple times
@@ -45,15 +2518,150 @@ M	src/lib-ssl-iostream/iostream-openssl.h
 
 M	src/lib-storage/mail-storage-service.c
 
-2018-06-28 17:52:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (582970113)
+2018-06-18 13:15:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (68ba703ac)
 
-    Released v2.3.2.
+    lib-imap-client: Fix crash when ostream output blocks before connection
+    finishes
+
+    It's possible that ostream tries to add IO_WRITE callback before 
+    imapc_connection_connected() callback is called.
+
+    Fixes: Panic: io_add(0x2) called twice fd=15, callback=0x... -> 0x...
+
+M	src/lib-imap-client/imapc-connection.c
+
+2018-06-18 19:13:30 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (bb336da16)
+
+    imapc: Don't trust mail stream to have correct CRLFs
+
+    It's not that expensive to just recalculate them. If they're not correct in 
+    the stream, it can result in e.g. truncated emails due to wrong virtual_size 
+    being used in body_size calculation. The wrong CRLFs can especially happen 
+    if plugins modify the stream in istream_opened() hook.
+
+M	src/lib-storage/index/imapc/imapc-mail-fetch.c
+
+2018-06-16 19:58:57 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (a4a1c8424)
+
+    lib-imap-client: Remove assert from imapc_client_mailbox_reconnect
+
+    It's possible for the assert to trigger if there are multiple reconnections. 
+    imapc_connection_can_reconnect() checks a bit later whether the reconnection 
+    can still be done.
+
+M	src/lib-imap-client/imapc-client.c
+
+2018-06-16 19:40:34 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6a20890a4)
+
+    imapc: Fix assert-crash if syncing adds delayed expunges, but fails
+    afterwards
+
+    Fixes: Panic: file imapc-sync.c: line 328 (imapc_initial_sync_check):
+    assertion failed: (mail_index_is_expunged(view, lseq) ||
+    seq_range_exists(&ctx->mbox->delayed_expunged_uids, luid))
+
+M	src/lib-storage/index/imapc/imapc-sync.c
+
+2018-06-16 19:37:27 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b352767f8)
+
+    imapc: Fix potential assert-crash when reconnecting during syncing
+
+    Fixes: Panic: file imapc-sync.c: line 328 (imapc_initial_sync_check):
+    assertion failed: (mail_index_is_expunged(view, lseq) ||
+    seq_range_exists(&ctx->mbox->delayed_expunged_uids, luid))
+
+M	src/lib-storage/index/imapc/imapc-storage.c
+M	src/lib-storage/index/imapc/imapc-sync.c
+
+2018-06-16 15:56:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (56b939c19)
+
+    imapc: Fix assert-crash when reconnecting during initial FETCH finds
+    expunges
+
+    The initial FETCH is automatically retried on failure, but the FETCH state 
+    wasn't reset during the reconnection.
+
+    Fixes: Panic: file imapc-sync.c: line 328 (imapc_initial_sync_check):
+    assertion failed: (mail_index_is_expunged(view, lseq) ||
+    seq_range_exists(&ctx->mbox->delayed_expunged_uids, luid))
+
+M	src/lib-storage/index/imapc/imapc-storage.c
+
+2018-06-16 15:09:53 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (7a52620e0)
+
+    imapc: Fix assert-crash when reconnecting expunges newly added messages
+
+    The initial FETCH 1:* during reconnection may notice some messages that are 
+    missing and tries to expunge them. But those messages could still be in 
+    delayed_sync_trans, and currently lib-index doesn't support expunging
+    anything but the latest mail from a transaction.
+
+    Fixes: Panic: file mail-index-transaction-update.c: line 337
+    (mail_index_expunge_last_append): assertion failed: (seq == t->last_new_seq)
+
+M	src/lib-storage/index/imapc/imapc-mailbox.c
+
+2018-06-16 15:08:26 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (7c58144cb)
+
+    imapc: Move expunging from index to imapc_mailbox_index_expunge()
 
 
-M	NEWS
-M	configure.ac
+M	src/lib-storage/index/imapc/imapc-mailbox.c
 
-2018-06-19 12:33:49 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (cb05284d7)
+2018-06-04 19:16:04 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (42625103e)
+
+    lib-storage: Set index_mail_data.body_size if it can be calculated easily
+
+    Probably doesn't help with anything currently, but makes the code more 
+    consistent in how it works.
+
+M	src/lib-storage/index/index-mail.c
+
+2018-05-31 16:52:54 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (440645ada)
+
+    imapc: Don't use RFC822.SIZE values for message body size calculation
+
+    If the RFC822.SIZE doesn't match the exact stream size, the body size 
+    calculation will become wrong. The only downside to this patch is that now
+    the body size will need to be calculated by parsing the stream, but there
+    shouldn't be any need to do that unless the body was already FETCHed, so it
+    shouldn't cause any extra IMAP traffic.
+
+M	src/lib-storage/index/imapc/imapc-mail-fetch.c
+M	src/lib-storage/index/imapc/imapc-mail.c
+M	src/lib-storage/index/index-mail.c
+M	src/lib-storage/index/index-mail.h
+
+2018-06-04 19:03:20 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (69b714836)
+
+    lib-storage: Move code to index_mail_try_set_body_size()
+
+    This also adds a check to make sure virtual_size is set. With the current 
+    caller it was already guaranteed to be set.
+
+M	src/lib-storage/index/index-mail.c
+
+2018-05-31 16:49:34 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (764e86b8b)
+
+    lib-storage: Don't set virtual_size from index record if it's already set
+
+    The existing virtual_size may be a correct one, while the one in the index 
+    may be wrong. This will be an especially important fix with the next commit,
+    because it would make the existing inexact_total_sizes=FALSE wrong.
+
+M	src/lib-storage/index/index-mail.c
+
+2018-06-04 19:37:15 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6dc1296d0)
+
+    lib-storage: Don't enforce creation of vsize header.
+
+    It's useful for caching quota=count and for STATUS (X-SIZE). If neither is 
+    used the header shouldn't be created and kept up-to-date. If the header is 
+    enabled, it also triggers creation of per-email vsize records.
+
+M	src/lib-storage/index/index-mailbox-size.c
+
+2018-06-19 12:33:49 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6eb02203a)
 
     imapc: Fix handling UIDVALIDITY changes
 
@@ -64,7 +2672,7 @@ M	src/lib-storage/index/imapc/imapc-storage.c
 M	src/lib-storage/index/imapc/imapc-storage.h
 M	src/lib-storage/index/imapc/imapc-sync.c
 
-2018-06-19 12:31:43 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8952ef673)
+2018-06-19 12:31:43 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ada9a6b35)
 
     lib-index: Make sure error is set on sync & commit failures
 
@@ -74,15 +2682,7 @@ M	src/lib-storage/index/imapc/imapc-sync.c
 M	src/lib-index/mail-index-sync.c
 M	src/lib-index/mail-index-transaction.c
 
-2018-06-17 01:14:42 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6bae54415)
-
-    Released v2.3.2.rc1
-
-
-M	NEWS
-M	configure.ac
-
-2018-06-18 17:03:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (8ffa9f269)
+2018-06-18 17:03:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (9fdfc0359)
 
     lib: When log writing keeps returning EAGAIN, change process title only once
 
@@ -90,7 +2690,7 @@ M	configure.ac
 
 M	src/lib/failures.c
 
-2018-06-18 16:19:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (daaf81513)
+2018-06-18 16:19:55 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (98d021781)
 
     lib: If log write returns EAGAIN, use poll() instead of ioloop for waiting
 
@@ -100,7 +2700,7 @@ M	src/lib/failures.c
 
 M	src/lib/failures.c
 
-2018-06-18 16:07:30 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (ad5447e35)
+2018-06-18 16:07:30 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (c39d796ba)
 
     lib: Revert earlier "log write is blocking" handling change
 
@@ -114,7 +2714,7 @@ M	src/lib/failures.c
 
 M	src/lib/failures.c
 
-2018-05-03 15:22:09 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (6f364a136)
+2018-05-03 15:22:09 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (cb1b482a4)
 
     fs-posix: mkdir missing directory if it's changed by FS_METADATA_WRITE_FNAME
 
@@ -125,14 +2725,7 @@ M	src/lib/failures.c
 
 M	src/lib-fs/fs-posix.c
 
-2018-01-31 19:48:49 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (3f310ab60)
-
-    lib-imap: imap_match_deinit(NULL) should be a no-op
-
-
-M	src/lib-imap/imap-match.c
-
-2018-02-25 19:13:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (28983eb41)
+2018-02-25 19:13:18 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (3a8cf378c)
 
     lib: iostream-pump: Make iostream_pump_unref() implementation match other
     similar code.
@@ -142,28 +2735,28 @@ M	src/lib-imap/imap-match.c
 M	src/lib/iostream-pump.c
 M	src/lib/iostream-pump.h
 
-2018-05-25 11:07:38 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (4db613a47)
+2018-05-25 11:07:38 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (0f972d2b1)
 
     lib-fs: fs_unlock(NULL) should be a no-op
 
 
 M	src/lib-fs/fs-api.c
 
-2018-05-25 11:03:25 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (919db520f)
+2018-05-25 11:03:25 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (60627f9f1)
 
     global: start relying on fs_iter_deinit(NULL) being a no-op
 
 
 M	src/lib-dict-extra/dict-fs.c
 
-2018-05-25 11:02:56 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (8f7561879)
+2018-05-25 11:02:56 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (5f12eca8d)
 
     lib-fs: fs_iter_deinit(NULL) should be a no-op
 
 
 M	src/lib-fs/fs-api.c
 
-2018-05-25 10:53:54 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (4cabfcd06)
+2018-05-25 10:53:54 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (8e68c0cac)
 
     global: start relying on fs_deinit(NULL) and fs_unref(NULL) being no-ops
 
@@ -195,14 +2788,14 @@ M	src/lib-storage/index/dbox-common/dbox-storage.c
 M	src/plugins/fs-compress/fs-compress.c
 M	src/plugins/mail-crypt/fs-crypt-common.c
 
-2018-05-25 10:48:29 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (3eb5fc7ad)
+2018-05-25 10:48:29 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (f72bc8eb7)
 
     lib-fs: fs_unref(NULL) should be a no-op
 
 
 M	src/lib-fs/fs-api.c
 
-2018-05-25 10:38:36 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (1714aa0a0)
+2018-05-25 10:38:36 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (018d23e16)
 
     global: start relying on fs_file_close(NULL) being a no-op
 
@@ -221,14 +2814,14 @@ M	src/lib-fs/fs-metawrap.c
 M	src/plugins/fs-compress/fs-compress.c
 M	src/plugins/mail-crypt/fs-crypt-common.c
 
-2018-05-25 10:35:35 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (13afec579)
+2018-05-25 10:35:35 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (6394956f7)
 
     lib-fs: fs_file_close(NULL) should be a no-op
 
 
 M	src/lib-fs/fs-api.c
 
-2018-05-25 10:31:27 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (f7fac54b5)
+2018-05-25 10:31:27 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (873ec0391)
 
     global: start relying on fs_file_deinit(NULL) being a no-op
 
@@ -249,14 +2842,21 @@ M	src/lib-fs/fs-sis-queue.c
 M	src/plugins/fs-compress/fs-compress.c
 M	src/plugins/mail-crypt/fs-crypt-common.c
 
-2018-05-25 10:18:34 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (14829716f)
+2018-05-25 10:18:34 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (a9ec4cdac)
 
     lib-fs: fs_file_deinit(NULL) should be a no-op
 
 
 M	src/lib-fs/fs-api.c
 
-2018-05-25 19:13:30 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (de3f7051b)
+2018-01-31 19:48:49 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (1e2e986e4)
+
+    lib-imap: imap_match_deinit(NULL) should be a no-op
+
+
+M	src/lib-imap/imap-match.c
+
+2018-05-25 19:13:30 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (8201a540b)
 
     global: start relying on http_client_request_abort(NULL) being a no-op
 
@@ -277,14 +2877,14 @@ M	src/lib-oauth2/oauth2.c
 M	src/plugins/fts-solr/solr-connection.c
 M	src/plugins/fts/fts-parser-tika.c
 
-2018-05-25 19:11:35 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (30f854e6e)
+2018-05-25 19:11:35 -0400 Josef 'Jeff' Sipek <jeff.sipek@dovecot.fi> (6332c5972)
 
     lib-http: http_client_request_abort(NULL) should be a no-op
 
 
 M	src/lib-http/http-client-request.c
 
-2018-06-07 14:20:33 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (bf307d4c2)
+2018-06-07 14:20:33 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (3468508c8)
 
     imap: Finish client ostream at disconnect
 
@@ -293,7 +2893,7 @@ M	src/lib-http/http-client-request.c
 
 M	src/imap/imap-client.c
 
-2018-03-04 20:09:21 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (d1972d1d6)
+2018-03-04 20:09:21 +0200 Aki Tuomi <aki.tuomi@dovecot.fi> (7d90b8f27)
 
     lib-lua: Remove script from linked list on destroy
 
@@ -301,7 +2901,7 @@ M	src/imap/imap-client.c
 
 M	src/lib-lua/dlua-script.c
 
-2018-04-17 12:20:26 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (18fbc4a90)
+2018-04-17 12:20:26 +0300 Aki Tuomi <aki.tuomi@dovecot.fi> (ff5fb6e3d)
 
     lib-ssl-iostream: Fix boolean misuse in SSL_CTX_set_ecdh_auto usage
 
@@ -309,7 +2909,7 @@ M	src/lib-lua/dlua-script.c
 
 M	src/lib-ssl-iostream/iostream-openssl-context.c
 
-2018-06-12 15:31:35 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b06a22f1d)
+2018-06-12 15:31:35 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (84f32ea22)
 
     global: Fix str_begins() usage
 
@@ -318,7 +2918,7 @@ M	src/lib-ssl-iostream/iostream-openssl-context.c
 M	src/lib-fs/fs-posix.c
 M	src/lib-program-client/program-client.c
 
-2018-03-07 18:56:00 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b9969c4d2)
+2018-03-07 18:56:00 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (39805c39b)
 
     lda: Fix error message for invalid -r parameter to mention `-r' rather than
     `-a'.
@@ -326,14 +2926,14 @@ M	src/lib-program-client/program-client.c
 
 M	src/lda/main.c
 
-2018-03-07 18:54:38 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (b87c67779)
+2018-03-07 18:54:38 +0100 Stephan Bosch <stephan.bosch@dovecot.fi> (7838684b5)
 
     lda: Add -r parameter to usage help message.
 
 
 M	src/lda/main.c
 
-2018-05-03 18:33:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (5af358949)
+2018-05-03 18:33:25 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (907f0bdd1)
 
     fts: When indexing virtual mailbox, index each real mailbox entirely
 
@@ -342,14 +2942,14 @@ M	src/lda/main.c
 
 M	src/plugins/fts/fts-storage.c
 
-2018-05-03 18:33:00 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (e209e104a)
+2018-05-03 18:33:00 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (99d2ff981)
 
     fts: Indexing virtual mailbox didn't always index the last mails
 
 
 M	src/plugins/fts/fts-storage.c
 
-2018-05-03 18:30:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (107b32376)
+2018-05-03 18:30:51 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (b4956dbc1)
 
     fts: Make sure indexing virtual mailbox doesn't recurse and index mail
     multiple times
@@ -357,7 +2957,7 @@ M	src/plugins/fts/fts-storage.c
 
 M	src/plugins/fts/fts-storage.c
 
-2018-06-08 19:56:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (42e32102a)
+2018-06-08 19:56:01 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (f769a22d4)
 
     doveadm: Fix compiler warning
 

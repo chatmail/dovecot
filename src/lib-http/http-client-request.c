@@ -235,8 +235,7 @@ void http_client_request_set_event(struct http_client_request *req,
 {
 	event_unref(&req->event);
 	req->event = event_create(event);
-	if (req->client->set.debug)
-		event_set_forced_debug(req->event, TRUE);
+	event_set_forced_debug(req->event, req->client->set.debug);
 	http_client_request_update_event(req);
 }
 
@@ -703,7 +702,8 @@ void http_client_request_get_stats(struct http_client_request *req,
 
 	/* number of attempts for this request */
 	stats_r->attempts = req->attempts;
-
+	/* number of send attempts for this request */
+	stats_r->send_attempts = req->send_attempts;
 }
 
 void http_client_request_append_stats_text(struct http_client_request *req,
@@ -720,14 +720,16 @@ void http_client_request_append_stats_text(struct http_client_request *req,
 
 	str_printfa(str, "queued %u.%03u secs ago",
 		    stats.total_msecs/1000, stats.total_msecs%1000);
+	if (stats.attempts > 0)
+		str_printfa(str, ", %u times retried", stats.attempts);
 
-	if (stats.first_sent_msecs == 0)
+	if (stats.send_attempts == 0) {
 		str_append(str, ", not yet sent");
-	else {
-		str_printfa(str, ", %u attempts in %u.%03u secs",
-			    stats.attempts + 1,
+	} else {
+		str_printfa(str, ", %u send attempts in %u.%03u secs",
+			    stats.send_attempts,
 			    stats.first_sent_msecs/1000, stats.first_sent_msecs%1000);
-		if (stats.attempts > 0) {
+		if (stats.send_attempts > 1) {
 			str_printfa(str, ", %u.%03u in last attempt",
 				    stats.last_sent_msecs/1000,
 				    stats.last_sent_msecs%1000);
@@ -1294,6 +1296,7 @@ static int http_client_request_send_real(struct http_client_request *req,
 	iov[2].iov_len = 2;
 
 	req->state = HTTP_REQUEST_STATE_PAYLOAD_OUT;
+	req->send_attempts++;
 	if (req->first_sent_time.tv_sec == 0)
 		req->first_sent_time = ioloop_timeval;
 	req->sent_time = ioloop_timeval;

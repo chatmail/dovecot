@@ -22,13 +22,15 @@ static bool cmp_addr(const struct message_address *a1,
 static const struct message_address *
 test_parse_address(const char *input, bool fill_missing)
 {
+	const enum message_address_parse_flags flags =
+		fill_missing ? MESSAGE_ADDRESS_PARSE_FLAG_FILL_MISSING : 0;
 	/* duplicate the input (without trailing NUL) so valgrind notices
 	   if there's any out-of-bounds access */
 	size_t input_len = strlen(input);
 	unsigned char *input_dup = i_memdup(input, input_len);
 	const struct message_address *addr =
 		message_address_parse(pool_datastack_create(),
-				      input_dup, input_len, UINT_MAX, fill_missing);
+				      input_dup, input_len, UINT_MAX, flags);
 	i_free(input_dup);
 	return addr;
 }
@@ -312,10 +314,81 @@ static void test_message_address(void)
 	test_end();
 
 	test_begin("message address parsing empty string");
-	test_assert(message_address_parse(unsafe_data_stack_pool, &uchar_nul, 0, 10, TRUE) == NULL);
+	test_assert(message_address_parse(unsafe_data_stack_pool, &uchar_nul, 0, 10,
+					  MESSAGE_ADDRESS_PARSE_FLAG_FILL_MISSING) == NULL);
 	str_truncate(str, 0);
 	message_address_write(str, NULL);
 	test_assert(str_len(str) == 0);
+	test_end();
+}
+
+static void test_message_address_nuls(void)
+{
+	const unsigned char input[] =
+		"\"user\0nuls\\\0-esc\"@[domain\0nuls\\\0-esc] (comment\0nuls\\\0-esc)";
+	const struct message_address output = {
+		NULL, "comment\xEF\xBF\xBDnuls\\\xEF\xBF\xBD-esc", NULL,
+		"user\xEF\xBF\xBDnuls\\\xEF\xBF\xBD-esc",
+		"[domain\xEF\xBF\xBDnuls\\\xEF\xBF\xBD-esc]", FALSE
+	};
+	const struct message_address *addr;
+
+	test_begin("message address parsing with NULs");
+	addr = message_address_parse(pool_datastack_create(),
+				     input, sizeof(input)-1, UINT_MAX, 0);
+	test_assert(addr != NULL && cmp_addr(addr, &output));
+	test_end();
+}
+
+static void test_message_address_nuls_display_name(void)
+{
+	const unsigned char input[] =
+		"\"displayname\0nuls\\\0-esc\" <\"user\0nuls\\\0-esc\"@[domain\0nuls\\\0-esc]>";
+	const struct message_address output = {
+		NULL, "displayname\xEF\xBF\xBDnuls\\\xEF\xBF\xBD-esc", NULL,
+		"user\xEF\xBF\xBDnuls\\\xEF\xBF\xBD-esc",
+		"[domain\xEF\xBF\xBDnuls\\\xEF\xBF\xBD-esc]", FALSE
+	};
+	const struct message_address *addr;
+
+	test_begin("message address parsing with NULs in display-name");
+	addr = message_address_parse(pool_datastack_create(),
+				     input, sizeof(input)-1, UINT_MAX, 0);
+	test_assert(addr != NULL && cmp_addr(addr, &output));
+	test_end();
+}
+
+static void test_message_address_non_strict_dots(void)
+{
+	const char *const inputs[] = {
+		".@example.com",
+		"..@example.com",
+		"..foo@example.com",
+		"..foo..@example.com",
+		"..foo..bar..@example.com",
+	};
+	const struct message_address *addr;
+	struct message_address output = {
+		NULL, NULL, NULL, "local-part",
+		"example.com", FALSE
+	};
+
+	test_begin("message address parsing with non-strict dots");
+	for (unsigned int i = 0; i < N_ELEMENTS(inputs); i++) {
+		const unsigned char *addr_input =
+			(const unsigned char *)inputs[i];
+		/* invalid with strict-dots flag */
+		addr = message_address_parse(pool_datastack_create(),
+			addr_input, strlen(inputs[i]), UINT_MAX,
+			MESSAGE_ADDRESS_PARSE_FLAG_STRICT_DOTS);
+		test_assert_idx(addr != NULL && addr->invalid_syntax, i);
+
+		/* valid without the strict-dots flag */
+		addr = message_address_parse(pool_datastack_create(),
+			addr_input, strlen(inputs[i]), UINT_MAX, 0);
+		output.mailbox = t_strcut(inputs[i], '@');
+		test_assert_idx(addr != NULL && cmp_addr(addr, &output), i);
+	}
 	test_end();
 }
 
@@ -443,6 +516,9 @@ int main(void)
 {
 	static void (*const test_functions[])(void) = {
 		test_message_address,
+		test_message_address_nuls,
+		test_message_address_nuls_display_name,
+		test_message_address_non_strict_dots,
 		test_message_address_path,
 		test_message_address_path_invalid,
 		NULL

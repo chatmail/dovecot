@@ -195,4 +195,4 @@ Some additional things which might help you configuring Solr search:
  * Please keep in mind that you will have to change the Solr URL to include the
    core name (ie:'dovecot': 'http://localhost:8939/solr/dovecot').
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

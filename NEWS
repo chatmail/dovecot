@@ -1,3 +1,43 @@
+v2.3.3 2018-10-01  Timo Sirainen <tss@iki.fi>
+
+	* doveconf hides more secrets now in the default output.
+	* ssl_dh setting is no longer enforced at startup. If it's not set and
+	  non-ECC DH key exchange happens, error is logged and client is
+	  disconnected.
+
+	+ Added log_debug=<filter> setting.
+	+ Added log_core_filter=<log filter> setting.
+	+ quota-clone: Write to dict asynchronously
+	+ --enable-hardening attempts to use retpoline Spectre 2 mitigations
+	+ lmtp proxy: Support source_ip passdb extra field.
+	+ doveadm stats dump: Support more fields and output stddev by default.
+	+ push-notification: Add SSL support for OX backend.
+	- NUL bytes in mail headers can cause truncated replies when fetched.
+	- director: Conflicting host up/down state changes may in some rare
+	  situations ended up in a loop of two directors constantly overwriting
+	  each others' changes.
+	- director: Fix hang/crash when multiple doveadm commands are being
+	  handled concurrently.
+	- director: Fix assert-crash if doveadm disconnects too early
+	- virtual plugin: Some searches used 100% CPU for many seconds
+	- dsync assert-crashed with acl plugin in some situations.
+	- mail_attachment_detection_options=add-flags-on-save assert-crashed
+	  with some specific Sieve scripts.
+	- Mail snippet generation crashed with mails containing invalid
+	  Content-Type:multipart header.
+	- Log prefix ordering was different for some log lines.
+	- quota: With noenforcing option current quota usage wasn't updated.
+	- auth: Kerberos authentication against Samba assert-crashed.
+	- stats clients were unnecessarily chatty with the stats server.
+	- imapc: Fixed various assert-crashes when reconnecting to server.
+	- lmtp, submission: Fix potential crash if client disconnects while
+	  handling a command.
+	- quota: Fixed compiling with glibc-2.26 / support libtirpc.
+	- fts-solr: Empty search values resulted in 400 Bad Request errors
+	- fts-solr: default_ns parameter couldn't be used
+	- submission server crashed if relay server returned over 7 lines in
+	  a reply (e.g. to EHLO)
+
 v2.3.2.1 2018-07-09  Timo Sirainen <tss@iki.fi>
 
 	- SSL/TLS servers may have crashed during client disconnection

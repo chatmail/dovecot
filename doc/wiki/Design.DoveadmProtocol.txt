@@ -86,4 +86,10 @@ line. So in the above case the protocol output will be:
 fa8cb722dfad9c52b62600007049b30b<tab>125159<tab>fa8cb722dfad9c52b62600007049b30b<tab>125160
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-07-09 04:42)
+Example Clients
+---------------
+
+ * Perl: Net::Doveadm [https://metacpan.org/pod/Net::Doveadm]
+ * See also HTTP protocol-based clients in <Design.DoveadmProtocol.HTTP.txt>
+
+(This file was created from the wiki on 2018-10-01 04:42)

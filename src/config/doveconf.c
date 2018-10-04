@@ -47,6 +47,17 @@ struct config_dump_human_context {
 
 static const char *indent_str = "                              !!!!";
 
+static const char *const secrets[] = {
+	"key",
+	"secret",
+	"pass",
+	"http://",
+	"https://",
+	"ftp://",
+	NULL
+};
+
+
 static void
 config_request_get_strings(const char *key, const char *value,
 			   enum config_key_type type, void *context)
@@ -168,6 +179,148 @@ static bool value_need_quote(const char *value)
 	return FALSE;
 }
 
+static const char *find_next_secret(const char *input, const char **secret_r)
+{
+	const char *const *secret;
+	const char *ptr = NULL;
+	*secret_r = NULL;
+	for(secret = secrets; *secret != NULL; secret++) {
+		const char *cptr;
+		if ((cptr = strstr(input, *secret)) != NULL) {
+			if (ptr == NULL || cptr < ptr) {
+				*secret_r = *secret;
+				ptr = cptr;
+			}
+		}
+	}
+	i_assert(*secret_r != NULL || ptr == NULL);
+	return ptr;
+}
+
+static bool
+hide_url_userpart_from_value(struct ostream *output, const char **_ptr,
+			     const char **optr, bool quote)
+{
+	const char *ptr = *_ptr;
+	const char *start_of_user = ptr;
+	const char *start_of_host = NULL;
+	string_t *quoted = NULL;
+
+	if (quote)
+		quoted = t_str_new(256);
+
+	/* it's a URL, see if there is a userpart */
+	while(*ptr != '\0' && !i_isspace(*ptr) && *ptr != '/') {
+		if (*ptr == '@') {
+			start_of_host = ptr;
+			break;
+		}
+		ptr++;
+	}
+
+	if (quote) {
+		str_truncate(quoted, 0);
+		str_append_escaped(quoted, *optr, start_of_user - (*optr));
+		o_stream_nsend(output, quoted->data, quoted->used);
+	} else {
+		o_stream_nsend(output, *optr, start_of_user - (*optr));
+	}
+
+	if (start_of_host != NULL && start_of_host != start_of_user) {
+		o_stream_nsend_str(output, "#hidden_use-P_to_show#");
+	} else if (quote) {
+		str_truncate(quoted, 0);
+		str_append_escaped(quoted, start_of_user, ptr - start_of_user);
+		o_stream_nsend(output, quoted->data, quoted->used);
+	} else {
+		o_stream_nsend(output, start_of_user, ptr - start_of_user);
+	}
+
+	*optr = ptr;
+	*_ptr = ptr;
+	return TRUE;
+}
+
+static inline bool key_ends_with(const char *key, const char *eptr,
+				 const char *suffix)
+{
+	/* take = into account */
+	size_t n = strlen(suffix)+1;
+	return (eptr-key > (ptrdiff_t)n && str_begins(eptr-n, suffix));
+}
+
+static bool
+hide_secrets_from_value(struct ostream *output, const char *key,
+			const char *value)
+{
+	bool ret = FALSE, quote = value_need_quote(value);
+	const char *ptr, *optr, *secret;
+	if (*value != '\0' &&
+	    (key_ends_with(key, value, "_password") ||
+	     key_ends_with(key, value, "_key") ||
+	     key_ends_with(key, value, "_nonce") ||
+	     str_begins(key, "ssl_dh"))) {
+		o_stream_nsend_str(output, "# hidden, use -P to show it");
+		return TRUE;
+	}
+
+	/* Check if we can find anything that has prefix of any of the
+	   secrets. It should match things like secret_api_key or pass or password,
+	   etc. but not something like nonsecret. */
+	optr = ptr = value;
+	while((ptr = find_next_secret(ptr, &secret)) != NULL) {
+		if (strstr(secret, "://") != NULL) {
+			ptr += strlen(secret);
+			if ((ret = hide_url_userpart_from_value(output, &ptr, &optr, quote)))
+				continue;
+		}
+		/* we have found something that we hide, and will deal with output
+		   here. */
+		ret = TRUE;
+		if (ptr == value ||
+		    (ptr > value && !i_isalnum(ptr[-1]))) {
+			size_t len;
+			while(*ptr != '\0') {
+				if (*ptr == '=' || i_isspace(*ptr))
+					break;
+				ptr++;
+			}
+			while(i_isspace(*ptr))
+				ptr++;
+			len = (size_t)(ptr-optr);
+			if (quote) {
+				string_t *quoted = t_str_new(len*2);
+				str_append_escaped(quoted, optr, len);
+				o_stream_nsend(output,
+					       quoted->data, quoted->used);
+			} else {
+				o_stream_nsend(output, optr, len);
+			}
+			if (*ptr == '=') {
+				o_stream_nsend(output, ptr, 1);
+				o_stream_nsend_str(output, "#hidden_use-P_to_show#");
+				while(*ptr != '\0' && !i_isspace(*ptr) &&
+				      *ptr != ';' && *ptr != ':')
+					ptr++;
+			}
+			optr = ptr;
+		} else {
+			/* "secret" is prefixed with alphanumeric character,
+			   e.g. "nopassword". So it's not really a secret.
+			   Skip forward to avoid infinite loop. */
+			ptr++;
+		}
+	};
+	/* if we are dealing with output, send rest here */
+	if (ret) {
+		if (quote)
+			o_stream_nsend_str(output, str_escape(optr));
+		else
+			o_stream_nsend_str(output, optr);
+	}
+	return ret;
+}
+
 static int ATTR_NULL(4)
 config_dump_human_output(struct config_dump_human_context *ctx,
 			 struct ostream *output, unsigned int indent,
@@ -270,10 +423,10 @@ config_dump_human_output(struct config_dump_human_context *ctx,
 				prefix.prefix_idx = prefix_idx;
 				array_append(&prefix_stack, &prefix, 1);
 
-				str_append_n(ctx->list_prefix, indent_str, indent*2);
+				str_append_max(ctx->list_prefix, indent_str, indent*2);
 				p = strchr(key2, '/');
 				if (p != NULL)
-					str_append_n(ctx->list_prefix, key2, p - key2);
+					str_append_data(ctx->list_prefix, key2, p - key2);
 				else
 					str_append(ctx->list_prefix, key2);
 				if (unique_key && *value != '\0') {
@@ -306,13 +459,11 @@ config_dump_human_output(struct config_dump_human_context *ctx,
 		i_assert(value != NULL);
 		o_stream_nsend(output, key, value-key);
 		o_stream_nsend_str(output, " = ");
-		if (hide_passwords && value[1] != '\0' &&
-		    ((value-key > 9 && strncmp(value-9, "_password", 9) == 0) ||
-		     (value-key > 8 && strncmp(value-8, "_api_key", 8) == 0) ||
-		     strncmp(key, "ssl_key",7) == 0 ||
-		     strncmp(key, "ssl_dh",6) == 0)) {
-			o_stream_nsend_str(output, " # hidden, use -P to show it");
-		} else if (!value_need_quote(value+1))
+		if (hide_passwords &&
+		    hide_secrets_from_value(output, key, value+1))
+			/* sent */
+			;
+		else if (!value_need_quote(value+1))
 			o_stream_nsend_str(output, value+1);
 		else {
 			o_stream_nsend(output, "\"", 1);
@@ -363,13 +514,13 @@ config_dump_filter_begin(string_t *str,
 	}
 
 	if (filter->local_name != NULL) {
-		str_append_n(str, indent_str, indent*2);
+		str_append_max(str, indent_str, indent*2);
 		str_printfa(str, "local_name %s {\n", filter->local_name);
 		indent++;
 	}
 
 	if (filter->remote_bits > 0) {
-		str_append_n(str, indent_str, indent*2);
+		str_append_max(str, indent_str, indent*2);
 		str_printfa(str, "remote %s", net_ip2addr(&filter->remote_net));
 
 		if (IPADDR_IS_V4(&filter->remote_net)) {
@@ -383,7 +534,7 @@ config_dump_filter_begin(string_t *str,
 		indent++;
 	}
 	if (filter->service != NULL) {
-		str_append_n(str, indent_str, indent*2);
+		str_append_max(str, indent_str, indent*2);
 		str_printfa(str, "protocol %s {\n", filter->service);
 		indent++;
 	}

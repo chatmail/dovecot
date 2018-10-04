@@ -12,6 +12,7 @@
 #include "mail-storage-private.h"
 #include "str.h"
 #include "strescape.h"
+#include "iostream-ssl.h"
 
 #include "push-notification-drivers.h"
 #include "push-notification-event-messagenew.h"
@@ -60,6 +61,7 @@ push_notification_driver_ox_init_global(struct mail_user *user,
 	struct push_notification_driver_ox_config *config)
 {
     struct http_client_settings http_set;
+    struct ssl_iostream_settings ssl_set;
 
     if (ox_global->http_client == NULL) {
         /* this is going to use the first user's settings, but these are
@@ -68,6 +70,10 @@ push_notification_driver_ox_init_global(struct mail_user *user,
         http_set.debug = user->mail_debug;
         http_set.max_attempts = config->http_max_retries+1;
         http_set.request_timeout_msecs = config->http_timeout_msecs;
+
+        i_zero(&ssl_set);
+        mail_user_init_ssl_client_settings(user, &ssl_set);
+        http_set.ssl = &ssl_set;
 
         ox_global->http_client = http_client_init(&http_set);
     }
@@ -277,11 +283,9 @@ static void push_notification_driver_ox_http_callback
     switch (response->status / 100) {
     case 2:
         // Success.
-	if (user->mail_debug) {
-            push_notification_driver_debug(OX_LOG_LABEL, user,
-                                           "Notification sent successfully: %s",
-                                           http_response_get_message(response));
-	}
+	push_notification_driver_debug(OX_LOG_LABEL, user,
+				       "Notification sent successfully: %s",
+				       http_response_get_message(response));
         break;
 
     default:

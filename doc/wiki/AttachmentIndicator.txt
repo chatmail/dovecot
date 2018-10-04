@@ -28,4 +28,4 @@ Once enabled, mails that are saved, are marked with $Has ''Attachment or $Has
 protected. Re-detecting mails is not currently possible, and flags are
 currently only set during save.
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

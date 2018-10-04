@@ -1,9 +1,10 @@
 Dovecot Lua support
 ===================
 
-Since v2.3.0 dovecot supports Lua scripting. Currently the only supported
-feature is <Lua based authentication> [AuthDatabase.Lua.txt]. Dovecot supports
-lua 5.0 or newer.
+Since v2.3.0 dovecot supports Lua scripting. Dovecot supports lua 5.0 or newer.
+
+ * <Lua based authentication> [AuthDatabase.Lua.txt]. Since v2.3.0
+ * <Lua push notifications> [Plugins.PushNotification.txt]. Since 2.3.3
 
 lib-lua
 -------
@@ -30,4 +31,176 @@ Logging:
 This item can also be extended by context specific tables, like authentication
 database adds *dovecot.auth*.
 
-(This file was created from the wiki on 2018-07-09 04:42)
+mail-lua
+--------
+
+Available since v2.3.3
+
+mail-lua is a plugin that can be loaded to provide API for mail storage Lua
+plugins. Mail-lua provides a common script to be used in mail storage instead
+of per-plugin scripts.
+
+C API
+-----
+
+ * dlua_register_mail_storage(script)
+
+Register storage Lua interface to script context
+
+ * bool mail_lua_plugin_get_script(user, script_r)
+
+Returns script context if available. If FALSE is returned, no Lua script has
+been loaded, and you should optionally deal this yourself.
+
+ * dlua_push_mail_user(script, user)
+
+Pushes a mail user on top of stack.
+
+ * dlua_push_mailbox(script, box)
+
+Pushes a mailbox on top of stack.
+
+ * dlua_push_mail(script, mail)
+
+Pushes a mail on top of stack.
+
+Lua API
+-------
+
+When mail user is created, a script is loaded if present as *mail_lua_script*
+and *mail_user_created* is called if present in script.
+
+On deinitialization, *mail_user_deinit_pre* is called first, if present,
+followed by *mail_user_deinit*.
+
+dovecot.storage
+---------------
+
+Following constants are specified
+
+ * STATUS_MESSAGES
+ * STATUS_RECENT
+ * STATUS_UIDNEXT
+ * STATUS_UIDVALIDITY
+ * STATUS_UNSEEN
+ * STATUS_FIRST_UNSEEN_SEQ
+ * STATUS_KEYWORDS
+ * STATUS_HIGHESTMODSEQ
+ * STATUS_PERMANENT_FLAGS
+ * STATUS_FIRST_RECENT_UID
+ * STATUS_HIGHESTPVTMODSEQ
+ * MAILBOX_FLAG_READONLY
+ * MAILBOX_FLAG_SAVEONLY
+ * MAILBOX_FLAG_DROP_RECENT
+ * MAILBOX_FLAG_NO_INDEX_FILES
+ * MAILBOX_FLAG_KEEP_LOCKED
+ * MAILBOX_FLAG_IGNORE_ACLS
+ * MAILBOX_FLAG_AUTO_CREATE
+ * MAILBOX_FLAG_AUTO_SUBSCRIBE
+ * MAILBOX_SYNC_FLAG_FULL_READ
+ * MAILBOX_SYNC_FLAG_FULL_WRITE
+ * MAILBOX_SYNC_FLAG_FAST
+ * MAILBOX_SYNC_FLAG_NO_EXPUNGES
+ * MAILBOX_SYNC_FLAG_FIX_INCONSISTENT
+ * MAILBOX_SYNC_FLAG_EXPUNGE
+ * MAILBOX_SYNC_FLAG_FORCE_RESYNC
+
+object mail_user
+----------------
+
+Meta:
+
+ * has tostring
+ * is comparable (by username)
+
+Functions:
+
+ * plugin_getenv(key) - returns key from user plugin settings or userdb
+   environment
+ * var_expand(template) - expands mail user variables (see <Variables.txt>)
+ * mailbox(name, flags) - allocates a mailbox
+
+Variables:
+
+ * home - home directory (if available)
+ * username - user's name
+ * uid - system uid
+ * gid - system gid
+ * service - IMAP/POP3/LMTP/LDA/...
+ * session_id - Current session ID
+ * session_create_time - When session was created
+ * nonexistent - If user does not really exist
+ * anonymous - If user is anonymous
+ * autocreated - If user was automatically created internally for some
+   operation
+ * mail_debug - If debugging is turned on
+ * fuzzy_search - FIXME: Undocumented
+ * dsyncing - If user is being dsync'd
+ * session_restored - If this is a restored session
+
+object mailbox
+--------------
+
+Meta:
+
+ * has tostring
+ * is comparable (by full mailbox name)
+
+Functions:
+
+ * open() - opens the mailbox
+ * close() - closes the mailbox
+ * free() - releases mailbox (must be done)
+ * sync(flags) - synchronizes the mailbox (should usually be done)
+ * status(items) - returns requested mailbox status items as table
+
+Variables:
+
+ * vname - Full mailbox name
+ * name - Mailbox name
+
+table mailbox status
+--------------------
+
+Variables:
+
+ * mailbox - full name of mailbox
+ * messages - number of messages
+ * recent - number of \Recent messages
+ * unseen - number of \Unseen messages
+ * uidvalidity - current UID validity
+ * uidnext - next UID
+ * first_unseen_seq - first seqno of unseen mail
+ * first_recent_uid - first UID of unseen mail
+ * highest_modseq - highest modification sequence
+ * highest_pvt_modseq - highest private modification sequence
+ * permanent_flags - supported permanent flags as a bitmask
+ * flags - supported flags as a bitmask
+ * permanent_keywords - if permanent keywords are supported
+ * allow_new_keywords - if new keywords can be added
+ * nonpermanent_modseqs - whether non-permanent keywords are allowed
+ * no_modseq_tracking - no modification sequence tracking
+ * have_guids - whether GUIDs exist
+ * have_save_guids - whether GUIDs can be saved
+ * have_only_guid128 - whether GUIDs are 128 bit always
+ * keywords - table of current keywords
+
+object mail
+-----------
+
+Meta:
+
+ * has tostring
+ * is comparable (within same mailbox, by UID)
+
+Functions:
+
+ * None yet
+
+Variables:
+
+ * mailbox - mailbox object
+ * seq - Sequence number (can change)
+ * uid - UID number (immutable)
+
+(This file was created from the wiki on 2018-10-01 04:42)

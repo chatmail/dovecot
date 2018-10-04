@@ -98,4 +98,4 @@ and removals are also tracked and can be retrieved with
 'mailbox_search_result_sync()', i.e. with this you can implement "what changed
 in search results since last time I checked".
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

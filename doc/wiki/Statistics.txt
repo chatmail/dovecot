@@ -4,6 +4,8 @@ Statistics
 This page is about the statistics support for Dovecot v2.3. For v2.1 and v2.2
 see <Statistics.Old.txt>.
 
+See <Events.txt> for list of all events that can be used in statistics.
+
 Dovecot v2.3 supports gathering statistics from "events". Eventually all of the
 log messages should be events, so it will be possible to configure Dovecot to
 get statistics for anything that is logged. For debug messages it's possible to
@@ -76,31 +78,6 @@ The stats counters are reset whenever the stats process is started, which also
 means a dovecot reload will reset statistics. Using 'doveadm stats -r'
 parameter will also reset the statistics atomically after they're dumped.
 
-Events
-------
-
-Current list of named events and their parameters:
-
-*imap_command_finished*
-
- * tag: Command tag
- * name: Command name
- * args: Command's full parameters
- * human_args: Command's parameters as more human-readable output
- * tagged_reply_state: OK, NO, BAD
- * tagged_reply: Full tagged reply, e.g. "OK SELECT finished."
- * last_run_time: Timestamp when the command was running last time (it's
-   followed by "mailbox sync" that can take some time)
- * running_usecs: How many usecs this command itself has spent running
- * lock_wait_usecs: How many usecs this command itself has spent waiting for
-   locks.
- * bytes_in, bytes_out: How many bytes of client input/output command has used.
-
-*http_request_finished*
-
- * attempts: Number of individual HTTP request attempts that were done (i.e.
-   number of retries after failures + 1)
-
 Examples
 --------
 
@@ -129,4 +106,4 @@ metric storage_http_gets {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

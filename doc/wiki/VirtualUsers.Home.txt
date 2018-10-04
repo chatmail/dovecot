@@ -86,4 +86,4 @@ user_attrs = .., mailDirectory=home=/var/vmail/%$
 
 Then just use 'mail_location = maildir:~/Maildir'.
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

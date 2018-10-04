@@ -101,4 +101,16 @@ Check out the access permissions of the mentioned directory, check:
     different access permissions or POSIX eXtended attributes may change the
     traditional permissions.
 
-(This file was created from the wiki on 2018-07-09 04:42)
+---%<-------------------------------------------------------------------------
+Couldn't create mailbox list lock 
+/data/mail/domain.com/username/mailboxes.lock:
+file_create_locked(/data/mail/domain.com/username/mailboxes.lock) failed:
+link(/data/mail/domain.com/username/mailboxes.lock6628a230290f9029,
+/data/mail/domain.com/username/mailboxes.lock) failed: Operation not permitted
+---%<-------------------------------------------------------------------------
+
+ 1. Your filesystem is not supported
+ 2. You have SELinux/AppArmor/RBAC or some other security framework that
+    prevents this
+
+(This file was created from the wiki on 2018-10-01 04:42)

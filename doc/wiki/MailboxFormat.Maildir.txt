@@ -397,4 +397,4 @@ References
  * Maildir++ [http://www.courier-mta.org/imap/README.maildirquota.html]
  * Wikipedia [http://en.wikipedia.org/wiki/Maildir]
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

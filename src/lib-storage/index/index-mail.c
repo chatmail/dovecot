@@ -131,6 +131,9 @@ static bool get_cached_parts(struct index_mail *mail)
 {
 	struct message_part *part;
 
+	if (mail->data.parts != NULL)
+		return TRUE;
+
 	T_BEGIN {
 		part = get_unserialized_parts(mail);
 	} T_END;
@@ -453,18 +456,33 @@ static bool get_cached_msgpart_sizes(struct index_mail *mail)
 
 const uint32_t *index_mail_get_vsize_extension(struct mail *_mail)
 {
-	struct index_mail *mail = INDEX_MAIL(_mail);
 	const void *idata;
 	bool expunged ATTR_UNUSED;
 
 	mail_index_lookup_ext(_mail->transaction->view, _mail->seq,
 			      _mail->box->mail_vsize_ext_id, &idata, &expunged);
 	const uint32_t *vsize = idata;
-
-	if (vsize != NULL && *vsize > 0) {
-		mail->data.virtual_size = (*vsize)-1;
-	}
 	return vsize;
+}
+
+static void index_mail_try_set_body_size(struct index_mail *mail)
+{
+	struct index_mail_data *data = &mail->data;
+
+	if (data->hdr_size_set && !data->inexact_total_sizes &&
+	    data->physical_size != (uoff_t)-1 &&
+	    data->virtual_size != (uoff_t)-1) {
+		/* We know the total size of this mail and we know the
+		   header size, so we can calculate also the body size.
+		   However, don't do this if there's a possibility that
+		   physical_size or virtual_size don't actually match the
+		   mail stream's size (e.g. buggy imapc servers). */
+		data->body_size.physical_size = data->physical_size -
+			data->hdr_size.physical_size;
+		data->body_size.virtual_size = data->virtual_size -
+			data->hdr_size.virtual_size;
+		data->body_size_set = TRUE;
+	}
 }
 
 bool index_mail_get_cached_virtual_size(struct index_mail *mail, uoff_t *size_r)
@@ -478,6 +496,8 @@ bool index_mail_get_cached_virtual_size(struct index_mail *mail, uoff_t *size_r)
 	const uint32_t *vsize = index_mail_get_vsize_extension(_mail);
 
 	data->cache_fetch_fields |= MAIL_FETCH_VIRTUAL_SIZE;
+	if (data->virtual_size == (uoff_t)-1 && vsize != NULL && *vsize > 0)
+		data->virtual_size = (*vsize)-1;
 	if (data->virtual_size == (uoff_t)-1) {
 		if (index_mail_get_cached_uoff_t(mail,
 						 MAIL_CACHE_VIRTUAL_FULL_SIZE,
@@ -488,13 +508,7 @@ bool index_mail_get_cached_virtual_size(struct index_mail *mail, uoff_t *size_r)
 				return FALSE;
 		}
 	}
-	if (data->hdr_size_set && data->physical_size != (uoff_t)-1) {
-		data->body_size.physical_size = data->physical_size -
-			data->hdr_size.physical_size;
-		data->body_size.virtual_size = data->virtual_size -
-			data->hdr_size.virtual_size;
-		data->body_size_set = TRUE;
-	}
+	index_mail_try_set_body_size(mail);
 	*size_r = data->virtual_size;
 
 	/* if vsize is present and wanted for index, but missing from index
@@ -1182,7 +1196,7 @@ static int index_mail_parse_body(struct index_mail *mail,
 	if (data->save_bodystructure_body) {
 		/* bodystructure header is parsed, we want the body's mime
 		   headers too */
-		i_assert(!data->save_bodystructure_header);
+		i_assert(data->parsed_bodystructure_header);
 		message_parser_parse_body(data->parser_ctx,
 					  parse_bodystructure_part_header,
 					  mail->mail.data_pool);
@@ -1224,14 +1238,13 @@ int index_mail_init_stream(struct index_mail *mail,
 	struct mail *_mail = &mail->mail.mail;
 	struct index_mail_data *data = &mail->data;
 	struct istream *input;
-	bool has_nuls;
+	bool has_nuls, body_size_from_stream = FALSE;
 	int ret;
 
-	if (_mail->box->storage->user->mail_debug &&
-	    mail->mail.get_stream_reason != NULL &&
+	if (mail->mail.get_stream_reason != NULL &&
 	    mail->mail.get_stream_reason[0] != '\0') {
-		i_debug("Mailbox %s: Opened mail UID=%u because: %s",
-			_mail->box->vname, _mail->uid,
+		e_debug(_mail->event,
+			"Opened mail because: %s",
 			mail->mail.get_stream_reason);
 	}
 	_mail->mail_stream_opened = TRUE;
@@ -1296,6 +1309,7 @@ int index_mail_init_stream(struct index_mail *mail,
 				}
 				data->body_size_set = TRUE;
 			}
+			body_size_from_stream = TRUE;
 		}
 
 		*body_size = data->body_size;
@@ -1306,6 +1320,14 @@ int index_mail_init_stream(struct index_mail *mail,
 			data->body_size.virtual_size;
 		data->physical_size = data->hdr_size.physical_size +
 			data->body_size.physical_size;
+		if (body_size_from_stream) {
+			/* the sizes were just calculated */
+			data->inexact_total_sizes = FALSE;
+		}
+	} else {
+		/* If body_size==NULL, the caller doesn't care about it.
+		   However, try to set it anyway if it can be calculated. */
+		index_mail_try_set_body_size(mail);
 	}
 	ret = index_mail_stream_check_failure(mail);
 
@@ -1327,7 +1349,8 @@ static int index_mail_parse_bodystructure(struct index_mail *mail,
 		   a string */
 		index_mail_body_parsed_cache_bodystructure(mail, field);
 	} else {
-		if (data->save_bodystructure_header ||
+		if ((data->save_bodystructure_header &&
+		     !data->parsed_bodystructure_header) ||
 		    !data->save_bodystructure_body ||
 		    field == MAIL_CACHE_BODY_SNIPPET) {
 			/* we haven't parsed the header yet */

@@ -58,9 +58,8 @@ If <ACL.txt> plugin is enabled, the Master user is still subject to ACLs just
 like any other user, which means that by default the master user has no access
 to any mailboxes of the user. The options for handling this are:
 
- 1. Adding a global <ACL.txt> for the master user. Unfortunately currently you
-    can only create per-mailbox ACLs, there is no "default ACL" that applies to
-    all mailboxes.
+ 1. Adding a global <ACL.txt> for the master user. You can create a "default
+    ACL", that applies to all mailboxes. See example below.
  2. Assigning 'MASTER_USER=$USER' in a <postlogin-script>
     [PostLoginScripting.txt]. The result is that the login username's ACL is
     used, rather than the master username's.
@@ -84,6 +83,13 @@ passdb {
 userdb {
   driver = passwd
 }
+---%<-------------------------------------------------------------------------
+
+To grant the masteruser access to all Mailboxes, the 'dovecot-acl' file can
+contain:
+
+---%<-------------------------------------------------------------------------
+* user=masteruser lr
 ---%<-------------------------------------------------------------------------
 
 Where the 'passwd.masterusers' file would contain the master usernames and
@@ -307,4 +313,4 @@ user_name = '%n' AND domain_name = '%d' AND ( \
 group by uid
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

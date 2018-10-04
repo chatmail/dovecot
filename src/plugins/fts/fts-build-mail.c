@@ -91,15 +91,13 @@ fts_build_unstructured_header(struct fts_mail_build_context *ctx,
 
 	/* @UNSAFE: if there are any NULs, replace them with spaces */
 	for (i = 0; i < hdr->full_value_len; i++) {
-		if (data[i] == '\0') {
+		if (hdr->full_value[i] == '\0') {
 			if (buf == NULL) {
-				buf = i_malloc(hdr->full_value_len);
-				memcpy(buf, data, i);
+				buf = i_memdup(hdr->full_value,
+					       hdr->full_value_len);
 				data = buf;
 			}
 			buf[i] = ' ';
-		} else if (buf != NULL) {
-			buf[i] = data[i];
 		}
 	}
 	ret = fts_build_data(ctx, data, hdr->full_value_len, TRUE);
@@ -187,7 +185,7 @@ static int fts_build_mail_header(struct fts_mail_build_context *ctx,
 		addr = message_address_parse(pool_datastack_create(),
 					     hdr->full_value,
 					     hdr->full_value_len,
-					     UINT_MAX, FALSE);
+					     UINT_MAX, 0);
 		str = t_str_new(hdr->full_value_len);
 		message_address_write(str, addr);
 

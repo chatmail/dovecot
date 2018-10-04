@@ -77,7 +77,7 @@ static struct event_filter *event_filters = NULL;
 struct event_filter *event_filter_create(void)
 {
 	struct event_filter *filter;
-	pool_t pool = pool_alloconly_create("event filter", 256);
+	pool_t pool = pool_alloconly_create("event filter", 2048);
 
 	filter = p_new(pool, struct event_filter, 1);
 	filter->pool = pool;
@@ -483,11 +483,12 @@ event_filter_query_match(const struct event_filter_query_internal *query,
 
 	if (query->name != NULL) {
 		if (event->sending_name == NULL ||
-		    strcmp(event->sending_name, query->name) != 0)
+		    !wildcard_match(event->sending_name, query->name))
 			return FALSE;
 	}
 	if (query->source_filename != NULL) {
-		if (source_linenum != query->source_linenum ||
+		if ((source_linenum != query->source_linenum &&
+		     query->source_linenum != 0) ||
 		    source_filename == NULL ||
 		    strcmp(event->source_filename, query->source_filename) != 0)
 			return FALSE;

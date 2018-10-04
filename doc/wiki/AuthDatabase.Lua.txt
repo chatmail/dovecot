@@ -17,7 +17,7 @@ Contents
 
      4. User database
 
-     5. Example
+     5. Examples
 
 Lua interface
 -------------
@@ -175,8 +175,11 @@ userdb {
 }
 ---%<-------------------------------------------------------------------------
 
-Example
--------
+Examples
+--------
+
+Skeleton
+--------
 
 ---%<-------------------------------------------------------------------------
 function auth_passdb_lookup(req)
@@ -205,4 +208,74 @@ function auth_userdb_iterate()
 end
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-07-09 04:42)
+Simple username password database (such as opensmtpd)
+-----------------------------------------------------
+
+The example uses whitespace separated username and password. As a special
+caution, the way Lua is used here means you can have multiple user password per
+line, instead of just one.This can be extended to more complicated separators
+or multiple fields per user.
+
+If you only want to autenticate users, and don't care about user listing, you
+can use
+
+---%<-------------------------------------------------------------------------
+function auth_passdb_lookup(req)
+    for line in io.lines("/path/to/file") do
+        for user, pass in string.gmatch(line, "(%w+)%s(.+)") do
+            if (user == req.username) then
+                -- you can add additional information here, like userdb_uid
+                return dovecot.auth.PASSDB_RESULT_OK, "password=" .. pass
+            end
+        end
+    end
+    return dovecot.auth.PASSDB_RESULT_USER_UNKNOWN, ""
+end
+---%<-------------------------------------------------------------------------
+
+If you also want to be able to list users, so that you could use doveadm cmd -A
+
+---%<-------------------------------------------------------------------------
+local database = "/path/to/file"
+
+function db_lookup(username)
+    for line in io.lines(database) do
+        for user, pass in string.gmatch(line, "(%w+)%s(.+)") do
+            if (user == username) then
+                return {result=0, password=pass}
+            end
+        end
+    end
+    return {result=-1}
+end
+
+function auth_passdb_lookup(req)
+    res = db_lookup(req.username)
+    if res.result == 0 then
+        -- you can add additional information here for passdb
+        return dovecot.auth.PASSDB_RESULT_OK, "password=" .. res.password
+    end
+    return dovecot.auth.PASSDB_RESULT_USER_UNKNOWN, ""
+end
+
+function auth_userdb_lookup(req)
+    res = db_lookup(req.username)
+    if res.result == 0 then
+        -- you can add additional information here for userdb, like uid or home
+        return dovecot.auth.USERDB_RESULT_OK, "uid=vmail gid=vmail"
+    end
+    return dovecot.auth.USERDB_RESULT_USER_UNKNOWN, ""
+end
+
+function auth_userdb_iterate()
+   users = {}
+   for line in io.lines(database) do
+        for user in string.gmatch(line, "(%w+)%s.+") do
+            table.insert(users, user)
+        end
+   end
+   return users
+end
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2018-10-01 04:42)

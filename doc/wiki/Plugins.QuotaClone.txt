@@ -6,12 +6,13 @@ Quota Clone Plugin
 Quota clone plugin is useful when you want to store everybody's current quota
 usage to a database, but you don't want to use the database as the
 authoritative quota database. For example you might want to access everybody's
-quota via Redis, but you don't store the Redis database permanently so it could
-become empty once in a while. In this case you can use e.g. <dict-file>
-[Quota.Dict.txt] or <count> [Quota.Count.txt] as the authoritative quota
-database and make a copy of the quota usage to Redis. From Redis you could then
-once in a while gather everybody's current quota usage and send it to yet
-another place (e.g. for statistics handling).
+quota via Redis (or with SQL database, Redis is example here), but you don't
+store the Redis database permanently so it could become empty once in a while.
+In this case you can use e.g. <dict-file> [Quota.Dict.txt] or <count>
+[Quota.Count.txt] as the authoritative quota database and make a copy of the
+quota usage to Redis. From Redis you could then once in a while gather
+everybody's current quota usage and send it to yet another place (e.g. for
+statistics handling).
 
 Every time quota is updated, the value is updated to the cloned dict. There are
 race conditions with it so the quota may not always be 100% correct. The old
@@ -33,4 +34,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)
