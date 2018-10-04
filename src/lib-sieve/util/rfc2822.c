@@ -133,7 +133,7 @@ unsigned int rfc2822_header_append
 	unsigned int lines = 0;
 
 	/* Write header field name first */
-	str_append_n(header, name, line_len);
+	str_append(header, name);
 	str_append(header, ": ");
 
 	if ( body_offset_r != NULL )
@@ -143,13 +143,22 @@ unsigned int rfc2822_header_append
 
 	/* Add field body; fold it if necessary and account for existing folding */
 	while ( *bp != '\0' ) {
+		bool ws_first = TRUE;
+
 		while ( *bp != '\0' && nlp == NULL &&
 			(wp == NULL || line_len < max_line) ) {
 			if ( *bp == ' ' || *bp == '\t' ) {
-			 	wp = bp;
+				if (ws_first)
+					wp = bp;
+				ws_first = FALSE;
 			} else if ( *bp == '\r' || *bp == '\n' ) {
-				nlp = bp;
+				if (ws_first)
+					nlp = bp;
+				else
+					nlp = wp;
 				break;
+			} else {
+				ws_first = TRUE;
 			}
 
 			bp++; line_len++;
@@ -159,11 +168,12 @@ unsigned int rfc2822_header_append
 
 		/* Existing newline ? */
 		if ( nlp != NULL ) {			
-			/* Replace any sort of newline for consistency */
-			while ( *bp == '\r' || *bp == '\n' )
+			/* Replace any consecutive newline and whitespace for
+			   consistency */
+			while ( *bp == ' ' || *bp == '\t' || *bp == '\r' || *bp == '\n' )
 				bp++;
 
-			str_append_n(header, sp, nlp-sp);
+			str_append_data(header, sp, nlp-sp);
 
 			if ( crlf )
 				str_append(header, "\r\n");
@@ -180,7 +190,8 @@ unsigned int rfc2822_header_append
 			sp = bp;
 		} else {
 			/* Insert newline at last whitespace within the max_line limit */
-			str_append_n(header, sp, wp-sp);
+			i_assert(wp >= sp);
+			str_append_data(header, sp, wp-sp);
 
 			/* Force continued line; drop any existing whitespace */
 			while ( *wp == ' ' || *wp == '\t' )
@@ -195,6 +206,8 @@ unsigned int rfc2822_header_append
 			str_append_c(header, '\t');
 
 			sp = wp;
+			if (sp > bp)
+				bp = sp;
 		}
 
 		lines++;
@@ -205,7 +218,7 @@ unsigned int rfc2822_header_append
 	}
 
 	if ( bp != sp || lines == 0 ) {
-		str_append_n(header, sp, bp-sp);
+		str_append_data(header, sp, bp-sp);
 		if ( crlf )
 			str_append(header, "\r\n");
 		else
