@@ -20,6 +20,10 @@ Contents
 
      5. Folder keys
 
+         1. Unencrypted user keys
+
+         2. Encrypted user keys
+
      6. Global keys
 
          1. RSA key
@@ -155,6 +159,12 @@ must also specify *mail_crypt_curve*. Any valid curve supported by underlying
 cryptographic library is supported.*mail_attribute_dict* has to be set since it
 is used to store the keys.
 
+Unencrypted user keys
+---------------------
+
+In this version of the folder keys mode, the users private key is stored
+unencrypted on the server.
+
 Example config for folder keys with Maildir:
 
 ---%<-------------------------------------------------------------------------
@@ -166,6 +176,38 @@ plugin {
     mail_crypt_curve = secp521r1
     mail_crypt_save_version = 2
 }
+---%<-------------------------------------------------------------------------
+
+Encrypted user keys
+-------------------
+
+In this version of the folder keys mode, the users private key is stored
+encrypted on the server.
+
+Example config for mandatory encrypted folder keys  with Maildir:
+
+---%<-------------------------------------------------------------------------
+mail_attribute_dict = file:%h/Maildir/dovecot-attributes
+
+mail_plugins = $mail_plugins mail_crypt
+
+plugin {
+    mail_crypt_curve = secp521r1
+    mail_crypt_save_version = 2
+    mail_crypt_require_encrypted_user_key = yes
+}
+---%<-------------------------------------------------------------------------
+
+The password that is used to decrypt the users master/private key, must be
+provided via password query:
+
+---%<-------------------------------------------------------------------------
+# File: /etc/dovecot/dovecot-sql.conf.ext
+
+password_query = SELECT \
+email as user, password, \
+'%w' AS userdb_mail_crypt_private_password \
+FROM virtual_users  WHERE email='%u';
 ---%<-------------------------------------------------------------------------
 
 Global keys
@@ -477,4 +519,4 @@ doveadm mailbox cryptokey password [-u username | -A] [-N | -n password] [-O |
 
 Sets, changes or clears password for user's private key.
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

@@ -1,6 +1,17 @@
 Push notification framework
 ===========================
 
+Contents
+
+
+ 1. Push notification framework
+
+     1. DLOG driver
+
+     2. OX driver
+
+     3. Lua Driver
+
 To use push notifications, both the "notify" and the "push_notification"
 plugins need to be activated. For LMTP delivery, this is required:
 
@@ -94,4 +105,228 @@ by defining "user_from_metadata" in the push_notification_driver url, e.g.
 push_notification_driver = ox:url=http://example.com/ user_from_metadata
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-07-09 04:42)
+Example Payload
+---------------
+
+See
+https://github.com/dovecot/core/blob/master/src/plugins/push-notification/push-notification-driver-ox.c.
+
+Push notification sent in JSON format with the following fields:
+
+ * *user*: User identifier (string)
+ * *event*: RFC 5423 event type (string; currently only "'MessageNew'")
+ * *folder*: Mailbox name (string)
+ * *imap-uidvalidity*: RFC 3501 UIDVALIDITY value of the mailbox (integer)
+ * *imap-uid*: UID of the message, if applicable (integer)
+ * *from*: RFC 2822 address of the message sender, if applicable (string)
+ * *subject*: Subject of the message, if applicable (string)
+ * *snippet*: Snippet of the message body, if applicable (string)
+ * *unseen*: RFC 3501 UNSEEN value of the mailbox (integer)
+
+---%<-------------------------------------------------------------------------
+Content-Type: application/json; charset=utf-8
+
+{
+  "user": "4@464646669",
+  "imap-uidvalidity": 123412341,
+  "imap-uid": 2345,
+  "folder": "INBOX",
+  "event": "MessageNew",
+  "from": "alice@barfoo.org",
+  "subject": "Test",
+  "snippet": "Hey guys\nThis is only a test...",
+  "unseen": 2
+}
+---%<-------------------------------------------------------------------------
+
+Lua Driver
+----------
+
+Since (FIXME: Release version) v2.3.x+ you can use Lua to write custom push
+notification handlers, but unfortunately it does not really work yet.See
+<Design.Lua.txt> for general information about Lua in Dovecot. If you have
+mail_lua_script (a global script for storage) it will be used if no script is
+specified.
+
+Configuration
+-------------
+
+---%<-------------------------------------------------------------------------
+mail_plugins = $mail_plugins mail_lua notify push_notification
+push_notification_lua
+
+plugin {
+   push_notification_driver = lua:file=/path/to/lua/script
+   # you can omit the script name if you want to use mail_lua_script script
+instead
+   #mail_lua_script=/path/to/common/script.lua
+}
+---%<-------------------------------------------------------------------------
+
+Example script
+--------------
+
+---%<-------------------------------------------------------------------------
+## To use
+##
+## plugin {
+##  push_notification_driver = lua:file=/home/cmouse/empty.lua
+##  push_lua_url = http://push.notification.server/handler
+## }
+##
+## server is sent a POST message to given url with parameters
+##
+
+local http = require("socket.http")
+local url = require("socket.url")
+
+function table_get(t, k, d)
+  return t[k] or d
+end
+
+function dovecot_lua_notify_begin_txn(user)
+  return {messages={}, ep=user:plugin_getenv("push_lua_url"),
+username=user.username}
+end
+
+function dovecot_lua_notify_end_txn(ctx, success)
+  local i, msg = next(ctx["messages"], nil)
+  while i do
+    local r, c = http.request(ctx["ep"], "from=" .. url.escape(table_get(msg,
+"from", "")) .. "&to=" .. url.escape(table_get(msg, "to", "")) .. "&subject="
+.. url.escape(table_get(msg, "subject", "")) .. "&snippet=" ..
+url.escape(table_get(msg, "snippet", "")) .. "&user=" ..
+url.escape(ctx["username"]))
+    if r and c/100 ~= 2 then
+      dovecot.i_error("lua-push: Remote error " .. tostring(c) .. " handling
+push notication")
+    end
+    if r == nil then
+      dovecot.i_error("lua-push: " .. c)
+    end
+    i, msg = next(ctx["messages"], i)
+  end
+end
+
+function dovecot_lua_notify_event_message_append(ctx, event)
+  table.insert(ctx["messages"], event)
+end
+
+function dovecot_lua_notify_event_message_new(ctx, event)
+  table.insert(ctx["messages"], event)
+end
+---%<-------------------------------------------------------------------------
+
+Overview
+--------
+
+The Lua driver hooks into all events, and calls matching functions when found
+in Lua script.
+
+Currently it supports
+
+ * mailbox create, delete, rename, subscribe and unsubscribe
+ * message new, append, expunge, read and trash, flags set, flags clear
+
+All events are called within a transaction. The event is called with context
+and an event table, which contains the event parameters.All events contain at
+least
+
+ * name - name of the event
+ * user - current mail user
+
+Events are always called after the fact.
+
+Transactions
+------------
+
+ * dovecot_lua_notify_begin_txn(user)
+
+Start transaction. Return value is used as transaction context and is treated
+as opaque value by Lua driver. The user parameter is mail_user object.
+
+ * dovecot_lua_notify_end_txn(context, success)
+
+End transaction, context is unreferenced.
+
+Mailbox events
+--------------
+
+All mailbox events contain 'mailbox' parameter, which is the name of the
+affected mailbox.
+
+ * dovecot_lua_notify_event_mailbox_create(context, {name, mailbox})
+
+Called when mailbox has been created.
+
+ * dovecot_lua_notify_event_mailbox_delete(context, {name, mailbox})
+
+Called when mailbox has been deleted.
+
+ * dovecot_lua_notify_event_mailbox_rename(context, {name, mailbox,
+   mailbox_old})
+
+Called when mailbox has been renamed, old name is retained in mailbox_old
+attribute.
+
+ * dovecot_lua_notify_event_mailbox_subscribe(context, {name, mailbox})
+
+Called when mailbox has been subscribed to. The mailbox does not necessarily
+exist.
+
+ * dovecot_lua_notify_event_mailbox_unsubscribe(context, {name, mailbox})
+
+Called when mailbox has been unsubscribed from. The mailbox does not
+necessarily exist.
+
+Message events
+--------------
+
+All message events contain following parameters
++--------------+----------------------+
+| mailbox      | Mailbox name         |
++--------------+----------------------+
+| uid          | Message UID          |
++--------------+----------------------+
+| uid_validity | Mailbox UID validity |
++--------------+----------------------+
+
+ * dovecot_lua_notify_event_message_new(context, {name, mailbox, uid,
+   uid_validity, date, tz, from, to, subject, snippet})
+
+Called when message is delivered.
+
+ * dovecot_lua_notify_event_message_append(context, {name, mailbox, uid,
+   uid_validity, from, to, subject, snippet})
+
+Called when message is APPENDed to a mailbox.
+
+ * dovecot_lua_notify_event_message_read(context, {name, mailbox, uid,
+   uid_validity})
+
+Called when message is marked as Seen.
+
+ * dovecot_lua_notify_event_message_trash(context, {name, mailbox, uid,
+   uid_validity})
+
+Called when message is marked Deleted.
+
+ * dovecot_lua_notify_event_message_expunge(context, {name, mailbox, uid,
+   uid_validity})
+
+Called when message is EXPUNGEd.
+
+ * dovecot_lua_notify_event_flags_set(context, {name, mailbox, uid,
+   uid_validity, flags, keywords_set})
+
+Called when message flags or keywords are set. flags is a bitmask. keywords_set
+is an table of keywords set.
+
+ * dovecot_lua_notify_event_flags_clear(context, {name, mailbox, uid,
+   uid_validity, flags, keywords_clear, keywords_old})
+
+Called when message flags or keywords are removed. flags is a bitmask.
+keywords_clear is keywords cleared, keywords_old is an table of keywords that
+were set.
+
+(This file was created from the wiki on 2018-10-01 04:42)

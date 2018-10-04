@@ -65,7 +65,8 @@ userdb {
 ssl=yes
 ssl_cert=</path/to/cert.pem
 ssl_key=</path/to/key.pem
-# if you are using v2.3+
+# if you are using v2.3.0-v2.3.2.1 (or want to support non-ECC DH algorithms)
+# since v2.3.3 this setting has been made optional.
 #ssl_dh=</path/to/dh.pem
 
 namespace {
@@ -110,7 +111,7 @@ config file you add which setting. In the production system it's often easier
 to just have a single 'dovecot.conf' file, which you can create easily using
 
 ---%<-------------------------------------------------------------------------
-doveconf -n > dovecot.conf
+doveconf -nP > dovecot.conf
 ---%<-------------------------------------------------------------------------
 
 Hints about writing configuration files
@@ -119,8 +120,8 @@ Hints about writing configuration files
  * Usually it does not matter in which file you write the setting, however,
    later settings replace earlier ones. If you use the same section multiple
    times, the settings are merged together.
- * Boolean settings in the 'plugin' section interprete /any/ value as *true*,
-   even '0', 'no' and 'false'.
+ * Before v2.3, boolean settings in the 'plugin' section interpret /any/ value
+   as *true*, even '0', 'no' and 'false'.
  * To read the content of a file, for instance for the SSL certificate option,
    prefix the filename with a '<', e.g.:
 
@@ -190,6 +191,10 @@ authentication> [Authentication.Mechanisms.txt]). This is recommended in most
 situations, since it prevents leaking passwords. However, if you don't offer
 SSL for some reason, you'll probably want to set 'disable_plaintext_auth = no'.
 
+Since v2.3.3 you only need ssl_key and ssl_cert, leaving ssl_dh unset (and
+removing ssl-parameters.dat if left over from 2.2) will prevent using non-EC DH
+algorithms.
+
 NFS
 ---
 
@@ -201,4 +206,4 @@ Running
 
 See <RunningDovecot.txt> and <Logging.txt>.
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

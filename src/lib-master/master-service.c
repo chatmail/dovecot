@@ -181,7 +181,6 @@ master_service_init(const char *name, enum master_service_flags flags,
 	data_stack_frame_t datastack_frame_id = 0;
 	unsigned int count;
 	const char *value;
-	const char *error;
 
 	i_assert(name != NULL);
 
@@ -261,9 +260,15 @@ master_service_init(const char *name, enum master_service_flags flags,
 		master_service_init_socket_listeners(service);
 	} T_END;
 
+#ifdef HAVE_SSL
 	/* load SSL module if necessary */
-	if (service->want_ssl_settings && ssl_module_load(&error) < 0)
-		i_fatal("Cannot load SSL module: %s", error);
+	if (service->want_ssl_settings) {
+		const char *error;
+		if (ssl_module_load(&error) < 0)
+			i_fatal("Cannot load SSL module: %s", error);
+		service->ssl_module_loaded = TRUE;
+	}
+#endif
 
 	/* set up some kind of logging until we know exactly how and where
 	   we want to log */
@@ -576,6 +581,9 @@ void master_service_init_finish(struct master_service *service)
 {
 	enum libsig_flags sigint_flags = LIBSIG_FLAG_DELAYED;
 	struct stat st;
+
+	i_assert(!service->init_finished);
+	service->init_finished = TRUE;
 
 	/* set default signal handlers */
 	if ((service->flags & MASTER_SERVICE_FLAG_STANDALONE) == 0)
@@ -990,6 +998,11 @@ void master_service_deinit(struct master_service **_service)
 
 	*_service = NULL;
 
+	if (!service->init_finished &&
+	    (service->flags & MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME) == 0) {
+		if (!t_pop(&service->datastack_frame_id))
+			i_panic("Leaked t_pop() call");
+	}
 	master_service_haproxy_abort(service);
 
 	master_service_io_listeners_remove(service);
@@ -1275,5 +1288,5 @@ bool version_string_verify_full(const char *line, const char *service_name,
 bool master_service_is_ssl_module_loaded(struct master_service *service)
 {
 	/* if this is TRUE, then ssl module is loaded by init */
-	return service->want_ssl_settings;
+	return service->ssl_module_loaded;
 }

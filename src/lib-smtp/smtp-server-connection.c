@@ -770,7 +770,7 @@ smtp_server_connection_alloc(struct smtp_server *server,
 	struct smtp_server_connection *conn;
 	pool_t pool;
 
-	pool = pool_alloconly_create("smtp server", 512);
+	pool = pool_alloconly_create("smtp server", 1024);
 	conn = p_new(pool, struct smtp_server_connection, 1);
 	conn->pool = pool;
 	conn->refcount = 1;
@@ -1286,8 +1286,8 @@ void smtp_server_connection_reset_state(struct smtp_server_connection *conn)
 	   BDAT LAST, clears all segments sent during that transaction and resets
 	   the session.
 	 */
-	if (conn->state.data_input != NULL)
-		i_stream_destroy(&conn->state.data_input);
+	i_stream_destroy(&conn->state.data_input);
+	i_stream_destroy(&conn->state.data_chain_input);
 	conn->state.data_chain = NULL;
 
 	/* reset state */

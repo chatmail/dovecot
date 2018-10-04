@@ -78,17 +78,20 @@ void e_debug(struct event *event,
 }
 
 static bool event_get_log_prefix(struct event *event, string_t *log_prefix,
-				 bool *replace_prefix)
+				 bool *replace_prefix, unsigned int *type_pos)
 {
 	bool ret = FALSE;
 
 	if (event->log_prefix_replace) {
 		/* this event replaces all parent log prefixes */
 		*replace_prefix = TRUE;
+		*type_pos = event->log_prefix == NULL ? 0 :
+			strlen(event->log_prefix);
 	} else if (event->parent == NULL) {
 		/* append to default log prefix, don't replace it */
 	} else {
-		if (event_get_log_prefix(event->parent, log_prefix, replace_prefix))
+		if (event_get_log_prefix(event->parent, log_prefix,
+					 replace_prefix, type_pos))
 			ret = TRUE;
 	}
 	if (event->log_prefix != NULL) {
@@ -108,31 +111,33 @@ void event_log(struct event *event, const struct event_log_params *params,
 	va_end(args);
 }
 
-static bool
-event_want_debug_log(struct event *event, const char *source_filename,
+#undef event_want_debug_log
+bool event_want_debug_log(struct event *event, const char *source_filename,
 		     unsigned int source_linenum)
 {
 	struct failure_context ctx = { .type = LOG_TYPE_DEBUG };
 
 	if (event->forced_debug)
-		return TRUE;
+		event->sending_debug_log = TRUE;
 
-	if (global_debug_log_filter != NULL &&
-	    event_filter_match_source(global_debug_log_filter, event,
-				      source_filename, source_linenum, &ctx))
-		return TRUE;
-	if (global_core_log_filter != NULL &&
-	    event_filter_match_source(global_core_log_filter, event,
-				      source_filename, source_linenum, &ctx))
-		return TRUE;
-	return FALSE;
+	else if (global_debug_log_filter != NULL &&
+		 event_filter_match_source(global_debug_log_filter, event,
+					   source_filename, source_linenum, &ctx))
+		event->sending_debug_log = TRUE;
+	else if (global_core_log_filter != NULL &&
+		 event_filter_match_source(global_core_log_filter, event,
+					   source_filename, source_linenum, &ctx))
+		event->sending_debug_log = TRUE;
+	else
+		event->sending_debug_log = FALSE;
+	return event->sending_debug_log;
 }
 
+#undef event_want_debug
 bool event_want_debug(struct event *event, const char *source_filename,
 		      unsigned int source_linenum)
 {
-	event->sending_debug_log =
-		event_want_debug_log(event, source_filename, source_linenum);
+	(void)event_want_debug_log(event, source_filename, source_linenum);
 	if (event->sending_debug_log)
 		return TRUE;
 
@@ -154,28 +159,35 @@ event_logv_type(struct event *event, enum log_type log_type,
 {
 	string_t *log_prefix_str = t_str_new(64);
 	bool replace_prefix = FALSE;
+	unsigned int type_pos = 0;
 
 	struct failure_context ctx = {
 		.type = log_type,
 	};
-
+	bool abort_after_event = FALSE;
 	int old_errno = errno;
-	if (!event_get_log_prefix(event, log_prefix_str, &replace_prefix)) {
+
+	if (global_core_log_filter != NULL &&
+	    event_filter_match_source(global_core_log_filter, event,
+				      event->source_filename,
+				      event->source_linenum, &ctx))
+		abort_after_event = TRUE;
+
+	if (!event_get_log_prefix(event, log_prefix_str,
+				  &replace_prefix, &type_pos)) {
 		/* keep log prefix as it is */
 		event_vsend(event, &ctx, fmt, args);
 	} else if (replace_prefix) {
 		/* event overrides the log prefix (even if it's "") */
 		ctx.log_prefix = str_c(log_prefix_str);
+		ctx.log_prefix_type_pos = type_pos;
 		event_vsend(event, &ctx, fmt, args);
 	} else {
 		/* append to log prefix, but don't fully replace it */
 		str_vprintfa(log_prefix_str, fmt, args);
 		event_send(event, &ctx, "%s", str_c(log_prefix_str));
 	}
-	if (global_core_log_filter != NULL &&
-	    event_filter_match_source(global_core_log_filter, event,
-				      event->source_filename,
-				      event->source_linenum, &ctx))
+	if (abort_after_event)
 		abort();
 	errno = old_errno;
 }
@@ -200,7 +212,14 @@ void event_logv(struct event *event, const struct event_log_params *params,
 
 struct event *event_set_forced_debug(struct event *event, bool force)
 {
-	event->forced_debug = force;
+	if (force)
+		event->forced_debug = TRUE;
+	return event;
+}
+
+struct event *event_unset_forced_debug(struct event *event)
+{
+	event->forced_debug = FALSE;
 	return event;
 }
 

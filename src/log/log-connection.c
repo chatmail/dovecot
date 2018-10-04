@@ -144,9 +144,13 @@ client_log_ctx(struct log_connection *log,
 		log_error_buffer_add(log->errorbuf, &err);
 		break;
 	}
-	i_set_failure_prefix("%s", prefix);
+	/* log_prefix overrides the global prefix. Don't bother changing the
+	   global prefix in that case. */
+	if (ctx->log_prefix == NULL)
+		i_set_failure_prefix("%s", prefix);
 	i_log_type(ctx, "%s", text);
-	i_set_failure_prefix("%s", global_log_prefix);
+	if (ctx->log_prefix == NULL)
+		i_set_failure_prefix("%s", global_log_prefix);
 }
 
 static void
@@ -238,12 +242,10 @@ log_it(struct log_connection *log, const char *line,
 	struct failure_line failure;
 	struct failure_context failure_ctx;
 	struct log_client *client = NULL;
-	const char *prefix;
+	const char *prefix = "";
 
 	if (log->master) {
-		T_BEGIN {
-			log_parse_master_line(line, log_time, tm);
-		} T_END;
+		log_parse_master_line(line, log_time, tm);
 		return;
 	}
 
@@ -271,11 +273,16 @@ log_it(struct log_connection *log, const char *line,
 	failure_ctx.type = failure.log_type;
 	failure_ctx.timestamp = tm;
 	failure_ctx.timestamp_usecs = log_time->tv_usec;
-	if (failure.disable_log_prefix)
+	if (failure.log_prefix_len != 0) {
+		failure_ctx.log_prefix =
+			t_strndup(failure.text, failure.log_prefix_len);
+		failure.text += failure.log_prefix_len;
+	} else if (failure.disable_log_prefix) {
 		failure_ctx.log_prefix = "";
-
-	prefix = client != NULL && client->prefix != NULL ?
-		client->prefix : log->default_prefix;
+	} else {
+		prefix = client != NULL && client->prefix != NULL ?
+			client->prefix : log->default_prefix;
+	}
 	client_log_ctx(log, &failure_ctx, log_time, prefix, failure.text);
 }
 
@@ -355,8 +362,9 @@ static void log_connection_input(struct log_connection *log)
 		now = ioloop_timeval;
 		tm = *localtime(&now.tv_sec);
 
-		while ((line = i_stream_next_line(log->input)) != NULL)
+		while ((line = i_stream_next_line(log->input)) != NULL) T_BEGIN {
 			log_it(log, line, &now, &tm);
+		} T_END;
 		io_loop_time_refresh();
 		if (timeval_diff_msecs(&ioloop_timeval, &start_timeval) > MAX_MSECS_PER_CONNECTION) {
 			too_much = TRUE;
@@ -405,7 +413,7 @@ void log_connection_create(struct log_error_buffer *errorbuf,
 	log->listen_fd = listen_fd;
 	log->io = io_add(fd, IO_READ, log_connection_input, log);
 	log->input = i_stream_create_fd(fd, PIPE_BUF);
-	log->default_prefix = i_strdup_printf("listen_fd %d", listen_fd);
+	log->default_prefix = i_strdup_printf("listen_fd(%d): ", listen_fd);
 	hash_table_create_direct(&log->clients, default_pool, 0);
 	array_idx_set(&logs_by_fd, listen_fd, &log);
 

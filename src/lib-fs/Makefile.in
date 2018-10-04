@@ -97,7 +97,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
 	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
 	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
-	$(top_srcdir)/m4/cc_pie.m4 \
+	$(top_srcdir)/m4/cc_pie.m4 $(top_srcdir)/m4/cc_retpoline.m4 \
 	$(top_srcdir)/m4/cc_stack_protector.m4 \
 	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
 	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
@@ -349,6 +349,8 @@ LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBSODIUM_CFLAGS = @LIBSODIUM_CFLAGS@
 LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
+LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
+LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@

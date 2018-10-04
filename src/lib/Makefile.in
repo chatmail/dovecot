@@ -97,7 +97,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
 	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
 	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
-	$(top_srcdir)/m4/cc_pie.m4 \
+	$(top_srcdir)/m4/cc_pie.m4 $(top_srcdir)/m4/cc_retpoline.m4 \
 	$(top_srcdir)/m4/cc_stack_protector.m4 \
 	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
 	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
@@ -219,6 +219,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-byteorder.$(OBJEXT) \
 	test_lib-test-crc32.$(OBJEXT) \
 	test_lib-test-data-stack.$(OBJEXT) \
+	test_lib-test-event-log.$(OBJEXT) \
 	test_lib-test-failures.$(OBJEXT) \
 	test_lib-test-file-create-locked.$(OBJEXT) \
 	test_lib-test-guid.$(OBJEXT) test_lib-test-hash.$(OBJEXT) \
@@ -267,6 +268,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-primes.$(OBJEXT) \
 	test_lib-test-printf-format-fix.$(OBJEXT) \
 	test_lib-test-priorityq.$(OBJEXT) \
+	test_lib-test-random.$(OBJEXT) \
 	test_lib-test-seq-range-array.$(OBJEXT) \
 	test_lib-test-stats-dist.$(OBJEXT) test_lib-test-str.$(OBJEXT) \
 	test_lib-test-strescape.$(OBJEXT) \
@@ -452,6 +454,8 @@ LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBSODIUM_CFLAGS = @LIBSODIUM_CFLAGS@
 LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
+LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
+LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
@@ -758,6 +762,7 @@ headers = \
 	event-log.h \
 	execv-const.h \
 	failures.h \
+	failures-private.h \
 	fd-util.h \
 	fdatasync-path.h \
 	fdpass.h \
@@ -908,6 +913,7 @@ test_lib_SOURCES = \
 	test-byteorder.c \
 	test-crc32.c \
 	test-data-stack.c \
+	test-event-log.c \
 	test-failures.c \
 	test-file-create-locked.c \
 	test-guid.c \
@@ -959,6 +965,7 @@ test_lib_SOURCES = \
 	test-primes.c \
 	test-printf-format-fix.c \
 	test-priorityq.c \
+	test-random.c \
 	test-seq-range-array.c \
 	test-stats-dist.c \
 	test-str.c \
@@ -979,7 +986,7 @@ test_headers = \
 	test-lib.h \
 	test-lib.inc
 
-test_lib_LDADD = $(test_libs)
+test_lib_LDADD = $(test_libs) -lm
 test_lib_DEPENDENCIES = $(test_libs)
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
@@ -1206,6 +1213,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-byteorder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-crc32.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-data-stack.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-log.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-failures.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-file-create-locked.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-guid.Po@am__quote@
@@ -1258,6 +1266,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-primes.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-printf-format-fix.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-priorityq.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-random.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-seq-range-array.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-stats-dist.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-str-find.Po@am__quote@
@@ -1474,6 +1483,20 @@ test_lib-test-data-stack.obj: test-data-stack.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-data-stack.c' object='test_lib-test-data-stack.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-data-stack.obj `if test -f 'test-data-stack.c'; then $(CYGPATH_W) 'test-data-stack.c'; else $(CYGPATH_W) '$(srcdir)/test-data-stack.c'; fi`
+
+test_lib-test-event-log.o: test-event-log.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-log.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-log.Tpo -c -o test_lib-test-event-log.o `test -f 'test-event-log.c' || echo '$(srcdir)/'`test-event-log.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-log.Tpo $(DEPDIR)/test_lib-test-event-log.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-log.c' object='test_lib-test-event-log.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-log.o `test -f 'test-event-log.c' || echo '$(srcdir)/'`test-event-log.c
+
+test_lib-test-event-log.obj: test-event-log.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-log.obj -MD -MP -MF $(DEPDIR)/test_lib-test-event-log.Tpo -c -o test_lib-test-event-log.obj `if test -f 'test-event-log.c'; then $(CYGPATH_W) 'test-event-log.c'; else $(CYGPATH_W) '$(srcdir)/test-event-log.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-log.Tpo $(DEPDIR)/test_lib-test-event-log.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-log.c' object='test_lib-test-event-log.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-log.obj `if test -f 'test-event-log.c'; then $(CYGPATH_W) 'test-event-log.c'; else $(CYGPATH_W) '$(srcdir)/test-event-log.c'; fi`
 
 test_lib-test-failures.o: test-failures.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-failures.o -MD -MP -MF $(DEPDIR)/test_lib-test-failures.Tpo -c -o test_lib-test-failures.o `test -f 'test-failures.c' || echo '$(srcdir)/'`test-failures.c
@@ -2188,6 +2211,20 @@ test_lib-test-priorityq.obj: test-priorityq.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-priorityq.c' object='test_lib-test-priorityq.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-priorityq.obj `if test -f 'test-priorityq.c'; then $(CYGPATH_W) 'test-priorityq.c'; else $(CYGPATH_W) '$(srcdir)/test-priorityq.c'; fi`
+
+test_lib-test-random.o: test-random.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-random.o -MD -MP -MF $(DEPDIR)/test_lib-test-random.Tpo -c -o test_lib-test-random.o `test -f 'test-random.c' || echo '$(srcdir)/'`test-random.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-random.Tpo $(DEPDIR)/test_lib-test-random.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-random.c' object='test_lib-test-random.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-random.o `test -f 'test-random.c' || echo '$(srcdir)/'`test-random.c
+
+test_lib-test-random.obj: test-random.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-random.obj -MD -MP -MF $(DEPDIR)/test_lib-test-random.Tpo -c -o test_lib-test-random.obj `if test -f 'test-random.c'; then $(CYGPATH_W) 'test-random.c'; else $(CYGPATH_W) '$(srcdir)/test-random.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-random.Tpo $(DEPDIR)/test_lib-test-random.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-random.c' object='test_lib-test-random.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-random.obj `if test -f 'test-random.c'; then $(CYGPATH_W) 'test-random.c'; else $(CYGPATH_W) '$(srcdir)/test-random.c'; fi`
 
 test_lib-test-seq-range-array.o: test-seq-range-array.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-seq-range-array.o -MD -MP -MF $(DEPDIR)/test_lib-test-seq-range-array.Tpo -c -o test_lib-test-seq-range-array.o `test -f 'test-seq-range-array.c' || echo '$(srcdir)/'`test-seq-range-array.c

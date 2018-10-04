@@ -146,7 +146,7 @@ smtp_reply_parser_restart(struct smtp_reply_parser *parser)
 	pool_unref(&parser->reply_pool);
 	i_zero(&parser->state);
 
-	parser->reply_pool = pool_alloconly_create("smtp_reply", 256);
+	parser->reply_pool = pool_alloconly_create("smtp_reply", 1024);
 	parser->state.reply = p_new(parser->reply_pool, struct smtp_reply, 1);
 	p_array_init(&parser->state.reply_lines, parser->reply_pool, 8);
 
@@ -166,7 +166,7 @@ static int smtp_reply_parse_code
 	if (str_len(parser->strbuf) + (parser->cur-first) > 3)
 		return -1;
 
-	str_append_n(parser->strbuf, first, parser->cur - first);
+	str_append_data(parser->strbuf, first, parser->cur - first);
 	if (parser->cur == parser->end)
 		return 0;
 	if (str_len(parser->strbuf) != 3)
@@ -195,7 +195,7 @@ static int smtp_reply_parse_textstring(struct smtp_reply_parser *parser)
 		return -1;
 	}
 
-	str_append_n(parser->strbuf, first, parser->cur - first);
+	str_append_data(parser->strbuf, first, parser->cur - first);
 	if (parser->cur == parser->end)
 		return 0;
 	return 1;
@@ -217,7 +217,7 @@ static int smtp_reply_parse_ehlo_domain(struct smtp_reply_parser *parser)
 			"Reply exceeds size limit");
 		return -1;
 	}
-	str_append_n(parser->strbuf, first, parser->cur - first);
+	str_append_data(parser->strbuf, first, parser->cur - first);
 	if (parser->cur == parser->end)
 		return 0;
 	return 1;
@@ -249,7 +249,7 @@ static int smtp_reply_parse_ehlo_greet(struct smtp_reply_parser *parser)
 			}
 
 			/* sanitize bad characters */
-			str_append_n(parser->strbuf,
+			str_append_data(parser->strbuf,
 				first, parser->cur - first);
 
 			if (parser->cur == parser->end)
@@ -582,6 +582,9 @@ int smtp_reply_parse_next(struct smtp_reply_parser *parser,
 		return ret;
 	}
 
+	i_assert(array_count(&parser->state.reply_lines) > 0);
+	array_append_zero(&parser->state.reply_lines);
+
 	parser->state.state = SMTP_REPLY_PARSE_STATE_INIT;
 	parser->state.reply->text_lines =
 		array_idx(&parser->state.reply_lines, 0);
@@ -622,6 +625,9 @@ int smtp_reply_parse_ehlo(struct smtp_reply_parser *parser,
 		*error_r = parser->error;
 		return ret;
 	}
+
+	i_assert(array_count(&parser->state.reply_lines) > 0);
+	array_append_zero(&parser->state.reply_lines);
 
 	parser->state.state = SMTP_REPLY_PARSE_STATE_INIT;
 	parser->state.reply->text_lines =

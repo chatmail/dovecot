@@ -164,4 +164,4 @@ the cache timeout period and you changed the settings on it using eg. vmoduser
 account dovecot can still log this user on because the result of the password
 query has been stored in cache and used.
 
-(This file was created from the wiki on 2018-07-09 04:42)
+(This file was created from the wiki on 2018-10-01 04:42)

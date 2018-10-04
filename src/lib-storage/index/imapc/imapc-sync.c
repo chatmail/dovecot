@@ -411,6 +411,12 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 		imapc_mailbox_run(mbox);
 	array_free(&ctx->expunged_uids);
 
+	if (!mbox->state_fetched_success) {
+		/* All the sync commands succeeded, but we got disconnected.
+		   imapc_initial_sync_check() will crash if we go there. */
+		ctx->failed = TRUE;
+	}
+
 	/* add uidnext & highestmodseq after all appends */
 	imapc_sync_uid_next(ctx);
 	imapc_sync_highestmodseq(ctx);
@@ -490,13 +496,13 @@ static int imapc_sync_finish(struct imapc_sync_context **_ctx)
 	int ret = ctx->failed ? -1 : 0;
 
 	*_ctx = NULL;
-	if (ret == 0) {
-		if (mail_index_sync_commit(&ctx->index_sync_ctx) < 0) {
-			mailbox_set_index_error(&ctx->mbox->box);
-			ret = -1;
-		}
-	} else {
-		mail_index_sync_rollback(&ctx->index_sync_ctx);
+	/* Commit the transaction even if we failed. This is important, because
+	   during the sync delayed_sync_trans points to the sync transaction.
+	   Even if the syncing doesn't fully succeed, we don't want to lose
+	   changes in delayed_sync_trans. */
+	if (mail_index_sync_commit(&ctx->index_sync_ctx) < 0) {
+		mailbox_set_index_error(&ctx->mbox->box);
+		ret = -1;
 	}
 	if (ctx->mbox->sync_gmail_pop3_search_tag != NULL) {
 		mailbox_set_critical(&ctx->mbox->box,

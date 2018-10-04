@@ -85,6 +85,7 @@ wikifiles = ACL.txt \
 	Director.txt \
 	DomainLost.txt \
 	Errors.ChgrpNoPerm.txt \
+	Events.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
 	HAProxy.txt \

@@ -191,6 +191,7 @@ headers = \
 	event-log.h \
 	execv-const.h \
 	failures.h \
+	failures-private.h \
 	fd-util.h \
 	fdatasync-path.h \
 	fdpass.h \
@@ -343,6 +344,7 @@ test_lib_SOURCES = \
 	test-byteorder.c \
 	test-crc32.c \
 	test-data-stack.c \
+	test-event-log.c \
 	test-failures.c \
 	test-file-create-locked.c \
 	test-guid.c \
@@ -394,6 +396,7 @@ test_lib_SOURCES = \
 	test-primes.c \
 	test-printf-format-fix.c \
 	test-priorityq.c \
+	test-random.c \
 	test-seq-range-array.c \
 	test-stats-dist.c \
 	test-str.c \
@@ -414,7 +417,7 @@ test_headers = \
 	test-lib.h \
 	test-lib.inc
 
-test_lib_LDADD = $(test_libs)
+test_lib_LDADD = $(test_libs) -lm
 test_lib_DEPENDENCIES = $(test_libs)
 
 check-local:

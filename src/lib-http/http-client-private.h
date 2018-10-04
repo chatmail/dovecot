@@ -121,7 +121,7 @@ struct http_client_request {
 	uoff_t response_offset, request_offset;
 	uoff_t bytes_in, bytes_out;
 
-	unsigned int attempts;
+	unsigned int attempts, send_attempts;
 	unsigned int redirects;
 	uint64_t sent_global_ioloop_usecs;
 	uint64_t sent_http_ioloop_usecs;
@@ -274,11 +274,13 @@ struct http_client_peer {
 
 	/* active connections to this peer */
 	ARRAY_TYPE(http_client_connection) conns;
+	/* pending connections (not ready connecting) */
+	ARRAY_TYPE(http_client_connection) pending_conns;
 
 	/* zero time-out for consolidating request handling */
 	struct timeout *to_req_handling;
 
-	bool connecting:1;       /* peer is waiting to be connected */
+	bool connect_failed:1;   /* last connection attempt failed */
 	bool connect_backoff:1;  /* peer is waiting for backoff timout*/
 	bool disconnected:1;     /* peer is already disconnected */
 	bool handling_requests:1;/* currently running request handler */

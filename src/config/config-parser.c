@@ -77,7 +77,7 @@ static int config_add_type(struct setting_parser_context *parser,
 
 	str = t_str_new(256);
 	p = strchr(line, '=');
-	str_append_n(str, line, p-line);
+	str_append_data(str, line, p-line);
 	str_append_c(str, SETTINGS_SEPARATOR);
 	str_append(str, p+1);
 	if (info != NULL) {
@@ -479,7 +479,7 @@ str_append_file(string_t *str, const char *key, const char *path,
 		return -1;
 	}
 	while ((ret = read(fd, buf, sizeof(buf))) > 0)
-		str_append_n(str, buf, ret);
+		str_append_data(str, buf, ret);
 	if (ret < 0) {
 		*error_r = t_strdup_printf("%s: read(%s) failed: %m",
 					   key, path);
@@ -631,7 +631,7 @@ config_parse_line(struct config_parser_context *ctx,
 			len--;
 		}
 		if(len >= 1) {
-			str_append_n(full_line, line, len);
+			str_append_data(full_line, line, len);
 			str_append_c(full_line, ' ');
 		}
 		return CONFIG_LINE_TYPE_CONTINUE;

@@ -216,8 +216,8 @@ static void client_auth_parse_args(struct client *client, bool success,
 			}
 		} else if (str_begins(key, "forward_")) {
 			/* these are passed to upstream */
-		} else if (client->set->auth_debug)
-			i_debug("Ignoring unknown passdb extra field: %s", key);
+		} else
+			e_debug(event_auth, "Ignoring unknown passdb extra field: %s", key);
 	}
 	if (array_count(&alt_usernames) > 0) {
 		const char **alt;
@@ -617,7 +617,7 @@ int client_auth_read_line(struct client *client)
 		client_destroy(client, "Authentication response too large");
 		return -1;
 	}
-	str_append_n(client->auth_response, data, i);
+	str_append_data(client->auth_response, data, i);
 	i_stream_skip(client->input, i == size ? size : i+1);
 
 	/* drop trailing \r */

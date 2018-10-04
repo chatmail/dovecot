@@ -15,7 +15,7 @@ cmd_dict_init_full(struct doveadm_cmd_context *cctx,
 {
 	struct dict_settings dict_set;
 	struct dict *dict;
-	bool set;
+	bool set = FALSE;
 	const char *dict_uri, *error, *key, *username = "";
 
 	if (doveadm_cmd_param_bool(cctx, "exact", &set) && set)
@@ -35,8 +35,6 @@ cmd_dict_init_full(struct doveadm_cmd_context *cctx,
 	if (!doveadm_cmd_param_str(cctx, "prefix", &key) &&
 	    !doveadm_cmd_param_str(cctx, "key", &key))
 		key = "";
-
-	i_debug("key = %s", key);
 
 	if (!str_begins(key, DICT_PATH_PRIVATE) &&
 	    !str_begins(key, DICT_PATH_SHARED)) {
