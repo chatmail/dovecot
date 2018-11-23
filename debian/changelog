@@ -1,3 +1,10 @@
+dovecot (1:2.3.4-1) unstable; urgency=medium
+
+  * [14c247f] New upstream version 2.3.4
+  * [7fed004] Update pigeonhole to 0.5.4
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Fri, 23 Nov 2018 22:00:06 +0200
+
 dovecot (1:2.3.3-1) unstable; urgency=medium
 
   [ Jelmer Vernooĳ ]
