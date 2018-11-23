@@ -1,3 +1,16 @@
+v0.5.4 2018-11-23  Stephan Bosch <stephan@rename-it.nl>
+
+	* Adjustments to several changes in Dovecot v2.3.4 make this Pigeonhole
+	  release dependent on that Dovecot release; it will not compile against
+	  older Dovecot versions. And, conversely, you need to upgrade
+	  Pigeonhole when upgrading Dovecot to v2.3.4.
+	* The changes regarding the default postmaster_address in Dovecot v2.3.4
+	  mainly apply to Pigeonhole. The new default should work for all
+	  existing installations, thereby fixing several reported v2.3/v0.5
+	  migration problems.
+	- IMAP FILTER=SIEVE capability: Fix assert crash occurring when running
+	  UID FILTER on a Sieve script with errors.
+
 v0.5.3 2018-10-01  Stephan Bosch <stephan@rename-it.nl>
 
 	- Fix assertion panic occurring when managesieve service fails to open
