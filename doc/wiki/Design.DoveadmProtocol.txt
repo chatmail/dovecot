@@ -92,4 +92,4 @@ Example Clients
  * Perl: Net::Doveadm [https://metacpan.org/pod/Net::Doveadm]
  * See also HTTP protocol-based clients in <Design.DoveadmProtocol.HTTP.txt>
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

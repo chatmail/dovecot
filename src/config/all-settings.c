@@ -77,8 +77,6 @@ struct mail_storage_settings {
 	const char *lock_method;
 	const char *pop3_uidl_format;
 
-	const char *postmaster_address;
-
 	const char *hostname;
 	const char *recipient_delimiter;
 
@@ -89,10 +87,6 @@ struct mail_storage_settings {
 
 	enum file_lock_method parsed_lock_method;
 	enum fsync_mode parsed_fsync_mode;
-	/* May be NULL - use mail_storage_get_postmaster_address() instead of
-	   directly accessing this. */
-	const struct message_address *_parsed_postmaster_address;
-	const struct smtp_address *_parsed_postmaster_address_smtp;
 
 	const char *const *parsed_mail_attachment_content_type_filter;
 	bool parsed_mail_attachment_exclude_inlined;
@@ -147,8 +141,16 @@ struct mail_user_settings {
 
 	const char *mail_log_prefix;
 
+	const char *hostname;
+	const char *postmaster_address;
+
 	ARRAY(struct mail_namespace_settings *) namespaces;
 	ARRAY(const char *) plugin_envs;
+
+	/* May be NULL - use mail_storage_get_postmaster_address() instead of
+	   directly accessing this. */
+	const struct message_address *_parsed_postmaster_address;
+	const struct smtp_address *_parsed_postmaster_address_smtp;
 };
 /* ../../src/lib-storage/index/pop3c/pop3c-settings.h */
 /* <settings checks> */
@@ -541,17 +543,6 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 #ifndef CONFIG_BINARY
 	if (*set->hostname == '\0')
 		set->hostname = p_strdup(pool, my_hostdomain());
-	if (set->postmaster_address[0] == SETTING_STRVAR_UNEXPANDED[0] &&
-	    set->postmaster_address[1] == '\0') {
-		/* check for valid looking fqdn in hostname */
-		if (strchr(set->hostname, '.') == NULL) {
-			*error_r = "postmaster_address setting not given";
-			return FALSE;
-		}
-		set->postmaster_address =
-			p_strconcat(pool, SETTING_STRVAR_UNEXPANDED,
-				    "postmaster@", set->hostname, NULL);
-	}
 #endif
 
 	/* parse mail_attachment_indicator_options */
@@ -586,51 +577,6 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 
 	return TRUE;
 }
-
-#ifndef CONFIG_BINARY
-static bool parse_postmaster_address(const char *address, pool_t pool,
-				     struct mail_storage_settings *set,
-				     const char **error_r) ATTR_NULL(3)
-{
-	struct message_address *addr;
-	struct smtp_address *smtp_addr;
-
-	addr = message_address_parse(pool,
-		(const unsigned char *)address,
-		strlen(address), 2, 0);
-	if (addr == NULL || addr->domain == NULL || addr->invalid_syntax ||
-	    smtp_address_create_from_msg(pool, addr, &smtp_addr) < 0) {
-		*error_r = t_strdup_printf(
-			"invalid address `%s' specified for the "
-			"postmaster_address setting", address);
-		return FALSE;
-	}
-	if (addr->next != NULL) {
-		*error_r = "more than one address specified for the "
-			"postmaster_address setting";
-		return FALSE;
-	}
-	if (addr->name == NULL || *addr->name == '\0')
-		addr->name = "Postmaster";
-	if (set != NULL) {
-		set->_parsed_postmaster_address = addr;
-		set->_parsed_postmaster_address_smtp = smtp_addr;
-	}
-	return TRUE;
-}
-
-static bool mail_storage_settings_expand_check(void *_set,
-	pool_t pool, const char **error_r ATTR_UNUSED)
-{
-	struct mail_storage_settings *set = _set;
-	const char *error;
-
-	/* Parse if possible. Perform error handling later. */
-	(void)parse_postmaster_address(set->postmaster_address, pool,
-				       set, &error);
-	return TRUE;
-}
-#endif
 
 static bool namespace_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 				     const char **error_r)
@@ -753,6 +699,20 @@ static bool mail_user_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 
 #ifndef CONFIG_BINARY
 	fix_base_path(set, pool, &set->auth_socket_path);
+
+	if (*set->hostname == '\0')
+		set->hostname = p_strdup(pool, my_hostdomain());
+	if (set->postmaster_address[0] == SETTING_STRVAR_UNEXPANDED[0] &&
+	    set->postmaster_address[1] == '\0') {
+		/* check for valid looking fqdn in hostname */
+		if (strchr(set->hostname, '.') == NULL) {
+			*error_r = "postmaster_address setting not given";
+			return FALSE;
+		}
+		set->postmaster_address =
+			p_strconcat(pool, SETTING_STRVAR_UNEXPANDED,
+				    "postmaster@", set->hostname, NULL);
+	}
 #else
 	if (*set->mail_plugins != '\0' &&
 	    access(set->mail_plugin_dir, R_OK | X_OK) < 0) {
@@ -764,6 +724,53 @@ static bool mail_user_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 #endif
 	return TRUE;
 }
+
+#ifndef CONFIG_BINARY
+static bool parse_postmaster_address(const char *address, pool_t pool,
+				     struct mail_user_settings *set,
+				     const char **error_r) ATTR_NULL(3)
+{
+	struct message_address *addr;
+	struct smtp_address *smtp_addr;
+
+	addr = message_address_parse(pool,
+		(const unsigned char *)address,
+		strlen(address), 2, 0);
+	if (addr == NULL || addr->domain == NULL || addr->invalid_syntax ||
+	    smtp_address_create_from_msg(pool, addr, &smtp_addr) < 0) {
+		*error_r = t_strdup_printf(
+			"invalid address `%s' specified for the "
+			"postmaster_address setting", address);
+		return FALSE;
+	}
+	if (addr->next != NULL) {
+		*error_r = "more than one address specified for the "
+			"postmaster_address setting";
+		return FALSE;
+	}
+	if (addr->name == NULL || *addr->name == '\0')
+		addr->name = "Postmaster";
+	if (set != NULL) {
+		set->_parsed_postmaster_address = addr;
+		set->_parsed_postmaster_address_smtp = smtp_addr;
+	}
+	return TRUE;
+}
+
+static bool
+mail_user_settings_expand_check(void *_set, pool_t pool,
+				const char **error_r ATTR_UNUSED)
+{
+	struct mail_user_settings *set = _set;
+	const char *error;
+
+	/* Parse if possible. Perform error handling later. */
+	(void)parse_postmaster_address(set->postmaster_address, pool,
+				       set, &error);
+	return TRUE;
+}
+#endif
+
 /* </settings checks> */
 #undef DEF
 #define DEF(type, name) \
@@ -818,7 +825,6 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_ENUM, lock_method),
 	DEF(SET_STR, pop3_uidl_format),
 
-	DEF(SET_STR_VARS, postmaster_address),
 	DEF(SET_STR, hostname),
 	DEF(SET_STR, recipient_delimiter),
 
@@ -877,7 +883,6 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.lock_method = "fcntl:flock:dotlock",
 	.pop3_uidl_format = "%08Xu%08Xv",
 
-	.postmaster_address = "postmaster@%d",
 	.hostname = "",
 	.recipient_delimiter = "+",
 
@@ -897,9 +902,6 @@ const struct setting_parser_info mail_storage_setting_parser_info = {
 	.parent = &mail_user_setting_parser_info,
 
 	.check_func = mail_storage_settings_check,
-#ifndef CONFIG_BINARY
-	.expand_check_func = mail_storage_settings_expand_check,
-#endif
 };
 #undef DEF
 #define DEF(type, name) \
@@ -1027,6 +1029,9 @@ static const struct setting_define mail_user_setting_defines[] = {
 
 	DEF(SET_STR, mail_log_prefix),
 
+	DEF(SET_STR, hostname),
+	DEF(SET_STR_VARS, postmaster_address),
+
 	DEFLIST_UNIQUE(namespaces, "namespace", &mail_namespace_setting_parser_info),
 	{ SET_STRLIST, "plugin", offsetof(struct mail_user_settings, plugin_envs), NULL },
 
@@ -1055,6 +1060,9 @@ static const struct mail_user_settings mail_user_default_settings = {
 
 	.mail_log_prefix = "%s(%u)<%{pid}><%{session}>: ",
 
+	.hostname = "",
+	.postmaster_address = "postmaster@%{if;%d;ne;;%d;%{hostname}}",
+
 	.namespaces = ARRAY_INIT,
 	.plugin_envs = ARRAY_INIT
 };
@@ -1068,7 +1076,10 @@ const struct setting_parser_info mail_user_setting_parser_info = {
 
 	.parent_offset = (size_t)-1,
 
-	.check_func = mail_user_settings_check
+	.check_func = mail_user_settings_check,
+#ifndef CONFIG_BINARY
+	.expand_check_func = mail_user_settings_expand_check,
+#endif
 };
 /* ../../src/lib-storage/index/pop3c/pop3c-settings.c */
 /* <settings checks> */
@@ -5308,35 +5319,35 @@ const struct setting_parser_info *all_default_roots[] = {
 	&master_service_ssl_setting_parser_info,
 	&smtp_submit_setting_parser_info,
 	&director_setting_parser_info, 
-	&old_stats_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&mdbox_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&submission_setting_parser_info, 
+	&quota_status_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&fs_crypt_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&submission_login_setting_parser_info, 
 	&mail_user_setting_parser_info, 
 	&imap_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&aggregator_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&master_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&login_setting_parser_info, 
-	&submission_login_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&quota_status_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&imap_login_setting_parser_info, 
-	&submission_setting_parser_info, 
 	&imapc_setting_parser_info, 
+	&aggregator_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&lmtp_setting_parser_info, 
+	&old_stats_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
 	&maildir_setting_parser_info, 
-	&mdbox_setting_parser_info, 
-	&dict_setting_parser_info, 
-	&fs_crypt_setting_parser_info, 
-	&lda_setting_parser_info, 
+	&master_setting_parser_info, 
 	&stats_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&login_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

@@ -5,6 +5,7 @@
 #include "event-filter.h"
 #include "array.h"
 #include "llist.h"
+#include "time-util.h"
 #include "str.h"
 #include "strescape.h"
 #include "ioloop.h"
@@ -112,6 +113,7 @@ struct event *event_dup(const struct event *source)
 	event_export(source, str);
 	if (!event_import(ret, str_c(str), &err))
 		i_panic("event_import(%s) failed: %s", str_c(str), err);
+	ret->tv_created_ioloop = source->tv_created_ioloop;
 	return ret;
 }
 
@@ -127,8 +129,10 @@ struct event *event_create(struct event *parent, const char *source_filename,
 	event->refcount = 1;
 	event->id = ++event_id_counter;
 	event->pool = pool;
-	event->tv_created = ioloop_timeval;
-	event->source_filename = source_filename;
+	event->tv_created_ioloop = ioloop_timeval;
+	if (gettimeofday(&event->tv_created, NULL) < 0)
+		i_panic("gettimeofday() failed: %m");
+	event->source_filename = p_strdup(pool, source_filename);
 	event->source_linenum = source_linenum;
 	if (parent != NULL) {
 		event->parent = parent;
@@ -154,6 +158,7 @@ event_create_passthrough(struct event *parent, const char *source_filename,
 		event->passthrough = TRUE;
 		/* This event only intends to extend the parent event.
 		   Use the parent's creation timestamp. */
+		event->tv_created_ioloop = parent->tv_created_ioloop;
 		event->tv_created = parent->tv_created;
 		event_last_passthrough = &event->event_passthrough;
 	} else {
@@ -489,6 +494,19 @@ event_add_int(struct event *event, const char *key, intmax_t num)
 }
 
 struct event *
+event_inc_int(struct event *event, const char *key, intmax_t num)
+{
+	struct event_field *field;
+
+	field = event_find_field_int(event, key);
+	if (field == NULL || field->value_type != EVENT_FIELD_VALUE_TYPE_INTMAX)
+		return event_add_int(event, key, num);
+
+	field->value.intmax += num;
+	return event;
+}
+
+struct event *
 event_add_timeval(struct event *event, const char *key,
 		  const struct timeval *tv)
 {
@@ -516,6 +534,11 @@ event_add_fields(struct event *event,
 	return event;
 }
 
+void event_field_clear(struct event *event, const char *key)
+{
+	event_add_str(event, key, "");
+}
+
 struct event *event_get_parent(struct event *event)
 {
 	return event->parent;
@@ -530,6 +553,15 @@ bool event_get_last_send_time(struct event *event, struct timeval *tv_r)
 {
 	*tv_r = event->tv_last_sent;
 	return tv_r->tv_sec != 0;
+}
+
+void event_get_last_duration(struct event *event, intmax_t *duration_r)
+{
+	if (event->tv_last_sent.tv_sec == 0) {
+		*duration_r = 0;
+		return;
+	}
+	*duration_r = timeval_diff_usecs(&event->tv_last_sent, &event->tv_created);
 }
 
 const struct event_field *
@@ -565,7 +597,8 @@ void event_send(struct event *event, struct failure_context *ctx,
 void event_vsend(struct event *event, struct failure_context *ctx,
 		 const char *fmt, va_list args)
 {
-	event->tv_last_sent = ioloop_timeval;
+	if (gettimeofday(&event->tv_last_sent, NULL) < 0)
+		i_panic("gettimeofday() failed: %m");
 	if (event_send_callbacks(event, EVENT_CALLBACK_TYPE_EVENT,
 				 ctx, fmt, args)) {
 		if (ctx->type != LOG_TYPE_DEBUG ||
@@ -940,6 +973,13 @@ event_passthrough_add_timeval(const char *key, const struct timeval *tv)
 	return event_last_passthrough;
 }
 
+static struct event_passthrough *
+event_passthrough_inc_int(const char *key, intmax_t num)
+{
+	event_inc_int(last_passthrough_event(), key, num);
+	return event_last_passthrough;
+}
+
 static struct event *event_passthrough_event(void)
 {
 	struct event *event = last_passthrough_event();
@@ -959,6 +999,7 @@ const struct event_passthrough event_passthrough_vfuncs = {
 	event_passthrough_add_str,
 	event_passthrough_add_int,
 	event_passthrough_add_timeval,
+	event_passthrough_inc_int,
 	event_passthrough_event,
 };
 

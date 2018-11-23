@@ -20,6 +20,9 @@ Solr Schema
 Replace Solr's existing 'solr/conf/schema.xml' using 'doc/solr-schema.xml' from
 Dovecot.
 
+For Solr 7.x you can use [attachment:solr-7.x-schema.xml]. We thank Daniel
+Miller '<dmiller AT SPAMFREE amfes DOT com>' for supplying this file.
+
 If you only have a 'managed-schema' file: copy 'schema.xml' to that folder,
 delete 'managed-schema' file and remove or comment out (be aware not to have
 recursive comment) the block '<updateRequestProcessorChain
@@ -195,4 +198,4 @@ Some additional things which might help you configuring Solr search:
  * Please keep in mind that you will have to change the Solr URL to include the
    core name (ie:'dovecot': 'http://localhost:8939/solr/dovecot').
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

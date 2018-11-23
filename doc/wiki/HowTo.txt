@@ -85,5 +85,9 @@ Others:
  * <Replacing antispam plugin with sieve> [HowTo.AntispamWithSieve.txt]
  * Debian + Dovecot + chasquid how-to
    [https://blitiri.com.ar/git/r/chasquid/b/master/t/docs/f=howto.md.html]
+ * The ultimate mail server setup
+   [https://www.ohreally.nl/2018/11/19/mail-server/]: Dovecot (IMAP + SASL +
+   LDA + Pigeonhole) + Postfix + Let's Encrypt + Greylisting + SPF + DKIM +
+   Bogofilter + Clamav
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

@@ -401,6 +401,17 @@ bool event_filter_import_unescaped(struct event_filter *filter,
 }
 
 static bool
+event_category_match(const struct event_category *category,
+		     const struct event_category *wanted_category)
+{
+	for (; category != NULL; category = category->parent) {
+		if (category == wanted_category)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+static bool
 event_has_category(struct event *event, struct event_category *wanted_category)
 {
 	struct event_category *const *catp;
@@ -410,7 +421,7 @@ event_has_category(struct event *event, struct event_category *wanted_category)
 	while (event != NULL) {
 		if (array_is_created(&event->categories)) {
 			array_foreach(&event->categories, catp) {
-				if (*catp == wanted_category)
+				if (event_category_match(*catp, wanted_category))
 					return TRUE;
 			}
 		}
@@ -450,6 +461,10 @@ event_match_field(struct event *event, const struct event_field *wanted_field)
 	}
 	switch (field->value_type) {
 	case EVENT_FIELD_VALUE_TYPE_STR:
+		if (field->value.str[0] == '\0') {
+			/* field was removed */
+			return FALSE;
+		}
 		return wildcard_match_icase(field->value.str, wanted_field->value.str);
 	case EVENT_FIELD_VALUE_TYPE_INTMAX:
 		return field->value.intmax == wanted_field->value.intmax;

@@ -1,3 +1,33 @@
+v2.3.4 2018-11-23  Timo Sirainen <tss@iki.fi>
+
+	* The default postmaster_address is now "postmaster@<user domain or
+	  server hostname>". If username contains the @domain part, that's
+	  used. If not, then the server's hostname is used.
+	* "doveadm stats dump" now returns two decimals for the "avg" field.
+
+	+ Added push notification driver that uses a Lua script
+	+ Added new SQL, DNS and connection events.
+	  See https://wiki2.dovecot.org/Events
+	+ Added "doveadm mailbox cache purge" command.
+	+ Added events API support for Lua scripts
+	+ doveadm force-resync -f parameter performs "index fsck" while opening
+	  the index. This may be useful to fix some types of broken index files.
+	  This may become the default behavior in a later version.
+	- director: Kicking a user crashes if login process is very slow
+	- pop3_no_flag_updates=no: Don't expunge DELEted and RETRed messages
+	  unless QUIT is sent.
+	- auth: Fix crypt() segfault with glibc-2.28+
+	- imap: Running UID FILTER script with errors assert-crashes
+	- dsync, pop3-migration: POP3 UIDLs weren't added to
+	  dovecot.index.cache while mails were saved.
+	- dict clients may have been using 100% CPU while waiting for dict
+	  server to finish commands.
+	- doveadm user: Fixed user listing via HTTP API
+	- All levels of Cassandra log messages were logged as Dovecot errors.
+	- http/smtp client may have crashed after SSL handshake
+	- Lua auth converted strings that looked like numbers into numbers.
+
+
 v2.3.3 2018-10-01  Timo Sirainen <tss@iki.fi>
 
 	* doveconf hides more secrets now in the default output.

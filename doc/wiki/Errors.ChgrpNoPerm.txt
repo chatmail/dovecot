@@ -25,4 +25,4 @@ To solve this problem you can do only one of two things:
     read other users' INBOXes
     [http://dovecot.org/list/dovecot-news/2008-March/000060.html].
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

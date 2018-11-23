@@ -979,8 +979,10 @@ static void http_client_connection_input(struct connection *_conn)
 			i_assert(ret == 0);
 			return;
 		}
+	}
 
-		/* ready for first request */
+	if (!conn->connect_succeeded) {
+		/* just got ready for first request */
 		http_client_connection_ready(conn);
 	}
 
@@ -1353,6 +1355,7 @@ http_client_connection_ready(struct http_client_connection *conn)
 	const struct http_client_settings *set = &peer->client->set;
 
 	e_debug(conn->event, "Ready for requests");
+	i_assert(!conn->connect_succeeded);
 
 	/* connected */
 	conn->connected = TRUE;
@@ -1617,6 +1620,7 @@ http_client_connection_tunnel_response(const struct http_response *response,
 
 	http_client_request_start_tunnel(req, &tunnel);
 
+	conn->conn.event_parent = conn->event;
 	connection_init_from_streams(cctx->conn_list, &conn->conn,
 				     name, tunnel.input, tunnel.output);
 	connection_switch_ioloop_to(&conn->conn, cctx->ioloop);
@@ -1698,6 +1702,7 @@ http_client_connection_create(struct http_client_peer *peer)
 	conn->label = i_strdup_printf("%s [%d]",
 		http_client_peer_shared_label(pshared), conn->id);
 	conn->event = event_create(peer->client->event);
+	conn->conn.event_parent = conn->event;
 	event_set_append_log_prefix(conn->event,
 		t_strdup_printf("conn %s: ", conn->label));
 

@@ -262,4 +262,4 @@ plugin [https://plugins.roundcube.net/packages/johndoh/markasjunk2] for
 allowing users to mark Spam/Ham in a convenient way. Please make sure the
 Junk/Spam folder matches your configuration.
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

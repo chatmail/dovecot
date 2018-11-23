@@ -25,7 +25,7 @@ Usage
 
 Once enabled, mails that are saved, are marked with $Has ''Attachment or $Has
 ''No ''Attachment keyword. These keywords can be cleared, and are not
-protected. Re-detecting mails is not currently possible, and flags are
-currently only set during save.
+protected. Since v2.3.3 it is possible to post-process attachments with
+'doveadm rebuild attachments' command.
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)
