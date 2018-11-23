@@ -20,12 +20,17 @@
 
 #define PUSH_NOTIFICATION_CONFIG "push_notification_driver"
 #define PUSH_NOTIFICATION_CONFIG_OLD "push_notification_backend"
+#define PUSH_NOTIFICATION_EVENT_FINISHED "push_notification_finished"
 
 #define PUSH_NOTIFICATION_USER_CONTEXT(obj) \
         MODULE_CONTEXT_REQUIRE(obj, push_notification_user_module)
 static MODULE_CONTEXT_DEFINE_INIT(push_notification_user_module,
                                   &mail_user_module_register);
 static struct ioloop *main_ioloop;
+
+struct event_category event_category_push_notification = {
+	.name = "push_notification",
+};
 
 static void
 push_notification_transaction_init(struct push_notification_txn *ptxn)
@@ -77,7 +82,9 @@ push_notification_transaction_create(struct mailbox *box,
     ptxn->puser = PUSH_NOTIFICATION_USER_CONTEXT(ptxn->muser);
     ptxn->t = t;
     ptxn->trigger = PUSH_NOTIFICATION_EVENT_TRIGGER_NONE;
-
+    ptxn->event = event_create(ptxn->muser->event);
+    event_add_category(ptxn->event, &event_category_push_notification);
+    event_set_append_log_prefix(ptxn->event, "push-notification: ");
     p_array_init(&ptxn->drivers, pool, 4);
 
     return ptxn;
@@ -96,6 +103,11 @@ static void push_notification_transaction_end
         }
     }
 
+    struct event_passthrough *e = event_create_passthrough(ptxn->event)->
+        set_name(PUSH_NOTIFICATION_EVENT_FINISHED);
+    /* emit event */
+    e_debug(e->event(), "Push notification transaction completed");
+    event_unref(&ptxn->event);
     pool_unref(&ptxn->pool);
 }
 
@@ -124,6 +136,7 @@ static void push_notification_mailbox_create(struct mailbox *box)
     struct push_notification_txn *ptxn;
 
     ptxn = push_notification_transaction_create(box, NULL);
+    push_notification_transaction_init(ptxn);
     push_notification_trigger_mbox_create(ptxn, box, NULL);
     push_notification_transaction_commit(ptxn, NULL);
 }
@@ -134,6 +147,7 @@ static void push_notification_mailbox_delete(void *txn ATTR_UNUSED,
     struct push_notification_txn *ptxn;
 
     ptxn = push_notification_transaction_create(box, NULL);
+    push_notification_transaction_init(ptxn);
     push_notification_trigger_mbox_delete(ptxn, box, NULL);
     push_notification_transaction_commit(ptxn, NULL);
 }
@@ -144,6 +158,7 @@ static void push_notification_mailbox_rename(struct mailbox *src,
     struct push_notification_txn *ptxn;
 
     ptxn = push_notification_transaction_create(dest, NULL);
+    push_notification_transaction_init(ptxn);
     push_notification_trigger_mbox_rename(ptxn, src, dest, NULL);
     push_notification_transaction_commit(ptxn, NULL);
 }
@@ -154,6 +169,7 @@ static void push_notification_mailbox_subscribe(struct mailbox *box,
     struct push_notification_txn *ptxn;
 
     ptxn = push_notification_transaction_create(box, NULL);
+    push_notification_transaction_init(ptxn);
     push_notification_trigger_mbox_subscribe(ptxn, box, subscribed, NULL);
     push_notification_transaction_commit(ptxn, NULL);
 }

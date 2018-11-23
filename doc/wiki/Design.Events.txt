@@ -261,4 +261,4 @@ The global events are pushed/popped in a stack. For example with IMAP the
 initial global event is the user's event. During IMAP command execution the
 global event is the IMAP command event.
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

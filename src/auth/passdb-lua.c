@@ -55,6 +55,11 @@ passdb_lua_lookup(struct auth_request *request,
 			auth_request_log_info(request, AUTH_SUBSYS_DB,
 				"No password returned (and no nopassword)");
 			result = PASSDB_RESULT_PASSWORD_MISMATCH;
+		} else {
+			if (*scheme_r == NULL)
+				*scheme_r = request->passdb->passdb->default_pass_scheme;
+			auth_request_set_field(request, "password",
+					       *password_r, *scheme_r);
 		}
 	} else if (*password_r != NULL && **password_r != '\0') {
 		auth_request_log_info(request, AUTH_SUBSYS_DB,
@@ -153,7 +158,7 @@ static void passdb_lua_init(struct passdb_module *_module)
 		(struct dlua_passdb_module *)_module;
 	const char *error;
 
-	if (dlua_script_create_file(module->file, &module->script, &error) < 0 ||
+	if (dlua_script_create_file(module->file, &module->script, auth_event, &error) < 0 ||
 	    auth_lua_script_init(module->script, &error) < 0)
 		i_fatal("passdb-lua: initialization failed: %s", error);
 	module->has_password_verify =

@@ -70,6 +70,10 @@ struct event_passthrough {
 		(*add_int)(const char *key, intmax_t num);
 	struct event_passthrough *
 		(*add_timeval)(const char *key, const struct timeval *tv);
+
+	struct event_passthrough *
+		(*inc_int)(const char *key, intmax_t num);
+
 	struct event *(*event)(void);
 };
 
@@ -177,11 +181,17 @@ event_add_category(struct event *event, struct event_category *category);
 /* Add key=value field to the event. If a key already exists, it's replaced.
    Child events automatically inherit key=values from their parents at the
    time the event is sent. So changing a key in parent will change the values
-   in the child events as well. Returns the event parameter. */
+   in the child events as well, unless the key has been overwritten in the
+   child event. Setting the value to "" is the same as event_field_clear().
+   Returns the event parameter. */
 struct event *
 event_add_str(struct event *event, const char *key, const char *value);
 struct event *
 event_add_int(struct event *event, const char *key, intmax_t num);
+/* Increase the key's value. If it's not set or isn't an integer type,
+   initialize the value to num. */
+struct event *
+event_inc_int(struct event *event, const char *key, intmax_t num);
 struct event *
 event_add_timeval(struct event *event, const char *key,
 		  const struct timeval *tv);
@@ -189,6 +199,12 @@ event_add_timeval(struct event *event, const char *key,
    terminates with key=NULL. Returns the event parameter. */
 struct event *
 event_add_fields(struct event *event, const struct event_add_field *fields);
+/* Mark a field as nonexistent. If a parent event has the field set, this
+   allows removing it from the child event. Using an event filter with e.g.
+   "key=*" won't match this field anymore, although it's still visible in
+   event_find_field*() and event_get_fields(). This is the same as using
+   event_add_str() with value="". */
+void event_field_clear(struct event *event, const char *key);
 
 /* Returns the parent event, or NULL if it doesn't exist. */
 struct event *event_get_parent(struct event *event);
@@ -197,6 +213,8 @@ void event_get_create_time(struct event *event, struct timeval *tv_r);
 /* Get the time when the event was last sent. Returns TRUE if time was
    returned, FALSE if event has never been sent. */
 bool event_get_last_send_time(struct event *event, struct timeval *tv_r);
+/* Get the event duration field, calculated after event has been sent. */
+void event_get_last_duration(struct event *event, intmax_t *duration_msec_r);
 /* Returns field for a given key, or NULL if it doesn't exist. If the key
    isn't found from the event itself, find it from parent events. */
 const struct event_field *

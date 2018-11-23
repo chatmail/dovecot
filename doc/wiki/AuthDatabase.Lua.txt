@@ -9,15 +9,25 @@ Contents
 
  1. Lua based authentication
 
-     1. Lua interface
+     1. Known bugs
 
-     2. Auth request accessors
+     2. Lua interface
 
-     3. Password database
+     3. Auth request accessors
 
-     4. User database
+     4. Password database
 
-     5. Examples
+     5. User database
+
+     6. Examples
+
+Known bugs
+----------
+
+ * Before 2.3.4 when returning a table with values, the table values are
+   mistakenly converted into a number if they seem like a number. So if you are
+   using values like '012345', this would get converted into '12345'
+ * Before 2.3.4 returning password without scheme would cause a crash.
 
 Lua interface
 -------------
@@ -278,4 +288,4 @@ function auth_userdb_iterate()
 end
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

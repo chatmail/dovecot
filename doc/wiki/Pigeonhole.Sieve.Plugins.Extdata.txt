@@ -152,4 +152,4 @@ Read the (preliminary) specification
 [https://github.com/stephanbosch/sieve-extdata-plugin/blob/core-0.5/doc/rfc/spec-bosch-sieve-external-data.txt]
 for more information.
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

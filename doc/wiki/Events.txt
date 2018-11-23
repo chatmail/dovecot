@@ -3,6 +3,43 @@ Events
 
 List of all events that can be used in <Statistics.txt> and elsewhere.
 
+Connection
+----------
+
+These events apply only for connections using the "connection API".
+Unfortunately not all connections currently use this, so these events work for
+some types of connections, but not for others.
+
+*client_connection_connected*
+
+ * client_ip: source IP
+ * client_port: source port
+ * ip: target IP
+ * port: target port
+
+*client_connection_disconnected*
+
+ * fields from *client_connection_connected*
+ * bytes_in: amount of data read
+ * bytes_out: amount of data written
+ * reason: disconnection reason
+
+*server_connection_connected*
+
+ * client_ip: source IP
+ * client_port: source port
+ * ip: target IP
+ * port: target port
+ * bytes_in: amount of data read
+ * bytes_out: amount of data written
+
+*server_connection_disconnected*
+
+ * fields from *server_connection_connected*
+ * bytes_in: amount of data read
+ * bytes_out: amount of data written
+ * reason: disconnection reason
+
 HTTP
 ----
 
@@ -71,4 +108,4 @@ SQL
 
 *sql_connection_finished*
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

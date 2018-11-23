@@ -189,4 +189,4 @@ understanding the consequences.
    log2_stale_secs. Don't be too eager, because older files are useful for
    QRESYNC and dsync.
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

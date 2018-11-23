@@ -10,6 +10,13 @@ Dovecot Design
  * <Doveadm server protocol> [Design.DoveadmProtocol.txt] and <Doveadm HTTP
    server protocol> [Design.DoveadmProtocol.HTTP.txt]
  * <Doveadm synchronization> [Design.Dsync.txt]
+ * <Dovecot Lua support> [Design.Lua.txt]
+
+Protocol extensions
+-------------------
+
+ * <Forwarding parameters in IMAP/POP3/LMTP/SMTP proxying>
+   [Design.ParameterForwarding.txt]
 
 Code APIs
 ---------
@@ -56,4 +63,4 @@ lib-storage:
  * <Plugins> [Design.Storage.Plugins.txt] - how to hook into lib-storage
    functions.
 
-(This file was created from the wiki on 2018-10-01 04:42)
+(This file was created from the wiki on 2018-11-23 04:42)

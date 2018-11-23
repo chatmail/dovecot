@@ -64,6 +64,7 @@ wikifiles = ACL.txt \
 	Design.MailProcess.txt \
 	Design.Memory.txt \
 	Design.OutputStreams.txt \
+	Design.ParameterForwarding.txt \
 	Design.Plugins.txt \
 	Design.Processes.txt \
 	Design.Storage.ErrorHandling.txt \
