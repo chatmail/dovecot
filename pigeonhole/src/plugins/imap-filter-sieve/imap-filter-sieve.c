@@ -687,6 +687,15 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 		struct sieve_script *script = scripts[i].script;
 		struct sieve_binary *sbin = scripts[i].binary;
 
+		if (sbin == NULL) {
+			if (debug) {
+				sieve_sys_debug(svinst,
+					"Skipping script from `%s'",
+					sieve_script_location(script));
+			}
+			continue;
+		}
+
 		cpflags = 0;
 		exflags = SIEVE_EXECUTE_FLAG_SKIP_RESPONSES;
 
@@ -700,9 +709,6 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 		} else {
 			ehandler = ifsuser->master_ehandler;
 		}
-
-		/* Open */
-		i_assert(sbin != NULL);
 
 		/* Execute */
 		if (debug) {
@@ -767,6 +773,7 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 		return 1;
 	}
 
+	i_assert(last_script != NULL); /* at least one script is executed */
 	return imap_sieve_filter_handle_exec_status(sctx,
 		last_script, ret, keep, scriptenv->exec_status);
 }

@@ -139,6 +139,7 @@ struct sieve_tool *sieve_tool_init
 	struct sieve_tool *tool;
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_STANDALONE |
+		MASTER_SERVICE_FLAG_DONT_SEND_STATS |
 		MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME;
 
 	if ( no_config )
@@ -489,7 +490,7 @@ sieve_tool_get_address(struct mail *mail, const char *header)
         return NULL;
     addr = message_address_parse(pool_datastack_create(),
                      (const unsigned char *)str,
-                     strlen(str), 1, FALSE);
+                     strlen(str), 1, 0);
     return addr == NULL || addr->mailbox == NULL || addr->domain == NULL ||
         *addr->mailbox == '\0' || *addr->domain == '\0' ?
         NULL : smtp_address_create_temp(addr->mailbox, addr->domain);
