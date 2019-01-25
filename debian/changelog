@@ -1,3 +1,9 @@
+dovecot (1:2.2.27-3+deb9u3) stretch-security; urgency=high
+
+  * [1fb4e06] Fix CVE-2019-3814: TLS client auth username handling
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Fri, 25 Jan 2019 12:45:33 +0200
+
 dovecot (1:2.2.27-3+deb9u2) stretch-security; urgency=high
 
   * [794e743] Fix CVE-2017-14461: rfc822_parse_domain information leak
