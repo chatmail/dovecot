@@ -1,3 +1,10 @@
+dovecot (1:2.3.4.1-1) unstable; urgency=high
+
+  * [bebf0b4] New upstream version 2.3.4.1
+    + Fixes CVE-2019-3814: TLS client auth username handling
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Tue, 05 Feb 2019 16:19:12 +0200
+
 dovecot (1:2.3.4-2) unstable; urgency=medium
 
   * [51d1317] Fix FTBFS on 32-bit platforms.
