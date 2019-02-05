@@ -46,6 +46,9 @@ ssl_cert = </etc/ssl/certs/dovecot.pem
 ssl_key = </etc/ssl/private/dovecot.pem
 ---%<-------------------------------------------------------------------------
 
+The '<' is mandatory. It indicates that the variable should contain *contents*
+of the file, instead of the file name. Not using it will cause an error.
+
 The certificate file can be world-readable, since it doesn't contain anything
 sensitive (in fact it's sent to each connecting SSL client). The key file's
 permissions should be restricted to only root (and possibly ssl-certs group or
@@ -242,6 +245,9 @@ Diffie Hellman parameters and saves them into
 regenerated them every week by default, but because the extra security gained
 by the regeneration is quite small, Dovecot v2.2 disabled the regeneration
 feature completely.
+
+ * Since v2.3.3+ Diffie-Hellman parameters have been made optional, and you are
+   encouraged to disable non-ECC DH algorithms completely.
 
 From and up to version 2.2, you can specify the wanted DH parameters length
 using:
@@ -497,15 +503,11 @@ Testing CA Success
 Client connections
 ------------------
 
-Since v2.3.4 dovecot accepts default system CAs for outgoing connections. Since
-v2.3.4 it is possible to disable certificate validation for e.g. HTTPS
-connections using 'ssl_client_require_valid_cert' setting. For overriding
-client CAs it's possible to use following settings:
+Since v2.3.4 dovecot accepts default system CAs for outgoing connections.
 
 ---%<-------------------------------------------------------------------------
 ssl_client_ca_dir = /path/to/pem/certificates
 ssl_client_ca_file = /path/to/pem/bundle
-ssl_client_require_valid_cert = yes|no
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-11-23 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

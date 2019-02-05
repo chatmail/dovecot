@@ -1,5 +1,5 @@
-Key-value authentication database (v2.1.9+)
-===========================================
+Key-value authentication database
+=================================
 
 Key-value databases can be used as auth backends. They probably should be used
 only for caching in front of e.g. SQL auth backends. Iteration is supported if
@@ -25,41 +25,143 @@ userdb {
 Dict configuration
 ------------------
 
-You can use userdb: prefix for accessing userdb variables (v2.2.26+).
-
 ---%<-------------------------------------------------------------------------
 uri = redis:host=127.0.0.1:port=6379
 
-password_key = dovecot/passdb/%u
-user_key = dovecot/userdb/%u
-iterate_disable = yes
-default_pass_scheme = plain
+# Dictionary URI
+#uri =
 
-## or the new syntax
+# Default password scheme
+default_pass_scheme = MD5
+
+# Username iteration prefix. Keys under this are assumed to contain usernames.
+iterate_prefix = userdb/
+
+# Should iteration be disabled for this userdb? If this userdb acts only as a
+# cache there's no reason to try to iterate the (partial & duplicate) users.
+#iterate_disable = no
+
+# The example here shows how to do multiple dict lookups and merge the replies.
+# The "passdb" and "userdb" keys are JSON objects containing key/value pairs,
+# for example: { "uid": 1000, "gid": 1000, "home": "/home/user" }
 
 key passdb {
-  key = dovecot/passdb/%u
-  passdb_objects = passdb
+  key = passdb/%u
+  format = json
+}
+key userdb {
+  key = userdb/%u
+  format = json
+}
+key quota {
+  key = userdb/%u/quota # or e.g. quota/%{userdb:quota_class}
+  #format = value
+  # The default_value is used if the key isn't found. If default_value setting
+  # isn't specified at all (even as empty), the passdb/userdb lookup fails with
+  # "user doesn't exist".
+  default_value = 100M
 }
 
-key userdb {
-  key = dovecot/userdb/%u
-  userdb_objects = userdb
+# Space separated list of keys whose values contain key/value paired objects.
+# All the key/value pairs inside the object are added as passdb fields.
+# This can only be used for JSON formatted values.
+passdb_objects = passdb
+
+#passdb_fields {
+#}
+
+# Userdb key/value object list.
+userdb_objects = userdb
+
+userdb_fields {
+  # dict:<key> refers to key names
+  quota_rule = *:storage=%{dict:quota}
+
+  # dict:<key>.<objkey> refers to the objkey inside (JSON) object
+  mail = maildir:%{dict:userdb.home}/Maildir
 }
 ---%<-------------------------------------------------------------------------
 
 Example values
 --------------
 
-Currently only JSON object values are supported. For example userdb lookup
-should return something like:
+The value formats are either "value" that contains a direct value, or "json".
+For example userdb lookup should return something like:
 
 ---%<-------------------------------------------------------------------------
 { "uid": 123, "gid": 123, "home": "/home/username" }
 ---%<-------------------------------------------------------------------------
 
-== Complete example for authenticating via the CDB dictionary This example uses
-the CDB dictionary to store the userdb and passdb.
+dict proxying
+-------------
+
+It may be useful to do the lookups via the "dict" or "dict-async" service. For
+example:
+
+'dovecot.conf':
+
+---%<-------------------------------------------------------------------------
+dict {
+  cassandra-userdb = cassandra:/etc/dovecot/dovecot-dict-userdb-cql.conf.ext
+}
+---%<-------------------------------------------------------------------------
+
+'dovecot-dict-auth.conf.ext':
+
+---%<-------------------------------------------------------------------------
+uri = proxy:dict-async:cassandra-userdb
+iterate_disable = yes
+# The _key and _path suffixes are not necessary, they're just here to help
+# understand how to match them between different parts of the configuration.
+key email_key {
+  key = userdb/email_path/%u
+}
+key displayname_key {
+  key = userdb/displayname_path/%u
+}
+userdb_fields {
+  # these fields will be visible as %{userdb:u_email} and
+%{userdb:u_displayname}
+  u_email = %{dict:email_key}
+  u_displayname = %{dict:displayname_key}
+}
+---%<-------------------------------------------------------------------------
+
+'dovecot-dict-userdb-cql.conf.ext':
+
+---%<-------------------------------------------------------------------------
+driver = cassandra
+connect = host=127.0.0.1 dbname=email_users
+
+# SELECT displayname FROM user_profile WHERE id = %u
+map {
+  # pattern must match the "key" path, except with added shared/ prefix. %u
+gets caught into $username
+  pattern = shared/userdb/displayname_path/$username
+  table = user_profile
+  value_field = displayname
+  value_type = string
+  fields {
+    id = $username
+  }
+}
+
+# SELECT email FROM user_profile WHERE id = %u
+map {
+  pattern = shared/userdb/email_path/$username
+  table = user_profile
+  value_field = email
+  value_type = string
+  fields {
+    id = $username
+  }
+}
+---%<-------------------------------------------------------------------------
+
+Complete example for authenticating via the CDB dictionary
+----------------------------------------------------------
+
+This example uses the CDB dictionary to store the userdb and passdb.
 
 Auth configuration
 ------------------
@@ -93,6 +195,7 @@ The CDB dictionary doesn't support iteration yet.
 ---%<-------------------------------------------------------------------------
 uri = proxy::auth
 
+# FIXME: obsolete configuration - should use the key { .. } instead
 password_key = passdb/%u
 user_key = userdb/%u
 # iterate_prefix = userdb/ # no yet supported
@@ -144,6 +247,7 @@ The last "dictionary name" ("somewhere") argument is redundant here.
 ---%<-------------------------------------------------------------------------
 uri = proxy:/var/run/auth_proxy_dovecot/socket:somewhere
 
+# FIXME: obsolete configuration - should use the key { .. } instead
 password_key = passdb/%u
 user_key = userdb/%u
 iterate_disable = yes
@@ -284,4 +388,4 @@ sub pre_server_close_hook {
 __END__
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-11-23 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

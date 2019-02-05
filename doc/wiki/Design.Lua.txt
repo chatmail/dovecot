@@ -5,8 +5,7 @@ Since v2.3.0 dovecot supports Lua scripting. Dovecot supports lua 5.0 or newer.
 See also:
 
  * <Lua based authentication> [AuthDatabase.Lua.txt]. Since v2.3.0
- * <Lua push notifications> [Plugins.PushNotification.txt]. In the upcoming
-   v2.3.4
+ * <Lua push notifications> [Plugins.PushNotification.txt]. Since v2.3.4
 
 lib-lua
 -------
@@ -42,7 +41,7 @@ Lua API
 
 Functions within dovecot variable that do generic logging
 
-Event functions are available since v2.3.4
+Event functions are available from v2.3.4 on
 
  * 'dovecot.event()'
  * 'dovecot.event(parent)'
@@ -76,7 +75,7 @@ Functions:
 mail-lua
 --------
 
-Available in the upcoming v2.3.4
+Available from v2.3.4 on
 
 mail-lua is a plugin that can be loaded to provide API for mail storage Lua
 plugins. Mail-lua provides a common script to be used in mail storage instead
@@ -247,4 +246,4 @@ Variables:
  * 'seq' - Sequence number (can change)
  * 'uid' - UID number (immutable)
 
-(This file was created from the wiki on 2018-11-23 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

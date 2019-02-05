@@ -12,17 +12,19 @@ Contents
 
      3. Prebuilt Binaries
 
-         1. ArchLinux
+         1. Alpine Linux
 
-         2. RHEL 6 + clones (CentOS, Scientific Linux, ...)
+         2. ArchLinux
 
-         3. Debian
+         3. RHEL 6 + clones (CentOS, Scientific Linux, ...)
 
-         4. openSUSE
+         4. Debian
 
-         5. FreeBSD
+         5. openSUSE
 
-         6. OpenBSD
+         6. FreeBSD
+
+         7. OpenBSD
 
 Getting the sources
 -------------------
@@ -77,6 +79,15 @@ a version error.
 
 Prebuilt Binaries
 -----------------
+
+Alpine Linux
+------------
+
+Pigeonhole can be installed from packages by running:
+
+---%<-------------------------------------------------------------------------
+apk add dovecot-pigeonhole-plugin
+---%<-------------------------------------------------------------------------
 
 ArchLinux
 ---------
@@ -145,4 +156,4 @@ Pigeonhole can be installed from packages by running:
 pkg_add dovecot-pigeonhole
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-11-23 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

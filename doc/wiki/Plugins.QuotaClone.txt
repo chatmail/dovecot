@@ -21,8 +21,8 @@ incremented/decremented) so the cloned quota is never too much wrong.
 
 The keys that are written to:
 
- * priv/quota/storage
- * priv/quota/messages
+ * priv/quota/storage - storage usage in bytes
+ * priv/quota/messages - count of messages
 
 Configuration
 -------------
@@ -34,4 +34,4 @@ plugin {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-11-23 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)
