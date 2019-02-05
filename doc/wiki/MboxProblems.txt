@@ -131,4 +131,4 @@ your SMTP server. The headers that you should filter out are:
  * X-UID
  * X-UIDL (if you're using 'pop3_reuse_xuidl=yes')
 
-(This file was created from the wiki on 2018-11-23 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

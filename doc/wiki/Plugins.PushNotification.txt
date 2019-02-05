@@ -1,16 +1,73 @@
-Push notification framework
+Push Notification Framework
 ===========================
 
 Contents
 
 
- 1. Push notification framework
+ 1. Push Notification Framework
 
-     1. DLOG driver
+     1. Introduction
 
-     2. OX driver
+     2. Usage
 
-     3. Lua Driver
+     3. Drivers
+
+         1. DLOG (Debug log)
+
+         2. OX (Open-Xchange) driver
+
+             1. Example Payload
+
+         3. Lua
+
+             1. Configuration
+
+             2. Example script
+
+                 1. Simple example
+
+                 2. Example with event code (v2.3.4+)
+
+             3. Overview
+
+             4. Transactions
+
+             5. Mailbox events
+
+             6. Message events
+
+Introduction
+------------
+
+Dovecot's Push Notification framework exposes RFC 5423 (Internet Message Store
+Events) [https://tools.ietf.org/html/rfc5423] events that occur in Dovecot to a
+system that can be used to report these events to external services.
+
+These events are available within the notification framework, although a driver
+may not implement all:
+
+ * FlagsClear
+ * FlagsSet
+ * MailboxCreate
+ * MailboxDelete
+ * MailboxRename
+ * MailboxSubscribe
+ * MailboxUnsubscribe
+ * MessageAppend
+ * MessageExpunge
+ * MessageNew
+ * MessageRead
+ * MessageTrash
+
+These events are not supported by the notification framework:
+
+ * Login (handled by <Authentication.txt>)
+ * Logout (handled by <Authentication.txt>)
+ * QuotaExceed (handled by <Quota.txt>)
+ * QuotaWithin (handled by <Quota.txt>)
+
+Usage
+-----
 
 To use push notifications, both the "notify" and the "push_notification"
 plugins need to be activated. For LMTP delivery, this is required:
@@ -30,8 +87,11 @@ protocol lda {
 }
 ---%<-------------------------------------------------------------------------
 
-DLOG driver
------------
+Drivers
+-------
+
+DLOG (Debug log)
+----------------
 
 ---%<-------------------------------------------------------------------------
 plugin {
@@ -41,11 +101,11 @@ plugin {
 
 This will cause notifications to end up in your debug log.
 
-OX driver
----------
+OX (Open-Xchange) driver
+------------------------
 
- The OX backend supports sending notifications on <MessageNew.txt> events (i.e.
-mail deliveries, not IMAP APPENDs).
+ The OX backend supports sending notifications on MessageNew events (i.e. mail
+deliveries, not IMAP APPENDs).
 
 The HTTP end-point (URL + authentication information) to use is configured in
 the Dovecot configuration file. The appropriate configuration options will
@@ -142,11 +202,10 @@ Content-Type: application/json; charset=utf-8
 }
 ---%<-------------------------------------------------------------------------
 
-Lua Driver
-----------
+Lua
+---
 
-Since (FIXME: Release version) v2.3.x+ you can use Lua to write custom push
-notification handlers, but unfortunately it does not really work yet.See
+Since v2.3.4+ you can use Lua to write custom push notification handlers.  See
 <Design.Lua.txt> for general information about Lua in Dovecot. If you have
 mail_lua_script (a global script for storage) it will be used if no script is
 specified.
@@ -223,8 +282,8 @@ function dovecot_lua_notify_event_message_new(ctx, event)   40
 end   42
 ---CodeArea-------------------------------------------------------------------
 
-Example with event code (since v2.3.4)
---------------------------------------
+Example with event code (v2.3.4+)
+---------------------------------
 
 ---CodeArea-------------------------------------------------------------------
 -- To use    1
@@ -429,4 +488,4 @@ Called when message flags or keywords are removed. flags is a bitmask.
 keywords_clear contains the keywords cleared, keywords_old is the table of
 keywords that were set before the event.
 
-(This file was created from the wiki on 2018-11-23 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

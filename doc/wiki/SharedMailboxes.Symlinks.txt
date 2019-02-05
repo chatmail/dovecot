@@ -39,4 +39,4 @@ Make sure the locking works properly with only fcntl or flock locking (See
 symlinking an mbox file, put the shared mailboxes inside a directory and
 symlink the entire directory.
 
-(This file was created from the wiki on 2018-11-23 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

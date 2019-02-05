@@ -146,6 +146,11 @@ Diffie-Hellman Parameters for SSL
    virtual machine is not recommended, unless there is some entropy
    helper/driver installed. Running this on your production proxy can starve
    connections due to lack of entropy.
+ * Since v2.3.3+ DH parameter usage is *optional* and can be omitted. You are
+   invited to amend ciphers to disallow non-ECC based DH algorithms, but if you
+   don't and someone does try to use them, error will be emitted.
+    * Example:
+      'ssl_ciphers=ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW:!DH@STRENGTH'
 
 Other Changes
 -------------
@@ -185,5 +190,19 @@ Other Changes
  * auth now supports bcrypt algorithm by default.
  * Some API changes have been made, if you have your own plugins please be
    aware that they might require change(s) to be compatible again.
+ * Due to the new stats environment, for now some environments may get harmless
+   errors about not being able to connect to stats-writer socket. To avoid
+   these errors, give enough permissions for the processes to connect to the
+   stats-writer, for example:
 
-(This file was created from the wiki on 2018-11-23 04:42)
+---%<-------------------------------------------------------------------------
+service stats {
+  unix_listener stats-writer {
+    user = vmail
+    #mode = 0666 # Use only if nothing else works. It's a bit insecure, since
+it allows any user in the system to mess up with the statistics.
+  }
+}
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2019-02-05 04:42)
