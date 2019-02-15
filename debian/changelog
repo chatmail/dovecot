@@ -1,3 +1,9 @@
+dovecot (1:2.3.4.1-1~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Fri, 15 Feb 2019 12:34:56 +0200
+
 dovecot (1:2.3.4.1-1) unstable; urgency=high
 
   * [bebf0b4] New upstream version 2.3.4.1
