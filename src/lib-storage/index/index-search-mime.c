@@ -96,7 +96,7 @@ static int seach_arg_mime_child_match(struct search_mimepart_context *mpctx,
 	T_BEGIN {
 		ARRAY(struct search_mimepart_stack) prev_stack;
 
-		/* preserve current stack for any nested CHILD PARENT nastyness */
+		/* preserve current stack for any nested CHILD PARENT nastiness */
 		t_array_init(&prev_stack, 16);
 		array_copy(&prev_stack.arr, 0, &mpctx->stack.arr, 0,
 			array_count(&mpctx->stack));
@@ -282,11 +282,11 @@ seach_arg_mime_filename_match(struct search_mimepart_context *mpctx,
 	case SEARCH_MIME_FILENAME_CONTAINS:
 		return (strstr(value, key) != NULL ? 1 : 0);
 	case SEARCH_MIME_FILENAME_BEGINS:
-		return (strncmp(value, key, strlen(key)) == 0 ? 1 : 0);
+		return (str_begins(value, key) ? 1 : 0);
 	case SEARCH_MIME_FILENAME_ENDS:
 		vlen = strlen(value);
 		alen = strlen(key);
-		return (strncmp(value + (vlen - alen), key, alen) == 0 ? 1 : 0);
+		return (str_begins(value + (vlen - alen), key) ? 1 : 0);
 	default:
 		break;
 	}
@@ -586,10 +586,8 @@ int index_search_mime_arg_match(struct mail_search_arg *args,
 	ret = mail_search_args_foreach(args,
 				       search_mimepart_arg, &mpctx);
 
-	if (mpctx.pool != NULL)
-		pool_unref(&mpctx.pool);
-	if (mpctx.buf != NULL)
-		str_free(&mpctx.buf);
+	pool_unref(&mpctx.pool);
+	str_free(&mpctx.buf);
 	return ret;
 }
 

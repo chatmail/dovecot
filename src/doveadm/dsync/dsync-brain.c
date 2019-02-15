@@ -370,8 +370,7 @@ int dsync_brain_deinit(struct dsync_brain **_brain, enum mail_error *error_r)
 		hash_table_iterate_deinit(&brain->mailbox_states_iter);
 	hash_table_destroy(&brain->mailbox_states);
 
-	if (brain->dsync_box_pool != NULL)
-		pool_unref(&brain->dsync_box_pool);
+	pool_unref(&brain->dsync_box_pool);
 
 	if (brain->lock_fd != -1) {
 		/* unlink the lock file before it gets unlocked */
@@ -442,6 +441,13 @@ dsync_brain_lock(struct dsync_brain *brain, const char *remote_hostname)
 				       "/"DSYNC_LOCK_FILENAME, NULL);
 	brain->lock_fd = file_create_locked(brain->lock_path, &lock_set,
 					    &brain->lock, &created, &error);
+	if (brain->lock_fd == -1 && errno == ENOENT) {
+		/* home directory not created */
+		if (mail_user_home_mkdir(brain->user) < 0)
+			return -1;
+		brain->lock_fd = file_create_locked(brain->lock_path, &lock_set,
+			&brain->lock, &created, &error);
+	}
 	if (brain->lock_fd == -1)
 		i_error("Couldn't lock %s: %s", brain->lock_path, error);
 	else if (brain->debug) {
@@ -747,15 +753,15 @@ static void dsync_brain_mailbox_states_dump(struct dsync_brain *brain)
 
 	iter = hash_table_iterate_init(brain->mailbox_states);
 	while (hash_table_iterate(iter, brain->mailbox_states, &guid, &state)) {
-		i_debug("brain %c: Mailbox %s state: uidvalidity=%u uid=%u modseq=%llu pvt_modseq=%llu messages=%u changes_during_sync=%d",
+		i_debug("brain %c: Mailbox %s state: uidvalidity=%u uid=%u modseq=%"PRIu64" pvt_modseq=%"PRIu64" messages=%u changes_during_sync=%d",
 			brain->master_brain ? 'M' : 'S',
 			guid_128_to_string(guid),
 			state->last_uidvalidity,
 			state->last_common_uid,
-			(unsigned long long)state->last_common_modseq,
-			(unsigned long long)state->last_common_pvt_modseq,
+			state->last_common_modseq,
+			state->last_common_pvt_modseq,
 			state->last_messages_count,
-			state->changes_during_sync);
+			state->changes_during_sync ? 1 : 0);
 	}
 	hash_table_iterate_deinit(&iter);
 }

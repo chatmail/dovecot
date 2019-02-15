@@ -11,7 +11,7 @@
 
 
 #define CHARSET_ALIAS_USER_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, charset_alias_user_module)
+	MODULE_CONTEXT_REQUIRE(obj, charset_alias_user_module)
 
 static MODULE_CONTEXT_DEFINE_INIT(charset_alias_user_module,
 				  &mail_user_module_register);
@@ -83,13 +83,13 @@ static int charset_alias_to_utf8_begin(const char *charset,
 static void charset_alias_to_utf8_end(struct charset_translation *t)
 {
 	i_assert(original_charset_utf8_vfuncs != NULL);
-	return original_charset_utf8_vfuncs->to_utf8_end(t);
+	original_charset_utf8_vfuncs->to_utf8_end(t);
 }
 
 static void charset_alias_to_utf8_reset(struct charset_translation *t)
 {
 	i_assert(original_charset_utf8_vfuncs != NULL);
-	return original_charset_utf8_vfuncs->to_utf8_reset(t);
+	original_charset_utf8_vfuncs->to_utf8_reset(t);
 }
 
 static enum charset_result charset_alias_to_utf8(struct charset_translation *t,
@@ -122,8 +122,7 @@ static unsigned int charset_aliases_init(struct mail_user *user, pool_t pool, co
 			continue;
 		}
 		if (strcasecmp(key, value) != 0) {
-			if (user->mail_debug)
-				i_debug("charset_alias: add charset-alias %s for %s", value, key);
+			e_debug(user->event, "charset_alias: add charset-alias %s for %s", value, key);
 			alias.charset = p_strdup(pool, t_str_lcase(key));
 			alias.alias = p_strdup(pool, value);
 			array_append(&charset_aliases, &alias, 1);

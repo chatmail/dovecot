@@ -24,8 +24,8 @@ struct mdbox_map_transaction_context {
 	struct mdbox_map_atomic_context *atomic;
 	struct mail_index_transaction *trans;
 
-	unsigned int changed:1;
-	unsigned int committed:1;
+	bool changed:1;
+	bool committed:1;
 };
 
 static int mdbox_map_generate_uid_validity(struct mdbox_map *map);
@@ -59,7 +59,8 @@ mdbox_map_init(struct mdbox_storage *storage, struct mailbox_list *root_list)
 	map->path = i_strconcat(root, "/"MDBOX_GLOBAL_DIR_NAME, NULL);
 	map->index_path =
 		i_strconcat(index_root, "/"MDBOX_GLOBAL_DIR_NAME, NULL);
-	map->index = mail_index_alloc(map->index_path,
+	map->index = mail_index_alloc(storage->storage.storage.event,
+				      map->index_path,
 				      MDBOX_GLOBAL_INDEX_PREFIX);
 	mail_index_set_fsync_mode(map->index,
 		MAP_STORAGE(map)->set->parsed_fsync_mode, 0);

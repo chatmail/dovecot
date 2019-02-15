@@ -19,6 +19,8 @@ struct http_test_request {
 	bool write_output;
 };
 
+static struct ioloop *ioloop;
+
 static void payload_input(struct http_test_request *req)
 {
 	const unsigned char *data;
@@ -26,7 +28,7 @@ static void payload_input(struct http_test_request *req)
 	int ret;
 
 	/* read payload */
-	while ((ret=i_stream_read_data(req->payload, &data, &size, 0)) > 0) {
+	while ((ret=i_stream_read_more(req->payload, &data, &size)) > 0) {
 		i_info("DEBUG: got data (size=%d)", (int)size); 
 		if (req->write_output)
 			if (write_full(1, data, size) < 0)
@@ -53,6 +55,8 @@ static void
 got_request_response(const struct http_response *response,
 		     struct http_test_request *req)
 {
+	io_loop_stop(ioloop);
+
 	if (response->status / 100 != 2) {
 		i_error("HTTP Request failed: %s", response->reason);
 		i_free(req);
@@ -280,6 +284,12 @@ static void run_tests(struct http_client *http_client)
 	http_client_request_set_payload(http_req, post_payload, TRUE);
 	i_stream_unref(&post_payload);
 	http_client_request_submit(http_req);
+
+	test_req = i_new(struct http_test_request, 1);
+	http_req = http_client_request_url_str(http_client,
+		"GET", "https://invalid.dovecot.org/",
+		got_request_response, test_req);
+	http_client_request_submit(http_req);
 }
 
 static void
@@ -300,10 +310,10 @@ test_http_request_init(struct http_client *http_client,
 	test_req = i_new(struct http_test_request, 1);
 	test_req->write_output = TRUE;
 	http_req = http_client_request(http_client,
-		method, url->host_name,
+		method, url->host.name,
 		t_strconcat("/", url->path, url->enc_query, NULL),
 		got_request_response, test_req);
-	if (url->have_port)
+	if (url->port != 0)
 		http_client_request_set_port(http_req, url->port);
 	if (url->have_ssl)
 		http_client_request_set_ssl(http_req, TRUE);
@@ -340,9 +350,11 @@ int main(int argc, char *argv[])
 	struct dns_client *dns_client;
 	struct dns_lookup_settings dns_set;
 	struct http_client_settings http_set;
-	struct http_client *http_client;
+	struct http_client_context *http_cctx;
+	struct http_client *http_client1, *http_client2, *http_client3, *http_client4;
+	struct ssl_iostream_settings ssl_set;
+	struct stat st;
 	const char *error;
-	struct ioloop *ioloop;
 
 	lib_init();
 #ifdef HAVE_OPENSSL
@@ -364,11 +376,16 @@ int main(int argc, char *argv[])
 	if (dns_client_connect(dns_client, &error) < 0)
 		i_fatal("Couldn't initialize DNS client: %s", error);
 
+	i_zero(&ssl_set);
+	ssl_set.allow_invalid_cert = TRUE;
+	if (stat("/etc/ssl/certs", &st) == 0 && S_ISDIR(st.st_mode))
+		ssl_set.ca_dir = "/etc/ssl/certs"; /* debian */
+	if (stat("/etc/ssl/certs", &st) == 0 && S_ISREG(st.st_mode))
+		ssl_set.ca_file = "/etc/pki/tls/cert.pem"; /* redhat */
+
 	i_zero(&http_set);
+	http_set.ssl = &ssl_set;
 	http_set.dns_client = dns_client;
-	http_set.ssl_allow_invalid_cert = TRUE;
-	http_set.ssl_ca_dir = "/etc/ssl/certs"; /* debian */
-	http_set.ssl_ca_file = "/etc/pki/tls/cert.pem"; /* redhat */
 	http_set.max_idle_time_msecs = 5*1000;
 	http_set.max_parallel_connections = 4;
 	http_set.max_pipelined_requests = 4;
@@ -378,28 +395,67 @@ int main(int argc, char *argv[])
 	http_set.debug = TRUE;
 	http_set.rawlog_dir = "/tmp/http-test";
 
-	http_client = http_client_init(&http_set);
+	http_cctx = http_client_context_create(&http_set);
+
+	http_client1 = http_client_init_shared(http_cctx, NULL);
+	http_client2 = http_client_init_shared(http_cctx, NULL);
+	http_client3 = http_client_init_shared(http_cctx, NULL);
+	http_client4 = http_client_init_shared(http_cctx, NULL);
 
 	switch (argc) {
 	case 1:
-		run_tests(http_client);
+		run_tests(http_client1);
+		run_tests(http_client2);
+		run_tests(http_client3);
+		run_tests(http_client4);
 		break;
 	case 2:
-		run_http_get(http_client, argv[1]);
+		run_http_get(http_client1, argv[1]);
+		run_http_get(http_client2, argv[1]);
+		run_http_get(http_client3, argv[1]);
+		run_http_get(http_client4, argv[1]);
 		break;
 	case 3:
-		run_http_post(http_client, argv[1], argv[2]);
+		run_http_post(http_client1, argv[1], argv[2]);
+		run_http_post(http_client2, argv[1], argv[2]);
+		run_http_post(http_client3, argv[1], argv[2]);
+		run_http_post(http_client4, argv[1], argv[2]);
 		break;
 	default:
 		i_fatal("Too many parameters");
 	}
 
-	http_client_wait(http_client);
-	http_client_deinit(&http_client);
+	for (;;) {
+		bool pending = FALSE;
+
+		if (http_client_get_pending_request_count(http_client1) > 0) {
+			i_debug("Requests still pending in client 1");
+			pending = TRUE;
+		} else if (http_client_get_pending_request_count(http_client2) > 0) {
+			i_debug("Requests still pending in client 2");
+			pending = TRUE;
+		} else if (http_client_get_pending_request_count(http_client3) > 0) {
+			i_debug("Requests still pending in client 3");
+			pending = TRUE;
+		} else if (http_client_get_pending_request_count(http_client4) > 0) {
+			i_debug("Requests still pending in client 4");
+			pending = TRUE;
+		}
+		if (!pending)
+			break;
+		io_loop_run(ioloop);
+	}
+	http_client_deinit(&http_client1);
+	http_client_deinit(&http_client2);
+	http_client_deinit(&http_client3);
+	http_client_deinit(&http_client4);
+
+	http_client_context_unref(&http_cctx);
 
 	dns_client_deinit(&dns_client);
 
 	io_loop_destroy(&ioloop);
+	ssl_iostream_context_cache_free();
 #ifdef HAVE_OPENSSL
 	ssl_iostream_openssl_deinit();
 #endif

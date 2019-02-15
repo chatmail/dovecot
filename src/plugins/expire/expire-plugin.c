@@ -20,10 +20,12 @@
 
 #define EXPIRE_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, expire_storage_module)
+#define EXPIRE_CONTEXT_REQUIRE(obj) \
+	MODULE_CONTEXT_REQUIRE(obj, expire_storage_module)
 #define EXPIRE_MAIL_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, expire_mail_module)
+	MODULE_CONTEXT_REQUIRE(obj, expire_mail_module)
 #define EXPIRE_USER_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, expire_mail_user_module)
+	MODULE_CONTEXT_REQUIRE(obj, expire_mail_user_module)
 
 struct expire_mail_index_header {
 	uint32_t timestamp;
@@ -45,8 +47,8 @@ struct expire_mailbox {
 struct expire_transaction_context {
 	union mailbox_transaction_module_context module_ctx;
 
-	unsigned int saves:1;
-	unsigned int first_expunged:1;
+	bool saves:1;
+	bool first_expunged:1;
 };
 
 const char *expire_plugin_version = DOVECOT_ABI_VERSION;
@@ -59,13 +61,14 @@ static MODULE_CONTEXT_DEFINE_INIT(expire_mail_user_module,
 
 static struct mailbox_transaction_context *
 expire_mailbox_transaction_begin(struct mailbox *box,
-				 enum mailbox_transaction_flags flags)
+				 enum mailbox_transaction_flags flags,
+				 const char *reason)
 {
-	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT(box);
+	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT_REQUIRE(box);
 	struct mailbox_transaction_context *t;
 	struct expire_transaction_context *xt;
 
-	t = xpr_box->module_ctx.super.transaction_begin(box, flags);
+	t = xpr_box->module_ctx.super.transaction_begin(box, flags, reason);
 	xt = i_new(struct expire_transaction_context, 1);
 
 	MODULE_CONTEXT_SET(t, expire_storage_module, xt);
@@ -80,7 +83,7 @@ static void first_save_timestamp(struct mailbox *box, time_t *stamp_r)
 
 	*stamp_r = ioloop_time;
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	mail = mail_alloc(t, 0, NULL);
 
 	/* find the first non-expunged mail. we're here because the first
@@ -96,7 +99,7 @@ static void first_save_timestamp(struct mailbox *box, time_t *stamp_r)
 
 static uint32_t expire_get_ext_id(struct mailbox *box)
 {
-	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT(box);
+	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT_REQUIRE(box);
 
 	if (xpr_box->expire_ext_id != (uint32_t)-1)
 		return xpr_box->expire_ext_id;
@@ -115,7 +118,7 @@ static int expire_lookup(struct mailbox *box, const char *key,
 	const struct expire_mail_index_header *hdr;
 	const void *data;
 	size_t data_size;
-	const char *value;
+	const char *value, *error;
 	int ret;
 
 	/* default to ioloop_time for newly saved mails. it may not be exactly
@@ -138,10 +141,12 @@ static int expire_lookup(struct mailbox *box, const char *key,
 	}
 
 	ret = dict_lookup(euser->db, pool_datastack_create(),
-			  key, &value);
+			  key, &value, &error);
 	if (ret <= 0) {
-		if (ret < 0)
+		if (ret < 0) {
+			i_error("expire: dict_lookup(%s) failed: %s", key, error);
 			return -1;
+		}
 		first_save_timestamp(box, new_stamp_r);
 		return 0;
 	}
@@ -156,11 +161,12 @@ expire_update(struct mailbox *box, const char *key, time_t timestamp)
 	struct dict_transaction_context *dctx;
 	struct mail_index_transaction *trans;
 	struct expire_mail_index_header hdr;
+	const char *error;
 
 	dctx = dict_transaction_begin(euser->db);
 	dict_set(dctx, key, dec2str(timestamp));
-	if (dict_transaction_commit(&dctx) < 0)
-		i_error("expire: dict commit failed");
+	if (dict_transaction_commit(&dctx, &error) < 0)
+		i_error("expire: dict commit failed: %s", error);
 	else if (euser->expire_cache) {
 		i_zero(&hdr);
 		hdr.timestamp = timestamp;
@@ -206,9 +212,8 @@ static int
 expire_mailbox_transaction_commit(struct mailbox_transaction_context *t,
 				  struct mail_transaction_commit_changes *changes_r)
 {
-	struct mail_user *user = t->box->storage->user;
-	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT(t->box);
-	struct expire_transaction_context *xt = EXPIRE_CONTEXT(t);
+	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT_REQUIRE(t->box);
+	struct expire_transaction_context *xt = EXPIRE_CONTEXT_REQUIRE(t);
 	struct mailbox *box = t->box;
 	time_t new_stamp = 0;
 	bool update_dict = FALSE;
@@ -222,11 +227,8 @@ expire_mailbox_transaction_commit(struct mailbox_transaction_context *t,
 			   transaction a new message was saved */
 			new_stamp = ioloop_time;
 		}
-		if (user->mail_debug) {
-			i_debug("expire: Expunging first message in %s, "
-				"updating timestamp to %ld",
-				box->vname, (long)new_stamp);
-		}
+		e_debug(box->event, "expire: Expunging first message, "
+			"updating timestamp to %ld", (long)new_stamp);
 		update_dict = TRUE;
 	}
 
@@ -262,10 +264,9 @@ expire_mailbox_transaction_commit(struct mailbox_transaction_context *t,
 			} else {
 				/* already exists */
 			}
-			if (user->mail_debug && update_dict) {
-				i_debug("expire: Saving first message to %s, "
-					"updating timestamp to %ld",
-					box->vname, (long)new_stamp);
+			if (update_dict) {
+				e_debug(box->event, "expire: Saving first message, "
+					"updating timestamp to %ld", (long)new_stamp);
 			}
 		}
 
@@ -279,8 +280,8 @@ expire_mailbox_transaction_commit(struct mailbox_transaction_context *t,
 static void
 expire_mailbox_transaction_rollback(struct mailbox_transaction_context *t)
 {
-	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT(t->box);
-	struct expire_transaction_context *xt = EXPIRE_CONTEXT(t);
+	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT_REQUIRE(t->box);
+	struct expire_transaction_context *xt = EXPIRE_CONTEXT_REQUIRE(t);
 
 	xpr_box->module_ctx.super.transaction_rollback(t);
 	i_free(xt);
@@ -291,7 +292,7 @@ static void expire_mail_expunge(struct mail *_mail)
 	struct mail_private *mail = (struct mail_private *)_mail;
 	union mail_module_context *xpr_mail = EXPIRE_MAIL_CONTEXT(mail);
 	struct expire_transaction_context *xt =
-		EXPIRE_CONTEXT(_mail->transaction);
+		EXPIRE_CONTEXT_REQUIRE(_mail->transaction);
 
 	if (_mail->seq == 1) {
 		/* first mail expunged, database needs to be updated */
@@ -321,8 +322,8 @@ static void expire_mail_allocated(struct mail *_mail)
 static int expire_save_finish(struct mail_save_context *ctx)
 {
 	struct expire_transaction_context *xt =
-		EXPIRE_CONTEXT(ctx->transaction);
-	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT(ctx->transaction->box);
+		EXPIRE_CONTEXT_REQUIRE(ctx->transaction);
+	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT_REQUIRE(ctx->transaction->box);
 
 	xt->saves = TRUE;
 	return xpr_box->module_ctx.super.save_finish(ctx);
@@ -332,8 +333,8 @@ static int
 expire_copy(struct mail_save_context *ctx, struct mail *mail)
 {
 	struct expire_transaction_context *xt =
-		EXPIRE_CONTEXT(ctx->transaction);
-	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT(ctx->transaction->box);
+		EXPIRE_CONTEXT_REQUIRE(ctx->transaction);
+	struct expire_mailbox *xpr_box = EXPIRE_CONTEXT_REQUIRE(ctx->transaction->box);
 
 	xt->saves = TRUE;
 	return xpr_box->module_ctx.super.copy(ctx, mail);
@@ -401,23 +402,26 @@ static void expire_mail_user_created(struct mail_user *user)
 {
 	struct mail_user_vfuncs *v = user->vlast;
 	struct expire_mail_user *euser;
+	struct dict_settings dict_set;
 	struct dict *db;
 	const char *dict_uri, *error;
 
-	dict_uri = mail_user_plugin_getenv(user, "expire_dict");
-	if (mail_user_plugin_getenv(user, "expire") == NULL) {
-		if (user->mail_debug)
-			i_debug("expire: No expire setting - plugin disabled");
+	if (!mail_user_plugin_getenv_bool(user, "expire")) {
+		e_debug(user->event, "expire: No expire setting - plugin disabled");
 		return;
 	}
+
+	dict_uri = mail_user_plugin_getenv(user, "expire_dict");
 	if (dict_uri == NULL) {
 		i_error("expire plugin: expire_dict setting missing");
 		return;
 	}
-
 	/* we're using only shared dictionary, the username doesn't matter. */
-	if (dict_init(dict_uri, DICT_DATA_TYPE_UINT32, "",
-		      user->set->base_dir, &db, &error) < 0) {
+	i_zero(&dict_set);
+	dict_set.value_type = DICT_DATA_TYPE_UINT32;
+	dict_set.username = "";
+	dict_set.base_dir = user->set->base_dir;
+	if (dict_init(dict_uri, &dict_set, &db, &error) < 0) {
 		i_error("expire plugin: dict_init(%s) failed: %s",
 			dict_uri, error);
 		return;
@@ -430,7 +434,7 @@ static void expire_mail_user_created(struct mail_user *user)
 
 	euser->db = db;
 	euser->set = expire_set_init(expire_get_patterns(user));
-	euser->expire_cache = mail_user_plugin_getenv(user, "expire_cache") != NULL;
+	euser->expire_cache = mail_user_plugin_getenv_bool(user, "expire_cache");
 	MODULE_CONTEXT_SET(user, expire_mail_user_module, euser);
 }
 

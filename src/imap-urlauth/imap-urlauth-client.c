@@ -38,6 +38,10 @@
 #define IS_STANDALONE() \
         (getenv(MASTER_IS_PARENT_ENV) == NULL)
 
+struct event_category event_category_urlauth = {
+	.name = "imap-urlauth",
+};
+
 struct client *imap_urlauth_clients;
 unsigned int imap_urlauth_client_count;
 
@@ -45,8 +49,8 @@ static int client_worker_connect(struct client *client);
 static void client_worker_disconnect(struct client *client);
 static void client_worker_input(struct client *client);
 
-int client_create(const char *username, int fd_in, int fd_out,
-		  const struct imap_urlauth_settings *set,
+int client_create(const char *service, const char *username,
+		  int fd_in, int fd_out, const struct imap_urlauth_settings *set,
 		  struct client **client_r)
 {
 	struct client *client;
@@ -62,6 +66,10 @@ int client_create(const char *username, int fd_in, int fd_out,
 	client->fd_ctrl = -1;
 	client->set = set;
 
+	client->event = event_create(NULL);
+	event_set_forced_debug(client->event, set->mail_debug);
+	event_add_category(client->event, &event_category_urlauth);
+
 	if (client_worker_connect(client) < 0) {
 		i_free(client);
 		return -1;
@@ -72,24 +80,22 @@ int client_create(const char *username, int fd_in, int fd_out,
 	if (username != NULL) {
 		if (set->imap_urlauth_submit_user != NULL &&
 		    strcmp(set->imap_urlauth_submit_user, username) == 0) {
-			if (set->mail_debug)
-				i_debug("User %s has URLAUTH submit access", username);
+			e_debug(client->event, "User %s has URLAUTH submit access", username);
 			app = "submit+";
 			array_append(&client->access_apps, &app, 1);
 		}
 		if (set->imap_urlauth_stream_user != NULL &&
 		    strcmp(set->imap_urlauth_stream_user, username) == 0) {
-			if (set->mail_debug)
-				i_debug("User %s has URLAUTH stream access", username);
+			e_debug(client->event, "User %s has URLAUTH stream access", username);
 			app = "stream";
 			array_append(&client->access_apps, &app, 1);
 		}
 	}
 
-	if (username != NULL)
-		client->username = i_strdup(username);
+	client->username = i_strdup(username);
+	client->service = i_strdup(service);
 
-	client->output = o_stream_create_fd(fd_out, (size_t)-1, FALSE);
+	client->output = o_stream_create_fd(fd_out, (size_t)-1);
 
 	imap_urlauth_client_count++;
 	DLLIST_PREPEND(&imap_urlauth_clients, client);
@@ -126,7 +132,7 @@ void client_send_line(struct client *client, const char *fmt, ...)
 
 static int client_worker_connect(struct client *client)
 {
-	static const char handshake[] = "VERSION\timap-urlauth-worker\t1\t0\n";
+	static const char handshake[] = "VERSION\timap-urlauth-worker\t2\t0\n";
 	const char *socket_path;
 	ssize_t ret;
 	unsigned char data;
@@ -134,8 +140,7 @@ static int client_worker_connect(struct client *client)
 	socket_path = t_strconcat(client->set->base_dir,
 				  "/"IMAP_URLAUTH_WORKER_SOCKET, NULL);
 
-	if (client->set->mail_debug)
-		i_debug("Connecting to worker socket %s", socket_path);
+	e_debug(client->event, "Connecting to worker socket %s", socket_path);
 
 	client->fd_ctrl = net_connect_unix_with_retries(socket_path, 1000);
 	if (client->fd_ctrl < 0) {
@@ -171,8 +176,7 @@ static int client_worker_connect(struct client *client)
 		return -1;
 	}
 
-	client->ctrl_output =
-		o_stream_create_fd(client->fd_ctrl, (size_t)-1, FALSE);
+	client->ctrl_output = o_stream_create_fd(client->fd_ctrl, (size_t)-1);
 
 	/* send protocol version handshake */
 	if (o_stream_send_str(client->ctrl_output, handshake) < 0) {
@@ -182,7 +186,7 @@ static int client_worker_connect(struct client *client)
 	}
 
 	client->ctrl_input =
-		i_stream_create_fd(client->fd_ctrl, MAX_INBUF_SIZE, FALSE);
+		i_stream_create_fd(client->fd_ctrl, MAX_INBUF_SIZE);
 	client->ctrl_io =
 		io_add(client->fd_ctrl, IO_READ, client_worker_input, client);  
 	return 0;
@@ -192,12 +196,9 @@ void client_worker_disconnect(struct client *client)
 {
 	client->worker_state = IMAP_URLAUTH_WORKER_STATE_INACTIVE;
 
-	if (client->ctrl_io != NULL)
-		io_remove(&client->ctrl_io);
-	if (client->ctrl_output != NULL)
-		o_stream_destroy(&client->ctrl_output);
-	if (client->ctrl_input != NULL)
-		i_stream_destroy(&client->ctrl_input);
+	io_remove(&client->ctrl_io);
+	o_stream_destroy(&client->ctrl_output);
+	i_stream_destroy(&client->ctrl_input);
 	if (client->fd_ctrl >= 0) {
 		net_disconnect(client->fd_ctrl);
 		client->fd_ctrl = -1;
@@ -225,6 +226,8 @@ client_worker_input_line(struct client *client, const char *response)
 		str_append(str, "ACCESS\t");
 		if (client->username != NULL)
 			str_append_tabescaped(str, client->username);
+		str_append(str, "\t");
+		str_append_tabescaped(str, client->service);
 		if (client->set->mail_debug)
 			str_append(str, "\tdebug");
 		if (array_count(&client->access_apps) > 0) {
@@ -269,8 +272,7 @@ client_worker_input_line(struct client *client, const char *response)
 			return -1;
 		}
 
-		if (client->set->mail_debug)
-			i_debug("Worker finished successfully");
+		e_debug(client->event, "Worker finished successfully");
 
 		if (restart) {
 			/* connect to new worker for accessing different user */
@@ -334,8 +336,7 @@ void client_destroy(struct client *client, const char *reason)
 	imap_urlauth_client_count--;
 	DLLIST_REMOVE(&imap_urlauth_clients, client);
 
-	if (client->to_idle != NULL)
-		timeout_remove(&client->to_idle);
+	timeout_remove(&client->to_idle);
 
 	client_worker_disconnect(client);
 	
@@ -343,8 +344,10 @@ void client_destroy(struct client *client, const char *reason)
 
 	fd_close_maybe_stdio(&client->fd_in, &client->fd_out);
 
-	if (client->username != NULL)
-		i_free(client->username);
+	event_unref(&client->event);
+
+	i_free(client->username);
+	i_free(client->service);
 	array_free(&client->access_apps);
 	i_free(client);
 

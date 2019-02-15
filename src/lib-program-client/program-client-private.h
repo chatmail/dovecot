@@ -14,6 +14,12 @@ enum program_client_error {
 	PROGRAM_CLIENT_ERROR_OTHER
 };
 
+enum program_client_exit_code {
+	PROGRAM_CLIENT_EXIT_INTERNAL_FAILURE = -1,
+	PROGRAM_CLIENT_EXIT_FAILURE = 0,
+	PROGRAM_CLIENT_EXIT_SUCCESS = 1,
+};
+
 struct program_client_extra_fd {
 	struct program_client *pclient;
 
@@ -39,7 +45,8 @@ struct program_client {
 	struct timeval start_time;
 
 	struct istream *input, *program_input, *seekable_output;
-	struct ostream *output, *program_output;
+	struct istream *dot_input;
+	struct ostream *output, *program_output, *dot_output;
 	char *temp_prefix;
 
 	ARRAY(struct program_client_extra_fd) extra_fds;
@@ -49,7 +56,7 @@ struct program_client {
 
 	bool other_error;
 	enum program_client_error error;
-	int exit_code;
+	enum program_client_exit_code exit_code;
 
 	int (*connect) (struct program_client * pclient);
 	int (*close_output) (struct program_client * pclient);
@@ -60,17 +67,22 @@ struct program_client {
 	bool debug:1;
 	bool disconnected:1;
 	bool output_seekable:1;
+	bool input_dot_created:1;
+	bool output_dot_created:1;
 	bool destroying:1;
 };
 
-void program_client_init(struct program_client *pclient, pool_t pool, const char *path,
-			 const char *const *args, const struct program_client_settings *set);
+void program_client_init(struct program_client *pclient, pool_t pool,
+			 const char *path,
+			 const char *const *args,
+			 const struct program_client_settings *set);
 
 void program_client_init_streams(struct program_client *pclient);
 
 int program_client_connected(struct program_client *pclient);
 
-void program_client_fail(struct program_client *pclient, enum program_client_error error);
+void program_client_fail(struct program_client *pclient,
+			 enum program_client_error error);
 
 void program_client_program_input(struct program_client *pclient);
 

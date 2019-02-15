@@ -106,6 +106,8 @@ Plugins
 
  * Most of the <Dovecot plugins> [Plugins.txt] work with LMTP.
  * Virtual quota can be enforced using <Quota plugin> [Quota.txt].
+    * 'lmtp_rcpt_check_quota = yes' enables quota checking already at RCPT TO
+      stage. This check isn't done for proxied connections.
  * Sieve language support can be added with the <Pigeonhole Sieve plugin>
    [Pigeonhole.Sieve.txt].
 
@@ -124,4 +126,4 @@ Using LMTP with different MTAs
  * <Exim> [LMTP.Exim.txt]
  * HALON [http://wiki.halon.se/LMTP]
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

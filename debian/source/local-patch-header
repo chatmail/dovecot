@@ -1,0 +1,3 @@
+This patch contains the pigeonhole sieve implementation from
+https://github.com/dovecot/pigeonhole. It is automatically generated from the
+package's git tree on build.

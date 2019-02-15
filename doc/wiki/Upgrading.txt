@@ -21,5 +21,6 @@ Upgrading between other versions
  * <v2.0 to v2.1> [Upgrading.2.1.txt]
  * <v2.1 to v2.2> [Upgrading.2.2.txt]
  * <v2.2 to v2.3> [Upgrading.2.3.txt]
+ * <v2.3 to v2.4> [Upgrading.2.4.txt]
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

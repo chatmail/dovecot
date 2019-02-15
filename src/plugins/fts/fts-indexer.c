@@ -30,8 +30,8 @@ struct fts_indexer_context {
 	int fd;
 	struct istream *input;
 
-	unsigned int notified:1;
-	unsigned int failed:1;
+	bool notified:1;
+	bool failed:1;
 };
 
 int fts_indexer_cmd(struct mail_user *user, const char *cmd,
@@ -126,7 +126,7 @@ int fts_indexer_init(struct fts_backend *backend, struct mailbox *box,
 	ctx->box = box;
 	ctx->path = i_strdup(path);
 	ctx->fd = fd;
-	ctx->input = i_stream_create_fd(fd, 128, FALSE);
+	ctx->input = i_stream_create_fd(fd, 128);
 	ctx->search_start_time = ioloop_timeval;
 
 	value = mail_user_plugin_getenv(box->storage->user, "fts_index_timeout");
@@ -169,7 +169,7 @@ static int fts_indexer_input(struct fts_indexer_context *ctx)
 	while ((line = i_stream_read_next_line(ctx->input)) != NULL) {
 		/* initial reply: <tag> \t OK
 		   following: <tag> \t <percentage> */
-		if (strncmp(line, "1\t", 2) != 0) {
+		if (!str_begins(line, "1\t")) {
 			i_error("indexer sent invalid reply: %s", line);
 			return -1;
 		}

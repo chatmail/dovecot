@@ -21,7 +21,7 @@ If you have problems, you may need to regenerate the build system entirely.
 To do so, use the procedure documented by the package, typically 'autoreconf'.])])
 
 # iconv.m4 serial 19 (gettext-0.18.2)
-dnl Copyright (C) 2000-2002, 2007-2014 Free Software Foundation, Inc.
+dnl Copyright (C) 2000-2002, 2007-2014, 2016 Free Software Foundation, Inc.
 dnl This file is free software; the Free Software Foundation
 dnl gives unlimited permission to copy and/or distribute it,
 dnl with or without modifications, as long as this notice is preserved.
@@ -293,7 +293,7 @@ size_t iconv();
 ])
 
 # lib-ld.m4 serial 6
-dnl Copyright (C) 1996-2003, 2009-2015 Free Software Foundation, Inc.
+dnl Copyright (C) 1996-2003, 2009-2016 Free Software Foundation, Inc.
 dnl This file is free software; the Free Software Foundation
 dnl gives unlimited permission to copy and/or distribute it,
 dnl with or without modifications, as long as this notice is preserved.
@@ -413,7 +413,7 @@ AC_LIB_PROG_LD_GNU
 ])
 
 # lib-link.m4 serial 26 (gettext-0.18.2)
-dnl Copyright (C) 2001-2015 Free Software Foundation, Inc.
+dnl Copyright (C) 2001-2016 Free Software Foundation, Inc.
 dnl This file is free software; the Free Software Foundation
 dnl gives unlimited permission to copy and/or distribute it,
 dnl with or without modifications, as long as this notice is preserved.
@@ -1191,7 +1191,7 @@ AC_DEFUN([AC_LIB_LINKFLAGS_FROM_LIBS],
 ])
 
 # lib-prefix.m4 serial 7 (gettext-0.18)
-dnl Copyright (C) 2001-2005, 2008-2015 Free Software Foundation, Inc.
+dnl Copyright (C) 2001-2005, 2008-2016 Free Software Foundation, Inc.
 dnl This file is free software; the Free Software Foundation
 dnl gives unlimited permission to copy and/or distribute it,
 dnl with or without modifications, as long as this notice is preserved.
@@ -2857,10 +2857,93 @@ AC_SUBST([am__tar])
 AC_SUBST([am__untar])
 ]) # _AM_PROG_TAR
 
+m4_include([m4/ac_checktype2.m4])
+m4_include([m4/ac_typeof.m4])
+m4_include([m4/arc4random.m4])
+m4_include([m4/blockdev.m4])
+m4_include([m4/c99_vsnprintf.m4])
+m4_include([m4/cc_clang.m4])
+m4_include([m4/cc_fortify.m4])
+m4_include([m4/cc_pie.m4])
+m4_include([m4/cc_retpoline.m4])
+m4_include([m4/cc_stack_protector.m4])
+m4_include([m4/cflags.m4])
+m4_include([m4/clock_gettime.m4])
+m4_include([m4/crypt.m4])
+m4_include([m4/crypt_xpg6.m4])
+m4_include([m4/dbqlk.m4])
+m4_include([m4/dirent_dtype.m4])
+m4_include([m4/dovecot.m4])
+m4_include([m4/fd_passing.m4])
+m4_include([m4/fdatasync.m4])
+m4_include([m4/flexible_array_member.m4])
+m4_include([m4/glibc.m4])
+m4_include([m4/gmtime_max.m4])
+m4_include([m4/gmtime_tm_gmtoff.m4])
+m4_include([m4/ioloop.m4])
+m4_include([m4/iovec.m4])
+m4_include([m4/ipv6.m4])
+m4_include([m4/ld_relro.m4])
+m4_include([m4/ld_whole_archive.m4])
+m4_include([m4/libcap.m4])
+m4_include([m4/libtool.m4])
+m4_include([m4/libwrap.m4])
+m4_include([m4/linux_mremap.m4])
+m4_include([m4/ltoptions.m4])
+m4_include([m4/ltsugar.m4])
+m4_include([m4/ltversion.m4])
+m4_include([m4/lt~obsolete.m4])
+m4_include([m4/mmap_write.m4])
+m4_include([m4/mntctl.m4])
+m4_include([m4/modules.m4])
+m4_include([m4/notify.m4])
+m4_include([m4/nsl.m4])
+m4_include([m4/off_t_max.m4])
+m4_include([m4/pr_set_dumpable.m4])
+m4_include([m4/q_quotactl.m4])
+m4_include([m4/quota.m4])
+m4_include([m4/random.m4])
+m4_include([m4/rlimit.m4])
+m4_include([m4/sendfile.m4])
+m4_include([m4/size_t_signed.m4])
+m4_include([m4/sockpeercred.m4])
+m4_include([m4/sql.m4])
+m4_include([m4/ssl.m4])
+m4_include([m4/st_tim.m4])
+m4_include([m4/static_array.m4])
+m4_include([m4/test_with.m4])
+m4_include([m4/time_t.m4])
+m4_include([m4/typeof.m4])
+m4_include([m4/typeof_dev_t.m4])
+m4_include([m4/unsetenv.m4])
+m4_include([m4/uoff_t_max.m4])
+m4_include([m4/vararg.m4])
 m4_include([m4/want_apparmor.m4])
-m4_include([dovecot.m4])
-m4_include([libtool.m4])
-m4_include([ltoptions.m4])
-m4_include([ltsugar.m4])
-m4_include([ltversion.m4])
-m4_include([lt~obsolete.m4])
+m4_include([m4/want_bsdauth.m4])
+m4_include([m4/want_bzlib.m4])
+m4_include([m4/want_cassandra.m4])
+m4_include([m4/want_cdb.m4])
+m4_include([m4/want_checkpassword.m4])
+m4_include([m4/want_clucene.m4])
+m4_include([m4/want_db.m4])
+m4_include([m4/want_gssapi.m4])
+m4_include([m4/want_icu.m4])
+m4_include([m4/want_ldap.m4])
+m4_include([m4/want_lua.m4])
+m4_include([m4/want_lz4.m4])
+m4_include([m4/want_lzma.m4])
+m4_include([m4/want_mysql.m4])
+m4_include([m4/want_pam.m4])
+m4_include([m4/want_passwd.m4])
+m4_include([m4/want_pgsql.m4])
+m4_include([m4/want_prefetch.m4])
+m4_include([m4/want_shadow.m4])
+m4_include([m4/want_sia.m4])
+m4_include([m4/want_sodium.m4])
+m4_include([m4/want_solr.m4])
+m4_include([m4/want_sqlite.m4])
+m4_include([m4/want_stemmer.m4])
+m4_include([m4/want_textcat.m4])
+m4_include([m4/want_vpopmail.m4])
+m4_include([m4/want_zlib.m4])
+m4_include([m4/warnings.m4])

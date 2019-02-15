@@ -10,8 +10,8 @@ struct setting_parser_info;
 struct mail_storage_service_user;
 
 enum mail_storage_service_flags {
-	/* Fail if we don't drop root privileges */
-	MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT		= 0x01,
+	/* Allow not dropping root privileges */
+	MAIL_STORAGE_SERVICE_FLAG_ALLOW_ROOT		= 0x01,
 	/* Lookup user from userdb */
 	MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP		= 0x02,
 	/* Force mail_debug=yes */
@@ -37,6 +37,8 @@ enum mail_storage_service_flags {
 };
 
 struct mail_storage_service_input {
+	struct event *parent_event;
+
 	const char *module;
 	const char *service;
 	const char *username;
@@ -59,9 +61,13 @@ struct mail_storage_service_input {
 	enum mail_storage_service_flags flags_override_remove;
 
 	/* override MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP for this lookup */
-	unsigned int no_userdb_lookup:1;
+	bool no_userdb_lookup:1;
 	/* Enable auth_debug=yes for this lookup */
-	unsigned int debug:1;
+	bool debug:1;
+	/* Connection is secure (SSL or just trusted) */
+	bool conn_secured:1;
+	/* Connection is secured using SSL specifically */
+	bool conn_ssl_secured:1;
 };
 
 extern struct module *mail_storage_service_modules;
@@ -88,8 +94,7 @@ void mail_storage_service_init_settings(struct mail_storage_service_ctx *ctx,
 					const struct mail_storage_service_input *input)
 	ATTR_NULL(2);
 /* Returns 1 if ok, 0 if user wasn't found, -1 if fatal error,
-   -2 if error is user-specific (e.g. invalid settings).
-   Error can be safely shown to untrusted users. */
+   -2 if error is user-specific (e.g. invalid settings). */
 int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 				const struct mail_storage_service_input *input,
 				struct mail_storage_service_user **user_r,
@@ -101,12 +106,14 @@ void mail_storage_service_save_userdb_fields(struct mail_storage_service_ctx *ct
 /* Returns 0 if ok, -1 if fatal error, -2 if error is user-specific. */
 int mail_storage_service_next(struct mail_storage_service_ctx *ctx,
 			      struct mail_storage_service_user *user,
-			      struct mail_user **mail_user_r);
+			      struct mail_user **mail_user_r,
+			      const char **error_r);
 /* Returns 0 if ok, -1 if fatal error, -2 if error is user-specific. */
 int mail_storage_service_next_with_session_suffix(struct mail_storage_service_ctx *ctx,
 						  struct mail_storage_service_user *user,
 						  const char *session_id_postfix,
-						  struct mail_user **mail_user_r);
+						  struct mail_user **mail_user_r,
+						   const char **error_r);
 void mail_storage_service_restrict_setenv(struct mail_storage_service_ctx *ctx,
 					  struct mail_storage_service_user *user);
 /* Combine lookup() and next() into one call. */
@@ -117,12 +124,9 @@ int mail_storage_service_lookup_next(struct mail_storage_service_ctx *ctx,
 				     const char **error_r);
 void mail_storage_service_user_ref(struct mail_storage_service_user *user);
 void mail_storage_service_user_unref(struct mail_storage_service_user **user);
-/* FIXME: for backwards compatibility - remove */
-#define mail_storage_service_user_free(user) \
-	mail_storage_service_user_unref(user)
 /* Initialize iterating through all users. */
 void mail_storage_service_all_init(struct mail_storage_service_ctx *ctx);
-/* Same as mail_storage_service_all_init(), but give a user mask hint to the
+/* Initialize iterating through all users with a user mask hint to the
    userdb iteration lookup. This itself isn't yet guaranteed to filter out any
    usernames. */
 void mail_storage_service_all_init_mask(struct mail_storage_service_ctx *ctx,
@@ -140,7 +144,6 @@ void mail_storage_service_io_activate_user(struct mail_storage_service_user *use
 /* Deactivate user context. This only switches back to non-user-specific
    log prefix. */
 void mail_storage_service_io_deactivate_user(struct mail_storage_service_user *user);
-void mail_storage_service_io_deactivate(struct mail_storage_service_ctx *ctx);
 
 /* Return the settings pointed to by set_root parameter in _init().
    The settings contain all the changes done by userdb lookups. */

@@ -53,8 +53,8 @@ static const char *get_msgnum(struct client *client, const char *args,
 	num--;
 
 	if (client->deleted) {
-		if (client->deleted_bitmask[num / CHAR_BIT] &
-		    (1 << (num % CHAR_BIT))) {
+		if ((client->deleted_bitmask[num / CHAR_BIT] &
+		     (1 << (num % CHAR_BIT))) != 0) {
 			client_send_line(client, "-ERR Message is deleted.");
 			return NULL;
 		}
@@ -134,8 +134,8 @@ static void cmd_list_callback(struct client *client)
 		}
 
 		if (client->deleted) {
-			if (client->deleted_bitmask[ctx->msgnum / CHAR_BIT] &
-			    (1 << (ctx->msgnum % CHAR_BIT)))
+			if ((client->deleted_bitmask[ctx->msgnum / CHAR_BIT] &
+			     (1 << (ctx->msgnum % CHAR_BIT))) != 0)
 				continue;
 		}
 
@@ -268,7 +268,7 @@ bool client_update_mails(struct client *client)
 	mail_search_args_unref(&search_args);
 
 	while (mailbox_search_next(ctx, &mail)) {
-		if (seq_range_exists(&deleted_msgs, mail->seq))
+		if (client->quit_seen && seq_range_exists(&deleted_msgs, mail->seq))
 			client_expunge(client, mail);
 		else if (seq_range_exists(&seen_msgs, mail->seq))
 			mail_update_flags(mail, MODIFY_ADD, MAIL_SEEN);
@@ -282,6 +282,7 @@ bool client_update_mails(struct client *client)
 
 static int cmd_quit(struct client *client, const char *args ATTR_UNUSED)
 {
+	client->quit_seen = TRUE;
 	if (client->deleted || client->seen_bitmask != NULL) {
 		if (!client_update_mails(client)) {
 			client_send_storage_error(client);
@@ -336,7 +337,7 @@ static void fetch_callback(struct client *client)
 	int ret;
 
 	while ((ctx->body_lines > 0 || !ctx->in_body) &&
-	       i_stream_read_data(ctx->stream, &data, &size, 0) > 0) {
+	       i_stream_read_more(ctx->stream, &data, &size) > 0) {
 		if (size > 4096)
 			size = 4096;
 
@@ -529,7 +530,8 @@ static int cmd_rset(struct client *client, const char *args ATTR_UNUSED)
 		(void)mailbox_search_deinit(&search_ctx);
 
 		(void)mailbox_transaction_commit(&client->trans);
-		client->trans = mailbox_transaction_begin(client->mailbox, 0);
+		client->trans = mailbox_transaction_begin(client->mailbox, 0,
+							  __func__);
 	}
 
 	client_send_line(client, "+OK");
@@ -570,17 +572,9 @@ static int
 pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 	     bool *permanent_uidl_r)
 {
-	static struct var_expand_table static_tab[] = {
-		{ 'v', NULL, "uidvalidity" },
-		{ 'u', NULL, "uid" },
-		{ 'm', NULL, "md5" },
-		{ 'f', NULL, "filename" },
-		{ 'g', NULL, "guid" },
-		{ '\0', NULL, NULL }
-	};
-	struct var_expand_table *tab;
-	char uid_str[MAX_INT_STRLEN];
+	char uid_str[MAX_INT_STRLEN] = { 0 };
 	const char *uidl;
+	const char *hdr_md5 = NULL, *filename = NULL, *guid = NULL;
 
 	if (mail_get_special(mail, MAIL_FETCH_UIDL_BACKEND, &uidl) == 0 &&
 	    *uidl != '\0') {
@@ -598,22 +592,17 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 		return 0;
 	}
 
-	tab = t_malloc(sizeof(static_tab));
-	memcpy(tab, static_tab, sizeof(static_tab));
-	tab[0].value = t_strdup_printf("%u", client->uid_validity);
-
 	if ((client->uidl_keymask & UIDL_UID) != 0) {
 		if (i_snprintf(uid_str, sizeof(uid_str), "%u", mail->uid) < 0)
 			i_unreached();
-		tab[1].value = uid_str;
 	}
 	if ((client->uidl_keymask & UIDL_MD5) != 0) {
 		if (mail_get_special(mail, MAIL_FETCH_HEADER_MD5,
-				     &tab[2].value) < 0) {
+				     &hdr_md5) < 0) {
 			i_error("UIDL: Header MD5 lookup failed: %s",
 				mailbox_get_last_internal_error(mail->box, NULL));
 			return -1;
-		} else if (*tab[2].value == '\0') {
+		} else if (hdr_md5[0] == '\0') {
 			i_error("UIDL: Header MD5 not found "
 				"(pop3_uidl_format=%%m not supported by storage?)");
 			return -1;
@@ -621,11 +610,11 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 	}
 	if ((client->uidl_keymask & UIDL_FILE_NAME) != 0) {
 		if (mail_get_special(mail, MAIL_FETCH_STORAGE_ID,
-				     &tab[3].value) < 0) {
+				     &filename) < 0) {
 			i_error("UIDL: File name lookup failed: %s",
 				mailbox_get_last_internal_error(mail->box, NULL));
 			return -1;
-		} else if (*tab[3].value == '\0') {
+		} else if (filename[0] == '\0') {
 			i_error("UIDL: File name not found "
 				"(pop3_uidl_format=%%f not supported by storage?)");
 			return -1;
@@ -633,17 +622,33 @@ pop3_get_uid(struct client *client, struct mail *mail, string_t *str,
 	}
 	if ((client->uidl_keymask & UIDL_GUID) != 0) {
 		if (mail_get_special(mail, MAIL_FETCH_GUID,
-				     &tab[4].value) < 0) {
+				     &guid) < 0) {
 			i_error("UIDL: Message GUID lookup failed: %s",
 				mailbox_get_last_internal_error(mail->box, NULL));
 			return -1;
-		} else if (*tab[4].value == '\0') {
+		} else if (guid[0] == '\0') {
 			i_error("UIDL: Message GUID not found "
 				"(pop3_uidl_format=%%g not supported by storage?)");
 			return -1;
 		}
 	}
-	var_expand(str, client->mail_set->pop3_uidl_format, tab);
+
+	const struct var_expand_table tab[] = {
+		{ 'v', dec2str(client->uid_validity), "uidvalidity" },
+		{ 'u', uid_str, "uid" },
+		{ 'm', hdr_md5, "md5" },
+		{ 'f', filename, "filename" },
+		{ 'g', guid, "guid" },
+		{ '\0', NULL, NULL }
+	};
+	const char *error;
+
+	if (var_expand(str, client->mail_set->pop3_uidl_format,
+		       tab, &error) <= 0) {
+		i_error("UIDL: Failed to expand pop3_uidl_format=%s: %s",
+			client->mail_set->pop3_uidl_format, error);
+		return -1;
+	}
 	return 0;
 }
 
@@ -656,8 +661,8 @@ list_uidls_saved_iter(struct client *client, struct cmd_uidl_context *ctx)
 		uint32_t msgnum = ctx->msgnum++;
 
 		if (client->deleted) {
-			if (client->deleted_bitmask[msgnum / CHAR_BIT] &
-			    (1 << (msgnum % CHAR_BIT)))
+			if ((client->deleted_bitmask[msgnum / CHAR_BIT] &
+			     (1 << (msgnum % CHAR_BIT))) != 0)
 				continue;
 		}
 		found = TRUE;
@@ -700,8 +705,8 @@ static bool list_uids_iter(struct client *client, struct cmd_uidl_context *ctx)
 			break;
 		}
 		if (client->deleted) {
-			if (client->deleted_bitmask[msgnum / CHAR_BIT] &
-			    (1 << (msgnum % CHAR_BIT)))
+			if ((client->deleted_bitmask[msgnum / CHAR_BIT] &
+			     (1 << (msgnum % CHAR_BIT))) != 0)
 				continue;
 		}
 		found = TRUE;
@@ -814,7 +819,7 @@ static void client_uidls_save(struct client *client)
 		i_assert(mail->seq <= client->highest_seq);
 		seq_uidls[mail->seq-1] = uidl;
 		if (uidl_duplicates_rename)
-			hash_table_insert(prev_uidls, uidl, POINTER_CAST(1));
+			hash_table_update(prev_uidls, uidl, POINTER_CAST(1));
 	}
 	(void)mailbox_search_deinit(&search_ctx);
 	if (uidl_duplicates_rename)

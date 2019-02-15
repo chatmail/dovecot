@@ -42,9 +42,9 @@ struct pam_passdb_module {
 	const char *service_name, *pam_cache_key;
 	unsigned int requests_left;
 
-	unsigned int pam_setcred:1;
-	unsigned int pam_session:1;
-	unsigned int failure_show_msg:1;
+	bool pam_setcred:1;
+	bool pam_session:1;
+	bool failure_show_msg:1;
 };
 
 struct pam_conv_context {
@@ -171,7 +171,7 @@ static int try_pam_auth(struct auth_request *request, pam_handle_t *pamh,
 			str = t_strdup_printf("%s (%s missing?)", str, path);
 			auth_request_log_error(request, AUTH_SUBSYS_DB, "%s", str);
 		} else if (status == PAM_AUTH_ERR) {
-			str = t_strconcat(str, " (password mismatch?)", NULL);
+			str = t_strconcat(str, " ("AUTH_LOG_MSG_PASSWORD_MISMATCH"?)", NULL);
 			if (request->set->debug_passwords) {
 				str = t_strconcat(str, " (given password: ",
 						  request->mech_password,
@@ -312,14 +312,21 @@ pam_verify_plain(struct auth_request *request, const char *password,
         struct passdb_module *_module = request->passdb->passdb;
         struct pam_passdb_module *module = (struct pam_passdb_module *)_module;
 	enum passdb_result result;
-	const char *service;
+	const char *service, *error;
 
 	if (module->requests_left > 0) {
 		if (--module->requests_left == 0)
 			worker_restart_request = TRUE;
 	}
 
-	service = t_auth_request_var_expand(module->service_name, request, NULL);
+	if (t_auth_request_var_expand(module->service_name, request, NULL,
+				      &service, &error) <= 0) {
+		auth_request_log_debug(request, AUTH_SUBSYS_DB,
+			"Failed to expand service %s: %s",
+			module->service_name, error);
+		callback(PASSDB_RESULT_INTERNAL_FAILURE, request);
+		return;
+	}
 
 	auth_request_log_debug(request, AUTH_SUBSYS_DB,
 			       "lookup service=%s", service);
@@ -351,7 +358,7 @@ pam_preinit(pool_t pool, const char *args)
 			module->pam_session = TRUE;
 		else if (strcmp(t_args[i], "setcred=yes") == 0)
 			module->pam_setcred = TRUE;
-		else if (strncmp(t_args[i], "cache_key=", 10) == 0) {
+		else if (str_begins(t_args[i], "cache_key=")) {
 			module->module.default_cache_key =
 				auth_cache_parse_key(pool, t_args[i] + 10);
 		} else if (strcmp(t_args[i], "blocking=yes") == 0) {
@@ -361,7 +368,7 @@ pam_preinit(pool_t pool, const char *args)
 		} else if (strcmp(t_args[i], "*") == 0) {
 			/* for backwards compatibility */
 			module->service_name = "%Ls";
-		} else if (strncmp(t_args[i], "max_requests=", 13) == 0) {
+		} else if (str_begins(t_args[i], "max_requests=")) {
 			if (str_to_uint(t_args[i] + 13,
 					&module->requests_left) < 0) {
 				i_error("pam: Invalid requests_left value: %s",

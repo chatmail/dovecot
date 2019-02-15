@@ -1,0 +1,111 @@
+Events
+======
+
+List of all events that can be used in <Statistics.txt> and elsewhere.
+
+Connection
+----------
+
+These events apply only for connections using the "connection API".
+Unfortunately not all connections currently use this, so these events work for
+some types of connections, but not for others.
+
+*client_connection_connected*
+
+ * client_ip: source IP
+ * client_port: source port
+ * ip: target IP
+ * port: target port
+
+*client_connection_disconnected*
+
+ * fields from *client_connection_connected*
+ * bytes_in: amount of data read
+ * bytes_out: amount of data written
+ * reason: disconnection reason
+
+*server_connection_connected*
+
+ * client_ip: source IP
+ * client_port: source port
+ * ip: target IP
+ * port: target port
+ * bytes_in: amount of data read
+ * bytes_out: amount of data written
+
+*server_connection_disconnected*
+
+ * fields from *server_connection_connected*
+ * bytes_in: amount of data read
+ * bytes_out: amount of data written
+ * reason: disconnection reason
+
+HTTP
+----
+
+*http_request_finished*
+
+ * status_code: HTTP result status code
+ * attempts: Number of individual HTTP request attempts that were done (i.e.
+   number of retries after failures + 1)
+ * redirects: Number of redirects that were done while processing this request.
+
+ * bytes_in, bytes_out: Number of bytes received/sent for this request.
+
+*http_request_redirected*
+
+ * Intermediate event sent while HTTP request is being redirected. The
+   *http_request_finished* is still being sent as well.
+ * Same fields as *http_request_finished*
+
+*http_request_retried*
+
+ * Intermediate event sent while HTTP request is being retried. The
+   *http_request_finished* is still being sent as well.
+ * Same fields as *http_request_finished*
+
+IMAP
+----
+
+*imap_command_finished*
+
+ * tag: Command tag
+ * name: Command name
+ * args: Command's full parameters
+ * human_args: Command's parameters as more human-readable output
+ * tagged_reply_state: OK, NO, BAD
+ * tagged_reply: Full tagged reply, e.g. "OK SELECT finished."
+ * last_run_time: Timestamp when the command was running last time (it's
+   followed by "mailbox sync" that can take some time)
+ * running_usecs: How many usecs this command itself has spent running
+ * lock_wait_usecs: How many usecs this command itself has spent waiting for
+   locks.
+ * bytes_in, bytes_out: How many bytes of client input/output command has used.
+
+DNS
+---
+
+*dns_worker_request_finished* and *dns_request_finished*
+
+ * error: Human readable error
+ * error_code: Error code usable with net_gethosterror()
+
+*dns_worker_request_started* and *dns_request_started*
+
+SQL
+---
+
+*sql_query_finished*
+
+ * error: Human readable error
+ * error_code: Error code (if available)
+ * query_first_word: First word of the query, such as SELECT
+
+*sql_transaction_finished*
+
+ * error: Human readable error
+ * error_code: Error code (if available)
+
+*sql_connection_finished*
+
+(This file was created from the wiki on 2019-02-05 04:42)

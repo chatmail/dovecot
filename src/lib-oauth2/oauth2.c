@@ -49,7 +49,7 @@ oauth2_parse_json(struct oauth2_request *req)
 		(void)json_parser_deinit(&req->parser, &error);
 		error = "Invalid response data";
 		success = FALSE;
-	} else if (i_stream_is_eof(req->is) &&
+	} else if (i_stream_read_eof(req->is) &&
 		   req->is->v_offset == 0 && req->is->stream_errno == 0) {
 		/* discard error, empty response is OK. */
 		(void)json_parser_deinit(&req->parser, &error);
@@ -71,16 +71,14 @@ oauth2_request_abort(struct oauth2_request **_req)
 	struct oauth2_request *req = *_req;
 	*_req = NULL;
 
-	if (req->req != NULL)
-		http_client_request_abort(&req->req);
+	http_client_request_abort(&req->req);
 	oauth2_request_free_internal(req);
 }
 
 void
 oauth2_request_free_internal(struct oauth2_request *req)
 {
-	if (req->to_delayed_error != NULL)
-		timeout_remove(&req->to_delayed_error);
+	timeout_remove(&req->to_delayed_error);
 	pool_unref(&req->pool);
 }
 

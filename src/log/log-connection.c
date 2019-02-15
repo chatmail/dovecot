@@ -22,13 +22,13 @@
 /* Log a warning after 1 secs when we've been all the time busy writing the
    log connection. */
 #define LOG_WARN_PENDING_COUNT (1000 / MAX_MSECS_PER_CONNECTION)
-/* If we keep beeing busy, log a warning every 60 seconds. */
+/* If we keep being busy, log a warning every 60 seconds. */
 #define LOG_WARN_PENDING_INTERVAL (60 * LOG_WARN_PENDING_COUNT)
 
 struct log_client {
 	struct ip_addr ip;
 	char *prefix;
-	unsigned int fatal_logged:1;
+	bool fatal_logged:1;
 };
 
 struct log_connection {
@@ -45,8 +45,8 @@ struct log_connection {
 
 	unsigned int pending_count;
 
-	unsigned int master:1;
-	unsigned int handshaked:1;
+	bool master:1;
+	bool handshaked:1;
 };
 
 static struct log_connection *log_connections = NULL;
@@ -54,7 +54,8 @@ static ARRAY(struct log_connection *) logs_by_fd;
 static unsigned int global_pending_count;
 static struct log_connection *last_pending_log;
 
-static void log_connection_destroy(struct log_connection *log);
+static void
+log_connection_destroy(struct log_connection *log, bool shutting_down);
 
 static void log_refresh_proctitle(void)
 {
@@ -109,9 +110,9 @@ static void log_parse_option(struct log_connection *log,
 	struct log_client *client;
 
 	client = log_client_get(log, failure->pid);
-	if (strncmp(failure->text, "ip=", 3) == 0)
+	if (str_begins(failure->text, "ip="))
 		(void)net_addr2ip(failure->text + 3, &client->ip);
-	else if (strncmp(failure->text, "prefix=", 7) == 0) {
+	else if (str_begins(failure->text, "prefix=")) {
 		i_free(client->prefix);
 		client->prefix = i_strdup(failure->text + 7);
 	}
@@ -143,9 +144,13 @@ client_log_ctx(struct log_connection *log,
 		log_error_buffer_add(log->errorbuf, &err);
 		break;
 	}
-	i_set_failure_prefix("%s", prefix);
+	/* log_prefix overrides the global prefix. Don't bother changing the
+	   global prefix in that case. */
+	if (ctx->log_prefix == NULL)
+		i_set_failure_prefix("%s", prefix);
 	i_log_type(ctx, "%s", text);
-	i_set_failure_prefix("log: ");
+	if (ctx->log_prefix == NULL)
+		i_set_failure_prefix("%s", global_log_prefix);
 }
 
 static void
@@ -218,9 +223,9 @@ log_parse_master_line(const char *line, const struct timeval *log_time,
 			return;
 		}
 		log_client_free(log, client, pid);
-	} else if (strncmp(cmd, "FATAL ", 6) == 0) {
+	} else if (str_begins(cmd, "FATAL ")) {
 		client_log_fatal(log, client, cmd + 6, log_time, tm);
-	} else if (strncmp(cmd, "DEFAULT-FATAL ", 14) == 0) {
+	} else if (str_begins(cmd, "DEFAULT-FATAL ")) {
 		/* If the client has logged a fatal/panic, don't log this
 		   message. */
 		if (client == NULL || !client->fatal_logged)
@@ -237,12 +242,10 @@ log_it(struct log_connection *log, const char *line,
 	struct failure_line failure;
 	struct failure_context failure_ctx;
 	struct log_client *client = NULL;
-	const char *prefix;
+	const char *prefix = "";
 
 	if (log->master) {
-		T_BEGIN {
-			log_parse_master_line(line, log_time, tm);
-		} T_END;
+		log_parse_master_line(line, log_time, tm);
 		return;
 	}
 
@@ -270,9 +273,16 @@ log_it(struct log_connection *log, const char *line,
 	failure_ctx.type = failure.log_type;
 	failure_ctx.timestamp = tm;
 	failure_ctx.timestamp_usecs = log_time->tv_usec;
-
-	prefix = client != NULL && client->prefix != NULL ?
-		client->prefix : log->default_prefix;
+	if (failure.log_prefix_len != 0) {
+		failure_ctx.log_prefix =
+			t_strndup(failure.text, failure.log_prefix_len);
+		failure.text += failure.log_prefix_len;
+	} else if (failure.disable_log_prefix) {
+		failure_ctx.log_prefix = "";
+	} else {
+		prefix = client != NULL && client->prefix != NULL ?
+			client->prefix : log->default_prefix;
+	}
 	client_log_ctx(log, &failure_ctx, log_time, prefix, failure.text);
 }
 
@@ -337,7 +347,7 @@ static void log_connection_input(struct log_connection *log)
 
 	if (!log->handshaked) {
 		if (log_connection_handshake(log) < 0) {
-			log_connection_destroy(log);
+			log_connection_destroy(log, FALSE);
 			return;
 		}
 		/* come back here even if we read something else besides a
@@ -352,8 +362,9 @@ static void log_connection_input(struct log_connection *log)
 		now = ioloop_timeval;
 		tm = *localtime(&now.tv_sec);
 
-		while ((line = i_stream_next_line(log->input)) != NULL)
+		while ((line = i_stream_next_line(log->input)) != NULL) T_BEGIN {
 			log_it(log, line, &now, &tm);
+		} T_END;
 		io_loop_time_refresh();
 		if (timeval_diff_msecs(&ioloop_timeval, &start_timeval) > MAX_MSECS_PER_CONNECTION) {
 			too_much = TRUE;
@@ -364,7 +375,7 @@ static void log_connection_input(struct log_connection *log)
 	if (log->input->eof) {
 		if (log->input->stream_errno != 0)
 			i_error("read(log %s) failed: %m", log->default_prefix);
-		log_connection_destroy(log);
+		log_connection_destroy(log, FALSE);
 	} else {
 		i_assert(!log->input->closed);
 		if (!too_much) {
@@ -401,8 +412,8 @@ void log_connection_create(struct log_error_buffer *errorbuf,
 	log->fd = fd;
 	log->listen_fd = listen_fd;
 	log->io = io_add(fd, IO_READ, log_connection_input, log);
-	log->input = i_stream_create_fd(fd, PIPE_BUF, FALSE);
-	log->default_prefix = i_strdup_printf("listen_fd %d", listen_fd);
+	log->input = i_stream_create_fd(fd, PIPE_BUF);
+	log->default_prefix = i_strdup_printf("listen_fd(%d): ", listen_fd);
 	hash_table_create_direct(&log->clients, default_pool, 0);
 	array_idx_set(&logs_by_fd, listen_fd, &log);
 
@@ -410,25 +421,33 @@ void log_connection_create(struct log_error_buffer *errorbuf,
 	log_connection_input(log);
 }
 
-static void log_connection_destroy(struct log_connection *log)
+static void
+log_connection_destroy(struct log_connection *log, bool shutting_down)
 {
 	struct hash_iterate_context *iter;
 	void *key;
 	struct log_client *client;
+	unsigned int client_count = 0;
 
 	array_idx_clear(&logs_by_fd, log->listen_fd);
 
 	DLLIST_REMOVE(&log_connections, log);
 
 	iter = hash_table_iterate_init(log->clients);
-	while (hash_table_iterate(iter, log->clients, &key, &client))
+	while (hash_table_iterate(iter, log->clients, &key, &client)) {
 		i_free(client);
+		client_count++;
+	}
 	hash_table_iterate_deinit(&iter);
 	hash_table_destroy(&log->clients);
 
+	if (client_count > 0 && shutting_down) {
+		i_warning("Shutting down logging for '%s' with %u clients",
+			  log->default_prefix, client_count);
+	}
+
 	i_stream_unref(&log->input);
-	if (log->io != NULL)
-		io_remove(&log->io);
+	io_remove(&log->io);
 	if (close(log->fd) < 0)
 		i_error("close(log connection fd) failed: %m");
 	i_free(log->default_prefix);
@@ -447,6 +466,6 @@ void log_connections_deinit(void)
 	/* normally we don't exit until all log connections are gone,
 	   but we could get here when we're being killed by a signal */
 	while (log_connections != NULL)
-		log_connection_destroy(log_connections);
+		log_connection_destroy(log_connections, TRUE);
 	array_free(&logs_by_fd);
 }

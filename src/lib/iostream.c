@@ -23,25 +23,33 @@ void io_stream_init(struct iostream_private *stream)
 		stream->close = io_stream_default_close;
 	if (stream->destroy == NULL)
 		stream->destroy = io_stream_default_destroy;
+	stream->ioloop = current_ioloop;
 
 	stream->refcount = 1;
 }
 
 void io_stream_ref(struct iostream_private *stream)
 {
+	i_assert(stream->refcount > 0);
+
 	stream->refcount++;
 }
 
-void io_stream_unref(struct iostream_private *stream)
+bool io_stream_unref(struct iostream_private *stream)
 {
-	const struct iostream_destroy_callback *dc;
-
 	i_assert(stream->refcount > 0);
 	if (--stream->refcount != 0)
-		return;
+		return TRUE;
 
 	stream->close(stream, FALSE);
 	stream->destroy(stream);
+	return FALSE;
+}
+
+void io_stream_free(struct iostream_private *stream)
+{
+	const struct iostream_destroy_callback *dc;
+
 	if (array_is_created(&stream->destroy_callbacks)) {
 		array_foreach(&stream->destroy_callbacks, dc)
 			dc->callback(dc->context);
@@ -132,4 +140,15 @@ const char *io_stream_get_disconnect_reason(struct istream *input,
 		return "Connection closed";
 	else
 		return t_strdup_printf("Connection closed: %s", errstr);
+}
+
+void io_stream_switch_ioloop_to(struct iostream_private *stream,
+				struct ioloop *ioloop)
+{
+	stream->ioloop = ioloop;
+}
+
+struct ioloop *io_stream_get_ioloop(struct iostream_private *stream)
+{
+	return (stream->ioloop == NULL ? current_ioloop : stream->ioloop);
 }

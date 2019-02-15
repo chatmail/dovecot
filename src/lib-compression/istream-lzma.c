@@ -16,13 +16,12 @@ struct lzma_istream {
 	struct istream_private istream;
 
 	lzma_stream strm;
-	uoff_t eof_offset, stream_size;
-	size_t high_pos;
+	uoff_t eof_offset;
 	struct stat last_parent_statbuf;
 
-	unsigned int log_errors:1;
-	unsigned int marked:1;
-	unsigned int strm_closed:1;
+	bool log_errors:1;
+	bool marked:1;
+	bool strm_closed:1;
 };
 
 static void i_stream_lzma_close(struct iostream_private *stream,
@@ -43,8 +42,7 @@ static void lzma_read_error(struct lzma_istream *zstream, const char *error)
 	io_stream_set_error(&zstream->istream.iostream,
 			    "lzma.read(%s): %s at %"PRIuUOFF_T,
 			    i_stream_get_name(&zstream->istream.istream), error,
-			    zstream->istream.abs_start_offset +
-			    zstream->istream.istream.v_offset);
+			    i_stream_get_absolute_offset(&zstream->istream.istream));
 	if (zstream->log_errors)
 		i_error("%s", zstream->istream.iostream.error);
 }
@@ -53,7 +51,7 @@ static void lzma_stream_end(struct lzma_istream *zstream)
 {
 	zstream->eof_offset = zstream->istream.istream.v_offset +
 		(zstream->istream.pos - zstream->istream.skip);
-	zstream->stream_size = zstream->eof_offset;
+	zstream->istream.cached_stream_size = zstream->eof_offset;
 }
 
 static ssize_t i_stream_lzma_read(struct istream_private *stream)
@@ -66,50 +64,20 @@ static ssize_t i_stream_lzma_read(struct istream_private *stream)
 
 	high_offset = stream->istream.v_offset + (stream->pos - stream->skip);
 	if (zstream->eof_offset == high_offset) {
-		i_assert(zstream->high_pos == 0 ||
-			 zstream->high_pos == stream->pos);
 		stream->istream.eof = TRUE;
 		return -1;
 	}
 
-	if (stream->pos < zstream->high_pos) {
-		/* we're here because we seeked back within the read buffer. */
-		ret = zstream->high_pos - stream->pos;
-		stream->pos = zstream->high_pos;
-		zstream->high_pos = 0;
-
-		if (zstream->eof_offset != (uoff_t)-1) {
-			high_offset = stream->istream.v_offset +
-				(stream->pos - stream->skip);
-			i_assert(zstream->eof_offset == high_offset);
-			stream->istream.eof = TRUE;
-		}
-		return ret;
-	}
-	zstream->high_pos = 0;
-
-	if (stream->pos + CHUNK_SIZE > stream->buffer_size) {
-		/* try to keep at least CHUNK_SIZE available */
-		if (!zstream->marked && stream->skip > 0) {
-			/* don't try to keep anything cached if we don't
-			   have a seek mark. */
-			i_stream_compress(stream);
-		}
-		if (stream->buffer_size < i_stream_get_max_buffer_size(&stream->istream))
-			i_stream_grow_buffer(stream, CHUNK_SIZE);
-
-		if (stream->pos == stream->buffer_size) {
-			if (stream->skip > 0) {
-				/* lose our buffer cache */
-				i_stream_compress(stream);
-			}
-
-			if (stream->pos == stream->buffer_size)
-				return -2; /* buffer full */
-		}
+	if (!zstream->marked) {
+		if (!i_stream_try_alloc(stream, CHUNK_SIZE, &out_size))
+			return -2; /* buffer full */
+	} else {
+		/* try to avoid compressing, so we can quickly seek backwards */
+		if (!i_stream_try_alloc_avoid_compress(stream, CHUNK_SIZE, &out_size))
+			return -2; /* buffer full */
 	}
 
-	if (i_stream_read_data(stream->parent, &data, &size, 0) < 0) {
+	if (i_stream_read_more(stream->parent, &data, &size) < 0) {
 		if (stream->parent->stream_errno != 0) {
 			stream->istream.stream_errno =
 				stream->parent->stream_errno;
@@ -129,7 +97,6 @@ static ssize_t i_stream_lzma_read(struct istream_private *stream)
 	zstream->strm.next_in = data;
 	zstream->strm.avail_in = size;
 
-	out_size = stream->buffer_size - stream->pos;
 	zstream->strm.next_out = stream->w_buffer + stream->pos;
 	zstream->strm.avail_out = out_size;
 	ret = lzma_code(&zstream->strm, LZMA_RUN);
@@ -206,7 +173,6 @@ static void i_stream_lzma_reset(struct lzma_istream *zstream)
 	stream->parent_expected_offset = stream->parent_start_offset;
 	stream->skip = stream->pos = 0;
 	stream->istream.v_offset = 0;
-	zstream->high_pos = 0;
 
 	lzma_end(&zstream->strm);
 	i_stream_lzma_init(zstream);
@@ -216,97 +182,17 @@ static void
 i_stream_lzma_seek(struct istream_private *stream, uoff_t v_offset, bool mark)
 {
 	struct lzma_istream *zstream = (struct lzma_istream *) stream;
-	uoff_t start_offset = stream->istream.v_offset - stream->skip;
 
-	if (v_offset < start_offset) {
-		/* have to seek backwards */
-		i_stream_lzma_reset(zstream);
-		start_offset = 0;
-	} else if (zstream->high_pos != 0) {
-		stream->pos = zstream->high_pos;
-		zstream->high_pos = 0;
-	}
+	if (i_stream_nonseekable_try_seek(stream, v_offset))
+		return;
 
-	if (v_offset <= start_offset + stream->pos) {
-		/* seeking backwards within what's already cached */
-		stream->skip = v_offset - start_offset;
-		stream->istream.v_offset = v_offset;
-		zstream->high_pos = stream->pos;
-		stream->pos = stream->skip;
-	} else {
-		/* read and cache forward */
-		ssize_t ret;
-
-		do {
-			size_t avail = stream->pos - stream->skip;
-
-			if (stream->istream.v_offset + avail >= v_offset) {
-				i_stream_skip(&stream->istream,
-					      v_offset -
-					      stream->istream.v_offset);
-				ret = -1;
-				break;
-			}
-
-			i_stream_skip(&stream->istream, avail);
-		} while ((ret = i_stream_read(&stream->istream)) > 0);
-		i_assert(ret == -1);
-
-		if (stream->istream.v_offset != v_offset) {
-			/* some failure, we've broken it */
-			if (stream->istream.stream_errno != 0) {
-				i_error("lzma_istream.seek(%s) failed: %s",
-					i_stream_get_name(&stream->istream),
-					strerror(stream->istream.stream_errno));
-				i_stream_close(&stream->istream);
-			} else {
-				/* unexpected EOF. allow it since we may just
-				   want to check if there's anything.. */
-				i_assert(stream->istream.eof);
-			}
-		}
-	}
+	/* have to seek backwards - reset state and retry */
+	i_stream_lzma_reset(zstream);
+	if (!i_stream_nonseekable_try_seek(stream, v_offset))
+		i_unreached();
 
 	if (mark)
 		zstream->marked = TRUE;
-}
-
-static int
-i_stream_lzma_stat(struct istream_private *stream, bool exact)
-{
-	struct lzma_istream *zstream = (struct lzma_istream *) stream;
-	const struct stat *st;
-	size_t size;
-
-	if (i_stream_stat(stream->parent, exact, &st) < 0) {
-		stream->istream.stream_errno = stream->parent->stream_errno;
-		return -1;
-	}
-	stream->statbuf = *st;
-
-	/* when exact=FALSE always return the parent stat's size, even if we
-	   know the exact value. this is necessary because otherwise e.g. mbox
-	   code can see two different values and think that a compressed mbox
-	   file keeps changing. */
-	if (!exact)
-		return 0;
-
-	if (zstream->stream_size == (uoff_t)-1) {
-		uoff_t old_offset = stream->istream.v_offset;
-		ssize_t ret;
-
-		do {
-			size = i_stream_get_data_size(&stream->istream);
-			i_stream_skip(&stream->istream, size);
-		} while ((ret = i_stream_read(&stream->istream)) > 0);
-		i_assert(ret == -1);
-
-		i_stream_seek(&stream->istream, old_offset);
-		if (zstream->stream_size == (uoff_t)-1)
-			return -1;
-	}
-	stream->statbuf.st_size = zstream->stream_size;
-	return 0;
 }
 
 static void i_stream_lzma_sync(struct istream_private *stream)
@@ -332,7 +218,6 @@ struct istream *i_stream_create_lzma(struct istream *input, bool log_errors)
 
 	zstream = i_new(struct lzma_istream, 1);
 	zstream->eof_offset = (uoff_t)-1;
-	zstream->stream_size = (uoff_t)-1;
 	zstream->log_errors = log_errors;
 
 	i_stream_lzma_init(zstream);
@@ -341,7 +226,6 @@ struct istream *i_stream_create_lzma(struct istream *input, bool log_errors)
 	zstream->istream.max_buffer_size = input->real_stream->max_buffer_size;
 	zstream->istream.read = i_stream_lzma_read;
 	zstream->istream.seek = i_stream_lzma_seek;
-	zstream->istream.stat = i_stream_lzma_stat;
 	zstream->istream.sync = i_stream_lzma_sync;
 
 	zstream->istream.istream.readable_fd = FALSE;
@@ -349,6 +233,6 @@ struct istream *i_stream_create_lzma(struct istream *input, bool log_errors)
 	zstream->istream.istream.seekable = input->seekable;
 
 	return i_stream_create(&zstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }
 #endif

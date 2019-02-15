@@ -94,7 +94,7 @@ dump_msg_hdr(struct istream *input, unsigned int hdr_size, uoff_t *msg_size_r)
 	size_t size;
 	uoff_t msg_size;
 
-	if (i_stream_read_data(input, &data, &size, hdr_size-1) <= 0) {
+	if (i_stream_read_bytes(input, &data, &size, hdr_size) <= 0) {
 		if (size == 0)
 			return FALSE;
 		i_fatal("Partial message header read at %"PRIuUOFF_T": "
@@ -125,7 +125,7 @@ static void dump_msg_metadata(struct istream *input)
 	const char *line;
 
 	/* verify magic */
-	if (i_stream_read_data(input, &data, &size, sizeof(hdr)-1) <= 0) {
+	if (i_stream_read_bytes(input, &data, &size, sizeof(hdr)) <= 0) {
 		i_fatal("dbox missing metadata at %"PRIuUOFF_T,
 			input->v_offset);
 	}
@@ -221,7 +221,7 @@ static bool test_dump_dbox(const char *path)
 		p = path;
 	else
 		p++;
-	return strncmp(p, "m.", 2) == 0 || strncmp(p, "u.", 2) == 0;
+	return str_begins(p, "m.") || str_begins(p, "u.");
 }
 
 struct doveadm_cmd_dump doveadm_cmd_dump_dbox = {

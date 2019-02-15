@@ -70,7 +70,7 @@ void mailbox_list_delete_mailbox_until_root(struct mailbox_list *list,
 					    const char *storage_name);
 /* Wrapper to unlink_directory(UNLINK_DIRECTORY_FLAG_RMDIR). If it fails due
    to ELOOP, try to unlink() the path instead. */
-int mailbox_list_delete_trash(const char *path);
+int mailbox_list_delete_trash(const char *path, const char **error_r);
 /* Try to unlink() the path to the mailbox. Returns 0 on success.
 
    If the path didn't exist, returns -1 and sets the list error to

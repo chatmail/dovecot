@@ -62,9 +62,9 @@ struct mailbox_list_notify_index {
 	struct stat list_last_st, inbox_last_st;
 	struct mailbox *inbox;
 
-	unsigned int initialized:1;
-	unsigned int read_failed:1;
-	unsigned int inbox_event_pending:1;
+	bool initialized:1;
+	bool read_failed:1;
+	bool inbox_event_pending:1;
 };
 
 static const enum mailbox_status_items notify_status_items =
@@ -113,8 +113,10 @@ mailbox_list_index_notify_init_inbox(struct mailbox_list_notify_index *inotify)
 				       MAILBOX_FLAG_READONLY);
 	if (mailbox_open(inotify->inbox) < 0)
 		mailbox_free(&inotify->inbox);
-	inotify->inbox_log_path =
-		i_strconcat(inotify->inbox->index->filepath, ".log", NULL);
+	else
+		inotify->inbox_log_path =
+			i_strconcat(inotify->inbox->index->filepath,
+				    ".log", NULL);
 }
 
 int mailbox_list_index_notify_init(struct mailbox_list *list,
@@ -179,14 +181,10 @@ void mailbox_list_index_notify_deinit(struct mailbox_list_notify *notify)
 		mailbox_free(&inotify->inbox);
 	if (inotify->subscriptions != NULL)
 		mailbox_tree_deinit(&inotify->subscriptions);
-	if (inotify->io_wait != NULL)
-		io_remove(&inotify->io_wait);
-	if (inotify->io_wait_inbox != NULL)
-		io_remove(&inotify->io_wait_inbox);
-	if (inotify->to_wait != NULL)
-		timeout_remove(&inotify->to_wait);
-	if (inotify->to_notify != NULL)
-		timeout_remove(&inotify->to_notify);
+	io_remove(&inotify->io_wait);
+	io_remove(&inotify->io_wait_inbox);
+	timeout_remove(&inotify->to_wait);
+	timeout_remove(&inotify->to_notify);
 	if (inotify->sync_ctx != NULL)
 		(void)mail_index_view_sync_commit(&inotify->sync_ctx, &b);
 	mail_index_view_close(&inotify->view);
@@ -211,7 +209,7 @@ notify_lookup_guid(struct mailbox_list_notify_index *inotify,
 		   struct mailbox_status *status_r, guid_128_t guid_r)
 {
 	struct mailbox_list_index *ilist =
-		INDEX_LIST_CONTEXT(inotify->notify.list);
+		INDEX_LIST_CONTEXT_REQUIRE(inotify->notify.list);
 	struct mailbox_list_index_node *index_node;
 	uint32_t seq;
 
@@ -237,16 +235,18 @@ notify_lookup_guid(struct mailbox_list_notify_index *inotify,
 	return index_node;
 }
 
-static void notify_update_stat(struct mailbox_list_notify_index *inotify)
+static void notify_update_stat(struct mailbox_list_notify_index *inotify,
+			       bool stat_list, bool stat_inbox)
 {
 	bool call = FALSE;
 
-	if (stat(inotify->list_log_path, &inotify->list_last_st) < 0 &&
+	if (stat_list &&
+	    stat(inotify->list_log_path, &inotify->list_last_st) < 0 &&
 	    errno != ENOENT) {
 		i_error("stat(%s) failed: %m", inotify->list_log_path);
 		call = TRUE;
 	}
-	if (inotify->inbox_log_path != NULL) {
+	if (inotify->inbox_log_path != NULL && stat_inbox) {
 		if (stat(inotify->inbox_log_path, &inotify->inbox_last_st) < 0 &&
 		    errno != ENOENT) {
 			i_error("stat(%s) failed: %m", inotify->inbox_log_path);
@@ -262,7 +262,7 @@ mailbox_list_index_notify_sync_init(struct mailbox_list_notify_index *inotify)
 {
 	struct mail_index_view_sync_rec sync_rec;
 
-	notify_update_stat(inotify);
+	notify_update_stat(inotify, TRUE, TRUE);
 	(void)mail_index_refresh(inotify->view->index);
 
 	/* sync the view so that map extensions gets updated */
@@ -311,7 +311,7 @@ static int
 mailbox_list_index_notify_read_next(struct mailbox_list_notify_index *inotify)
 {
 	struct mailbox_list_notify *notify = &inotify->notify;
-	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(notify->list);
+	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT_REQUIRE(notify->list);
 	const struct mail_transaction_header *hdr;
 	const void *data;
 	int ret;
@@ -865,31 +865,52 @@ static void notify_now_callback(struct mailbox_list_notify_index *inotify)
 	inotify->wait_callback(inotify->wait_context);
 }
 
-static void notify_callback(struct mailbox_list_notify_index *inotify)
+static void list_notify_callback(struct mailbox_list_notify_index *inotify)
 {
-#define INOTIFY_ST_CHANGED(last_st, prev_st) \
-	((last_st).st_mtime != (prev_st).st_mtime || \
-	 ST_MTIME_NSEC(last_st) != ST_MTIME_NSEC(prev_st) || \
-	 (last_st).st_size != (prev_st).st_size || \
-	 (last_st).st_ino != (prev_st).st_ino)
 	struct stat list_prev_st = inotify->list_last_st;
-	struct stat inbox_prev_st = inotify->inbox_last_st;
-			 
-	notify_update_stat(inotify);
-	if (INOTIFY_ST_CHANGED(inotify->inbox_last_st, inbox_prev_st))
-		inotify->inbox_event_pending = TRUE;
-	if (inotify->inbox_event_pending ||
-	    INOTIFY_ST_CHANGED(inotify->list_last_st, list_prev_st)) {
+
+	if (inotify->to_notify != NULL) {
+		/* there's a pending notification already -
+		   no need to stat() again */
+		return;
+	}
+
+	notify_update_stat(inotify, TRUE, FALSE);
+	if (ST_CHANGED(inotify->list_last_st, list_prev_st)) {
 		/* log has changed. call the callback with a small delay
 		   to allow bundling multiple changes together */
-		if (inotify->to_notify != NULL) {
-			/* already doing this */
-			return;
-		}
 		inotify->to_notify =
 			timeout_add_short(NOTIFY_DELAY_MSECS,
 					  notify_now_callback, inotify);
 	}
+}
+
+static void inbox_notify_callback(struct mailbox_list_notify_index *inotify)
+{
+	struct stat inbox_prev_st = inotify->inbox_last_st;
+
+	if (inotify->to_notify != NULL && inotify->inbox_event_pending) {
+		/* there's a pending INBOX notification already -
+		   no need to stat() again */
+		return;
+	}
+
+	notify_update_stat(inotify, FALSE, TRUE);
+	if (ST_CHANGED(inotify->inbox_last_st, inbox_prev_st))
+		inotify->inbox_event_pending = TRUE;
+	if (inotify->inbox_event_pending && inotify->to_notify == NULL) {
+		/* log has changed. call the callback with a small delay
+		   to allow bundling multiple changes together */
+		inotify->to_notify =
+			timeout_add_short(NOTIFY_DELAY_MSECS,
+					  notify_now_callback, inotify);
+	}
+}
+
+static void full_notify_callback(struct mailbox_list_notify_index *inotify)
+{
+	list_notify_callback(inotify);
+	inbox_notify_callback(inotify);
 }
 
 void mailbox_list_index_notify_wait(struct mailbox_list_notify *notify,
@@ -904,22 +925,18 @@ void mailbox_list_index_notify_wait(struct mailbox_list_notify *notify,
 	inotify->wait_context = context;
 
 	if (callback == NULL) {
-		if (inotify->io_wait != NULL)
-			io_remove(&inotify->io_wait);
-		if (inotify->io_wait_inbox != NULL)
-			io_remove(&inotify->io_wait_inbox);
-		if (inotify->to_wait != NULL)
-			timeout_remove(&inotify->to_wait);
-		if (inotify->to_notify != NULL)
-			timeout_remove(&inotify->to_notify);
+		io_remove(&inotify->io_wait);
+		io_remove(&inotify->io_wait_inbox);
+		timeout_remove(&inotify->to_wait);
+		timeout_remove(&inotify->to_notify);
 	} else if (inotify->to_wait == NULL) {
-		(void)io_add_notify(inotify->list_log_path, notify_callback,
+		(void)io_add_notify(inotify->list_log_path, list_notify_callback,
 				    inotify, &inotify->io_wait);
 		/* we need to check for INBOX explicitly, because INBOX changes
 		   don't get added to mailbox.list.index.log */
 		if (inotify->inbox_log_path != NULL) {
 			(void)io_add_notify(inotify->inbox_log_path,
-					    notify_callback, inotify,
+					    inbox_notify_callback, inotify,
 					    &inotify->io_wait_inbox);
 		}
 		/* check with timeout as well, in case io_add_notify()
@@ -927,8 +944,8 @@ void mailbox_list_index_notify_wait(struct mailbox_list_notify *notify,
 		check_interval = notify->list->mail_set->mailbox_idle_check_interval;
 		i_assert(check_interval > 0);
 		inotify->to_wait = timeout_add(check_interval * 1000,
-					       notify_callback, inotify);
-		notify_update_stat(inotify);
+					       full_notify_callback, inotify);
+		notify_update_stat(inotify, TRUE, TRUE);
 	}
 }
 
@@ -940,7 +957,7 @@ void mailbox_list_index_notify_flush(struct mailbox_list_notify *notify)
 	if (inotify->to_notify == NULL &&
 	    notify->list->mail_set->mailbox_idle_check_interval > 0) {
 		/* no pending notification - check if anything had changed */
-		notify_callback(inotify);
+		full_notify_callback(inotify);
 	}
 	if (inotify->to_notify != NULL)
 		notify_now_callback(inotify);

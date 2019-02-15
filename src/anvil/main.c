@@ -53,6 +53,7 @@ log_fdpass_input(void *context ATTR_UNUSED)
 int main(int argc, char *argv[])
 {
 	const enum master_service_flags service_flags =
+		MASTER_SERVICE_FLAG_DONT_SEND_STATS |
 		MASTER_SERVICE_FLAG_UPDATE_PROCTITLE;
 	const char *error;
 
@@ -65,7 +66,7 @@ int main(int argc, char *argv[])
 		i_fatal("Error reading configuration: %s", error);
 	master_service_init_log(master_service, "anvil: ");
 
-	restrict_access_by_env(NULL, FALSE);
+	restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 	restrict_access_allow_coredumps(TRUE);
 	anvil_restarted = getenv("ANVIL_RESTARTED") != NULL;
 
@@ -80,8 +81,7 @@ int main(int argc, char *argv[])
 
 	master_service_run(master_service, client_connected);
 
-	if (log_fdpass_io != NULL)
-		io_remove(&log_fdpass_io);
+	io_remove(&log_fdpass_io);
 	penalty_deinit(&penalty);
 	connect_limit_deinit(&connect_limit);
 	anvil_connections_destroy_all();

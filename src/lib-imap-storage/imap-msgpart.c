@@ -44,7 +44,7 @@ struct imap_msgpart {
 	/* which part of the message part to fetch (default: 0..(uoff_t)-1) */
 	uoff_t partial_offset, partial_size;
 
-	unsigned int decode_cte_to_binary:1;
+	bool decode_cte_to_binary:1;
 };
 
 struct imap_msgpart_open_ctx {
@@ -264,16 +264,16 @@ int imap_msgpart_parse(const char *section, struct imap_msgpart **msgpart_r)
 		/* body (for root or for message/rfc822) */
 		msgpart->fetch_type = FETCH_BODY;
 		msgpart->wanted_fields |= MAIL_FETCH_STREAM_BODY;
-	} else if (strncmp(section, "HEADER", 6) == 0) {
+	} else if (str_begins(section, "HEADER")) {
 		/* header (for root or for message/rfc822) */
 		if (section[6] == '\0') {
 			msgpart->fetch_type = FETCH_HEADER;
 			ret = 0;
-		} else if (strncmp(section, "HEADER.FIELDS.NOT", 17) == 0) {
+		} else if (str_begins(section, "HEADER.FIELDS.NOT")) {
 			msgpart->fetch_type = FETCH_HEADER_FIELDS_NOT;
 			ret = imap_msgpart_parse_header_fields(msgpart,
 							       section+17);
-		} else if (strncmp(section, "HEADER.FIELDS", 13) == 0) {
+		} else if (str_begins(section, "HEADER.FIELDS")) {
 			msgpart->fetch_type = FETCH_HEADER_FIELDS;
 			ret = imap_msgpart_parse_header_fields(msgpart,
 							       section+13);
@@ -375,14 +375,7 @@ imap_msgpart_get_partial_header(struct mail *mail, struct istream *mail_input,
 	struct istream *input;
 	bool has_nuls;
 
-	if (msgpart->fetch_type == FETCH_HEADER_FIELDS) {
-		input = i_stream_create_header_filter(mail_input,
-						      HEADER_FILTER_INCLUDE |
-						      HEADER_FILTER_HIDE_BODY,
-						      hdr_fields, hdr_count,
-						      *null_header_filter_callback,
-						      (void *)NULL);
-	} else {
+	if (msgpart->fetch_type != FETCH_HEADER_FIELDS) {
 		i_assert(msgpart->fetch_type == FETCH_HEADER_FIELDS_NOT);
 		input = i_stream_create_header_filter(mail_input,
 						      HEADER_FILTER_EXCLUDE |
@@ -390,11 +383,23 @@ imap_msgpart_get_partial_header(struct mail *mail, struct istream *mail_input,
 						      hdr_fields, hdr_count,
 						      *null_header_filter_callback,
 						      (void *)NULL);
+	} else if (msgpart->section_number[0] != '\0') {
+		/* fetching partial headers for a message/rfc822 part. */
+		input = i_stream_create_header_filter(mail_input,
+						      HEADER_FILTER_INCLUDE |
+						      HEADER_FILTER_HIDE_BODY,
+						      hdr_fields, hdr_count,
+						      *null_header_filter_callback,
+						      (void *)NULL);
+	} else {
+		/* mail_get_header_stream() already filtered out the
+		   unwanted headers. */
+		input = mail_input;
+		i_stream_ref(input);
 	}
 
 	if (message_get_header_size(input, &hdr_size, &has_nuls) < 0) {
-		errno = input->stream_errno;
-		mail_storage_set_critical(mail->box->storage,
+		mail_set_critical(mail,
 			"read(%s) failed: %s", i_stream_get_name(input),
 			i_stream_get_error(input));
 		i_stream_unref(&input);
@@ -418,8 +423,6 @@ imap_msgpart_crlf_seek(struct mail *mail, struct istream *input,
 	uoff_t physical_start = input->v_offset;
 	uoff_t virtual_skip = msgpart->partial_offset;
 	bool cr_skipped;
-
-	i_assert(msgpart->headers == NULL); /* HEADER.FIELDS returns CRLFs */
 
 	if (virtual_skip == 0) {
 		/* no need to seek */
@@ -767,7 +770,7 @@ imap_msgpart_parse_bodystructure(struct mail *mail,
 
 	if (imap_bodystructure_parse(bodystructure, pmail->data_pool,
 				     all_parts, &error) < 0) {
-		mail_set_cache_corrupted_reason(mail,
+		mail_set_cache_corrupted(mail,
 			MAIL_FETCH_IMAP_BODYSTRUCTURE, t_strdup_printf(
 			"Invalid message_part/BODYSTRUCTURE %s: %s",
 			bodystructure, error));
@@ -844,6 +847,5 @@ int imap_msgpart_bodypartstructure(struct mail *mail,
 
 void imap_msgpart_close_mailbox(struct imap_msgpart *msgpart)
 {
-	if (msgpart->header_ctx != NULL)
-		mailbox_header_lookup_unref(&msgpart->header_ctx);
+	mailbox_header_lookup_unref(&msgpart->header_ctx);
 }

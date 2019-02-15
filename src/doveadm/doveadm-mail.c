@@ -21,8 +21,8 @@
 #include "mail-search-build.h"
 #include "mail-search-parser.h"
 #include "mailbox-list-iter.h"
-#include "client-connection.h"
 #include "doveadm.h"
+#include "client-connection.h"
 #include "doveadm-settings.h"
 #include "doveadm-print.h"
 #include "doveadm-dsync.h"
@@ -31,6 +31,11 @@
 #include <stdio.h>
 
 #define DOVEADM_MAIL_CMD_INPUT_TIMEOUT_MSECS (5*60*1000)
+
+struct force_resync_cmd_context {
+	struct doveadm_mail_cmd_context ctx;
+	bool fsck;
+};
 
 ARRAY_TYPE(doveadm_mail_cmd) doveadm_mail_cmds;
 void (*hook_doveadm_mail_init)(struct doveadm_mail_cmd_context *ctx);
@@ -203,17 +208,19 @@ static void doveadm_mail_cmd_input_read(struct doveadm_mail_cmd_context *ctx)
 	struct timeout *to;
 
 	ioloop = io_loop_create();
-	io = io_add(ctx->cmd_input_fd, IO_READ,
-		    doveadm_mail_cmd_input_input, ctx);
-	to = timeout_add(DOVEADM_MAIL_CMD_INPUT_TIMEOUT_MSECS,
-			 doveadm_mail_cmd_input_timeout, ctx);
-	/* read the pending input from stream. */
+	/* Read the pending input from stream. Delay adding the IO in case
+	   we're reading from a file. That would cause a panic with epoll. */
 	io_loop_set_running(ioloop);
 	doveadm_mail_cmd_input_input(ctx);
-	if (io_loop_is_running(ioloop))
+	if (io_loop_is_running(ioloop)) {
+		io = io_add(ctx->cmd_input_fd, IO_READ,
+			    doveadm_mail_cmd_input_input, ctx);
+		to = timeout_add(DOVEADM_MAIL_CMD_INPUT_TIMEOUT_MSECS,
+				 doveadm_mail_cmd_input_timeout, ctx);
 		io_loop_run(ioloop);
-	io_remove(&io);
-	timeout_remove(&to);
+		io_remove(&io);
+		timeout_remove(&to);
+	}
 	io_loop_destroy(&ioloop);
 
 	i_assert(ctx->cmd_input->eof);
@@ -222,20 +229,22 @@ static void doveadm_mail_cmd_input_read(struct doveadm_mail_cmd_context *ctx)
 
 void doveadm_mail_get_input(struct doveadm_mail_cmd_context *ctx)
 {
+	const struct doveadm_cmd_context *cctx = ctx->cctx;
+	bool cli = (cctx->conn_type == DOVEADM_CONNECTION_TYPE_CLI);
 	struct istream *inputs[2];
 
 	if (ctx->cmd_input != NULL)
 		return;
 
-	if (!ctx->cli && ctx->conn == NULL) {
+	if (!cli && cctx->input == NULL) {
 		ctx->cmd_input = i_stream_create_error_str(EINVAL, "Input stream missing (provide with file parameter)");
 		return;
 	}
 
-	if (ctx->conn != NULL)
-		inputs[0] = i_stream_create_dot(ctx->conn->input, FALSE);
+	if (!cli)
+		inputs[0] = i_stream_create_dot(cctx->input, FALSE);
 	else {
-		inputs[0] = i_stream_create_fd(STDIN_FILENO, 1024*1024, FALSE);
+		inputs[0] = i_stream_create_fd(STDIN_FILENO, 1024*1024);
 		i_stream_set_name(inputs[0], "stdin");
 	}
 	inputs[1] = NULL;
@@ -277,25 +286,30 @@ doveadm_mail_build_search_args(const char *const args[])
 	return sargs;
 }
 
-static int cmd_force_resync_box(struct doveadm_mail_cmd_context *ctx,
+static int cmd_force_resync_box(struct doveadm_mail_cmd_context *_ctx,
 				const struct mailbox_info *info)
 {
+	struct force_resync_cmd_context *ctx =
+		(struct force_resync_cmd_context *)_ctx;
+	enum mailbox_flags flags = MAILBOX_FLAG_IGNORE_ACLS;
 	struct mailbox *box;
 	int ret = 0;
 
-	box = mailbox_alloc(info->ns->list, info->vname,
-			    MAILBOX_FLAG_IGNORE_ACLS);
-	mailbox_set_reason(box, ctx->cmd->name);
+	if (ctx->fsck)
+		flags |= MAILBOX_FLAG_FSCK;
+
+	box = mailbox_alloc(info->ns->list, info->vname, flags);
+	mailbox_set_reason(box, _ctx->cmd->name);
 	if (mailbox_open(box) < 0) {
 		i_error("Opening mailbox %s failed: %s", info->vname,
 			mailbox_get_last_internal_error(box, NULL));
-		doveadm_mail_failed_mailbox(ctx, box);
+		doveadm_mail_failed_mailbox(_ctx, box);
 		ret = -1;
 	} else if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FORCE_RESYNC |
 				MAILBOX_SYNC_FLAG_FIX_INCONSISTENT) < 0) {
 		i_error("Forcing a resync on mailbox %s failed: %s",
 			info->vname, mailbox_get_last_internal_error(box, NULL));
-		doveadm_mail_failed_mailbox(ctx, box);
+		doveadm_mail_failed_mailbox(_ctx, box);
 		ret = -1;
 	}
 	mailbox_free(&box);
@@ -352,15 +366,33 @@ cmd_force_resync_init(struct doveadm_mail_cmd_context *_ctx ATTR_UNUSED,
 		doveadm_mail_help_name("force-resync");
 }
 
+static bool
+cmd_force_resync_parse_arg(struct doveadm_mail_cmd_context *_ctx, int c)
+{
+	struct force_resync_cmd_context *ctx =
+		(struct force_resync_cmd_context *)_ctx;
+
+	switch (c) {
+	case 'f':
+		ctx->fsck = TRUE;
+		break;
+	default:
+		return FALSE;
+	}
+	return TRUE;
+}
+
 static struct doveadm_mail_cmd_context *cmd_force_resync_alloc(void)
 {
-	struct doveadm_mail_cmd_context *ctx;
+	struct force_resync_cmd_context *ctx;
 
-	ctx = doveadm_mail_cmd_alloc(struct doveadm_mail_cmd_context);
-	ctx->v.init = cmd_force_resync_init;
-	ctx->v.run = cmd_force_resync_run;
-	ctx->v.prerun = cmd_force_resync_prerun;
-	return ctx;
+	ctx = doveadm_mail_cmd_alloc(struct force_resync_cmd_context);
+	ctx->ctx.getopt_args = "f";
+	ctx->ctx.v.parse_arg = cmd_force_resync_parse_arg;
+	ctx->ctx.v.init = cmd_force_resync_init;
+	ctx->ctx.v.run = cmd_force_resync_run;
+	ctx->ctx.v.prerun = cmd_force_resync_prerun;
+	return &ctx->ctx;
 }
 
 static void
@@ -378,12 +410,14 @@ doveadm_cctx_to_storage_service_input(const struct doveadm_cmd_context *cctx,
 
 static int
 doveadm_mail_next_user(struct doveadm_mail_cmd_context *ctx,
-		       const struct doveadm_cmd_context *cctx,
 		       const char **error_r)
 {
+	const struct doveadm_cmd_context *cctx = ctx->cctx;
 	struct mail_storage_service_input input;
 	const char *error, *ip;
 	int ret;
+
+	i_assert(cctx != NULL);
 
 	ip = net_ip2addr(&cctx->remote_ip);
 	if (ip[0] == '\0')
@@ -419,9 +453,8 @@ doveadm_mail_next_user(struct doveadm_mail_cmd_context *ctx,
 
 	ret = mail_storage_service_next(ctx->storage_service,
 					ctx->cur_service_user,
-					&ctx->cur_mail_user);
+					&ctx->cur_mail_user, error_r);
 	if (ret < 0) {
-		*error_r = "User init failed";
 		mail_storage_service_user_unref(&ctx->cur_service_user);
 		return ret;
 	}
@@ -440,14 +473,13 @@ static void sig_die(const siginfo_t *si, void *context ATTR_UNUSED)
 }
 
 int doveadm_mail_single_user(struct doveadm_mail_cmd_context *ctx,
-			     const struct doveadm_cmd_context *cctx,
 			     const char **error_r)
 {
+	const struct doveadm_cmd_context *cctx = ctx->cctx;
+
 	i_assert(cctx->username != NULL);
 
 	doveadm_cctx_to_storage_service_input(cctx, &ctx->storage_service_input);
-	ctx->cur_client_ip = cctx->remote_ip;
-	ctx->cur_username = cctx->username;
 	ctx->storage_service = mail_storage_service_init(master_service, NULL,
 							 ctx->service_flags);
 	ctx->v.init(ctx, ctx->args);
@@ -457,14 +489,14 @@ int doveadm_mail_single_user(struct doveadm_mail_cmd_context *ctx,
 	lib_signals_set_handler(SIGINT, 0, sig_die, NULL);
 	lib_signals_set_handler(SIGTERM, 0, sig_die, NULL);
 
-	return doveadm_mail_next_user(ctx, cctx, error_r);
+	return doveadm_mail_next_user(ctx, error_r);
 }
 
 static void
 doveadm_mail_all_users(struct doveadm_mail_cmd_context *ctx,
-		       struct doveadm_cmd_context *cctx,
 		       const char *wildcard_user)
 {
+	struct doveadm_cmd_context *cctx = ctx->cctx;
 	unsigned int user_idx;
 	const char *ip, *user, *error;
 	int ret;
@@ -492,10 +524,9 @@ doveadm_mail_all_users(struct doveadm_mail_cmd_context *ctx,
 				continue;
 		}
 		cctx->username = user;
-		ctx->cur_username = user;
 		doveadm_print_sticky("username", user);
 		T_BEGIN {
-			ret = doveadm_mail_next_user(ctx, cctx, &error);
+			ret = doveadm_mail_next_user(ctx, &error);
 			if (ret < 0)
 				i_error("%s", error);
 			else if (ret == 0)
@@ -517,7 +548,7 @@ doveadm_mail_all_users(struct doveadm_mail_cmd_context *ctx,
 	}
 	if (doveadm_verbose)
 		printf("\n");
-	ip = net_ip2addr(&ctx->cur_client_ip);
+	ip = net_ip2addr(&cctx->remote_ip);
 	if (ip[0] == '\0')
 		i_set_failure_prefix("doveadm: ");
 	else
@@ -590,9 +621,10 @@ doveadm_mail_cmdline_init(const struct doveadm_mail_cmd *cmd)
 
 static void
 doveadm_mail_cmd_exec(struct doveadm_mail_cmd_context *ctx,
-		      struct doveadm_cmd_context *cctx,
 		      const char *wildcard_user)
 {
+	const struct doveadm_cmd_context *cctx = ctx->cctx;
+	bool cli = (cctx->conn_type == DOVEADM_CONNECTION_TYPE_CLI);
 	int ret;
 	const char *error;
 
@@ -609,16 +641,16 @@ doveadm_mail_cmd_exec(struct doveadm_mail_cmd_context *ctx,
 	}
 
 	if (ctx->iterate_single_user) {
-		if (ctx->cur_username == NULL)
+		if (cctx->username == NULL)
 			i_fatal_status(EX_USAGE, "USER environment is missing and -u option not used");
-		if (!ctx->cli) {
+		if (!cli) {
 			/* we may access multiple users */
 			ctx->service_flags |= MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP;
 		}
 
 		if (ctx->add_username_header)
 			doveadm_print_sticky("username", cctx->username);
-		ret = doveadm_mail_single_user(ctx, cctx, &error);
+		ret = doveadm_mail_single_user(ctx, &error);
 		if (ret < 0) {
 			/* user lookup/init failed somehow */
 			doveadm_exit_code = EX_TEMPFAIL;
@@ -629,7 +661,7 @@ doveadm_mail_cmd_exec(struct doveadm_mail_cmd_context *ctx,
 		}
 	} else {
 		ctx->service_flags |= MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP;
-		doveadm_mail_all_users(ctx, cctx, wildcard_user);
+		doveadm_mail_all_users(ctx, wildcard_user);
 	}
 	if (ctx->search_args != NULL)
 		mail_search_args_unref(&ctx->search_args);
@@ -646,10 +678,8 @@ doveadm_mail_cmd_exec(struct doveadm_mail_cmd_context *ctx,
 
 static void doveadm_mail_cmd_free(struct doveadm_mail_cmd_context *ctx)
 {
-	if (ctx->users_list_input != NULL)
-		i_stream_unref(&ctx->users_list_input);
-	if (ctx->cmd_input != NULL)
-		i_stream_unref(&ctx->cmd_input);
+	i_stream_unref(&ctx->users_list_input);
+	i_stream_unref(&ctx->cmd_input);
 	pool_unref(&ctx->pool);
 }
 
@@ -661,12 +691,13 @@ doveadm_mail_cmd(const struct doveadm_mail_cmd *cmd, int argc, char *argv[])
 	const char *getopt_args, *wildcard_user;
 	int c;
 
-	ctx = doveadm_mail_cmdline_init(cmd);
-	ctx->full_args = (const void *)(argv + 1);
-	ctx->cli = TRUE;
-	ctx->cur_username = getenv("USER");
-
 	i_zero(&cctx);
+	cctx.conn_type = DOVEADM_CONNECTION_TYPE_CLI;
+	cctx.username = getenv("USER");
+
+	ctx = doveadm_mail_cmdline_init(cmd);
+	ctx->cctx = &cctx;
+	ctx->full_args = (const void *)(argv + 1);
 
 	getopt_args = "AF:S:u:";
 	/* keep context's getopt_args first in case it contains '+' */
@@ -688,11 +719,11 @@ doveadm_mail_cmd(const struct doveadm_mail_cmd *cmd, int argc, char *argv[])
 		case 'u':
 			ctx->service_flags |=
 				MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP;
-			ctx->cur_username = optarg;
-			if (strchr(ctx->cur_username, '*') != NULL ||
-			    strchr(ctx->cur_username, '?') != NULL) {
-				wildcard_user = ctx->cur_username;
-				ctx->cur_username = NULL;
+			cctx.username = optarg;
+			if (strchr(cctx.username, '*') != NULL ||
+			    strchr(cctx.username, '?') != NULL) {
+				wildcard_user = cctx.username;
+				cctx.username = NULL;
 			}
 			break;
 		case 'F':
@@ -714,8 +745,7 @@ doveadm_mail_cmd(const struct doveadm_mail_cmd *cmd, int argc, char *argv[])
 			       cmd->name, argv[0]);
 	}
 	ctx->args = (const void *)argv;
-	cctx.username = ctx->cur_username;
-	doveadm_mail_cmd_exec(ctx, &cctx, wildcard_user);
+	doveadm_mail_cmd_exec(ctx, wildcard_user);
 	doveadm_mail_cmd_free(ctx);
 }
 
@@ -732,7 +762,7 @@ doveadm_mail_cmd_try_find_multi_word(const struct doveadm_mail_cmd *cmd,
 	*argv += 1;
 
 	len = strlen((*argv)[0]);
-	if (strncmp(cmdname, (*argv)[0], len) != 0)
+	if (!str_begins(cmdname, (*argv)[0]))
 		return FALSE;
 
 	if (cmdname[len] == ' ') {
@@ -866,9 +896,10 @@ void doveadm_mail_help_name(const char *cmd_name)
 static struct doveadm_cmd_ver2 doveadm_cmd_force_resync_ver2 = {
 	.name = "force-resync",
 	.mail_cmd = cmd_force_resync_alloc,
-	.usage = DOVEADM_CMD_MAIL_USAGE_PREFIX "<mailbox mask>",
+	.usage = DOVEADM_CMD_MAIL_USAGE_PREFIX "[-f] <mailbox mask>",
 DOVEADM_CMD_PARAMS_START
 DOVEADM_CMD_MAIL_COMMON
+DOVEADM_CMD_PARAM('f', "fsck", CMD_PARAM_BOOL, 0)
 DOVEADM_CMD_PARAM('\0', "mailbox-mask", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
 DOVEADM_CMD_PARAMS_END
 };
@@ -918,7 +949,11 @@ static struct doveadm_cmd_ver2 *mail_commands_ver2[] = {
 	&doveadm_cmd_purge_ver2,
 	&doveadm_cmd_search_ver2,
 	&doveadm_cmd_copy_ver2,
-	&doveadm_cmd_move_ver2
+	&doveadm_cmd_move_ver2,
+	&doveadm_cmd_mailbox_cache_decision,
+	&doveadm_cmd_mailbox_cache_remove,
+	&doveadm_cmd_mailbox_cache_purge,
+	&doveadm_cmd_rebuild_attachments,
 };
 
 void doveadm_mail_init(void)
@@ -964,18 +999,20 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 	const char *fieldstr;
 	ARRAY_TYPE(const_string) pargv, full_args;
 	int i;
+	bool cli = (cctx->conn_type == DOVEADM_CONNECTION_TYPE_CLI);
+	bool tcp_server = (cctx->conn_type == DOVEADM_CONNECTION_TYPE_TCP);
 	struct doveadm_mail_cmd mail_cmd = {
 		cctx->cmd->mail_cmd, cctx->cmd->name, cctx->cmd->usage
 	};
 
-	if (!cctx->cli) {
+	if (!cli) {
 		mctx = doveadm_mail_cmd_init(&mail_cmd, doveadm_settings);
 		/* doveadm-server always does userdb lookups */
 		mctx->service_flags |= MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP;
 	} else {
 		mctx = doveadm_mail_cmdline_init(&mail_cmd);
 	}
-	mctx->cur_username = cctx->username;
+	mctx->cctx = cctx;
 	mctx->iterate_all_users = FALSE;
 	wildcard_user = NULL;
 	p_array_init(&full_args, mctx->pool, 8);
@@ -988,7 +1025,7 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 			continue;
 
 		if (strcmp(arg->name, "all-users") == 0) {
-			if (cctx->tcp_server)
+			if (tcp_server)
 				mctx->add_username_header = TRUE;
 			else
 				mctx->iterate_all_users = arg->value.v_bool;
@@ -1000,22 +1037,20 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 				doveadm_settings->doveadm_worker_count = 1;
 		} else if (strcmp(arg->name, "user") == 0) {
 			mctx->service_flags |= MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP;
-			if (!cctx->tcp_server)
-				mctx->cur_username = arg->value.v_string;
+			if (!tcp_server)
+				cctx->username = arg->value.v_string;
 
 			fieldstr = "-u";
 			array_append(&full_args, &fieldstr, 1);
 			array_append(&full_args, &arg->value.v_string, 1);
 			if (strchr(arg->value.v_string, '*') != NULL ||
 			    strchr(arg->value.v_string, '?') != NULL) {
-				if (cctx->tcp_server)
+				if (tcp_server)
 					mctx->add_username_header = TRUE;
 				else {
 					wildcard_user = arg->value.v_string;
-					mctx->cur_username = NULL;
+					cctx->username = NULL;
 				}
-			} else if (!cctx->tcp_server) {
-				cctx->username = mctx->cur_username;
 			}
 		} else if (strcmp(arg->name, "user-file") == 0) {
 			mctx->service_flags |= MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP;
@@ -1052,8 +1087,29 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 			const char *short_opt_str = p_strdup_printf(
 				mctx->pool, "-%c", arg->short_opt);
 
-			optarg = (char*)arg->value.v_string;
-			mctx->v.parse_arg(mctx, arg->short_opt);
+			switch(arg->type) {
+			case CMD_PARAM_BOOL:
+				optarg = NULL;
+				break;
+			case CMD_PARAM_INT64:
+				optarg = (char*)dec2str(arg->value.v_int64);
+				break;
+			case CMD_PARAM_IP:
+				optarg = (char*)net_ip2addr(&arg->value.v_ip);
+				break;
+			case CMD_PARAM_STR:
+				optarg = (char*)arg->value.v_string;
+				break;
+			default:
+				i_panic("Cannot convert parameter %s to short opt",
+					arg->name);
+			}
+			if (!mctx->v.parse_arg(mctx, arg->short_opt)) {
+				i_error("Invalid parameter %c", arg->short_opt);
+				doveadm_mail_cmd_free(mctx);
+				doveadm_exit_code = EX_USAGE;
+				return;
+			}
 
 			array_append(&full_args, &short_opt_str, 1);
 			if (arg->type == CMD_PARAM_STR)
@@ -1083,9 +1139,7 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 
 	mctx->args = array_idx(&full_args, args_pos);
 	mctx->full_args = array_idx(&full_args, 0);
-	mctx->cli = cctx->cli;
-	mctx->conn = cctx->conn;
 
-	doveadm_mail_cmd_exec(mctx, cctx, wildcard_user);
+	doveadm_mail_cmd_exec(mctx, wildcard_user);
 	doveadm_mail_cmd_free(mctx);
 }

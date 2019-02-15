@@ -37,6 +37,7 @@ struct posix_fs {
 	bool mode_auto;
 	bool have_dirs;
 	bool disable_fsync;
+	bool accurate_mtime;
 };
 
 struct posix_fs_file {
@@ -89,7 +90,7 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 	fs->lock_method = FS_POSIX_LOCK_METHOD_FLOCK;
 	fs->mode = FS_DEFAULT_MODE;
 
-	tmp = t_strsplit_spaces(args, ": ");
+	tmp = t_strsplit_spaces(args, ":");
 	for (; *tmp != NULL; tmp++) {
 		const char *arg = *tmp;
 
@@ -97,20 +98,18 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 			fs->lock_method = FS_POSIX_LOCK_METHOD_FLOCK;
 		else if (strcmp(arg, "lock=dotlock") == 0)
 			fs->lock_method = FS_POSIX_LOCK_METHOD_DOTLOCK;
-		else if (strncmp(arg, "prefix=", 7) == 0) {
-			unsigned int len = strlen(arg + 7);
+		else if (str_begins(arg, "prefix=")) {
 			i_free(fs->path_prefix);
-			if (len > 0 && arg[7+len-1] != '/')
-				fs->path_prefix = i_strconcat(arg + 7, "/", NULL);
-			else
-				fs->path_prefix = i_strdup(arg + 7);
+			fs->path_prefix = i_strdup(arg + 7);
 		} else if (strcmp(arg, "mode=auto") == 0) {
 			fs->mode_auto = TRUE;
 		} else if (strcmp(arg, "dirs") == 0) {
 			fs->have_dirs = TRUE;
 		} else if (strcmp(arg, "no-fsync") == 0) {
 			fs->disable_fsync = TRUE;
-		} else if (strncmp(arg, "mode=", 5) == 0) {
+		} else if (str_begins(arg, "accurate-mtime")) {
+			fs->accurate_mtime = TRUE;
+		} else if (str_begins(arg, "mode=")) {
 			unsigned int mode;
 			if (str_to_uint_oct(arg+5, &mode) < 0) {
 				fs_set_error(_fs, "Invalid mode value: %s", arg+5);
@@ -223,7 +222,7 @@ static int fs_posix_rmdir_parents(struct posix_fs *fs, const char *path)
 	while ((p = strrchr(path, '/')) != NULL) {
 		path = t_strdup_until(path, p);
 		if ((fs->root_path != NULL && strcmp(path, fs->root_path) == 0) ||
-		    (fs->path_prefix != NULL && strncmp(path, fs->path_prefix, strlen(path)) == 0))
+		    (fs->path_prefix != NULL && str_begins(fs->path_prefix, path)))
 			break;
 		if (rmdir(path) == 0) {
 			/* success, continue to parent */
@@ -253,7 +252,7 @@ static int fs_posix_create(struct posix_fs_file *file)
 	i_assert(file->temp_path == NULL);
 
 	if ((slash = strrchr(file->full_path, '/')) != NULL) {
-		str_append_n(str, file->full_path, slash - file->full_path);
+		str_append_data(str, file->full_path, slash - file->full_path);
 		if (fs_posix_get_mode(fs, str_c(str), &mode) < 0)
 			return -1;
 		str_append_c(str, '/');
@@ -310,16 +309,27 @@ static int fs_posix_open(struct posix_fs_file *file)
 	return 0;
 }
 
-static struct fs_file *
-fs_posix_file_init(struct fs *_fs, const char *path,
+static struct fs_file *fs_posix_file_alloc(void)
+{
+	struct posix_fs_file *file = i_new(struct posix_fs_file, 1);
+	return &file->file;
+}
+
+static void
+fs_posix_file_init(struct fs_file *_file, const char *path,
 		   enum fs_open_mode mode, enum fs_open_flags flags)
 {
-	struct posix_fs *fs = (struct posix_fs *)_fs;
-	struct posix_fs_file *file;
+	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs *fs = (struct posix_fs *)_file->fs;
 	guid_128_t guid;
+	size_t path_len = strlen(path);
 
-	file = i_new(struct posix_fs_file, 1);
-	file->file.fs = _fs;
+	if (path_len > 0 && path[path_len-1] == '/') {
+		/* deleting "path/" (used e.g. by doveadm fs delete) - strip
+		   out the trailing "/" since it doesn't work well with NFS. */
+		path = t_strndup(path, path_len-1);
+	}
+
 	if (mode != FS_OPEN_MODE_CREATE_UNIQUE_128)
 		file->file.path = i_strdup(path);
 	else {
@@ -332,7 +342,6 @@ fs_posix_file_init(struct fs *_fs, const char *path,
 	file->open_mode = mode;
 	file->open_flags = flags;
 	file->fd = -1;
-	return &file->file;
 }
 
 static void fs_posix_file_close(struct fs_file *_file)
@@ -399,7 +408,7 @@ static bool fs_posix_prefetch(struct fs_file *_file, uoff_t length ATTR_UNUSED)
 /* HAVE_POSIX_FADVISE alone isn't enough for CentOS 4.9 */
 #if defined(HAVE_POSIX_FADVISE) && defined(POSIX_FADV_WILLNEED)
 	if (posix_fadvise(file->fd, 0, length, POSIX_FADV_WILLNEED) < 0) {
-		i_error("posix_fadvise(%s) failed: %m", file->full_path);
+		e_error(_file->event, "posix_fadvise(%s) failed: %m", file->full_path);
 		return TRUE;
 	}
 #endif
@@ -449,28 +458,45 @@ fs_posix_read_stream(struct fs_file *_file, size_t max_buffer_size)
 static void fs_posix_write_rename_if_needed(struct posix_fs_file *file)
 {
 	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
-	const char *new_fname, *new_prefix, *p;
+	const char *new_fname;
 
 	new_fname = fs_metadata_find(&file->file.metadata, FS_METADATA_WRITE_FNAME);
 	if (new_fname == NULL)
 		return;
 
-	p = strrchr(file->file.path, '/');
-	if (p == NULL)
-		new_prefix = "";
-	else
-		new_prefix = t_strdup_until(file->file.path, p+1);
 	i_free(file->file.path);
-	file->file.path = i_strconcat(new_prefix, new_fname, NULL);
+	file->file.path = i_strdup(new_fname);
 
 	i_free(file->full_path);
 	file->full_path = fs->path_prefix == NULL ? i_strdup(file->file.path) :
 		i_strconcat(fs->path_prefix, file->file.path, NULL);
 }
 
+static int fs_posix_write_finish_link(struct posix_fs_file *file)
+{
+	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
+	unsigned int try_count = 0;
+	int ret;
+
+	ret = link(file->temp_path, file->full_path);
+	while (ret < 0 && errno == ENOENT &&
+	       try_count <= MAX_MKDIR_RETRY_COUNT) {
+		if (fs_posix_mkdir_parents(fs, file->full_path) < 0)
+			return -1;
+		ret = link(file->temp_path, file->full_path);
+		try_count++;
+	}
+	if (ret < 0) {
+		fs_set_error(file->file.fs, "link(%s, %s) failed: %m",
+			     file->temp_path, file->full_path);
+	}
+	return ret;
+}
+
 static int fs_posix_write_finish(struct posix_fs_file *file)
 {
 	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
+	unsigned int try_count = 0;
 	int ret, old_errno;
 
 	if ((file->open_flags & FS_OPEN_FLAG_FSYNC) != 0 &&
@@ -481,15 +507,27 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 			return -1;
 		}
 	}
+	if (fs->accurate_mtime) {
+		/* Linux updates the mtime timestamp only on timer interrupts.
+		   This isn't anywhere close to being microsecond precision.
+		   If requested, use utimes() to explicitly set a more accurate
+		   mtime. */
+		struct timeval tv[2];
+		if (gettimeofday(&tv[0], NULL) < 0)
+			i_fatal("gettimeofday() failed: %m");
+		tv[1] = tv[0];
+		if ((utimes(file->temp_path, tv)) < 0) {
+			fs_set_error(file->file.fs, "utimes(%s) failed: %m",
+				     file->temp_path);
+			return -1;
+		}
+	}
 
 	fs_posix_write_rename_if_needed(file);
 	switch (file->open_mode) {
 	case FS_OPEN_MODE_CREATE_UNIQUE_128:
 	case FS_OPEN_MODE_CREATE:
-		if ((ret = link(file->temp_path, file->full_path)) < 0) {
-			fs_set_error(file->file.fs, "link(%s, %s) failed: %m",
-				     file->temp_path, file->full_path);
-		}
+		ret = fs_posix_write_finish_link(file);
 		old_errno = errno;
 		if (unlink(file->temp_path) < 0) {
 			fs_set_error(file->file.fs, "unlink(%s) failed: %m",
@@ -503,7 +541,15 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 		}
 		break;
 	case FS_OPEN_MODE_REPLACE:
-		if (rename(file->temp_path, file->full_path) < 0) {
+		ret = rename(file->temp_path, file->full_path);
+		while (ret < 0 && errno == ENOENT &&
+		       try_count <= MAX_MKDIR_RETRY_COUNT) {
+			if (fs_posix_mkdir_parents(fs, file->full_path) < 0)
+				return -1;
+			ret = rename(file->temp_path, file->full_path);
+			try_count++;
+		}
+		if (ret < 0) {
 			fs_set_error(file->file.fs, "rename(%s, %s) failed: %m",
 				     file->temp_path, file->full_path);
 			return -1;
@@ -717,6 +763,7 @@ static int fs_posix_copy(struct fs_file *_src, struct fs_file *_dest)
 	unsigned int try_count = 0;
 	int ret;
 
+	fs_posix_write_rename_if_needed(dest);
 	ret = link(src->full_path, dest->full_path);
 	if (errno == EEXIST && dest->open_mode == FS_OPEN_MODE_REPLACE) {
 		/* destination file already exists - replace it */
@@ -783,15 +830,19 @@ static int fs_posix_delete(struct fs_file *_file)
 	return 0;
 }
 
-static struct fs_iter *
-fs_posix_iter_init(struct fs *_fs, const char *path, enum fs_iter_flags flags)
+static struct fs_iter *fs_posix_iter_alloc(void)
 {
-	struct posix_fs *fs = (struct posix_fs *)_fs;
-	struct posix_fs_iter *iter;
+	struct posix_fs_iter *iter = i_new(struct posix_fs_iter, 1);
+	return &iter->iter;
+}
 
-	iter = i_new(struct posix_fs_iter, 1);
-	iter->iter.fs = _fs;
-	iter->iter.flags = flags;
+static void
+fs_posix_iter_init(struct fs_iter *_iter, const char *path,
+		   enum fs_iter_flags flags ATTR_UNUSED)
+{
+	struct posix_fs_iter *iter = (struct posix_fs_iter *)_iter;
+	struct posix_fs *fs = (struct posix_fs *)_iter->fs;
+
 	iter->path = fs->path_prefix == NULL ? i_strdup(path) :
 		i_strconcat(fs->path_prefix, path, NULL);
 	if (iter->path[0] == '\0') {
@@ -801,9 +852,8 @@ fs_posix_iter_init(struct fs *_fs, const char *path, enum fs_iter_flags flags)
 	iter->dir = opendir(iter->path);
 	if (iter->dir == NULL && errno != ENOENT) {
 		iter->err = errno;
-		fs_set_error(_fs, "opendir(%s) failed: %m", iter->path);
+		fs_set_error(_iter->fs, "opendir(%s) failed: %m", iter->path);
 	}
-	return &iter->iter;
 }
 
 static bool fs_posix_iter_want(struct posix_fs_iter *iter, const char *fname)
@@ -814,7 +864,8 @@ static bool fs_posix_iter_want(struct posix_fs_iter *iter, const char *fname)
 		const char *path = t_strdup_printf("%s/%s", iter->path, fname);
 		struct stat st;
 
-		if (stat(path, &st) < 0)
+		if (stat(path, &st) < 0 &&
+		    lstat(path, &st) < 0)
 			ret = FALSE;
 		else if (!S_ISDIR(st.st_mode))
 			ret = (iter->iter.flags & FS_ITER_FLAG_DIRS) == 0;
@@ -847,16 +898,13 @@ static const char *fs_posix_iter_next(struct fs_iter *_iter)
 			if (fs_posix_iter_want(iter, d->d_name))
 				return d->d_name;
 			break;
-		case DT_REG:
-		case DT_LNK:
-			if ((iter->iter.flags & FS_ITER_FLAG_DIRS) == 0)
-				return d->d_name;
-			break;
 		case DT_DIR:
 			if ((iter->iter.flags & FS_ITER_FLAG_DIRS) != 0)
 				return d->d_name;
 			break;
 		default:
+			if ((iter->iter.flags & FS_ITER_FLAG_DIRS) == 0)
+				return d->d_name;
 			break;
 		}
 #else
@@ -896,6 +944,7 @@ const struct fs fs_class_posix = {
 		fs_posix_init,
 		fs_posix_deinit,
 		fs_posix_get_properties,
+		fs_posix_file_alloc,
 		fs_posix_file_init,
 		fs_posix_file_deinit,
 		fs_posix_file_close,
@@ -916,6 +965,7 @@ const struct fs fs_class_posix = {
 		fs_posix_copy,
 		fs_posix_rename,
 		fs_posix_delete,
+		fs_posix_iter_alloc,
 		fs_posix_iter_init,
 		fs_posix_iter_next,
 		fs_posix_iter_deinit,

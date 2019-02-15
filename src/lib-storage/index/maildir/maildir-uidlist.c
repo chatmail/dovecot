@@ -90,15 +90,15 @@ struct maildir_uidlist {
 
 	guid_128_t mailbox_guid;
 
-	unsigned int recreate:1;
-	unsigned int recreate_on_change:1;
-	unsigned int initial_read:1;
-	unsigned int initial_hdr_read:1;
-	unsigned int retry_rewind:1;
-	unsigned int locked_refresh:1;
-	unsigned int unsorted:1;
-	unsigned int have_mailbox_guid:1;
-	unsigned int opened_readonly:1;
+	bool recreate:1;
+	bool recreate_on_change:1;
+	bool initial_read:1;
+	bool initial_hdr_read:1;
+	bool retry_rewind:1;
+	bool locked_refresh:1;
+	bool unsorted:1;
+	bool have_mailbox_guid:1;
+	bool opened_readonly:1;
 };
 
 struct maildir_uidlist_sync_ctx {
@@ -113,11 +113,11 @@ struct maildir_uidlist_sync_ctx {
 	unsigned int new_files_count;
 	unsigned int finish_change_counter;
 
-	unsigned int partial:1;
-	unsigned int finished:1;
-	unsigned int changed:1;
-	unsigned int failed:1;
-	unsigned int locked:1;
+	bool partial:1;
+	bool finished:1;
+	bool changed:1;
+	bool failed:1;
+	bool locked:1;
 };
 
 struct maildir_uidlist_iter_ctx {
@@ -171,10 +171,10 @@ static int maildir_uidlist_lock_timeout(struct maildir_uidlist *uidlist,
 		}
 		if (errno != ENOENT || i == MAILDIR_DELETE_RETRY_COUNT) {
 			if (errno == EACCES) {
-				mail_storage_set_critical(box->storage, "%s",
+				mailbox_set_critical(box, "%s",
 					eacces_error_get_creating("file_dotlock_create", path));
 			} else {
-				mail_storage_set_critical(box->storage,
+				mailbox_set_critical(box,
 					"file_dotlock_create(%s) failed: %m",
 					path);
 			}
@@ -294,11 +294,9 @@ struct maildir_uidlist *maildir_uidlist_init(struct maildir_mailbox *mbox)
 
 static void maildir_uidlist_close(struct maildir_uidlist *uidlist)
 {
-	struct mail_storage *storage = uidlist->box->storage;
-
 	if (uidlist->fd != -1) {
 		if (close(uidlist->fd) < 0) {
-			mail_storage_set_critical(storage,
+			mailbox_set_critical(uidlist->box,
 				"close(%s) failed: %m", uidlist->path);
 		}
 		uidlist->fd = -1;
@@ -330,8 +328,7 @@ void maildir_uidlist_deinit(struct maildir_uidlist **_uidlist)
 	maildir_uidlist_close(uidlist);
 
 	hash_table_destroy(&uidlist->files);
-	if (uidlist->record_pool != NULL)
-		pool_unref(&uidlist->record_pool);
+	pool_unref(&uidlist->record_pool);
 
 	array_free(&uidlist->records);
 	str_free(&uidlist->hdr_extensions);
@@ -350,18 +347,17 @@ static void ATTR_FORMAT(2, 3)
 maildir_uidlist_set_corrupted(struct maildir_uidlist *uidlist,
 			      const char *fmt, ...)
 {
-	struct mail_storage *storage = uidlist->box->storage;
 	va_list args;
 
 	va_start(args, fmt);
 	if (uidlist->retry_rewind) {
-		mail_storage_set_critical(storage,
+		mailbox_set_critical(uidlist->box,
 			"Broken or unexpectedly changed file %s "
 			"line %u: %s - re-reading from beginning",
 			uidlist->path, uidlist->read_line_count,
 			t_strdup_vprintf(fmt, args));
 	} else {
-		mail_storage_set_critical(storage, "Broken file %s line %u: %s",
+		mailbox_set_critical(uidlist->box, "Broken file %s line %u: %s",
 			uidlist->path, uidlist->read_line_count,
 			t_strdup_vprintf(fmt, args));
 	}
@@ -374,7 +370,7 @@ static void maildir_uidlist_update_hdr(struct maildir_uidlist *uidlist,
 	struct maildir_index_header *mhdr = uidlist->mhdr;
 
 	if (mhdr->uidlist_mtime == 0 && uidlist->version != UIDLIST_VERSION) {
-		/* upgrading from older verson. don't update the
+		/* upgrading from older version. don't update the
 		   uidlist times until it uses the new format */
 		uidlist->recreate = TRUE;
 		return;
@@ -415,7 +411,7 @@ maildir_uidlist_read_extended(struct maildir_uidlist *uidlist,
 	const char *start, *line = *line_p;
 	buffer_t *buf;
 
-	buf = buffer_create_dynamic(pool_datastack_create(), 128);
+	buf = t_buffer_create(128);
 	while (*line != '\0' && *line != ':') {
 		/* skip over an extension field */
 		start = line;
@@ -537,7 +533,7 @@ static bool maildir_uidlist_next(struct maildir_uidlist *uidlist,
 		   we'll waste a bit of memory here by allocating the record
 		   twice, but that's not really a problem.  */
 		rec->filename = old_rec->filename;
-		hash_table_insert(uidlist->files, rec->filename, rec);
+		hash_table_update(uidlist->files, rec->filename, rec);
 		uidlist->unsorted = TRUE;
 		return TRUE;
 	} else {
@@ -566,7 +562,7 @@ static bool maildir_uidlist_next(struct maildir_uidlist *uidlist,
 	}
 
 	rec->filename = p_strdup(uidlist->record_pool, line);
-	hash_table_insert(uidlist->files, rec->filename, rec);
+	hash_table_update(uidlist->files, rec->filename, rec);
 	array_append(&uidlist->records, &rec, 1);
 	return TRUE;
 }
@@ -702,7 +698,6 @@ static int
 maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
 			    bool *retry_r, bool try_retry)
 {
-	struct mail_storage *storage = uidlist->box->storage;
 	const char *line;
 	uint32_t orig_next_uid, orig_uid_validity;
 	struct istream *input;
@@ -721,7 +716,7 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
 		}
 		if (fd == -1) {
 			if (errno != ENOENT) {
-				mail_storage_set_critical(storage,
+				mailbox_set_critical(uidlist->box,
 					"open(%s) failed: %m", uidlist->path);
 				return -1;
 			}
@@ -736,7 +731,7 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
 				*retry_r = TRUE;
 				return -1;
 			}
-			mail_storage_set_critical(storage,
+			mailbox_set_critical(uidlist->box,
 				"lseek(%s) failed: %m", uidlist->path);
 			return -1;
 		}
@@ -752,7 +747,7 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
                         *retry_r = TRUE;
                         return -1;
                 }
-                mail_storage_set_critical(storage,
+                mailbox_set_critical(uidlist->box,
 			"fstat(%s) failed: %m", uidlist->path);
 		return -1;
 	}
@@ -765,7 +760,7 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
 							    st.st_size/8));
 	}
 
-	input = i_stream_create_fd(fd, (size_t)-1, FALSE);
+	input = i_stream_create_fd(fd, (size_t)-1);
 	i_stream_seek(input, last_read_offset);
 
 	orig_uid_validity = uidlist->uid_validity;
@@ -805,7 +800,7 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
 		    orig_uid_validity != 0) {
 			uidlist->recreate = TRUE;
 		} else if (ret > 0 && uidlist->next_uid < orig_next_uid) {
-			mail_storage_set_critical(storage,
+			mailbox_set_critical(uidlist->box,
 				"%s: next_uid was lowered (%u -> %u, hdr=%u)",
 				uidlist->path, orig_next_uid,
 				uidlist->next_uid, uidlist->hdr_next_uid);
@@ -832,7 +827,7 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
                 if (input->stream_errno == ESTALE && try_retry)
 			*retry_r = TRUE;
 		else {
-			mail_storage_set_critical(storage,
+			mailbox_set_critical(uidlist->box,
 				"read(%s) failed: %s", uidlist->path,
 				i_stream_get_error(input));
 		}
@@ -842,7 +837,7 @@ maildir_uidlist_update_read(struct maildir_uidlist *uidlist,
 	i_stream_destroy(&input);
 	if (ret <= 0) {
 		if (close(fd) < 0) {
-			mail_storage_set_critical(storage,
+			mailbox_set_critical(uidlist->box,
 				"close(%s) failed: %m", uidlist->path);
 		}
 	}
@@ -860,7 +855,7 @@ maildir_uidlist_stat(struct maildir_uidlist *uidlist, struct stat *st_r)
 	}
 	if (nfs_safe_stat(uidlist->path, st_r) < 0) {
 		if (errno != ENOENT) {
-			mail_storage_set_critical(storage,
+			mailbox_set_critical(uidlist->box,
 				"stat(%s) failed: %m", uidlist->path);
 			return -1;
 		}
@@ -901,7 +896,7 @@ maildir_uidlist_has_changed(struct maildir_uidlist *uidlist, bool *recreated_r)
 				*recreated_r = TRUE;
 				return 1;
 			}
-			mail_storage_set_critical(storage,
+			mailbox_set_critical(uidlist->box,
 				"fstat(%s) failed: %m", uidlist->path);
 			return -1;
 		}
@@ -940,7 +935,7 @@ static int maildir_uidlist_open_latest(struct maildir_uidlist *uidlist)
 		uidlist->recreate_on_change = TRUE;
 	}
 	if (uidlist->fd == -1 && errno != ENOENT) {
-		mail_storage_set_critical(uidlist->box->storage,
+		mailbox_set_critical(uidlist->box,
 			"open(%s) failed: %m", uidlist->path);
 		return -1;
 	}
@@ -1152,7 +1147,7 @@ maildir_uidlist_rec_set_ext(struct maildir_uidlist_rec *rec, pool_t pool,
 	size_t len;
 
 	/* copy existing extensions, except for the one we're updating */
-	buf = buffer_create_dynamic(pool_datastack_create(), 128);
+	buf = t_buffer_create(128);
 	if (rec->extensions != NULL) {
 		p = rec->extensions;
 		while (*p != '\0') {
@@ -1296,7 +1291,7 @@ static int maildir_uidlist_write_fd(struct maildir_uidlist *uidlist, int fd,
 				i_assert(MAILDIR_UIDLIST_REC_EXT_KEY_IS_VALID(*p));
 				len = strlen((const char *)p);
 				str_append_c(str, ' ');
-				str_append_n(str, p, len);
+				str_append_data(str, p, len);
 				p += len + 1;
 			}
 		}
@@ -1305,15 +1300,15 @@ static int maildir_uidlist_write_fd(struct maildir_uidlist *uidlist, int fd,
 		if (strp == NULL)
 			str_append(str, rec->filename);
 		else
-			str_append_n(str, rec->filename, strp - rec->filename);
+			str_append_data(str, rec->filename, strp - rec->filename);
 		str_append_c(str, '\n');
 		o_stream_nsend(output, str_data(str), str_len(str));
 	}
 	maildir_uidlist_iter_deinit(&iter);
 
-	if (o_stream_nfinish(output) < 0) {
-		mail_storage_set_critical(storage, "write(%s) failed: %s", path,
-					  o_stream_get_error(output));
+	if (o_stream_finish(output) < 0) {
+		mailbox_set_critical(uidlist->box, "write(%s) failed: %s",
+				     path, o_stream_get_error(output));
 		o_stream_unref(&output);
 		return -1;
 	}
@@ -1323,7 +1318,7 @@ static int maildir_uidlist_write_fd(struct maildir_uidlist *uidlist, int fd,
 
 	if (storage->set->parsed_fsync_mode != FSYNC_MODE_NEVER) {
 		if (fdatasync(fd) < 0) {
-			mail_storage_set_critical(storage,
+			mailbox_set_critical(uidlist->box,
 				"fdatasync(%s) failed: %m", path);
 			return -1;
 		}
@@ -1419,7 +1414,7 @@ static int maildir_uidlist_recreate(struct maildir_uidlist *uidlist)
 			break;
 
 		if (errno != ENOENT || i == MAILDIR_DELETE_RETRY_COUNT) {
-			mail_storage_set_critical(box->storage,
+			mailbox_set_critical(box,
 				"open(%s, O_CREAT) failed: %m", temp_path);
 			return -1;
 		}
@@ -1432,12 +1427,12 @@ static int maildir_uidlist_recreate(struct maildir_uidlist *uidlist)
 	if (perm->file_create_gid != (gid_t)-1 &&
 	    fchown(fd, (uid_t)-1, perm->file_create_gid) < 0) {
 		if (errno == EPERM) {
-			mail_storage_set_critical(box->storage, "%s",
+			mailbox_set_critical(box, "%s",
 				eperm_error_get_chgrp("fchown", temp_path,
 						perm->file_create_gid,
 						perm->file_create_gid_origin));
 		} else {
-			mail_storage_set_critical(box->storage,
+			mailbox_set_critical(box,
 				"fchown(%s) failed: %m", temp_path);
 		}
 	}
@@ -1446,7 +1441,7 @@ static int maildir_uidlist_recreate(struct maildir_uidlist *uidlist)
 	ret = maildir_uidlist_write_fd(uidlist, fd, temp_path, 0, &file_size);
 	if (ret == 0) {
 		if (rename(temp_path, uidlist->path) < 0) {
-			mail_storage_set_critical(box->storage,
+			mailbox_set_critical(box,
 				"rename(%s, %s) failed: %m",
 				temp_path, uidlist->path);
 			ret = -1;
@@ -1456,12 +1451,12 @@ static int maildir_uidlist_recreate(struct maildir_uidlist *uidlist)
 	if (ret < 0)
 		i_unlink(temp_path);
 	else if (fstat(fd, &st) < 0) {
-		mail_storage_set_critical(box->storage,
+		mailbox_set_critical(box,
 			"fstat(%s) failed: %m", temp_path);
 		ret = -1;
 	} else if (file_size != (uoff_t)st.st_size) {
 		i_assert(!file_dotlock_is_locked(uidlist->dotlock));
-		mail_storage_set_critical(box->storage,
+		mailbox_set_critical(box,
 			"Maildir uidlist dotlock overridden: %s",
 			uidlist->path);
 		ret = -1;
@@ -1529,7 +1524,6 @@ static bool maildir_uidlist_want_recreate(struct maildir_uidlist_sync_ctx *ctx)
 static int maildir_uidlist_sync_update(struct maildir_uidlist_sync_ctx *ctx)
 {
 	struct maildir_uidlist *uidlist = ctx->uidlist;
-	struct mail_storage *storage = uidlist->box->storage;
 	struct stat st;
 	uoff_t file_size;
 
@@ -1547,7 +1541,7 @@ static int maildir_uidlist_sync_update(struct maildir_uidlist_sync_ctx *ctx)
 	i_assert(ctx->first_unwritten_pos != UINT_MAX);
 
 	if (lseek(uidlist->fd, 0, SEEK_END) < 0) {
-		mail_storage_set_critical(storage,
+		mailbox_set_critical(uidlist->box,
 			"lseek(%s) failed: %m", uidlist->path);
 		return -1;
 	}
@@ -1557,7 +1551,7 @@ static int maildir_uidlist_sync_update(struct maildir_uidlist_sync_ctx *ctx)
 		return -1;
 
 	if (fstat(uidlist->fd, &st) < 0) {
-		mail_storage_set_critical(storage,
+		mailbox_set_critical(uidlist->box,
 			"fstat(%s) failed: %m", uidlist->path);
 		return -1;
 	}
@@ -1711,7 +1705,7 @@ maildir_uidlist_sync_next_partial(struct maildir_uidlist_sync_ctx *ctx,
 	}
 	if (uid != 0) {
 		if (rec->uid != uid && rec->uid != (uint32_t)-1) {
-			mail_storage_set_critical(uidlist->box->storage,
+			mailbox_set_critical(uidlist->box,
 				"Maildir: %s changed UID %u -> %u",
 				filename, rec->uid, uid);
 			return -1;
@@ -1992,8 +1986,7 @@ static void maildir_uidlist_swap(struct maildir_uidlist_sync_ctx *ctx)
 	uidlist->files = ctx->files;
 	i_zero(&ctx->files);
 
-	if (uidlist->record_pool != NULL)
-		pool_unref(&uidlist->record_pool);
+	pool_unref(&uidlist->record_pool);
 	uidlist->record_pool = ctx->record_pool;
 	ctx->record_pool = NULL;
 
@@ -2063,8 +2056,7 @@ int maildir_uidlist_sync_deinit(struct maildir_uidlist_sync_ctx **_ctx,
 
 	if (hash_table_is_created(ctx->files))
 		hash_table_destroy(&ctx->files);
-	if (ctx->record_pool != NULL)
-		pool_unref(&ctx->record_pool);
+	pool_unref(&ctx->record_pool);
 	if (array_is_created(&ctx->records))
 		array_free(&ctx->records);
 	i_free(ctx);

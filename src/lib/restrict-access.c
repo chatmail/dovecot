@@ -256,16 +256,17 @@ get_setuid_error_str(const struct restrict_access_settings *set, uid_t target_ui
 }
 
 void restrict_access(const struct restrict_access_settings *set,
-		     const char *home, bool disallow_root)
+		     enum restrict_access_flags flags, const char *home)
 {
 	bool is_root, have_root_group, preserve_groups = FALSE;
 	bool allow_root_gid;
+	bool allow_root = (flags & RESTRICT_ACCESS_FLAG_ALLOW_ROOT) != 0;
 	uid_t target_uid = set->uid;
 
 	is_root = geteuid() == 0;
 
 	if (!is_root &&
-	    set->drop_setuid_root &&
+	    !set->allow_setuid_root &&
 	    getuid() == 0) {
 		/* recover current effective UID */
 		if (target_uid == (uid_t)-1)
@@ -325,17 +326,16 @@ void restrict_access(const struct restrict_access_settings *set,
 
 		if (chroot(set->chroot_dir) != 0)
 			i_fatal("chroot(%s) failed: %m", set->chroot_dir);
+		/* makes static analyzers happy, and is more secure */
+		if (chdir("/") != 0)
+			i_fatal("chdir(/) failed: %m");
+
 		chroot_dir = i_strdup(set->chroot_dir);
 
 		if (home != NULL) {
 			if (chdir(home) < 0) {
 				i_error("chdir(%s) failed: %m", home);
-				home = NULL;
 			}
-		}
-		if (home == NULL) {
-			if (chdir("/") != 0)
-				i_fatal("chdir(/) failed: %m");
 		}
 	}
 
@@ -346,9 +346,9 @@ void restrict_access(const struct restrict_access_settings *set,
 	}
 
 	/* verify that we actually dropped the privileges */
-	if ((target_uid != (uid_t)-1 && target_uid != 0) || disallow_root) {
+	if ((target_uid != (uid_t)-1 && target_uid != 0) || !allow_root) {
 		if (setuid(0) == 0) {
-			if (disallow_root &&
+			if (!allow_root &&
 			    (target_uid == 0 || target_uid == (uid_t)-1))
 				i_fatal("This process must not be run as root");
 
@@ -449,12 +449,12 @@ void restrict_access_get_env(struct restrict_access_settings *set_r)
 	set_r->chroot_dir = null_if_empty(getenv("RESTRICT_CHROOT"));
 }
 
-void restrict_access_by_env(const char *home, bool disallow_root)
+void restrict_access_by_env(enum restrict_access_flags flags, const char *home)
 {
 	struct restrict_access_settings set;
 
 	restrict_access_get_env(&set);
-	restrict_access(&set, home, disallow_root);
+	restrict_access(&set, flags, home);
 
 	/* clear the environment, so we don't fail if we get back here */
 	env_remove("RESTRICT_SETUID");
@@ -467,7 +467,14 @@ void restrict_access_by_env(const char *home, bool disallow_root)
 	}
 	env_remove("RESTRICT_GID_FIRST");
 	env_remove("RESTRICT_GID_LAST");
-	env_remove("RESTRICT_SETEXTRAGROUPS");
+	if (getuid() != 0)
+		env_remove("RESTRICT_SETEXTRAGROUPS");
+	else {
+		/* Preserve RESTRICT_SETEXTRAGROUPS, so if we're again dropping
+		   more privileges we'll still preserve the extra groups. This
+		   mainly means preserving service { extra_groups } for lmtp
+		   and doveadm accesses. */
+	}
 	env_remove("RESTRICT_USER");
 	env_remove("RESTRICT_CHROOT");
 }
@@ -530,4 +537,9 @@ void restrict_access_drop_priv_gid(void)
 bool restrict_access_have_priv_gid(void)
 {
 	return process_privileged_gid != (gid_t)-1;
+}
+
+void restrict_access_deinit(void)
+{
+	i_free(chroot_dir);
 }

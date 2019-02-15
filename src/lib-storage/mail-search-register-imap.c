@@ -305,7 +305,7 @@ arg_new_interval(struct mail_search_build_context *ctx,
 		ctx->_error = "Invalid search interval parameter";
 		return NULL;
 	}
-	sarg->value.search_flags = MAIL_SEARCH_ARG_FLAG_USE_TZ;
+	sarg->value.search_flags = MAIL_SEARCH_ARG_FLAG_UTC_TIMES;
 	sarg->value.time = ioloop_time - interval;
 	sarg->value.date_type = MAIL_SEARCH_DATE_TYPE_RECEIVED;
 	return sarg;
@@ -355,7 +355,7 @@ arg_modseq_set_ext(struct mail_search_build_context *ctx,
 	const char *value;
 
 	name = t_str_lcase(name);
-	if (strncmp(name, "/flags/", 7) != 0)
+	if (!str_begins(name, "/flags/"))
 		return 0;
 	name += 7;
 

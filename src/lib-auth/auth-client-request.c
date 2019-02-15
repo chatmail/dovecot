@@ -16,16 +16,14 @@ struct auth_client_request {
 	unsigned int id;
 	time_t created;
 
-	struct auth_request_info request_info;
-
 	auth_request_callback_t *callback;
 	void *context;
 };
 
 static void auth_server_send_new_request(struct auth_server_connection *conn,
-					 struct auth_client_request *request)
+					 struct auth_client_request *request,
+					 const struct auth_request_info *info)
 {
-	struct auth_request_info *info = &request->request_info;
 	string_t *str;
 
 	str = t_str_new(512);
@@ -36,8 +34,13 @@ static void auth_server_send_new_request(struct auth_server_connection *conn,
 
 	if ((info->flags & AUTH_REQUEST_FLAG_SUPPORT_FINAL_RESP) != 0)
 		str_append(str, "\tfinal-resp-ok");
-	if ((info->flags & AUTH_REQUEST_FLAG_SECURED) != 0)
+	if ((info->flags & AUTH_REQUEST_FLAG_SECURED) != 0) {
 		str_append(str, "\tsecured");
+		if ((info->flags & AUTH_REQUEST_FLAG_TRANSPORT_SECURITY_TLS) != 0)
+			str_append(str, "=tls");
+	} else {
+		i_assert((info->flags & AUTH_REQUEST_FLAG_TRANSPORT_SECURITY_TLS) == 0);
+	}
 	if ((info->flags & AUTH_REQUEST_FLAG_NO_PENALTY) != 0)
 		str_append(str, "\tno-penalty");
 	if ((info->flags & AUTH_REQUEST_FLAG_VALID_CLIENT_CERT) != 0)
@@ -85,6 +88,19 @@ static void auth_server_send_new_request(struct auth_server_connection *conn,
 		str_append(str, "\tlocal_name=");
 		str_append_tabescaped(str, info->local_name);
 	}
+	if (info->ssl_cipher_bits != 0 && info->ssl_cipher != NULL) {
+		str_append(str, "\tssl_cipher=");
+		str_append_tabescaped(str, info->ssl_cipher);
+		str_printfa(str, "\tssl_cipher_bits=%u", info->ssl_cipher_bits);
+		if (info->ssl_pfs != NULL) {
+			str_append(str, "\tssl_pfs=");
+			str_append_tabescaped(str, info->ssl_pfs);
+		}
+	}
+	if (info->ssl_protocol != NULL) {
+		str_append(str, "\tssl_protocol=");
+		str_append_tabescaped(str, info->ssl_protocol);
+	}
 	if (info->client_id != NULL &&
 	    *info->client_id != '\0') {
 		str_append(str, "\tclient_id=");
@@ -118,16 +134,6 @@ auth_client_request_new(struct auth_client *client,
 	request->pool = pool;
 	request->conn = client->conn;
 
-	request->request_info = *request_info;
-	request->request_info.mech = p_strdup(pool, request_info->mech);
-	request->request_info.service = p_strdup(pool, request_info->service);
-	request->request_info.session_id =
-		p_strdup_empty(pool, request_info->session_id);
-	request->request_info.cert_username =
-		p_strdup_empty(pool, request_info->cert_username);
-	request->request_info.initial_resp_base64 =
-		p_strdup_empty(pool, request_info->initial_resp_base64);
-	
 	request->callback = callback;
 	request->context = context;
 
@@ -135,7 +141,7 @@ auth_client_request_new(struct auth_client *client,
 		auth_server_connection_add_request(request->conn, request);
 	request->created = ioloop_time;
 	T_BEGIN {
-		auth_server_send_new_request(request->conn, request);
+		auth_server_send_new_request(request->conn, request, request_info);
 	} T_END;
 	return request;
 }
@@ -225,7 +231,7 @@ void auth_client_request_server_input(struct auth_client_request *request,
 	switch (status) {
 	case AUTH_REQUEST_STATUS_OK:
 		for (tmp = args; *tmp != NULL; tmp++) {
-			if (strncmp(*tmp, "resp=", 5) == 0) {
+			if (str_begins(*tmp, "resp=")) {
 				base64_data = *tmp + 5;
 				break;
 			}

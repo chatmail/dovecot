@@ -12,13 +12,13 @@ struct dot_istream {
 	/* how far in string "\r\n.\r" are we */
 	unsigned int state;
 	/* state didn't actually start with \r */
-	unsigned int state_no_cr:1;
+	bool state_no_cr:1;
 	/* state didn't contain \n either (only at the beginnign of stream) */
-	unsigned int state_no_lf:1;
+	bool state_no_lf:1;
 	/* we've seen the "." line, keep returning EOF */
-	unsigned int dot_eof:1;
+	bool dot_eof:1;
 
-	unsigned int send_last_lf:1;
+	bool send_last_lf:1;
 };
 
 static int i_stream_dot_read_some(struct dot_istream *dstream)
@@ -29,8 +29,9 @@ static int i_stream_dot_read_some(struct dot_istream *dstream)
 
 	size = i_stream_get_data_size(stream->parent);
 	if (size == 0) {
-		ret = i_stream_read(stream->parent);
-		if (ret <= 0 && (ret != -2 || stream->skip == 0)) {
+		ret = i_stream_read_memarea(stream->parent);
+		if (ret <= 0) {
+			i_assert(ret != -2); /* 0 sized buffer can't be full */
 			if (stream->parent->stream_errno != 0) {
 				stream->istream.stream_errno =
 					stream->parent->stream_errno;
@@ -231,5 +232,5 @@ struct istream *i_stream_create_dot(struct istream *input, bool send_last_lf)
 	dstream->state_no_cr = TRUE;
 	dstream->state_no_lf = TRUE;
 	return i_stream_create(&dstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }

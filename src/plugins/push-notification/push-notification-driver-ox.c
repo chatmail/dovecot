@@ -12,14 +12,13 @@
 #include "mail-storage-private.h"
 #include "str.h"
 #include "strescape.h"
+#include "iostream-ssl.h"
 
+#include "push-notification-plugin.h"
 #include "push-notification-drivers.h"
 #include "push-notification-event-messagenew.h"
 #include "push-notification-events.h"
 #include "push-notification-txn-msg.h"
-
-
-#define OX_LOG_LABEL "OX Push Notification: "
 
 #define OX_METADATA_KEY \
     MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER "vendor/vendor.dovecot/http-notify"
@@ -41,6 +40,7 @@ static struct push_notification_driver_ox_global *ox_global = NULL;
 /* This is data specific to an OX driver. */
 struct push_notification_driver_ox_config {
     struct http_url *http_url;
+    struct event *event;
     unsigned int cached_ox_metadata_lifetime_secs;
     bool use_unsafe_username;
     unsigned int http_max_retries;
@@ -60,6 +60,7 @@ push_notification_driver_ox_init_global(struct mail_user *user,
 	struct push_notification_driver_ox_config *config)
 {
     struct http_client_settings http_set;
+    struct ssl_iostream_settings ssl_set;
 
     if (ox_global->http_client == NULL) {
         /* this is going to use the first user's settings, but these are
@@ -68,6 +69,10 @@ push_notification_driver_ox_init_global(struct mail_user *user,
         http_set.debug = user->mail_debug;
         http_set.max_attempts = config->http_max_retries+1;
         http_set.request_timeout_msecs = config->http_timeout_msecs;
+        http_set.event = user->event;
+        i_zero(&ssl_set);
+        mail_user_init_ssl_client_settings(user, &ssl_set);
+        http_set.ssl = &ssl_set;
 
         ox_global->http_client = http_client_init(&http_set);
     }
@@ -84,28 +89,33 @@ push_notification_driver_ox_init(struct push_notification_driver_config *config,
     /* Valid config keys: cache_lifetime, url */
     tmp = hash_table_lookup(config->config, (const char *)"url");
     if (tmp == NULL) {
-        *error_r = OX_LOG_LABEL "Driver requires the url parameter";
+        *error_r = "Driver requires the url parameter";
         return -1;
     }
 
     dconfig = p_new(pool, struct push_notification_driver_ox_config, 1);
+    dconfig->event = event_create(user->event);
+    event_add_category(dconfig->event, &event_category_push_notification);
+    event_set_append_log_prefix(dconfig->event, "push-notification-ox: ");
 
     if (http_url_parse(tmp, NULL, HTTP_URL_ALLOW_USERINFO_PART, pool,
                        &dconfig->http_url, &error) < 0) {
-        *error_r = t_strdup_printf(OX_LOG_LABEL "Failed to parse OX REST URL %s: %s",
+        event_unref(&dconfig->event);
+        *error_r = t_strdup_printf("Failed to parse OX REST URL %s: %s",
                                    tmp, error);
         return -1;
     }
     dconfig->use_unsafe_username =
         hash_table_lookup(config->config, (const char *)"user_from_metadata") != NULL;
 
-    push_notification_driver_debug(OX_LOG_LABEL, user, "Using URL %s", tmp);
+    e_debug(dconfig->event, "Using URL %s", tmp);
 
     tmp = hash_table_lookup(config->config, (const char *)"cache_lifetime");
     if (tmp == NULL)
         dconfig->cached_ox_metadata_lifetime_secs = DEFAULT_CACHE_LIFETIME_SECS;
     else if (settings_get_time(tmp, &dconfig->cached_ox_metadata_lifetime_secs, &error) < 0) {
-        *error_r = t_strdup_printf(OX_LOG_LABEL "Failed to parse OX cache_lifetime %s: %s",
+        event_unref(&dconfig->event);
+        *error_r = t_strdup_printf("Failed to parse OX cache_lifetime %s: %s",
                                    tmp, error);
         return -1;
     }
@@ -121,9 +131,8 @@ push_notification_driver_ox_init(struct push_notification_driver_config *config,
         dconfig->http_timeout_msecs = DEFAULT_TIMEOUT_MSECS;
     }
 
-    push_notification_driver_debug(OX_LOG_LABEL, user,
-                                   "Using cache lifetime: %u",
-                                   dconfig->cached_ox_metadata_lifetime_secs);
+    e_debug(dconfig->event, "Using cache lifetime: %u",
+            dconfig->cached_ox_metadata_lifetime_secs);
 
     if (ox_global == NULL) {
         ox_global = i_new(struct push_notification_driver_ox_global, 1);
@@ -142,7 +151,6 @@ static const char *push_notification_driver_ox_get_metadata
     struct push_notification_driver_ox_config *dconfig = dtxn->duser->context;
     struct mail_attribute_value attr;
     struct mailbox *inbox;
-    struct mailbox_transaction_context *mctx = NULL;
     struct mail_namespace *ns;
     bool success = FALSE, use_existing_txn = FALSE;
     int ret;
@@ -156,39 +164,23 @@ static const char *push_notification_driver_ox_get_metadata
     /* Get canonical INBOX, where private server-level metadata is stored.
      * See imap/cmd-getmetadata.c */
     if ((dtxn->ptxn->t != NULL) && dtxn->ptxn->mbox->inbox_user) {
-        /* Use the currently open transaction. */
         inbox = dtxn->ptxn->mbox;
-        mctx = dtxn->ptxn->t;
         use_existing_txn = TRUE;
     } else {
         ns = mail_namespace_find_inbox(dtxn->ptxn->muser->namespaces);
         inbox = mailbox_alloc(ns->list, "INBOX", MAILBOX_FLAG_READONLY);
-        if (mailbox_open(inbox) < 0) {
-            i_error(OX_LOG_LABEL "Skipped because unable to open INBOX: %s",
-                    mailbox_get_last_internal_error(inbox, NULL));
-        } else {
-            mctx = mailbox_transaction_begin(inbox, 0);
-        }
     }
 
-    if (mctx != NULL) {
-        ret = mailbox_attribute_get(mctx, MAIL_ATTRIBUTE_TYPE_PRIVATE,
+    ret = mailbox_attribute_get(inbox, MAIL_ATTRIBUTE_TYPE_PRIVATE,
                                     OX_METADATA_KEY, &attr);
-        if (ret < 0) {
-            i_error(OX_LOG_LABEL "Skipped because unable to get attribute: %s",
-                    mailbox_get_last_internal_error(inbox, NULL));
-        } else if (ret == 0) {
-            push_notification_driver_debug(OX_LOG_LABEL, dtxn->ptxn->muser,
-                                           "Skipped because not active (/private/"OX_METADATA_KEY" METADATA not set)");
-        } else {
-            success = TRUE;
-        }
-
-        if (!use_existing_txn && (mailbox_transaction_commit(&mctx) < 0)) {
-            i_error(OX_LOG_LABEL "Transaction commit failed: %s",
-                    mailbox_get_last_internal_error(inbox, NULL));
-            /* the commit doesn't matter though. */
-        }
+    if (ret < 0) {
+        e_error(dconfig->event, "Skipped because unable to get attribute: %s",
+                mailbox_get_last_internal_error(inbox, NULL));
+    } else if (ret == 0) {
+        e_debug(dconfig->event,
+                "Skipped because not active (/private/"OX_METADATA_KEY" METADATA not set)");
+    } else {
+        success = TRUE;
     }
 
     if (!use_existing_txn) {
@@ -212,12 +204,12 @@ static bool push_notification_driver_ox_begin_txn
     const char *key, *mbox_curr, *md_value, *value;
     bool mbox_found = FALSE;
     struct push_notification_driver_ox_txn *txn;
+    struct push_notification_driver_ox_config *dconfig = dtxn->duser->context;
 
     md_value = push_notification_driver_ox_get_metadata(dtxn);
     if (md_value == NULL) {
         return FALSE;
     }
-    struct mail_user *user = dtxn->ptxn->muser;
 
     /* Unused keys: events, expire, folder */
     /* TODO: To be implemented later(?) */
@@ -226,9 +218,8 @@ static bool push_notification_driver_ox_begin_txn
     const char *const *mboxes = default_mboxes;
 
     if (expire < ioloop_time) {
-        push_notification_driver_debug(OX_LOG_LABEL, user,
-                                       "Skipped due to expiration (%ld < %ld)",
-                                       (long)expire, (long)ioloop_time);
+        e_debug(dconfig->event, "Skipped due to expiration (%ld < %ld)",
+                (long)expire, (long)ioloop_time);
         return FALSE;
     }
 
@@ -241,9 +232,8 @@ static bool push_notification_driver_ox_begin_txn
     }
 
     if (mbox_found == FALSE) {
-        push_notification_driver_debug(OX_LOG_LABEL, user,
-                                       "Skipped because %s is not a watched mailbox",
-                                       mbox_curr);
+        e_debug(dconfig->event, "Skipped because %s is not a watched mailbox",
+                mbox_curr);
         return FALSE;
     }
 
@@ -264,11 +254,11 @@ static bool push_notification_driver_ox_begin_txn
     }
 
     if (txn->unsafe_user == NULL) {
-        i_error(OX_LOG_LABEL "No user provided in config");
+        e_error(dconfig->event, "No user provided in config");
         return FALSE;
     }
 
-    push_notification_driver_debug(OX_LOG_LABEL, user, "User (%s)", txn->unsafe_user);
+    e_debug(dconfig->event, "User (%s)", txn->unsafe_user);
 
     for (; *events != NULL; events++) {
         if (strcmp(*events, "MessageNew") == 0) {
@@ -278,8 +268,7 @@ static bool push_notification_driver_ox_begin_txn
                             PUSH_NOTIFICATION_MESSAGE_HDR_SUBJECT |
                             PUSH_NOTIFICATION_MESSAGE_BODY_SNIPPET;
             push_notification_event_init(dtxn, "MessageNew", config);
-            push_notification_driver_debug(OX_LOG_LABEL, user,
-                                           "Handling MessageNew event");
+            e_debug(dconfig->event, "Handling MessageNew event");
         }
     }
 
@@ -289,21 +278,18 @@ static bool push_notification_driver_ox_begin_txn
 }
 
 static void push_notification_driver_ox_http_callback
-(const struct http_response *response, struct mail_user *user)
+(const struct http_response *response, struct push_notification_driver_ox_config *dconfig)
 {
     switch (response->status / 100) {
     case 2:
         // Success.
-	if (user->mail_debug) {
-            push_notification_driver_debug(OX_LOG_LABEL, user,
-                                           "Notification sent successfully: %s",
-                                           http_response_get_message(response));
-	}
+        e_debug(dconfig->event, "Notification sent successfully: %s",
+	        http_response_get_message(response));
         break;
 
     default:
         // Error.
-        i_error(OX_LOG_LABEL "Error when sending notification: %s",
+        e_error(dconfig->event, "Error when sending notification: %s",
                 http_response_get_message(response));
         break;
     }
@@ -320,6 +306,7 @@ static int push_notification_driver_ox_get_mailbox_status
 (struct push_notification_driver_txn *dtxn,
  struct mailbox_status *r_box_status)
 {
+    struct push_notification_driver_ox_config *dconfig = dtxn->duser->context;
     /* The already opened mailbox. We cannot use or sync it, because we are within a save transaction. */
     struct mailbox *mbox = dtxn->ptxn->mbox;
     struct mailbox *box;
@@ -328,13 +315,13 @@ static int push_notification_driver_ox_get_mailbox_status
     /* open and sync new instance of the same mailbox to get most recent status */
     box = mailbox_alloc(mailbox_get_namespace(mbox)->list, mailbox_get_name(mbox), MAILBOX_FLAG_READONLY);
     if (mailbox_sync(box, 0) < 0) {
-        i_error("mailbox_sync(%s) failed: %s", mailbox_get_vname(mbox), mailbox_get_last_internal_error(box, NULL));
+        e_error(dconfig->event, "mailbox_sync(%s) failed: %s", mailbox_get_vname(mbox), mailbox_get_last_internal_error(box, NULL));
         ret = -1;
     } else {
         /* only 'unseen' is needed at the moment */
         mailbox_get_open_status(box, STATUS_UNSEEN, r_box_status);
-        push_notification_driver_debug(OX_LOG_LABEL, dtxn->ptxn->muser, "Got status of mailbox '%s': (unseen: %u)",
-                                       mailbox_get_vname(box), r_box_status->unseen);
+        e_debug(dconfig->event, "Got status of mailbox '%s': (unseen: %u)",
+                mailbox_get_vname(box), r_box_status->unseen);
         ret = 0;
     }
 
@@ -373,8 +360,8 @@ static void push_notification_driver_ox_process_msg
     http_req = http_client_request_url(ox_global->http_client, "PUT",
                                        dconfig->http_url,
                                        push_notification_driver_ox_http_callback,
-                                       user);
-
+                                       dconfig);
+    http_client_request_set_event(http_req, dconfig->event);
     http_client_request_add_header(http_req, "Content-Type",
                                    "application/json; charset=utf-8");
 
@@ -406,8 +393,7 @@ static void push_notification_driver_ox_process_msg
     }
     str_append(str, "}");
 
-    push_notification_driver_debug(OX_LOG_LABEL, user,
-                                   "Sending notification: %s", str_c(str));
+    e_debug(dconfig->event, "Sending notification: %s", str_c(str));
 
     payload = i_stream_create_from_data(str_data(str), str_len(str));
     i_stream_add_destroy_callback(payload, str_free_i, str);
@@ -429,6 +415,7 @@ static void push_notification_driver_ox_deinit
         i_assert(ox_global->refcount > 0);
         --ox_global->refcount;
     }
+    event_unref(&dconfig->event);
 }
 
 static void push_notification_driver_ox_cleanup(void)

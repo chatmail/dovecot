@@ -61,6 +61,8 @@ Changes:
  * 2017/02/13 - Improved documentation and added instructions for Spam->Trash.
    (Thanks for everyone who commented on mailing list)
  * 2017/02/10 - Removed imap_stats (it's not needed).
+ * 2018/04/11 - Added notes about sa-learn/spamc and warning about sieve script
+   location.
 
 Dovecot configuration
 ---------------------
@@ -92,6 +94,12 @@ plugin {
 
 Sieve scripts
 -------------
+
+*You cannot run scripts anywhere you want*
+
+Sieve allows you to only run scripts under sieve_pipe_bin_dir. You can't use
+/usr/local/bin/my-sieve-filter.sh, you have to put the script under
+sieve_pipe_bin_dir and use my-sieve-filter.sh instead.
 
 Create directory /usr/lib/dovecot/sieve and put following files to that:
 
@@ -132,6 +140,28 @@ Shell scripts
 
 For spamassassin
 ----------------
+
+*Untested*
+
+spamc interaction scripts are not tested yet.
+
+sa-learn-spam.sh
+
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
+# you can also use tcp/ip here, consult spamc(1)    2
+exec /usr/bin/spamc -u ${1} -L spam -C report    3
+---CodeArea-------------------------------------------------------------------
+
+sa-learn-ham.sh
+
+---CodeArea-------------------------------------------------------------------
+#!/bin/sh    1
+# you can also use tcp/ip here, consult spamc(1)    2
+exec /usr/bin/spamc -u ${1} -L ham -C report    3
+---CodeArea-------------------------------------------------------------------
+
+You can also use sa-learn.
 
 Note that using sa-learn often incurs significant start-up time for every
 message. This can cause "lockout" of the user until all the processes
@@ -227,8 +257,9 @@ variables are supported in this.
 RoundCube
 ---------
 
-Recent versions of RoundCube [https://roundcube.net/] include a plugin (located
-in 'plugins/markasjunk') for allowing users to mark Spam/Ham in a convenient
-way. Please make sure the Junk/Spam folder matches your configuration.
+Recent versions of RoundCube [https://roundcube.net/] include a markasjunk2
+plugin [https://plugins.roundcube.net/packages/johndoh/markasjunk2] for
+allowing users to mark Spam/Ham in a convenient way. Please make sure the
+Junk/Spam folder matches your configuration.
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

@@ -4,7 +4,6 @@
 #include "array.h"
 #include "hostpid.h"
 #include "net.h"
-#include "fd-set-nonblock.h"
 #include "istream.h"
 #include "ostream.h"
 #include "ioloop.h"
@@ -75,8 +74,8 @@ test_server_wait_connection(struct test_server *server, bool send_banner)
 	i_assert(server->fd >= 0);
 
 	fd_set_nonblock(server->fd, FALSE);
-	server->input = i_stream_create_fd(server->fd, (size_t)-1, FALSE);
-	server->output = o_stream_create_fd(server->fd, (size_t)-1, FALSE);
+	server->input = i_stream_create_fd(server->fd, (size_t)-1);
+	server->output = o_stream_create_fd(server->fd, (size_t)-1);
 	o_stream_set_no_error_handling(server->output, TRUE);
 
 	if (send_banner) {
@@ -87,12 +86,9 @@ test_server_wait_connection(struct test_server *server, bool send_banner)
 
 static void test_server_disconnect(struct test_server *server)
 {
-	if (server->input != NULL)
-		i_stream_unref(&server->input);
-	if (server->output != NULL)
-		o_stream_unref(&server->output);
-	if (server->fd != -1)
-		i_close_fd(&server->fd);
+	i_stream_unref(&server->input);
+	o_stream_unref(&server->output);
+	i_close_fd(&server->fd);
 }
 
 static void test_server_disconnect_and_wait(bool send_banner)
@@ -119,6 +115,7 @@ static void test_run_client_server(
 {
 	struct imapc_client_settings client_set_copy = *client_set;
 	struct ioloop *ioloop;
+	const char *error;
 
 	imapc_client_cmd_tag_counter = 0;
 	imapc_login_last_reply = IMAPC_COMMAND_STATE_INVALID;
@@ -165,10 +162,11 @@ static void test_run_client_server(
 		imapc_client_deinit(&imapc_client);
 	io_loop_destroy(&ioloop);
 
-	if (server.fd_listen != -1)
-		i_close_fd(&server.fd_listen);
+	i_close_fd(&server.fd_listen);
 	test_server_kill();
-	(void)unlink_directory(client_set->temp_path_prefix, UNLINK_DIRECTORY_FLAG_RMDIR);
+	if (unlink_directory(client_set->temp_path_prefix,
+			     UNLINK_DIRECTORY_FLAG_RMDIR, &error) < 0)
+		i_fatal("%s", error);
 }
 
 static enum imapc_command_state test_imapc_cmd_last_reply_pop(void)
@@ -678,7 +676,7 @@ static void test_imapc_client_get_capabilities_disconnected(void)
 
 int main(int argc ATTR_UNUSED, char *argv[])
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_imapc_connect_failed,
 		test_imapc_banner_hangs,
 		test_imapc_login_hangs,

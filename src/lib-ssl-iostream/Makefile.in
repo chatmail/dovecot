@@ -15,7 +15,6 @@
 @SET_MAKE@
 
 
-
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -90,13 +89,62 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@BUILD_OPENSSL_TRUE@noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-ssl-iostream
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/want_apparmor.m4 \
-	$(top_srcdir)/dovecot.m4 $(top_srcdir)/libtool.m4 \
-	$(top_srcdir)/ltoptions.m4 $(top_srcdir)/ltsugar.m4 \
-	$(top_srcdir)/ltversion.m4 $(top_srcdir)/lt~obsolete.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
+	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
+	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
+	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
+	$(top_srcdir)/m4/cc_pie.m4 $(top_srcdir)/m4/cc_retpoline.m4 \
+	$(top_srcdir)/m4/cc_stack_protector.m4 \
+	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
+	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
+	$(top_srcdir)/m4/dbqlk.m4 $(top_srcdir)/m4/dirent_dtype.m4 \
+	$(top_srcdir)/m4/dovecot.m4 $(top_srcdir)/m4/fd_passing.m4 \
+	$(top_srcdir)/m4/fdatasync.m4 \
+	$(top_srcdir)/m4/flexible_array_member.m4 \
+	$(top_srcdir)/m4/glibc.m4 $(top_srcdir)/m4/gmtime_max.m4 \
+	$(top_srcdir)/m4/gmtime_tm_gmtoff.m4 \
+	$(top_srcdir)/m4/ioloop.m4 $(top_srcdir)/m4/iovec.m4 \
+	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/ld_relro.m4 \
+	$(top_srcdir)/m4/ld_whole_archive.m4 \
+	$(top_srcdir)/m4/libcap.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/libwrap.m4 $(top_srcdir)/m4/linux_mremap.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/m4/mmap_write.m4 $(top_srcdir)/m4/mntctl.m4 \
+	$(top_srcdir)/m4/modules.m4 $(top_srcdir)/m4/notify.m4 \
+	$(top_srcdir)/m4/nsl.m4 $(top_srcdir)/m4/off_t_max.m4 \
+	$(top_srcdir)/m4/pr_set_dumpable.m4 \
+	$(top_srcdir)/m4/q_quotactl.m4 $(top_srcdir)/m4/quota.m4 \
+	$(top_srcdir)/m4/random.m4 $(top_srcdir)/m4/rlimit.m4 \
+	$(top_srcdir)/m4/sendfile.m4 $(top_srcdir)/m4/size_t_signed.m4 \
+	$(top_srcdir)/m4/sockpeercred.m4 $(top_srcdir)/m4/sql.m4 \
+	$(top_srcdir)/m4/ssl.m4 $(top_srcdir)/m4/st_tim.m4 \
+	$(top_srcdir)/m4/static_array.m4 $(top_srcdir)/m4/test_with.m4 \
+	$(top_srcdir)/m4/time_t.m4 $(top_srcdir)/m4/typeof.m4 \
+	$(top_srcdir)/m4/typeof_dev_t.m4 $(top_srcdir)/m4/unsetenv.m4 \
+	$(top_srcdir)/m4/uoff_t_max.m4 $(top_srcdir)/m4/vararg.m4 \
+	$(top_srcdir)/m4/want_apparmor.m4 \
+	$(top_srcdir)/m4/want_bsdauth.m4 \
+	$(top_srcdir)/m4/want_bzlib.m4 \
+	$(top_srcdir)/m4/want_cassandra.m4 \
+	$(top_srcdir)/m4/want_cdb.m4 \
+	$(top_srcdir)/m4/want_checkpassword.m4 \
+	$(top_srcdir)/m4/want_clucene.m4 $(top_srcdir)/m4/want_db.m4 \
+	$(top_srcdir)/m4/want_gssapi.m4 $(top_srcdir)/m4/want_icu.m4 \
+	$(top_srcdir)/m4/want_ldap.m4 $(top_srcdir)/m4/want_lua.m4 \
+	$(top_srcdir)/m4/want_lz4.m4 $(top_srcdir)/m4/want_lzma.m4 \
+	$(top_srcdir)/m4/want_mysql.m4 $(top_srcdir)/m4/want_pam.m4 \
+	$(top_srcdir)/m4/want_passwd.m4 $(top_srcdir)/m4/want_pgsql.m4 \
+	$(top_srcdir)/m4/want_prefetch.m4 \
+	$(top_srcdir)/m4/want_shadow.m4 $(top_srcdir)/m4/want_sia.m4 \
+	$(top_srcdir)/m4/want_sodium.m4 $(top_srcdir)/m4/want_solr.m4 \
+	$(top_srcdir)/m4/want_sqlite.m4 \
+	$(top_srcdir)/m4/want_stemmer.m4 \
+	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_vpopmail.m4 \
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/warnings.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -137,7 +185,8 @@ am__installdirs = "$(DESTDIR)$(moduledir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
 LTLIBRARIES = $(module_LTLIBRARIES) $(noinst_LTLIBRARIES)
 libssl_iostream_la_LIBADD =
-am_libssl_iostream_la_OBJECTS = iostream-ssl.lo
+am_libssl_iostream_la_OBJECTS = iostream-ssl.lo \
+	iostream-ssl-context-cache.lo
 libssl_iostream_la_OBJECTS = $(am_libssl_iostream_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -149,13 +198,12 @@ am__DEPENDENCIES_1 =
 am__libssl_iostream_openssl_la_SOURCES_DIST =  \
 	dovecot-openssl-common.c iostream-openssl.c \
 	iostream-openssl-common.c iostream-openssl-context.c \
-	iostream-openssl-params.c istream-openssl.c ostream-openssl.c
+	istream-openssl.c ostream-openssl.c
 @BUILD_OPENSSL_TRUE@am_libssl_iostream_openssl_la_OBJECTS =  \
 @BUILD_OPENSSL_TRUE@	dovecot-openssl-common.lo \
 @BUILD_OPENSSL_TRUE@	iostream-openssl.lo \
 @BUILD_OPENSSL_TRUE@	iostream-openssl-common.lo \
 @BUILD_OPENSSL_TRUE@	iostream-openssl-context.lo \
-@BUILD_OPENSSL_TRUE@	iostream-openssl-params.lo \
 @BUILD_OPENSSL_TRUE@	istream-openssl.lo ostream-openssl.lo
 libssl_iostream_openssl_la_OBJECTS =  \
 	$(am_libssl_iostream_openssl_la_OBJECTS)
@@ -165,17 +213,6 @@ libssl_iostream_openssl_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(LDFLAGS) -o $@
 @BUILD_OPENSSL_TRUE@am_libssl_iostream_openssl_la_rpath = -rpath \
 @BUILD_OPENSSL_TRUE@	$(moduledir)
-@BUILD_OPENSSL_TRUE@am__EXEEXT_1 = test-ssl-iostream$(EXEEXT)
-PROGRAMS = $(noinst_PROGRAMS)
-am__test_ssl_iostream_SOURCES_DIST = test-ssl-iostream.c
-@BUILD_OPENSSL_TRUE@am_test_ssl_iostream_OBJECTS = test_ssl_iostream-test-ssl-iostream.$(OBJEXT)
-test_ssl_iostream_OBJECTS = $(am_test_ssl_iostream_OBJECTS)
-@BUILD_OPENSSL_TRUE@am__DEPENDENCIES_2 = $(LIBDOVECOT_TEST_DEPS) \
-@BUILD_OPENSSL_TRUE@	$(am__DEPENDENCIES_1)
-test_ssl_iostream_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
-	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
-	$(test_ssl_iostream_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
-	-o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -211,11 +248,9 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libssl_iostream_la_SOURCES) \
-	$(libssl_iostream_openssl_la_SOURCES) \
-	$(test_ssl_iostream_SOURCES)
+	$(libssl_iostream_openssl_la_SOURCES)
 DIST_SOURCES = $(libssl_iostream_la_SOURCES) \
-	$(am__libssl_iostream_openssl_la_SOURCES_DIST) \
-	$(am__test_ssl_iostream_SOURCES_DIST)
+	$(am__libssl_iostream_openssl_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -255,6 +290,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BINARY_CFLAGS = @BINARY_CFLAGS@
+BINARY_LDFLAGS = @BINARY_LDFLAGS@
 CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
 CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
@@ -296,6 +333,8 @@ KRB5_LIBS = @KRB5_LIBS@
 LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
+LD_NO_WHOLE_ARCHIVE = @LD_NO_WHOLE_ARCHIVE@
+LD_WHOLE_ARCHIVE = @LD_WHOLE_ARCHIVE@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
 LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
@@ -317,15 +356,20 @@ LIBICU_CFLAGS = @LIBICU_CFLAGS@
 LIBICU_LIBS = @LIBICU_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSODIUM_CFLAGS = @LIBSODIUM_CFLAGS@
+LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
+LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
+LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
-LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
+LUA_CFLAGS = @LUA_CFLAGS@
+LUA_LIBS = @LUA_LIBS@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -349,15 +393,19 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
+PANDOC = @PANDOC@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PGSQL_CFLAGS = @PGSQL_CFLAGS@
 PGSQL_LIBS = @PGSQL_LIBS@
 PG_CONFIG = @PG_CONFIG@
+PIE_CFLAGS = @PIE_CFLAGS@
+PIE_LDFLAGS = @PIE_LDFLAGS@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
+RELRO_LDFLAGS = @RELRO_LDFLAGS@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
 SED = @SED@
@@ -412,8 +460,6 @@ libdir = @libdir@
 libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
-mail_storages = @mail_storages@
-mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -450,27 +496,12 @@ AM_CPPFLAGS = \
 @BUILD_OPENSSL_TRUE@	iostream-openssl.c \
 @BUILD_OPENSSL_TRUE@	iostream-openssl-common.c \
 @BUILD_OPENSSL_TRUE@	iostream-openssl-context.c \
-@BUILD_OPENSSL_TRUE@	iostream-openssl-params.c \
 @BUILD_OPENSSL_TRUE@	istream-openssl.c \
 @BUILD_OPENSSL_TRUE@	ostream-openssl.c
 
-@BUILD_OPENSSL_TRUE@test_programs = test-ssl-iostream
-@BUILD_OPENSSL_TRUE@LIBDOVECOT_TEST_DEPS = \
-@BUILD_OPENSSL_TRUE@	libssl_iostream_openssl.la \
-@BUILD_OPENSSL_TRUE@	libssl_iostream.la \
-@BUILD_OPENSSL_TRUE@	../lib-test/libtest.la \
-@BUILD_OPENSSL_TRUE@	../lib/liblib.la
-
-@BUILD_OPENSSL_TRUE@LIBDOVECOT_TEST = \
-@BUILD_OPENSSL_TRUE@	$(LIBDOVECOT_TEST_DEPS) \
-@BUILD_OPENSSL_TRUE@	$(MODULE_LIBS)
-
-@BUILD_OPENSSL_TRUE@test_ssl_iostream_LDADD = $(LIBDOVECOT_TEST)
-@BUILD_OPENSSL_TRUE@test_ssl_iostream_DEPENDENCIES = $(LIBDOVECOT_TEST_DEPS)
-@BUILD_OPENSSL_TRUE@test_ssl_iostream_CFLAGS = $(AM_CPPFLAGS)
-@BUILD_OPENSSL_TRUE@test_ssl_iostream_SOURCES = test-ssl-iostream.c
 libssl_iostream_la_SOURCES = \
-	iostream-ssl.c
+	iostream-ssl.c \
+	iostream-ssl-context-cache.c
 
 noinst_HEADERS = \
 	dovecot-openssl-common.h
@@ -568,19 +599,6 @@ libssl_iostream.la: $(libssl_iostream_la_OBJECTS) $(libssl_iostream_la_DEPENDENC
 libssl_iostream_openssl.la: $(libssl_iostream_openssl_la_OBJECTS) $(libssl_iostream_openssl_la_DEPENDENCIES) $(EXTRA_libssl_iostream_openssl_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libssl_iostream_openssl_la_LINK) $(am_libssl_iostream_openssl_la_rpath) $(libssl_iostream_openssl_la_OBJECTS) $(libssl_iostream_openssl_la_LIBADD) $(LIBS)
 
-clean-noinstPROGRAMS:
-	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
-	echo " rm -f" $$list; \
-	rm -f $$list || exit $$?; \
-	test -n "$(EXEEXT)" || exit 0; \
-	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
-	echo " rm -f" $$list; \
-	rm -f $$list
-
-test-ssl-iostream$(EXEEXT): $(test_ssl_iostream_OBJECTS) $(test_ssl_iostream_DEPENDENCIES) $(EXTRA_test_ssl_iostream_DEPENDENCIES) 
-	@rm -f test-ssl-iostream$(EXEEXT)
-	$(AM_V_CCLD)$(test_ssl_iostream_LINK) $(test_ssl_iostream_OBJECTS) $(test_ssl_iostream_LDADD) $(LIBS)
-
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -590,12 +608,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dovecot-openssl-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-openssl-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-openssl-context.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-openssl-params.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-openssl.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-ssl-context-cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/iostream-ssl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-openssl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-openssl.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_ssl_iostream-test-ssl-iostream.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -617,20 +634,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
-
-test_ssl_iostream-test-ssl-iostream.o: test-ssl-iostream.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_ssl_iostream_CFLAGS) $(CFLAGS) -MT test_ssl_iostream-test-ssl-iostream.o -MD -MP -MF $(DEPDIR)/test_ssl_iostream-test-ssl-iostream.Tpo -c -o test_ssl_iostream-test-ssl-iostream.o `test -f 'test-ssl-iostream.c' || echo '$(srcdir)/'`test-ssl-iostream.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_ssl_iostream-test-ssl-iostream.Tpo $(DEPDIR)/test_ssl_iostream-test-ssl-iostream.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-ssl-iostream.c' object='test_ssl_iostream-test-ssl-iostream.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_ssl_iostream_CFLAGS) $(CFLAGS) -c -o test_ssl_iostream-test-ssl-iostream.o `test -f 'test-ssl-iostream.c' || echo '$(srcdir)/'`test-ssl-iostream.c
-
-test_ssl_iostream-test-ssl-iostream.obj: test-ssl-iostream.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_ssl_iostream_CFLAGS) $(CFLAGS) -MT test_ssl_iostream-test-ssl-iostream.obj -MD -MP -MF $(DEPDIR)/test_ssl_iostream-test-ssl-iostream.Tpo -c -o test_ssl_iostream-test-ssl-iostream.obj `if test -f 'test-ssl-iostream.c'; then $(CYGPATH_W) 'test-ssl-iostream.c'; else $(CYGPATH_W) '$(srcdir)/test-ssl-iostream.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_ssl_iostream-test-ssl-iostream.Tpo $(DEPDIR)/test_ssl_iostream-test-ssl-iostream.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-ssl-iostream.c' object='test_ssl_iostream-test-ssl-iostream.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_ssl_iostream_CFLAGS) $(CFLAGS) -c -o test_ssl_iostream-test-ssl-iostream.obj `if test -f 'test-ssl-iostream.c'; then $(CYGPATH_W) 'test-ssl-iostream.c'; else $(CYGPATH_W) '$(srcdir)/test-ssl-iostream.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -741,11 +744,9 @@ distdir: $(DISTFILES)
 	    || exit 1; \
 	  fi; \
 	done
-@BUILD_OPENSSL_FALSE@check-local:
 check-am: all-am
-	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-am
-all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(moduledir)" "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -783,7 +784,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-moduleLTLIBRARIES \
-	clean-noinstLTLIBRARIES clean-noinstPROGRAMS mostlyclean-am
+	clean-noinstLTLIBRARIES mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -851,32 +852,26 @@ ps-am:
 
 uninstall-am: uninstall-moduleLTLIBRARIES uninstall-pkginc_libHEADERS
 
-.MAKE: check-am install-am install-strip
+.MAKE: install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am check check-am check-local clean \
-	clean-generic clean-libtool clean-moduleLTLIBRARIES \
-	clean-noinstLTLIBRARIES clean-noinstPROGRAMS cscopelist-am \
-	ctags ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-moduleLTLIBRARIES \
-	install-pdf install-pdf-am install-pkginc_libHEADERS \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs maintainer-clean \
-	maintainer-clean-generic mostlyclean mostlyclean-compile \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags tags-am uninstall uninstall-am \
+.PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
+	clean-libtool clean-moduleLTLIBRARIES clean-noinstLTLIBRARIES \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man \
+	install-moduleLTLIBRARIES install-pdf install-pdf-am \
+	install-pkginc_libHEADERS install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
 	uninstall-moduleLTLIBRARIES uninstall-pkginc_libHEADERS
 
 .PRECIOUS: Makefile
 
-
-@BUILD_OPENSSL_TRUE@check-local:
-@BUILD_OPENSSL_TRUE@	for bin in $(test_programs); do \
-@BUILD_OPENSSL_TRUE@	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
-@BUILD_OPENSSL_TRUE@	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

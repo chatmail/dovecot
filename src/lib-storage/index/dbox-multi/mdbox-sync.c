@@ -21,8 +21,10 @@
 #include "mdbox-map.h"
 #include "mdbox-file.h"
 #include "mdbox-sync.h"
+#include "mailbox-recent-flags.h"
 
 
+/* returns -1 on error, 1 on success, 0 if guid is empty/missing */
 static int
 dbox_sync_verify_expunge_guid(struct mdbox_sync_context *ctx, uint32_t seq,
 			      const guid_128_t guid_128)
@@ -33,14 +35,17 @@ dbox_sync_verify_expunge_guid(struct mdbox_sync_context *ctx, uint32_t seq,
 	mail_index_lookup_uid(ctx->sync_view, seq, &uid);
 	mail_index_lookup_ext(ctx->sync_view, seq,
 			      ctx->mbox->guid_ext_id, &data, NULL);
-	if (guid_128_is_empty(guid_128) ||
-	    memcmp(data, guid_128, GUID_128_SIZE) == 0)
+
+	if ((data == NULL) || guid_128_is_empty(data))
 		return 0;
 
-	mail_storage_set_critical(&ctx->mbox->storage->storage.storage,
-		"Mailbox %s: Expunged GUID mismatch for UID %u: %s vs %s",
-		ctx->mbox->box.vname, uid,
-		guid_128_to_string(data), guid_128_to_string(guid_128));
+	if (guid_128_is_empty(guid_128) ||
+	    memcmp(data, guid_128, GUID_128_SIZE) == 0)
+		return 1;
+
+	mailbox_set_critical(&ctx->mbox->box,
+		"Expunged GUID mismatch for UID %u: %s vs %s",
+		uid, guid_128_to_string(data), guid_128_to_string(guid_128));
 	mdbox_storage_set_corrupted(ctx->mbox->storage);
 	return -1;
 }
@@ -49,14 +54,16 @@ static int mdbox_sync_expunge(struct mdbox_sync_context *ctx, uint32_t seq,
 			      const guid_128_t guid_128)
 {
 	uint32_t map_uid;
+	int ret;
 
 	if (seq_range_array_add(&ctx->expunged_seqs, seq)) {
 		/* already marked as expunged in this sync */
 		return 0;
 	}
 
-	if (dbox_sync_verify_expunge_guid(ctx, seq, guid_128) < 0)
-		return -1;
+	ret = dbox_sync_verify_expunge_guid(ctx, seq, guid_128);
+	if (ret <= 0)
+		return ret;
 	if (mdbox_mail_lookup(ctx->mbox, ctx->sync_view, seq, &map_uid) < 0)
 		return -1;
 	if (mdbox_map_update_refcount(ctx->map_trans, map_uid, -1) < 0)
@@ -107,7 +114,10 @@ static int dbox_sync_mark_expunges(struct mdbox_sync_context *ctx)
 		mail_index_lookup_uid(ctx->sync_view, seq, &uid);
 		mail_index_lookup_ext(ctx->sync_view, seq,
 				      ctx->mbox->guid_ext_id, &data, NULL);
-		mail_index_expunge_guid(trans, seq, data);
+		if ((data == NULL) || guid_128_is_empty(data))
+			mail_index_expunge(trans, seq);
+		else
+			mail_index_expunge_guid(trans, seq, data);
 	}
 	if (mail_index_transaction_commit(&trans) < 0)
 		return -1;
@@ -144,9 +154,7 @@ static int mdbox_sync_index(struct mdbox_sync_context *ctx)
 				return -1;
 			return 1;
 		}
-		mail_storage_set_critical(box->storage,
-			"Mailbox %s: Broken index: missing UIDVALIDITY",
-			box->vname);
+		mailbox_set_critical(box, "Broken index: missing UIDVALIDITY");
 		return 0;
 	}
 
@@ -224,7 +232,6 @@ int mdbox_sync_begin(struct mdbox_mailbox *mbox, enum mdbox_sync_flags flags,
 		     struct mdbox_map_atomic_context *atomic,
 		     struct mdbox_sync_context **ctx_r)
 {
-	struct mail_storage *storage = mbox->box.storage;
 	const struct mail_index_header *hdr =
 		mail_index_get_header(mbox->box.view);
 	struct mdbox_sync_context *ctx;
@@ -282,9 +289,8 @@ int mdbox_sync_begin(struct mdbox_mailbox *mbox, enum mdbox_sync_flags flags,
 
 		/* corrupted */
 		if (storage_rebuilt) {
-			mail_storage_set_critical(storage,
-				"mdbox %s: Storage keeps breaking",
-				mailbox_get_path(&mbox->box));
+			mailbox_set_critical(&mbox->box,
+				"mdbox: Storage keeps breaking");
 			return -1;
 		}
 
@@ -292,9 +298,8 @@ int mdbox_sync_begin(struct mdbox_mailbox *mbox, enum mdbox_sync_flags flags,
 		   try again from the beginning. */
 		mdbox_storage_set_corrupted(mbox->storage);
 		if ((flags & MDBOX_SYNC_FLAG_NO_REBUILD) != 0) {
-			mail_storage_set_critical(storage,
-				"mdbox %s: Can't rebuild storage",
-				mailbox_get_path(&mbox->box));
+			mailbox_set_critical(&mbox->box,
+				"mdbox: Can't rebuild storage");
 			return -1;
 		}
 		return mdbox_sync_begin(mbox, flags, atomic, ctx_r);
@@ -355,7 +360,7 @@ int mdbox_sync(struct mdbox_mailbox *mbox, enum mdbox_sync_flags flags)
 struct mailbox_sync_context *
 mdbox_storage_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
-	struct mdbox_mailbox *mbox = (struct mdbox_mailbox *)box;
+	struct mdbox_mailbox *mbox = MDBOX_MAILBOX(box);
 	enum mdbox_sync_flags mdbox_sync_flags = 0;
 	int ret = 0;
 

@@ -14,6 +14,7 @@
 
 @SET_MAKE@
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -88,12 +89,63 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/plugins/var-expand-crypt
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/want_apparmor.m4 \
-	$(top_srcdir)/dovecot.m4 $(top_srcdir)/libtool.m4 \
-	$(top_srcdir)/ltoptions.m4 $(top_srcdir)/ltsugar.m4 \
-	$(top_srcdir)/ltversion.m4 $(top_srcdir)/lt~obsolete.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
+	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
+	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
+	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
+	$(top_srcdir)/m4/cc_pie.m4 $(top_srcdir)/m4/cc_retpoline.m4 \
+	$(top_srcdir)/m4/cc_stack_protector.m4 \
+	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
+	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
+	$(top_srcdir)/m4/dbqlk.m4 $(top_srcdir)/m4/dirent_dtype.m4 \
+	$(top_srcdir)/m4/dovecot.m4 $(top_srcdir)/m4/fd_passing.m4 \
+	$(top_srcdir)/m4/fdatasync.m4 \
+	$(top_srcdir)/m4/flexible_array_member.m4 \
+	$(top_srcdir)/m4/glibc.m4 $(top_srcdir)/m4/gmtime_max.m4 \
+	$(top_srcdir)/m4/gmtime_tm_gmtoff.m4 \
+	$(top_srcdir)/m4/ioloop.m4 $(top_srcdir)/m4/iovec.m4 \
+	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/ld_relro.m4 \
+	$(top_srcdir)/m4/ld_whole_archive.m4 \
+	$(top_srcdir)/m4/libcap.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/libwrap.m4 $(top_srcdir)/m4/linux_mremap.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/m4/mmap_write.m4 $(top_srcdir)/m4/mntctl.m4 \
+	$(top_srcdir)/m4/modules.m4 $(top_srcdir)/m4/notify.m4 \
+	$(top_srcdir)/m4/nsl.m4 $(top_srcdir)/m4/off_t_max.m4 \
+	$(top_srcdir)/m4/pr_set_dumpable.m4 \
+	$(top_srcdir)/m4/q_quotactl.m4 $(top_srcdir)/m4/quota.m4 \
+	$(top_srcdir)/m4/random.m4 $(top_srcdir)/m4/rlimit.m4 \
+	$(top_srcdir)/m4/sendfile.m4 $(top_srcdir)/m4/size_t_signed.m4 \
+	$(top_srcdir)/m4/sockpeercred.m4 $(top_srcdir)/m4/sql.m4 \
+	$(top_srcdir)/m4/ssl.m4 $(top_srcdir)/m4/st_tim.m4 \
+	$(top_srcdir)/m4/static_array.m4 $(top_srcdir)/m4/test_with.m4 \
+	$(top_srcdir)/m4/time_t.m4 $(top_srcdir)/m4/typeof.m4 \
+	$(top_srcdir)/m4/typeof_dev_t.m4 $(top_srcdir)/m4/unsetenv.m4 \
+	$(top_srcdir)/m4/uoff_t_max.m4 $(top_srcdir)/m4/vararg.m4 \
+	$(top_srcdir)/m4/want_apparmor.m4 \
+	$(top_srcdir)/m4/want_bsdauth.m4 \
+	$(top_srcdir)/m4/want_bzlib.m4 \
+	$(top_srcdir)/m4/want_cassandra.m4 \
+	$(top_srcdir)/m4/want_cdb.m4 \
+	$(top_srcdir)/m4/want_checkpassword.m4 \
+	$(top_srcdir)/m4/want_clucene.m4 $(top_srcdir)/m4/want_db.m4 \
+	$(top_srcdir)/m4/want_gssapi.m4 $(top_srcdir)/m4/want_icu.m4 \
+	$(top_srcdir)/m4/want_ldap.m4 $(top_srcdir)/m4/want_lua.m4 \
+	$(top_srcdir)/m4/want_lz4.m4 $(top_srcdir)/m4/want_lzma.m4 \
+	$(top_srcdir)/m4/want_mysql.m4 $(top_srcdir)/m4/want_pam.m4 \
+	$(top_srcdir)/m4/want_passwd.m4 $(top_srcdir)/m4/want_pgsql.m4 \
+	$(top_srcdir)/m4/want_prefetch.m4 \
+	$(top_srcdir)/m4/want_shadow.m4 $(top_srcdir)/m4/want_sia.m4 \
+	$(top_srcdir)/m4/want_sodium.m4 $(top_srcdir)/m4/want_solr.m4 \
+	$(top_srcdir)/m4/want_sqlite.m4 \
+	$(top_srcdir)/m4/want_stemmer.m4 \
+	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_vpopmail.m4 \
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/warnings.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -153,6 +205,17 @@ lib20_var_expand_crypt_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(lib20_var_expand_crypt_la_LDFLAGS) \
 	$(LDFLAGS) -o $@
+am__EXEEXT_1 = test-var-expand-crypt$(EXEEXT)
+PROGRAMS = $(noinst_PROGRAMS)
+am_test_var_expand_crypt_OBJECTS =  \
+	test_var_expand_crypt-test-var-expand-crypt.$(OBJEXT)
+test_var_expand_crypt_OBJECTS = $(am_test_var_expand_crypt_OBJECTS)
+test_var_expand_crypt_DEPENDENCIES = ../../lib-dovecot/libdovecot.la \
+	lib20_auth_var_expand_crypt.la
+test_var_expand_crypt_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(test_var_expand_crypt_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -188,9 +251,11 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(lib20_auth_var_expand_crypt_la_SOURCES) \
-	$(lib20_var_expand_crypt_la_SOURCES)
+	$(lib20_var_expand_crypt_la_SOURCES) \
+	$(test_var_expand_crypt_SOURCES)
 DIST_SOURCES = $(lib20_auth_var_expand_crypt_la_SOURCES) \
-	$(lib20_var_expand_crypt_la_SOURCES)
+	$(lib20_var_expand_crypt_la_SOURCES) \
+	$(test_var_expand_crypt_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -229,6 +294,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BINARY_CFLAGS = @BINARY_CFLAGS@
+BINARY_LDFLAGS = @BINARY_LDFLAGS@
 CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
 CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
@@ -270,6 +337,8 @@ KRB5_LIBS = @KRB5_LIBS@
 LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
+LD_NO_WHOLE_ARCHIVE = @LD_NO_WHOLE_ARCHIVE@
+LD_WHOLE_ARCHIVE = @LD_WHOLE_ARCHIVE@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
 LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
@@ -291,15 +360,20 @@ LIBICU_CFLAGS = @LIBICU_CFLAGS@
 LIBICU_LIBS = @LIBICU_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSODIUM_CFLAGS = @LIBSODIUM_CFLAGS@
+LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
+LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
+LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
-LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
+LUA_CFLAGS = @LUA_CFLAGS@
+LUA_LIBS = @LUA_LIBS@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -323,15 +397,19 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
+PANDOC = @PANDOC@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PGSQL_CFLAGS = @PGSQL_CFLAGS@
 PGSQL_LIBS = @PGSQL_LIBS@
 PG_CONFIG = @PG_CONFIG@
+PIE_CFLAGS = @PIE_CFLAGS@
+PIE_LDFLAGS = @PIE_LDFLAGS@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
+RELRO_LDFLAGS = @RELRO_LDFLAGS@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
 SED = @SED@
@@ -386,8 +464,6 @@ libdir = @libdir@
 libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
-mail_storages = @mail_storages@
-mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -412,6 +488,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-dcrypt
 
 lib20_var_expand_crypt_la_LDFLAGS = -module -avoid-version
@@ -428,6 +505,17 @@ lib20_auth_var_expand_crypt_la_SOURCES = \
 
 lib20_var_expand_crypt_la_SOURCES = \
 	var-expand-crypt-plugin.c
+
+test_programs = test-var-expand-crypt
+test_var_expand_crypt_CFLAGS = \
+	-DDCRYPT_BUILD_DIR=\"$(top_builddir)/src/lib-dcrypt\"
+
+test_var_expand_crypt_SOURCES = \
+	test-var-expand-crypt.c
+
+test_var_expand_crypt_LDADD = \
+	../../lib-dovecot/libdovecot.la \
+	lib20_auth_var_expand_crypt.la
 
 all: all-am
 
@@ -539,12 +627,26 @@ lib20_auth_var_expand_crypt.la: $(lib20_auth_var_expand_crypt_la_OBJECTS) $(lib2
 lib20_var_expand_crypt.la: $(lib20_var_expand_crypt_la_OBJECTS) $(lib20_var_expand_crypt_la_DEPENDENCIES) $(EXTRA_lib20_var_expand_crypt_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(lib20_var_expand_crypt_la_LINK) -rpath $(moduledir) $(lib20_var_expand_crypt_la_OBJECTS) $(lib20_var_expand_crypt_la_LIBADD) $(LIBS)
 
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
+test-var-expand-crypt$(EXEEXT): $(test_var_expand_crypt_OBJECTS) $(test_var_expand_crypt_DEPENDENCIES) $(EXTRA_test_var_expand_crypt_DEPENDENCIES) 
+	@rm -f test-var-expand-crypt$(EXEEXT)
+	$(AM_V_CCLD)$(test_var_expand_crypt_LINK) $(test_var_expand_crypt_OBJECTS) $(test_var_expand_crypt_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_var_expand_crypt-test-var-expand-crypt.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/var-expand-crypt-plugin.Plo@am__quote@
 
 .c.o:
@@ -567,6 +669,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+test_var_expand_crypt-test-var-expand-crypt.o: test-var-expand-crypt.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_var_expand_crypt_CFLAGS) $(CFLAGS) -MT test_var_expand_crypt-test-var-expand-crypt.o -MD -MP -MF $(DEPDIR)/test_var_expand_crypt-test-var-expand-crypt.Tpo -c -o test_var_expand_crypt-test-var-expand-crypt.o `test -f 'test-var-expand-crypt.c' || echo '$(srcdir)/'`test-var-expand-crypt.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_var_expand_crypt-test-var-expand-crypt.Tpo $(DEPDIR)/test_var_expand_crypt-test-var-expand-crypt.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-var-expand-crypt.c' object='test_var_expand_crypt-test-var-expand-crypt.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_var_expand_crypt_CFLAGS) $(CFLAGS) -c -o test_var_expand_crypt-test-var-expand-crypt.o `test -f 'test-var-expand-crypt.c' || echo '$(srcdir)/'`test-var-expand-crypt.c
+
+test_var_expand_crypt-test-var-expand-crypt.obj: test-var-expand-crypt.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_var_expand_crypt_CFLAGS) $(CFLAGS) -MT test_var_expand_crypt-test-var-expand-crypt.obj -MD -MP -MF $(DEPDIR)/test_var_expand_crypt-test-var-expand-crypt.Tpo -c -o test_var_expand_crypt-test-var-expand-crypt.obj `if test -f 'test-var-expand-crypt.c'; then $(CYGPATH_W) 'test-var-expand-crypt.c'; else $(CYGPATH_W) '$(srcdir)/test-var-expand-crypt.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_var_expand_crypt-test-var-expand-crypt.Tpo $(DEPDIR)/test_var_expand_crypt-test-var-expand-crypt.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-var-expand-crypt.c' object='test_var_expand_crypt-test-var-expand-crypt.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_var_expand_crypt_CFLAGS) $(CFLAGS) -c -o test_var_expand_crypt-test-var-expand-crypt.obj `if test -f 'test-var-expand-crypt.c'; then $(CYGPATH_W) 'test-var-expand-crypt.c'; else $(CYGPATH_W) '$(srcdir)/test-var-expand-crypt.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -657,8 +773,9 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-am
-all-am: Makefile $(LTLIBRARIES)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS)
 installdirs:
 	for dir in "$(DESTDIR)$(auth_moduledir)" "$(DESTDIR)$(moduledir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -696,7 +813,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-auth_moduleLTLIBRARIES clean-generic clean-libtool \
-	clean-moduleLTLIBRARIES mostlyclean-am
+	clean-moduleLTLIBRARIES clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -766,26 +883,32 @@ ps-am:
 uninstall-am: uninstall-auth_moduleLTLIBRARIES \
 	uninstall-moduleLTLIBRARIES
 
-.MAKE: install-am install-strip
+.MAKE: check-am install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am check check-am clean \
+.PHONY: CTAGS GTAGS TAGS all all-am check check-am check-local clean \
 	clean-auth_moduleLTLIBRARIES clean-generic clean-libtool \
-	clean-moduleLTLIBRARIES cscopelist-am ctags ctags-am distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-auth_moduleLTLIBRARIES install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-moduleLTLIBRARIES \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
-	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
+	clean-moduleLTLIBRARIES clean-noinstPROGRAMS cscopelist-am \
+	ctags ctags-am distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am \
+	install-auth_moduleLTLIBRARIES install-data install-data-am \
+	install-dvi install-dvi-am install-exec install-exec-am \
+	install-html install-html-am install-info install-info-am \
+	install-man install-moduleLTLIBRARIES install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-am \
 	uninstall-auth_moduleLTLIBRARIES uninstall-moduleLTLIBRARIES
 
 .PRECIOUS: Makefile
 
+
+check-local:
+	for bin in $(test_programs); do \
+	  if ! env $(test_options) $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

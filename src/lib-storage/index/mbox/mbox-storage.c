@@ -26,7 +26,7 @@
 	 (st).st_atime < (st).st_mtime ? MAILBOX_MARKED : MAILBOX_UNMARKED)
 
 #define MBOX_LIST_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mbox_mailbox_list_module)
+	MODULE_CONTEXT_REQUIRE(obj, mbox_mailbox_list_module)
 
 struct mbox_mailbox_list {
 	union mailbox_list_module_context module_ctx;
@@ -78,9 +78,8 @@ void mbox_set_syscall_error(struct mbox_mailbox *mbox, const char *function)
 	} else {
 		const char *toobig_error = errno != EFBIG ? "" :
 			" (process was started with ulimit -f limit)";
-		mail_storage_set_critical(&mbox->storage->storage,
-			"%s failed with mbox file %s: %m%s", function,
-			mailbox_get_path(&mbox->box), toobig_error);
+		mailbox_set_critical(&mbox->box,
+			"%s failed with mbox: %m%s", function, toobig_error);
 	}
 }
 
@@ -101,6 +100,7 @@ mbox_list_get_path(struct mailbox_list *list, const char *name,
 	switch (type) {
 	case MAILBOX_LIST_PATH_TYPE_CONTROL:
 	case MAILBOX_LIST_PATH_TYPE_INDEX:
+	case MAILBOX_LIST_PATH_TYPE_INDEX_CACHE:
 	case MAILBOX_LIST_PATH_TYPE_LIST_INDEX:
 		if (name == NULL && type == MAILBOX_LIST_PATH_TYPE_CONTROL &&
 		    list->set.control_dir != NULL) {
@@ -149,7 +149,7 @@ static int
 mbox_storage_create(struct mail_storage *_storage, struct mail_namespace *ns,
 		    const char **error_r)
 {
-	struct mbox_storage *storage = (struct mbox_storage *)_storage;
+	struct mbox_storage *storage = MBOX_STORAGE(_storage);
 	struct stat st;
 	const char *dir;
 
@@ -185,8 +185,7 @@ static void mbox_storage_get_list_settings(const struct mail_namespace *ns,
 
 	if (set->inbox_path == NULL) {
 		set->inbox_path = t_strconcat(set->root_dir, "/inbox", NULL);
-		if (ns->mail_set->mail_debug)
-			i_debug("mbox: INBOX defaulted to %s", set->inbox_path);
+		e_debug(ns->user->event, "mbox: INBOX defaulted to %s", set->inbox_path);
 	}
 }
 
@@ -384,7 +383,7 @@ mbox_mailbox_alloc(struct mail_storage *storage, struct mailbox_list *list,
 
 	index_storage_mailbox_alloc(&mbox->box, vname, flags, MAIL_INDEX_PREFIX);
 
-	mbox->storage = (struct mbox_storage *)storage;
+	mbox->storage = MBOX_STORAGE(storage);
 	mbox->mbox_fd = -1;
 	mbox->mbox_lock_type = F_UNLCK;
 	mbox->mbox_list_index_ext_id = (uint32_t)-1;
@@ -437,7 +436,7 @@ static int mbox_mailbox_open_existing(struct mbox_mailbox *mbox)
 		   /var/mail and we want to allow privileged dotlocking */
 		rootdir = mailbox_list_get_root_forced(box->list,
 						       MAILBOX_LIST_PATH_TYPE_DIR);
-		if (strncmp(box_path, rootdir, strlen(rootdir)) != 0)
+		if (!str_begins(box_path, rootdir))
 			mbox->mbox_privileged_locking = TRUE;
 	}
 	if ((box->flags & MAILBOX_FLAG_KEEP_LOCKED) != 0) {
@@ -455,7 +454,7 @@ static int mbox_mailbox_open_existing(struct mbox_mailbox *mbox)
 
 static bool mbox_storage_is_readonly(struct mailbox *box)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 
 	if (index_storage_is_readonly(box))
 		return TRUE;
@@ -471,7 +470,7 @@ static bool mbox_storage_is_readonly(struct mailbox *box)
 
 static int mbox_mailbox_open(struct mailbox *box)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 	struct stat st;
 	int ret;
 
@@ -498,7 +497,7 @@ static int mbox_mailbox_open(struct mailbox *box)
 	} else if (mail_storage_set_error_from_errno(box->storage)) {
 		return -1;
 	} else {
-		mail_storage_set_critical(box->storage,
+		mailbox_set_critical(box,
 			"stat(%s) failed: %m", mailbox_get_path(box));
 		return -1;
 	}
@@ -507,7 +506,7 @@ static int mbox_mailbox_open(struct mailbox *box)
 static int
 mbox_mailbox_update(struct mailbox *box, const struct mailbox_update *update)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 	int ret = 0;
 
 	if (!box->opened) {
@@ -545,7 +544,7 @@ static int create_inbox(struct mailbox *box)
 		i_close_fd(&fd);
 		return 0;
 	} else if (errno == EACCES) {
-		mail_storage_set_critical(box->storage, "%s",
+		mailbox_set_critical(box, "%s",
 			mail_error_create_eacces_msg("open", inbox_path));
 		return -1;
 	} else if (errno == EEXIST) {
@@ -553,7 +552,7 @@ static int create_inbox(struct mailbox *box)
 				       "Mailbox already exists");
 		return -1;
 	} else {
-		mail_storage_set_critical(box->storage,
+		mailbox_set_critical(box,
 			"open(%s, O_CREAT) failed: %m", inbox_path);
 		return -1;
 	}
@@ -589,7 +588,7 @@ mbox_mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 
 static void mbox_mailbox_close(struct mailbox *box)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 	const struct mail_index_header *hdr;
 	enum mbox_sync_flags sync_flags = 0;
 
@@ -613,12 +612,10 @@ static void mbox_mailbox_close(struct mailbox *box)
 
 	if (mbox->mbox_global_lock_id != 0)
 		mbox_unlock(mbox, mbox->mbox_global_lock_id);
-	if (mbox->keep_lock_to != NULL)
-		timeout_remove(&mbox->keep_lock_to);
+	timeout_remove(&mbox->keep_lock_to);
 
         mbox_file_close(mbox);
-	if (mbox->mbox_file_stream != NULL)
-		i_stream_destroy(&mbox->mbox_file_stream);
+	i_stream_destroy(&mbox->mbox_file_stream);
 
 	index_storage_mailbox_close(box);
 }
@@ -658,7 +655,7 @@ mbox_mailbox_get_guid(struct mbox_mailbox *mbox, guid_128_t guid_r)
 		i_assert(mbox->mbox_lock_type == F_UNLCK);
 		box2 = mailbox_alloc(mbox->box.list, mbox->box.vname, 0);
 		ret = mailbox_sync(box2, 0);
-		mbox2 = (struct mbox_mailbox *)box2;
+		mbox2 = MBOX_MAILBOX(box2);
 		memcpy(guid_r, mbox2->mbox_hdr.mailbox_guid, GUID_128_SIZE);
 		mailbox_free(&box2);
 		return ret;
@@ -672,7 +669,7 @@ mbox_mailbox_get_metadata(struct mailbox *box,
 			  enum mailbox_metadata_items items,
 			  struct mailbox_metadata *metadata_r)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 
 	if (index_mailbox_get_metadata(box, items, metadata_r) < 0)
 		return -1;
@@ -685,7 +682,7 @@ mbox_mailbox_get_metadata(struct mailbox *box,
 
 static void mbox_notify_changes(struct mailbox *box)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 
 	if (box->notify_callback == NULL)
 		mailbox_watch_remove_all(box);
@@ -728,16 +725,17 @@ static void mbox_storage_add_list(struct mail_storage *storage,
 
 static struct mailbox_transaction_context *
 mbox_transaction_begin(struct mailbox *box,
-		       enum mailbox_transaction_flags flags)
+		       enum mailbox_transaction_flags flags,
+		       const char *reason)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 	struct mbox_transaction_context *mt;
 
 	if ((flags & MAILBOX_TRANSACTION_FLAG_EXTERNAL) != 0)
 		mbox->external_transactions++;
 
 	mt = i_new(struct mbox_transaction_context, 1);
-	index_transaction_init(&mt->t, box, flags);
+	index_transaction_init(&mt->t, box, flags, reason);
 	return &mt->t;
 }
 
@@ -745,7 +743,7 @@ static void
 mbox_transaction_unlock(struct mailbox *box, unsigned int lock_id1,
 			unsigned int lock_id2)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 
 	if (lock_id1 != 0)
 		mbox_unlock(mbox, lock_id1);
@@ -766,10 +764,9 @@ static int
 mbox_transaction_commit(struct mailbox_transaction_context *t,
 			struct mail_transaction_commit_changes *changes_r)
 {
-	struct mbox_transaction_context *mt =
-		(struct mbox_transaction_context *)t;
+	struct mbox_transaction_context *mt = MBOX_TRANSCTX(t);
 	struct mailbox *box = t->box;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 	unsigned int read_lock_id = mt->read_lock_id;
 	unsigned int write_lock_id = mt->write_lock_id;
 	int ret;
@@ -787,10 +784,9 @@ mbox_transaction_commit(struct mailbox_transaction_context *t,
 static void
 mbox_transaction_rollback(struct mailbox_transaction_context *t)
 {
-	struct mbox_transaction_context *mt =
-		(struct mbox_transaction_context *)t;
+	struct mbox_transaction_context *mt = MBOX_TRANSCTX(t);
 	struct mailbox *box = t->box;
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(box);
 	unsigned int read_lock_id = mt->read_lock_id;
 	unsigned int write_lock_id = mt->write_lock_id;
 

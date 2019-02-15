@@ -16,8 +16,8 @@ struct cmd_idle_context {
 	struct imap_sync_context *sync_ctx;
 	struct timeout *keepalive_to, *to_hibernate;
 
-	unsigned int manual_cork:1;
-	unsigned int sync_pending:1;
+	bool manual_cork:1;
+	bool sync_pending:1;
 };
 
 static void idle_add_keepalive_timeout(struct cmd_idle_context *ctx);
@@ -28,10 +28,8 @@ idle_finish(struct cmd_idle_context *ctx, bool done_ok, bool free_cmd)
 {
 	struct client *client = ctx->client;
 
-	if (ctx->keepalive_to != NULL)
-		timeout_remove(&ctx->keepalive_to);
-	if (ctx->to_hibernate != NULL)
-		timeout_remove(&ctx->to_hibernate);
+	timeout_remove(&ctx->keepalive_to);
+	timeout_remove(&ctx->to_hibernate);
 
 	if (ctx->sync_ctx != NULL) {
 		/* we're here only in connection failure cases */
@@ -39,8 +37,7 @@ idle_finish(struct cmd_idle_context *ctx, bool done_ok, bool free_cmd)
 	}
 
 	o_stream_cork(client->output);
-	if (client->io != NULL)
-		io_remove(&client->io);
+	io_remove(&client->io);
 
 	if (client->mailbox != NULL)
 		mailbox_notify_changes_stop(client->mailbox);
@@ -140,11 +137,9 @@ static bool idle_sync_now(struct mailbox *box, struct cmd_idle_context *ctx)
 {
 	i_assert(ctx->sync_ctx == NULL);
 
-	if (ctx->to_hibernate != NULL) {
-		/* hibernation can't happen while sync is running.
-		   the timeout is added back afterwards. */
-		timeout_remove(&ctx->to_hibernate);
-	}
+	/* hibernation can't happen while sync is running.
+	   the timeout is added back afterwards. */
+	timeout_remove(&ctx->to_hibernate);
 
 	ctx->sync_pending = FALSE;
 	ctx->sync_ctx = imap_sync_init(ctx->client, box, 0, 0);
@@ -167,17 +162,17 @@ static void idle_callback(struct mailbox *box, struct cmd_idle_context *ctx)
 
 static void idle_add_keepalive_timeout(struct cmd_idle_context *ctx)
 {
-	unsigned int interval = ctx->client->set->imap_idle_notify_interval;
+	struct client *client = ctx->client;
+	unsigned int interval = client->set->imap_idle_notify_interval;
 
 	if (interval == 0)
 		return;
 
-	interval = imap_keepalive_interval_msecs(ctx->client->user->username,
-						 ctx->client->user->remote_ip,
+	interval = imap_keepalive_interval_msecs(client->user->username,
+						 client->user->conn.remote_ip,
 						 interval);
 
-	if (ctx->keepalive_to != NULL)
-		timeout_remove(&ctx->keepalive_to);
+	timeout_remove(&ctx->keepalive_to);
 	ctx->keepalive_to = timeout_add(interval, keepalive_timeout, ctx);
 }
 

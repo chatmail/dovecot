@@ -32,12 +32,12 @@ struct mail_index_view_sync_ctx {
 	unsigned int lost_flag_idx;
 
 	size_t data_offset;
-	unsigned int failed:1;
-	unsigned int sync_map_update:1;
-	unsigned int skipped_expunges:1;
-	unsigned int last_read:1;
-	unsigned int log_was_lost:1;
-	unsigned int hidden:1;
+	bool failed:1;
+	bool sync_map_update:1;
+	bool skipped_expunges:1;
+	bool last_read:1;
+	bool log_was_lost:1;
+	bool hidden:1;
 };
 
 static int
@@ -431,7 +431,7 @@ view_sync_get_log_lost_changes(struct mail_index_view_sync_ctx *ctx,
 	i_array_init(&ctx->lost_flags, 64);
 	t_array_init(&ctx->lost_old_kw, 32);
 	t_array_init(&ctx->lost_new_kw, 32);
-	ctx->lost_kw_buf = buffer_create_dynamic(pool_datastack_create(), 128);
+	ctx->lost_kw_buf = t_buffer_create(128);
 
 	/* handle expunges and sync flags */
 	seqi = seqj = 1;

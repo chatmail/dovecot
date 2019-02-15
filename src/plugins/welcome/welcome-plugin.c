@@ -12,7 +12,7 @@
 #define WELCOME_SOCKET_TIMEOUT_SECS 30
 
 #define WELCOME_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, welcome_storage_module)
+	MODULE_CONTEXT_REQUIRE(obj, welcome_storage_module)
 
 struct welcome_mailbox {
 	union mailbox_module_context module_ctx;
@@ -29,8 +29,7 @@ static void script_execute(struct mail_user *user, const char *cmd, bool wait)
 	char buf[1024];
 	int fd, ret;
 
-	if (user->mail_debug)
-		i_debug("welcome: Executing %s (wait=%d)", cmd, wait ? 1 : 0);
+	e_debug(user->event, "welcome: Executing %s (wait=%d)", cmd, wait ? 1 : 0);
 
 	args = t_strsplit_spaces(cmd, " ");
 	socket_path = args[0];
@@ -103,8 +102,8 @@ static int welcome_open_box(struct mailbox *box)
 	cmd = !wbox->created ? NULL :
 		mail_user_plugin_getenv(box->storage->user, "welcome_script");
 	if (cmd != NULL) {
-		bool wait = mail_user_plugin_getenv(box->storage->user,
-						    "welcome_wait") != NULL;
+		bool wait = mail_user_plugin_getenv_bool(box->storage->user,
+							 "welcome_wait");
 		script_execute(box->storage->user, cmd, wait);
 	}
 	return wbox->module_ctx.super.open(box);

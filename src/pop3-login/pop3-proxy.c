@@ -30,7 +30,7 @@ static int proxy_send_login(struct pop3_client *client, struct ostream *output)
 {
 	struct dsasl_client_settings sasl_set;
 	const unsigned char *sasl_output;
-	unsigned int len;
+	size_t len;
 	const char *mech_name, *error;
 	string_t *str = t_str_new(128);
 
@@ -111,7 +111,7 @@ pop3_proxy_continue_sasl_auth(struct client *client, struct ostream *output,
 {
 	string_t *str;
 	const unsigned char *data;
-	unsigned int data_len;
+	size_t data_len;
 	const char *error;
 	int ret;
 
@@ -154,7 +154,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 	switch (pop3_client->proxy_state) {
 	case POP3_PROXY_BANNER:
 		/* this is a banner */
-		if (strncmp(line, "+OK", 3) != 0) {
+		if (!str_begins(line, "+OK")) {
 			client_log_err(client, t_strdup_printf(
 				"proxy: Remote returned invalid banner: %s",
 				str_sanitize(line, 160)));
@@ -162,7 +162,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 			return -1;
 		}
 		pop3_client->proxy_xclient =
-			strncmp(line+3, " [XCLIENT]", 10) == 0;
+			str_begins(line+3, " [XCLIENT]");
 
 		ssl_flags = login_proxy_get_ssl_flags(client->login_proxy);
 		if ((ssl_flags & PROXY_SSL_FLAG_STARTTLS) == 0) {
@@ -176,7 +176,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 		}
 		return 0;
 	case POP3_PROXY_STARTTLS:
-		if (strncmp(line, "+OK", 3) != 0) {
+		if (!str_begins(line, "+OK")) {
 			client_log_err(client, t_strdup_printf(
 				"proxy: Remote STLS failed: %s",
 				str_sanitize(line, 160)));
@@ -195,7 +195,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 		}
 		return 1;
 	case POP3_PROXY_XCLIENT:
-		if (strncmp(line, "+OK", 3) != 0) {
+		if (!str_begins(line, "+OK")) {
 			client_log_err(client, t_strdup_printf(
 				"proxy: Remote XCLIENT failed: %s",
 				str_sanitize(line, 160)));
@@ -207,7 +207,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 		return 0;
 	case POP3_PROXY_LOGIN1:
 		i_assert(client->proxy_sasl_client == NULL);
-		if (strncmp(line, "+OK", 3) != 0)
+		if (!str_begins(line, "+OK"))
 			break;
 
 		/* USER successful, send PASS */
@@ -217,7 +217,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 		pop3_client->proxy_state = POP3_PROXY_LOGIN2;
 		return 0;
 	case POP3_PROXY_LOGIN2:
-		if (strncmp(line, "+ ", 2) == 0 &&
+		if (str_begins(line, "+ ") &&
 		    client->proxy_sasl_client != NULL) {
 			/* continue SASL authentication */
 			if (pop3_proxy_continue_sasl_auth(client, output,
@@ -227,7 +227,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 			}
 			return 0;
 		}
-		if (strncmp(line, "+OK", 3) != 0)
+		if (!str_begins(line, "+OK"))
 			break;
 
 		/* Login successful. Send this line to client. */
@@ -255,7 +255,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 	   So for now we'll just forward the error message. This
 	   shouldn't be a real problem since of course everyone will
 	   be using only Dovecot as their backend :) */
-	if (strncmp(line, "-ERR ", 5) != 0) {
+	if (!str_begins(line, "-ERR ")) {
 		client_send_reply(client, POP3_CMD_REPLY_ERROR,
 				  AUTH_FAILED_MSG);
 	} else {
@@ -263,7 +263,7 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 	}
 
 	if (client->set->auth_verbose) {
-		if (strncmp(line, "-ERR ", 5) == 0)
+		if (str_begins(line, "-ERR "))
 			line += 5;
 		client_proxy_log_failure(client, line);
 	}

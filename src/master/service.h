@@ -98,7 +98,7 @@ struct service {
 	struct timeout *to_login_notify;
 
 	/* if a process fails before servicing its first request, assume it's
-	   broken and start throtting new process creations */
+	   broken and start throttling new process creations */
 	struct timeout *to_throttle;
 	/* when process_limit is reached, wait for a while until we actually
 	   start dropping pending connections */
@@ -112,15 +112,17 @@ struct service {
 	time_t last_drop_warning;
 
 	/* all processes are in use and new connections are coming */
-	unsigned int listen_pending:1;
+	bool listen_pending:1;
 	/* service is currently listening for new connections */
-	unsigned int listening:1;
+	bool listening:1;
 	/* TRUE if service has at least one inet_listener */
-	unsigned int have_inet_listeners:1;
+	bool have_inet_listeners:1;
 	/* service_login_notify()'s last notification state */
-	unsigned int last_login_full_notify:1;
+	bool last_login_full_notify:1;
 	/* service has exited at least once with exit code 0 */
-	unsigned int have_successful_exits:1;
+	bool have_successful_exits:1;
+	/* service was stopped via doveadm */
+	bool doveadm_stop:1;
 };
 
 struct service_list {
@@ -147,10 +149,10 @@ struct service_list {
 
 	ARRAY(struct service *) services;
 
-	unsigned int destroying:1;
-	unsigned int destroyed:1;
-	unsigned int sigterm_sent:1;
-	unsigned int sigterm_sent_to_log:1;
+	bool destroying:1;
+	bool destroyed:1;
+	bool sigterm_sent:1;
+	bool sigterm_sent_to_log:1;
 };
 
 HASH_TABLE_DEFINE_TYPE(pid_process, void *, struct service_process *);
@@ -169,8 +171,13 @@ void service_list_unref(struct service_list *service_list);
 /* Return path to configuration process socket. */
 const char *services_get_config_socket_path(struct service_list *service_list);
 
-/* Send a signal to all processes in a given service */
-void service_signal(struct service *service, int signo);
+/* Send a signal to all processes in a given service. However, if we're sending
+   a SIGTERM and a process hasn't yet sent the initial status notification,
+   that process is skipped. The number of such skipped processes are stored in
+   uninitialized_count_r. Returns the number of processes that a signal was
+   successfully sent to. */
+unsigned int service_signal(struct service *service, int signo,
+			    unsigned int *uninitialized_count_r);
 /* Notify all processes (if necessary) that no more connections can be handled
    by the service without killing existing connections (TRUE) or that they
    can be (FALSE). */

@@ -17,7 +17,7 @@ Currently supported dict backends are:
  * Redis
  * Proxy
  * SQL
- * LDAP
+ * LDAP (read only)
 
 Flat Files
 ----------
@@ -207,7 +207,7 @@ map {
 LDAP (v2.2.24+)
 ---------------
 
-LDAP support is very similar to SQL support.
+LDAP support is very similar to SQL support, but there is no write support.
 
 Configuration
 -------------
@@ -265,4 +265,4 @@ map {
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

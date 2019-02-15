@@ -4,13 +4,12 @@
 #include "ioloop.h"
 #include "istream.h"
 #include "ostream.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "str.h"
 #include "base64.h"
 #include "process-title.h"
 #include "randgen.h"
 #include "restrict-access.h"
-#include "fd-close-on-exec.h"
 #include "write-full.h"
 #include "settings-parser.h"
 #include "master-interface.h"
@@ -18,7 +17,7 @@
 #include "master-login.h"
 #include "mail-user.h"
 #include "mail-storage-service.h"
-#include "lda-settings.h"
+#include "smtp-submit-settings.h"
 #include "imap-master-client.h"
 #include "imap-resp-code.h"
 #include "imap-commands.h"
@@ -38,6 +37,10 @@ static struct master_login *master_login = NULL;
 
 imap_client_created_func_t *hook_client_created = NULL;
 bool imap_debug = FALSE;
+
+struct event_category event_category_imap = {
+	.name = "imap",
+};
 
 imap_client_created_func_t *
 imap_client_created_hook_set(imap_client_created_func_t *new_hook)
@@ -67,9 +70,10 @@ void imap_refresh_proctitle(void)
 	case 1:
 		client = imap_clients;
 		str_append(title, client->user->username);
-		if (client->user->remote_ip != NULL) {
+		if (client->user->conn.remote_ip != NULL) {
 			str_append_c(title, ' ');
-			str_append(title, net_ip2addr(client->user->remote_ip));
+			str_append(title,
+				   net_ip2addr(client->user->conn.remote_ip));
 		}
 		wait_output = FALSE;
 		for (cmd = client->command_queue; cmd != NULL; cmd = cmd->next) {
@@ -108,7 +112,6 @@ static void client_kill_idle(struct client *client)
 	client_send_line(client, "* BYE Server shutting down.");
 	mail_storage_service_io_activate_user(client->service_user);
 	client_destroy(client, "Server shutting down.");
-	mail_storage_service_io_deactivate(storage_service);
 }
 
 static void imap_die(void)
@@ -222,7 +225,7 @@ client_add_input_finalize(struct client *client)
 	o_stream_unref(&output);
 
 	/* we could have already handled LOGOUT, or we might need to continue
-	   pending ambigious commands. */
+	   pending ambiguous commands. */
 	if (client->disconnected)
 		client_destroy(client, NULL);
 	else
@@ -233,31 +236,55 @@ int client_create_from_input(const struct mail_storage_service_input *input,
 			     int fd_in, int fd_out,
 			     struct client **client_r, const char **error_r)
 {
+	struct mail_storage_service_input service_input;
 	struct mail_storage_service_user *user;
 	struct mail_user *mail_user;
 	struct client *client;
 	struct imap_settings *imap_set;
-	struct lda_settings *lda_set;
+	struct smtp_submit_settings *smtp_set;
+	struct event *event;
+	const char *errstr;
 
-	if (mail_storage_service_lookup_next(storage_service, input,
-					     &user, &mail_user, error_r) <= 0)
+	event = event_create(NULL);
+	event_add_category(event, &event_category_imap);
+	event_add_fields(event, (const struct event_add_field []){
+		{ .key = "user", .value = input->username },
+		{ .key = "session", .value = input->session_id },
+		{ .key = NULL }
+	});
+
+	service_input = *input;
+	service_input.parent_event = event;
+	if (mail_storage_service_lookup_next(storage_service, &service_input,
+					     &user, &mail_user, error_r) <= 0) {
+		event_unref(&event);
 		return -1;
+	}
 	restrict_access_allow_coredumps(TRUE);
 
-	imap_set = mail_storage_service_user_get_set(user)[1];
+	smtp_set = mail_storage_service_user_get_set(user)[1];
+	imap_set = mail_storage_service_user_get_set(user)[2];
 	if (imap_set->verbose_proctitle)
 		verbose_proctitle = TRUE;
-	lda_set = mail_storage_service_user_get_set(user)[2];
 
-	settings_var_expand(&imap_setting_parser_info, imap_set,
-			    mail_user->pool, mail_user_var_expand_table(mail_user));
-	settings_var_expand(&lda_setting_parser_info, lda_set,
-			    mail_user->pool, mail_user_var_expand_table(mail_user));
+	if (settings_var_expand(&smtp_submit_setting_parser_info, smtp_set,
+				mail_user->pool, mail_user_var_expand_table(mail_user),
+				&errstr) <= 0 ||
+			settings_var_expand(&imap_setting_parser_info, imap_set,
+				mail_user->pool, mail_user_var_expand_table(mail_user),
+				&errstr) <= 0) {
+		*error_r = t_strdup_printf("Failed to expand settings: %s", errstr);
+		mail_user_unref(&mail_user);
+		mail_storage_service_user_unref(&user);
+		event_unref(&event);
+		return -1;
+	}
 
 	client = client_create(fd_in, fd_out, input->session_id,
-			       mail_user, user, imap_set, lda_set);
+			       event, mail_user, user, imap_set, smtp_set);
 	client->userdb_fields = input->userdb_fields == NULL ? NULL :
 		p_strarray_dup(client->pool, input->userdb_fields);
+	event_unref(&event);
 	*client_r = client;
 	return 0;
 }
@@ -305,16 +332,22 @@ login_client_connected(const struct master_login_client *login_client,
 #define MSG_BYE_INTERNAL_ERROR "* BYE "MAIL_ERRSTR_CRITICAL_MSG"\r\n"
 	struct mail_storage_service_input input;
 	struct client *client;
-	enum mail_auth_request_flags flags;
+	enum mail_auth_request_flags flags = login_client->auth_req.flags;
 	const char *error;
 
 	i_zero(&input);
 	input.module = input.service = "imap";
 	input.local_ip = login_client->auth_req.local_ip;
 	input.remote_ip = login_client->auth_req.remote_ip;
+	input.local_port = login_client->auth_req.local_port;
+	input.remote_port = login_client->auth_req.remote_port;
 	input.username = username;
 	input.userdb_fields = extra_fields;
 	input.session_id = login_client->session_id;
+	if ((flags & MAIL_AUTH_REQUEST_FLAG_CONN_SECURED) != 0)
+		input.conn_secured = TRUE;
+	if ((flags & MAIL_AUTH_REQUEST_FLAG_CONN_SSL_SECURED) != 0)
+		input.conn_ssl_secured = TRUE;
 
 	if (client_create_from_input(&input, login_client->fd, login_client->fd,
 				     &client, &error) < 0) {
@@ -330,7 +363,6 @@ login_client_connected(const struct master_login_client *login_client,
 		master_service_client_connection_destroyed(master_service);
 		return;
 	}
-	flags = login_client->auth_req.flags;
 	if ((flags & MAIL_AUTH_REQUEST_FLAG_TLS_COMPRESSION) != 0)
 		client->tls_compression = TRUE;
 	client_add_input_capability(client, login_client->data,
@@ -383,8 +415,8 @@ static void client_connected(struct master_service_connection *conn)
 int main(int argc, char *argv[])
 {
 	static const struct setting_parser_info *set_roots[] = {
+		&smtp_submit_setting_parser_info,
 		&imap_setting_parser_info,
-		&lda_setting_parser_info,
 		NULL
 	};
 	struct master_login_settings login_set;
@@ -417,8 +449,6 @@ int main(int argc, char *argv[])
 			MASTER_SERVICE_FLAG_STD_CLIENT;
 	} else {
 		service_flags |= MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN;
-		storage_service_flags |=
-			MAIL_STORAGE_SERVICE_FLAG_DISALLOW_ROOT;
 	}
 
 	master_service = master_service_init("imap", service_flags,
@@ -453,11 +483,26 @@ int main(int argc, char *argv[])
 	imap_fetch_handlers_init();
 	imap_master_clients_init();
 
-	random_init();
+	const char *error;
+	if (t_abspath(auth_socket_path, &login_set.auth_socket_path, &error) < 0)
+		i_fatal("t_abspath(%s) failed: %s", auth_socket_path, error);
+
+	if (argv[optind] != NULL) {
+		if (t_abspath(argv[optind], &login_set.postlogin_socket_path, &error) < 0)
+			i_fatal("t_abspath(%s) failed: %s", argv[optind], error);
+	}
+	login_set.callback = login_client_connected;
+	login_set.failure_callback = login_client_failed;
+
+	if (!IS_STANDALONE())
+		master_login = master_login_init(master_service, &login_set);
+
 	storage_service =
 		mail_storage_service_init(master_service,
 					  set_roots, storage_service_flags);
 	master_service_init_finish(master_service);
+	/* NOTE: login_set.*_socket_path are now invalid due to data stack
+	   having been freed */
 
 	/* fake that we're running, so we know if client was destroyed
 	   while handling its initial input */
@@ -467,22 +512,13 @@ int main(int argc, char *argv[])
 		T_BEGIN {
 			main_stdio_run(username);
 		} T_END;
-	} else T_BEGIN {
-		login_set.auth_socket_path = t_abspath(auth_socket_path);
-		if (argv[optind] != NULL) {
-			login_set.postlogin_socket_path =
-				t_abspath(argv[optind]);
-		}
-		login_set.callback = login_client_connected;
-		login_set.failure_callback = login_client_failed;
-
-		master_login = master_login_init(master_service, &login_set);
+	} else {
 		io_loop_set_running(current_ioloop);
-	} T_END;
+	}
 
 	if (io_loop_is_running(current_ioloop))
 		master_service_run(master_service, client_connected);
-	clients_destroy_all(storage_service);
+	clients_destroy_all();
 
 	if (master_login != NULL)
 		master_login_deinit(&master_login);
@@ -492,7 +528,6 @@ int main(int argc, char *argv[])
 	commands_deinit();
 	imap_master_clients_deinit();
 
-	random_deinit();
 	master_service_deinit(&master_service);
 	return 0;
 }

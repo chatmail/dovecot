@@ -22,9 +22,9 @@ struct zlib_ostream {
 
 	uint32_t crc, bytes32;
 
-	unsigned int gz:1;
-	unsigned int header_sent:1;
-	unsigned int flushed:1;
+	bool gz:1;
+	bool header_sent:1;
+	bool flushed:1;
 };
 
 static void o_stream_zlib_close(struct iostream_private *stream,
@@ -32,7 +32,9 @@ static void o_stream_zlib_close(struct iostream_private *stream,
 {
 	struct zlib_ostream *zstream = (struct zlib_ostream *)stream;
 
-	(void)o_stream_flush(&zstream->ostream.ostream);
+	i_assert(zstream->ostream.finished ||
+		 zstream->ostream.ostream.stream_errno != 0 ||
+		 zstream->ostream.error_handling_disabled);
 	(void)deflateEnd(&zstream->zs);
 	if (close_parent)
 		o_stream_close(zstream->ostream.parent);
@@ -159,8 +161,7 @@ o_stream_zlib_send_chunk(struct zlib_ostream *zstream,
 
 	zstream->crc = crc32_data_more(zstream->crc, data, size);
 	zstream->bytes32 += size;
-	zstream->flushed = flush == Z_SYNC_FLUSH && zs->avail_in == 0 &&
-		zs->avail_out == sizeof(zstream->outbuf);
+	zstream->flushed = FALSE;
 	return size;
 }
 
@@ -172,12 +173,7 @@ o_stream_zlib_send_flush(struct zlib_ostream *zstream, bool final)
 	bool done = FALSE;
 	int ret, flush;
 
-	if (zs->avail_in != 0) {
-		i_assert(zstream->ostream.ostream.last_failed_errno != 0);
-		zstream->ostream.ostream.stream_errno =
-			zstream->ostream.ostream.last_failed_errno;
-		return -1;
-	}
+	i_assert(zs->avail_in == 0);
 
 	if (zstream->flushed)
 		return 0;
@@ -192,8 +188,8 @@ o_stream_zlib_send_flush(struct zlib_ostream *zstream, bool final)
 	if ((ret = o_stream_zlib_send_outbuf(zstream)) <= 0)
 		return ret;
 
-	flush = !zstream->gz ? Z_SYNC_FLUSH :
-		(final ? Z_FINISH : Z_NO_FLUSH);
+	flush = final ? Z_FINISH :
+		(!zstream->gz ? Z_SYNC_FLUSH : Z_NO_FLUSH);
 
 	i_assert(zstream->outbuf_used == 0);
 	do {
@@ -225,7 +221,7 @@ o_stream_zlib_send_flush(struct zlib_ostream *zstream, bool final)
 		if (o_stream_zlib_send_gz_trailer(zstream) < 0)
 			return -1;
 	}
-	if (final || flush != Z_NO_FLUSH)
+	if (final)
 		zstream->flushed = TRUE;
 	return 0;
 }
@@ -233,15 +229,33 @@ o_stream_zlib_send_flush(struct zlib_ostream *zstream, bool final)
 static int o_stream_zlib_flush(struct ostream_private *stream)
 {
 	struct zlib_ostream *zstream = (struct zlib_ostream *)stream;
-	int ret;
 
-	if (o_stream_zlib_send_flush(zstream, TRUE) < 0)
+	if (o_stream_zlib_send_flush(zstream, stream->finished) < 0)
 		return -1;
 
-	ret = o_stream_flush(stream->parent);
-	if (ret < 0)
-		o_stream_copy_error_from_parent(stream);
-	return ret;
+	return o_stream_flush_parent(stream);
+}
+
+static size_t
+o_stream_zlib_get_buffer_used_size(const struct ostream_private *stream)
+{
+	const struct zlib_ostream *zstream =
+		(const struct zlib_ostream *)stream;
+
+	/* outbuf has already compressed data that we're trying to send to the
+	   parent stream. We're not including zlib's internal compression
+	   buffer size. */
+	return (zstream->outbuf_used - zstream->outbuf_offset) +
+		o_stream_get_buffer_used_size(stream->parent);
+}
+
+static size_t
+o_stream_zlib_get_buffer_avail_size(const struct ostream_private *stream)
+{
+	/* FIXME: not correct - this is counting compressed size, which may be
+	   too larger than uncompressed size in some situations. Fixing would
+	   require some kind of additional buffering. */
+	return o_stream_get_buffer_avail_size(stream->parent);
 }
 
 static ssize_t
@@ -306,6 +320,10 @@ o_stream_create_zlib(struct ostream *output, int level, bool gz)
 	zstream = i_new(struct zlib_ostream, 1);
 	zstream->ostream.sendv = o_stream_zlib_sendv;
 	zstream->ostream.flush = o_stream_zlib_flush;
+	zstream->ostream.get_buffer_used_size =
+		o_stream_zlib_get_buffer_used_size;
+	zstream->ostream.get_buffer_avail_size =
+		o_stream_zlib_get_buffer_avail_size;
 	zstream->ostream.iostream.close = o_stream_zlib_close;
 	zstream->crc = 0;
 	zstream->gz = gz;

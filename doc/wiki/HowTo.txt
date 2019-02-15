@@ -57,6 +57,7 @@ Others:
     * <With Postfix> [HowTo.PostfixAndDovecotSASL.txt]
     * <With Exim> [HowTo.EximAndDovecotSASL.txt]
     * With HALON [http://wiki.halon.se/SASL]
+    * <With chasquid> [HowTo.ChasquidAndDovecotSASL.txt]
  * <Default Debian stable setup with Exim, modified to use Maildir>
    [HowTo.DebianStable.txt]
  * <IMAPC: Configuring Dovecot as an IMAP Proxy in front of Exchange (Dovecot
@@ -82,5 +83,11 @@ Others:
    [http://content.fens.org/index.php?q=admin-howto/mail/dovecot2dbmail-proxy]
  * <Configuration files> [HowTo.WriteConfiguration.txt]
  * <Replacing antispam plugin with sieve> [HowTo.AntispamWithSieve.txt]
+ * Debian + Dovecot + chasquid how-to
+   [https://blitiri.com.ar/git/r/chasquid/b/master/t/docs/f=howto.md.html]
+ * The ultimate mail server setup
+   [https://www.ohreally.nl/2018/11/19/mail-server/]: Dovecot (IMAP + SASL +
+   LDA + Pigeonhole) + Postfix + Let's Encrypt + Greylisting + SPF + DKIM +
+   Bogofilter + Clamav
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

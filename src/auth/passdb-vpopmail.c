@@ -50,6 +50,9 @@ static bool vpopmail_is_disabled(struct auth_request *request,
 	if ((vpw->pw_flags & NO_POP) != 0 &&
 	    strcasecmp(request->service, "POP3") == 0)
 		return TRUE;
+	if ((vpw->pw_flags & NO_SMTP) != 0 &&
+	    strcasecmp(request->service, "SMTP") == 0)
+		return TRUE;
 	return FALSE;
 }
 
@@ -183,10 +186,10 @@ vpopmail_preinit(pool_t pool, const char *args)
 
 	tmp = t_strsplit_spaces(args, " ");
 	for (; *tmp != NULL; tmp++) {
-		if (strncmp(*tmp, "cache_key=", 10) == 0) {
+		if (str_begins(*tmp, "cache_key=")) {
 			module->module.default_cache_key =
 				auth_cache_parse_key(pool, *tmp + 10);
-		} else if (strncmp(*tmp, "webmail=", 8) == 0) {
+		} else if (str_begins(*tmp, "webmail=")) {
 			if (net_addr2ip(*tmp + 8, &module->webmail_ip) < 0)
 				i_fatal("vpopmail: Invalid webmail IP address");
 		} else if (strcmp(*tmp, "blocking=no") == 0) {

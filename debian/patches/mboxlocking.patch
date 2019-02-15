@@ -12,7 +12,7 @@ Bug: #720502
 
 --- a/doc/example-config/conf.d/10-mail.conf
 +++ b/doc/example-config/conf.d/10-mail.conf
-@@ -317,8 +317,14 @@
+@@ -320,8 +320,14 @@
  # in is important to avoid deadlocks if other MTAs/MUAs are using multiple
  # locking methods as well. Some operating systems don't allow using some of
  # them simultaneously.

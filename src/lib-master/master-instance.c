@@ -1,7 +1,7 @@
 /* Copyright (c) 2013-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "array.h"
 #include "istream.h"
 #include "ostream.h"
@@ -19,8 +19,8 @@ struct master_instance_list {
 
 	ARRAY(struct master_instance) instances;
 
-	unsigned int locked:1;
-	unsigned int config_paths_changed:1;
+	bool locked:1;
+	bool config_paths_changed:1;
 };
 
 struct master_instance_list_iter {
@@ -29,8 +29,9 @@ struct master_instance_list_iter {
 };
 
 static const struct dotlock_settings dotlock_set = {
-	.timeout = 2,
-	.stale_timeout = 60
+	.timeout = 10,
+	.stale_timeout = 60,
+	.use_io_notify = TRUE,
 };
 
 struct master_instance_list *master_instance_list_init(const char *path)
@@ -58,15 +59,19 @@ static void
 master_instance_update_config_path(struct master_instance_list *list,
 				   struct master_instance *inst)
 {
-	const char *path, *config_path;
+	const char *path, *config_path, *error;
 
 	/* update instance's config path if it has changed */
 	path = t_strconcat(inst->base_dir, "/"PACKAGE".conf", NULL);
-	if (t_readlink(path, &config_path) == 0) {
-		if (null_strcmp(inst->config_path, config_path) != 0) {
-			inst->config_path = p_strdup(list->pool, config_path);
-			list->config_paths_changed = TRUE;
-		}
+	if (t_readlink(path, &config_path, &error) < 0) {
+		/* The link may not exist, ignore the error. */
+		if (errno != ENOENT)
+			i_error("t_readlink(%s) failed: %s", path, error);
+		return;
+	}
+	if (null_strcmp(inst->config_path, config_path) != 0) {
+		inst->config_path = p_strdup(list->pool, config_path);
+		list->config_paths_changed = TRUE;
 	}
 }
 
@@ -132,7 +137,7 @@ master_instance_list_write(struct master_instance_list *list,
 	string_t *str = t_str_new(128);
 	int ret = 0;
 
-	output = o_stream_create_fd(fd, 0, FALSE);
+	output = o_stream_create_fd(fd, 0);
 	o_stream_cork(output);
 	array_foreach(&list->instances, inst) {
 		str_truncate(str, 0);
@@ -146,7 +151,7 @@ master_instance_list_write(struct master_instance_list *list,
 		str_append_c(str, '\n');
 		o_stream_nsend(output, str_data(str), str_len(str));
 	}
-	if (o_stream_nfinish(output) < 0) {
+	if (o_stream_finish(output) < 0) {
 		i_error("write(%s) failed: %s", path, o_stream_get_error(output));
 		ret = -1;
 	}

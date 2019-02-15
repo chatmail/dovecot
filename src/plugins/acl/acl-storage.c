@@ -19,6 +19,7 @@ static void acl_user_deinit(struct mail_user *user)
 {
 	struct acl_user *auser = ACL_USER_CONTEXT(user);
 
+	i_assert(auser != NULL);
 	acl_lookup_dict_deinit(&auser->acl_lookup_dict);
 	auser->module_ctx.super.deinit(user);
 }
@@ -56,7 +57,6 @@ void acl_mail_user_created(struct mail_user *user)
 	if (env != NULL && *env != '\0')
 		acl_mail_user_create(user, env);
 	else {
-		if (user->mail_debug)
-			i_debug("acl: No acl setting - ACLs are disabled");
+		e_debug(user->event, "acl: No acl setting - ACLs are disabled");
 	}
 }

@@ -14,6 +14,7 @@
 #include "connection.h"
 
 #include <unistd.h>
+#include <libgen.h>
 
 static void connection_idle_timeout(struct connection *conn)
 {
@@ -79,23 +80,22 @@ int connection_verify_version(struct connection *conn,
 	    strcmp(args[0], "VERSION") != 0 ||
 	    str_to_uint(args[2], &recv_major_version) < 0 ||
 	    str_to_uint(args[3], &conn->minor_version) < 0) {
-		i_error("%s didn't reply with a valid VERSION line",
-			conn->name);
+		e_error(conn->event, "didn't reply with a valid VERSION line: %s",
+			t_strarray_join(args, "\t"));
 		return -1;
 	}
 
 	if (strcmp(args[1], conn->list->set.service_name_in) != 0) {
-		i_error("%s: Connected to wrong socket type. "
-			"We want '%s', but received '%s'", conn->name,
+		e_error(conn->event, "Connected to wrong socket type. "
+			"We want '%s', but received '%s'",
 			conn->list->set.service_name_in, args[1]);
 		return -1;
 	}
 
 	if (recv_major_version != conn->list->set.major_version) {
-		i_error("%s: Socket supports major version %u, "
+		e_error(conn->event, "Socket supports major version %u, "
 			"but we support only %u (mixed old and new binaries?)",
-			conn->name, recv_major_version,
-			conn->list->set.major_version);
+			recv_major_version, conn->list->set.major_version);
 		return -1;
 	}
 	return 0;
@@ -113,7 +113,7 @@ int connection_input_line_default(struct connection *conn, const char *line)
 		return 1;
 	}
 	if (args[0] == NULL && !conn->list->set.allow_empty_args_input) {
-		i_error("%s: Unexpectedly received empty line", conn->name);
+		e_error(conn->event, "Unexpectedly received empty line");
 		return -1;
 	}
 
@@ -122,8 +122,7 @@ int connection_input_line_default(struct connection *conn, const char *line)
 
 void connection_input_halt(struct connection *conn)
 {
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	io_remove(&conn->io);
 }
 
 void connection_input_resume(struct connection *conn)
@@ -133,11 +132,11 @@ void connection_input_resume(struct connection *conn)
 	if (conn->io != NULL)
 		return;
 	if (conn->from_streams || set->input_max_size != 0) {
-		conn->io = io_add_istream(conn->input,
-					  *conn->list->v.input, conn);
+		conn->io = io_add_istream_to(conn->ioloop, conn->input,
+					     *conn->list->v.input, conn);
 	} else {
-		conn->io = io_add(conn->fd_in, IO_READ,
-				  *conn->list->v.input, conn);
+		conn->io = io_add_to(conn->ioloop, conn->fd_in, IO_READ,
+				     *conn->list->v.input, conn);
 	}
 }
 
@@ -158,8 +157,9 @@ static void connection_init_streams(struct connection *conn)
 							   set->input_max_size);
 		else
 			conn->input = i_stream_create_fd(conn->fd_in,
-							 set->input_max_size, FALSE);
+							 set->input_max_size);
 		i_stream_set_name(conn->input, conn->name);
+		i_stream_switch_ioloop_to(conn->input, conn->ioloop);
 	}
 	if (set->output_max_size != 0) {
 		if (conn->unix_socket)
@@ -167,16 +167,20 @@ static void connection_init_streams(struct connection *conn)
 							    set->output_max_size);
 		else
 			conn->output = o_stream_create_fd(conn->fd_out,
-							  set->output_max_size, FALSE);
+							  set->output_max_size);
 		o_stream_set_no_error_handling(conn->output, TRUE);
+		o_stream_set_finish_via_child(conn->output, FALSE);
 		o_stream_set_name(conn->output, conn->name);
+		o_stream_switch_ioloop_to(conn->output, conn->ioloop);
 	}
 	connection_input_resume(conn);
 	if (set->input_idle_timeout_secs != 0) {
-		conn->to = timeout_add(set->input_idle_timeout_secs*1000,
-				       connection_idle_timeout, conn);
+		conn->to = timeout_add_to(conn->ioloop,
+					  set->input_idle_timeout_secs*1000,
+					  connection_idle_timeout, conn);
 	}
 	if (set->major_version != 0 && !set->dont_send_version) {
+		e_debug(conn->event, "Sending version handshake");
 		o_stream_nsend_str(conn->output, t_strdup_printf(
 			"VERSION\t%s\t%u\t%u\n", set->service_name_out,
 			set->major_version, set->minor_version));
@@ -195,9 +199,19 @@ void connection_streams_changed(struct connection *conn)
 
 static void connection_client_connected(struct connection *conn, bool success)
 {
+	struct event_passthrough *e = event_create_passthrough(conn->event)->
+		set_name("server_connection_connected");
+
 	i_assert(conn->list->set.client);
 
 	conn->connect_finished = ioloop_timeval;
+	event_add_timeval(conn->event, "connect_finished_time", &ioloop_timeval);
+
+	if (success)
+		e_debug(e->event(), "Client connected (fd=%d)", conn->fd_in);
+	else
+		e_debug(e->event(), "Client connection failed (fd=%d)", conn->fd_in);
+
 	if (success)
 		connection_init_streams(conn);
 	if (conn->list->v.client_connected != NULL)
@@ -209,6 +223,28 @@ static void connection_client_connected(struct connection *conn, bool success)
 	}
 }
 
+void connection_init(struct connection_list *list,
+		     struct connection *conn)
+{
+	conn->ioloop = current_ioloop;
+	conn->fd_in = -1;
+	conn->fd_out = -1;
+	conn->name = NULL;
+
+	if (conn->event == NULL)
+		conn->event = event_create(conn->event_parent);
+	if (list->set.debug)
+		event_set_forced_debug(conn->event, TRUE);
+
+	if (conn->list != NULL) {
+		i_assert(conn->list == list);
+	} else {
+		conn->list = list;
+		DLLIST_PREPEND(&list->connections, conn);
+		list->connections_count++;
+	}
+}
+
 void connection_init_server(struct connection_list *list,
 			    struct connection *conn, const char *name,
 			    int fd_in, int fd_out)
@@ -216,31 +252,57 @@ void connection_init_server(struct connection_list *list,
 	i_assert(name != NULL);
 	i_assert(!list->set.client);
 
-	conn->list = list;
+	connection_init(list, conn);
+
 	conn->name = i_strdup(name);
+	event_set_append_log_prefix(conn->event, t_strdup_printf("(%s): ",
+				    conn->name));
 	conn->fd_in = fd_in;
 	conn->fd_out = fd_out;
-	connection_init_streams(conn);
 
-	DLLIST_PREPEND(&list->connections, conn);
-	list->connections_count++;
+	struct event_passthrough *e = event_create_passthrough(conn->event)->
+		set_name("client_connection_connected");
+	/* fd_out differs from fd_in only for stdin/stdout. Keep the logging
+	   output nice and clean by logging only the fd_in. If it's 0, it'll
+	   also be obvious that fd_out=1. */
+	e_debug(e->event(), "Server accepted connection (fd=%d)", fd_in);
+
+	connection_init_streams(conn);
+}
+
+void connection_init_client_ip_from(struct connection_list *list,
+				    struct connection *conn,
+				    const struct ip_addr *ip, in_port_t port,
+				    const struct ip_addr *my_ip)
+{
+	i_assert(list->set.client);
+
+	connection_init(list, conn);
+
+	conn->fd_in = conn->fd_out = -1;
+	conn->name = i_strdup_printf("%s:%u", net_ip2addr(ip), port);
+
+	conn->ip = *ip;
+	conn->port = port;
+
+	if (my_ip != NULL)
+		conn->my_ip = *my_ip;
+	else
+		i_zero(&conn->my_ip);
+
+	if (my_ip != NULL)
+		event_add_str(conn->event, "client_ip", net_ip2addr(my_ip));
+	event_add_str(conn->event, "ip", net_ip2addr(ip));
+	event_add_str(conn->event, "port", dec2str(port));
+	event_set_append_log_prefix(conn->event, t_strdup_printf("(%s): ",
+				    conn->name));
 }
 
 void connection_init_client_ip(struct connection_list *list,
 			       struct connection *conn,
 			       const struct ip_addr *ip, in_port_t port)
 {
-	i_assert(list->set.client);
-
-	conn->fd_in = conn->fd_out = -1;
-	conn->list = list;
-	conn->name = i_strdup_printf("%s:%u", net_ip2addr(ip), port);
-
-	conn->ip = *ip;
-	conn->port = port;
-
-	DLLIST_PREPEND(&list->connections, conn);
-	list->connections_count++;
+	connection_init_client_ip_from(list, conn, ip, port, NULL);
 }
 
 void connection_init_client_unix(struct connection_list *list,
@@ -248,13 +310,19 @@ void connection_init_client_unix(struct connection_list *list,
 {
 	i_assert(list->set.client);
 
+	connection_init(list, conn);
+
 	conn->fd_in = conn->fd_out = -1;
-	conn->list = list;
 	conn->name = i_strdup(path);
 	conn->unix_socket = TRUE;
 
-	DLLIST_PREPEND(&list->connections, conn);
-	list->connections_count++;
+	event_field_clear(conn->event, "ip");
+	event_field_clear(conn->event, "port");
+	event_field_clear(conn->event, "client_ip");
+	event_field_clear(conn->event, "client_port");
+
+	event_set_append_log_prefix(conn->event, t_strdup_printf("(%s): ",
+				    basename(conn->name)));
 }
 
 void connection_init_from_streams(struct connection_list *list,
@@ -263,7 +331,8 @@ void connection_init_from_streams(struct connection_list *list,
 {
 	i_assert(name != NULL);
 
-	conn->list = list;
+	connection_init(list, conn);
+
 	conn->name = i_strdup(name);
 	conn->from_streams = TRUE;
 	conn->fd_in = i_stream_get_fd(input);
@@ -284,9 +353,9 @@ void connection_init_from_streams(struct connection_list *list,
 	o_stream_ref(conn->output);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	o_stream_set_name(conn->output, conn->name);
+	event_set_append_log_prefix(conn->event, t_strdup_printf("(%s): ",
+				    conn->name));
 
-	DLLIST_PREPEND(&list->connections, conn);
-	list->connections_count++;
 	connection_input_resume(conn);
 
 	if (list->v.client_connected != NULL)
@@ -296,8 +365,7 @@ void connection_init_from_streams(struct connection_list *list,
 static void connection_socket_connected(struct connection *conn)
 {
 	io_remove(&conn->io);
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 
 	errno = net_geterror(conn->fd_in);
 	connection_client_connected(conn, errno == 0);
@@ -311,9 +379,12 @@ int connection_client_connect(struct connection *conn)
 	i_assert(conn->list->set.client);
 	i_assert(conn->fd_in == -1);
 
-	if (conn->port != 0)
-		fd = net_connect_ip(&conn->ip, conn->port, NULL);
-	else if (conn->list->set.unix_client_connect_msecs == 0)
+	e_debug(conn->event, "Connecting");
+
+	if (conn->port != 0) {
+		fd = net_connect_ip(&conn->ip, conn->port,
+			(conn->my_ip.family != 0 ? &conn->my_ip : NULL));
+	} else if (conn->list->set.unix_client_connect_msecs == 0)
 		fd = net_connect_unix(conn->name);
 	else
 		fd = net_connect_unix_with_retries(conn->name, conn->list->set.unix_client_connect_msecs);
@@ -324,11 +395,14 @@ int connection_client_connect(struct connection *conn)
 
 	if (conn->port != 0 ||
 	    conn->list->set.delayed_unix_client_connected_callback) {
-		conn->io = io_add(conn->fd_out, IO_WRITE,
-				  connection_socket_connected, conn);
+		conn->io = io_add_to(conn->ioloop, conn->fd_out, IO_WRITE,
+				     connection_socket_connected, conn);
+		e_debug(conn->event, "Waiting for connect (fd=%d) to finish for max %u msecs",
+			fd, set->client_connect_timeout_msecs);
 		if (set->client_connect_timeout_msecs != 0) {
-			conn->to = timeout_add(set->client_connect_timeout_msecs,
-					       connection_connect_timeout, conn);
+			conn->to = timeout_add_to(conn->ioloop,
+						  set->client_connect_timeout_msecs,
+						  connection_connect_timeout, conn);
 		}
 	} else {
 		connection_client_connected(conn, TRUE);
@@ -336,22 +410,39 @@ int connection_client_connect(struct connection *conn)
 	return 0;
 }
 
+static void connection_update_counters(struct connection *conn)
+{
+	if (conn->input != NULL)
+		event_add_int(conn->event, "bytes_in", conn->input->v_offset);
+	if (conn->output != NULL)
+		event_add_int(conn->event, "bytes_out", conn->output->offset);
+}
+
 void connection_disconnect(struct connection *conn)
 {
+	connection_update_counters(conn);
+	/* client connects to a Server, and Server gets connection from Client */
+	const char *ename = conn->list->set.client ?
+		"server_connection_disconnected" :
+		"client_connection_disconnected";
+
+	/* probably isn't connected anymore if it's 0 */
+	if (conn->fd_in > 0) {
+		struct event_passthrough *e = event_create_passthrough(conn->event)->
+			set_name(ename)->
+			add_str("reason", connection_disconnect_reason(conn));
+		e_debug(e->event(), "Disconnected: %s (fd=%u)",
+			connection_disconnect_reason(conn), conn->fd_in);
+	}
+
 	conn->last_input = 0;
 	i_zero(&conn->last_input_tv);
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
-	if (conn->io != NULL)
-		io_remove(&conn->io);
-	if (conn->input != NULL) {
-		i_stream_close(conn->input);
-		i_stream_destroy(&conn->input);
-	}
-	if (conn->output != NULL) {
-		o_stream_close(conn->output);
-		o_stream_destroy(&conn->output);
-	}
+	timeout_remove(&conn->to);
+	io_remove(&conn->io);
+	i_stream_close(conn->input);
+	i_stream_destroy(&conn->input);
+	o_stream_close(conn->output);
+	o_stream_destroy(&conn->output);
 	fd_close_maybe_stdio(&conn->fd_in, &conn->fd_out);
 }
 
@@ -364,6 +455,7 @@ void connection_deinit(struct connection *conn)
 
 	connection_disconnect(conn);
 	i_free(conn->name);
+	event_unref(&conn->event);
 }
 
 int connection_input_read(struct connection *conn)
@@ -443,16 +535,23 @@ const char *connection_input_timeout_reason(struct connection *conn)
 	}
 }
 
+void connection_switch_ioloop_to(struct connection *conn,
+				 struct ioloop *ioloop)
+{
+	conn->ioloop = ioloop;
+	if (conn->io != NULL)
+		conn->io = io_loop_move_io_to(ioloop, &conn->io);
+	if (conn->to != NULL)
+		conn->to = io_loop_move_timeout_to(ioloop, &conn->to);
+	if (conn->input != NULL)
+		i_stream_switch_ioloop_to(conn->input, ioloop);
+	if (conn->output != NULL)
+		o_stream_switch_ioloop_to(conn->output, ioloop);
+}
+
 void connection_switch_ioloop(struct connection *conn)
 {
-	if (conn->io != NULL)
-		conn->io = io_loop_move_io(&conn->io);
-	if (conn->to != NULL)
-		conn->to = io_loop_move_timeout(&conn->to);
-	if (conn->input != NULL)
-		i_stream_switch_ioloop(conn->input);
-	if (conn->output != NULL)
-		o_stream_switch_ioloop(conn->output);
+	connection_switch_ioloop_to(conn, current_ioloop);
 }
 
 struct connection_list *

@@ -6,13 +6,25 @@ Contents
 
  1. mail-crypt-plugin
 
-     1. Settings for mail crypt plugin
+     1. Introduction
 
-     2. Modes of operation
+         1. Functional Overview
 
-     3. Folder keys
+         2. Encryption Technologies
 
-     4. Global keys
+     2. Technical Requirements
+
+     3. Settings for mail crypt plugin
+
+     4. Modes of operation
+
+     5. Folder keys
+
+         1. Unencrypted user keys
+
+         2. Encrypted user keys
+
+     6. Global keys
 
          1. RSA key
 
@@ -22,15 +34,17 @@ Contents
 
          4. Base64 encoded keys
 
-     5. New dcrypt format (mail_crypt_save_version = 2)
+     7. New dcrypt format (mail_crypt_save_version = 2)
 
-     6. Old dcrypt format (mail_crypt_save_version = 1)
+     8. Old dcrypt format (mail_crypt_save_version = 1)
 
-     7. Read-only mode (mail_crypt_save_version = 0)
+     9. Read-only mode (mail_crypt_save_version = 0)
 
-     8. mail-crypt-plugin and ACLs
+     10. mail-crypt-plugin and ACLs
 
-     9. fs-crypt and fs-mail-crypt
+     11. decrypting files encrypted with mail-crypt plugin
+
+     12. fs-crypt and fs-mail-crypt
 
  2. doveadm plugin
 
@@ -41,6 +55,50 @@ Contents
      3. doveadm mailbox cryptokey export
 
      4. doveadm mailbox cryptokey password
+
+Introduction
+------------
+
+The Mail crypt plugin is used to secure email messages stored in a Dovecot
+system. Messages are encrypted before written to storage and decrypted after
+reading.  Both operations are transparent to the user.
+
+In case of unauthorized access to the storage backend, the messages will,
+without access to the decryption keys, be unreadable to the offending party.
+
+There can be a single encryption key for the whole system or each user can have
+a key of their own. The used cryptographical methods are widely usedstandards
+and keys are stored in portable formats, when possible.
+
+Functional Overview
+-------------------
+
+The use of Mail crypt plugin depends on a user having a keypair, a private and
+a public key, for asymmetric cryptography. These keys are provisioned in a
+variable via the user database or directly from Dovecot configuration files.
+
+The public half of the provisioned keypairs are used to generate and encrypt
+keys for symmetric encryption. The symmetric keys are used to encrypt and
+decrypt individual files. Symmetric encryption is faster and more suitable for
+block mode storage encryption. The symmetric key used to encrypt a file is
+stored, after being encrypted with the public asymmetric key, together with the
+file.
+
+Encryption Technologies
+-----------------------
+
+The Mail crypt plugin provides encryption at rest for emails. Encryption of the
+messages is performed using the symmetric Advanced Encryption Standard (AES)
+algorithm in Galois/Counter Mode (GCM) with 256 bit keys. Integrity of the data
+is ensured using Authenticated Encryption with Associated Data (AEAD) with
+SHA256 hashing. The encryption keys for the symmetric encryption are randomly
+generated. These keys in turn are encrypted using a key derived with from the
+provisioned private key. Provisioned private keys can be Elliptic Curve (EC)
+keys or RSA Encryption is done using the Integrated Encryption Scheme (IES).
+This algorithm is usable both with EC and RSA keys.
+
+Technical Requirements
+----------------------
 
 This feature is available in v2.2.27+. Using per-folder keys is not considered
 production quality, but global keys are fine.
@@ -101,6 +159,12 @@ must also specify *mail_crypt_curve*. Any valid curve supported by underlying
 cryptographic library is supported.*mail_attribute_dict* has to be set since it
 is used to store the keys.
 
+Unencrypted user keys
+---------------------
+
+In this version of the folder keys mode, the users private key is stored
+unencrypted on the server.
+
 Example config for folder keys with Maildir:
 
 ---%<-------------------------------------------------------------------------
@@ -112,6 +176,38 @@ plugin {
     mail_crypt_curve = secp521r1
     mail_crypt_save_version = 2
 }
+---%<-------------------------------------------------------------------------
+
+Encrypted user keys
+-------------------
+
+In this version of the folder keys mode, the users private key is stored
+encrypted on the server.
+
+Example config for mandatory encrypted folder keys  with Maildir:
+
+---%<-------------------------------------------------------------------------
+mail_attribute_dict = file:%h/Maildir/dovecot-attributes
+
+mail_plugins = $mail_plugins mail_crypt
+
+plugin {
+    mail_crypt_curve = secp521r1
+    mail_crypt_save_version = 2
+    mail_crypt_require_encrypted_user_key = yes
+}
+---%<-------------------------------------------------------------------------
+
+The password that is used to decrypt the users master/private key, must be
+provided via password query:
+
+---%<-------------------------------------------------------------------------
+# File: /etc/dovecot/dovecot-sql.conf.ext
+
+password_query = SELECT \
+email as user, password, \
+'%w' AS userdb_mail_crypt_private_password \
+FROM virtual_users  WHERE email='%u';
 ---%<-------------------------------------------------------------------------
 
 Global keys
@@ -289,6 +385,13 @@ folder key is encrypted to recipient's public key. If you have
 *mail_crypt_acl_require_secure_key_sharing* plugin setting, you can't share the
 key to groups or someone with no public key.
 
+decrypting files encrypted with mail-crypt plugin
+-------------------------------------------------
+
+You can use decrypt.rb
+[https://gist.github.com/cmouse/882f2e2a60c1e49b7d343f5a6a2721de] to decrypt
+encrypted files.
+
 fs-crypt and fs-mail-crypt
 --------------------------
 
@@ -416,4 +519,4 @@ doveadm mailbox cryptokey password [-u username | -A] [-N | -n password] [-O |
 
 Sets, changes or clears password for user's private key.
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

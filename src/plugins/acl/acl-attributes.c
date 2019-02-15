@@ -60,7 +60,7 @@ static int acl_attribute_get_acl(struct mailbox *box, const char *key,
 	struct acl_object_list_iter *iter;
 	struct acl_rights rights, wanted_rights;
 	const char *id;
-	int ret;
+	int ret = 0;
 
 	i_zero(value_r);
 
@@ -83,17 +83,22 @@ static int acl_attribute_get_acl(struct mailbox *box, const char *key,
 	}
 
 	iter = acl_object_list_init(aclobj);
-	while ((ret = acl_object_list_next(iter, &rights)) > 0) {
+	while (acl_object_list_next(iter, &rights)) {
 		if (!rights.global &&
 		    rights.id_type == wanted_rights.id_type &&
 		    null_strcmp(rights.identifier, wanted_rights.identifier) == 0) {
 			value_r->value = acl_rights_export(&rights);
+			ret = 1;
 			break;
 		}
 	}
-	if (ret < 0)
+	/* the return value here cannot be used, because this function
+	   needs to return whether it actually matched something
+	   or not */
+	if (acl_object_list_deinit(&iter) < 0) {
 		mail_storage_set_internal_error(box->storage);
-	acl_object_list_deinit(&iter);
+		ret = -1;
+	}
 	return ret;
 }
 
@@ -139,35 +144,33 @@ int acl_attribute_set(struct mailbox_transaction_context *t,
 		      enum mail_attribute_type type, const char *key,
 		      const struct mail_attribute_value *value)
 {
-	struct acl_mailbox *abox = ACL_CONTEXT(t->box);
+	struct acl_mailbox *abox = ACL_CONTEXT_REQUIRE(t->box);
 
 	if (acl_have_attribute_rights(t->box) < 0)
 		return -1;
-	if (strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_ACL,
-		    strlen(MAILBOX_ATTRIBUTE_PREFIX_ACL)) == 0)
+	if (str_begins(key, MAILBOX_ATTRIBUTE_PREFIX_ACL))
 		return acl_attribute_update_acl(t, key, value);
 	return abox->module_ctx.super.attribute_set(t, type, key, value);
 }
 
-int acl_attribute_get(struct mailbox_transaction_context *t,
+int acl_attribute_get(struct mailbox *box,
 		      enum mail_attribute_type type, const char *key,
 		      struct mail_attribute_value *value_r)
 {
-	struct acl_mailbox *abox = ACL_CONTEXT(t->box);
+	struct acl_mailbox *abox = ACL_CONTEXT_REQUIRE(box);
 
-	if (acl_have_attribute_rights(t->box) < 0)
+	if (acl_have_attribute_rights(box) < 0)
 		return -1;
-	if (strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_ACL,
-		    strlen(MAILBOX_ATTRIBUTE_PREFIX_ACL)) == 0)
-		return acl_attribute_get_acl(t->box, key, value_r);
-	return abox->module_ctx.super.attribute_get(t, type, key, value_r);
+	if (str_begins(key, MAILBOX_ATTRIBUTE_PREFIX_ACL))
+		return acl_attribute_get_acl(box, key, value_r);
+	return abox->module_ctx.super.attribute_get(box, type, key, value_r);
 }
 
 struct mailbox_attribute_iter *
 acl_attribute_iter_init(struct mailbox *box, enum mail_attribute_type type,
 			const char *prefix)
 {
-	struct acl_mailbox *abox = ACL_CONTEXT(box);
+	struct acl_mailbox *abox = ACL_CONTEXT_REQUIRE(box);
 	struct acl_mailbox_attribute_iter *aiter;
 
 	aiter = i_new(struct acl_mailbox_attribute_iter, 1);
@@ -179,8 +182,7 @@ acl_attribute_iter_init(struct mailbox *box, enum mail_attribute_type type,
 			attribute_iter_init(box, type, prefix);
 		if (box->storage->user->dsyncing &&
 		    type == MAIL_ATTRIBUTE_TYPE_SHARED &&
-		    strncmp(prefix, MAILBOX_ATTRIBUTE_PREFIX_ACL,
-			    strlen(prefix)) == 0) {
+		    str_begins(MAILBOX_ATTRIBUTE_PREFIX_ACL, prefix)) {
 			aiter->acl_iter = acl_object_list_init(abox->aclobj);
 			aiter->acl_name = str_new(default_pool, 128);
 			str_append(aiter->acl_name, MAILBOX_ATTRIBUTE_PREFIX_ACL);
@@ -193,21 +195,21 @@ static const char *
 acl_attribute_iter_next_acl(struct acl_mailbox_attribute_iter *aiter)
 {
 	struct acl_rights rights;
-	int ret;
 
-	while ((ret = acl_object_list_next(aiter->acl_iter, &rights)) > 0) {
+	if (aiter->failed)
+		return NULL;
+
+	while (acl_object_list_next(aiter->acl_iter, &rights)) {
 		if (rights.global)
 			continue;
 		str_truncate(aiter->acl_name, strlen(MAILBOX_ATTRIBUTE_PREFIX_ACL));
 		acl_rights_write_id(aiter->acl_name, &rights);
 		return str_c(aiter->acl_name);
 	}
-	if (ret < 0) {
+	if (acl_object_list_deinit(&aiter->acl_iter) < 0) {
 		mail_storage_set_internal_error(aiter->iter.box->storage);
 		aiter->failed = TRUE;
-		return NULL;
 	}
-	acl_object_list_deinit(&aiter->acl_iter);
 	return NULL;
 }
 
@@ -215,7 +217,7 @@ const char *acl_attribute_iter_next(struct mailbox_attribute_iter *iter)
 {
 	struct acl_mailbox_attribute_iter *aiter =
 		(struct acl_mailbox_attribute_iter *)iter;
-	struct acl_mailbox *abox = ACL_CONTEXT(iter->box);
+	struct acl_mailbox *abox = ACL_CONTEXT_REQUIRE(iter->box);
 	const char *key;
 
 	if (aiter->super == NULL)
@@ -231,17 +233,18 @@ int acl_attribute_iter_deinit(struct mailbox_attribute_iter *iter)
 {
 	struct acl_mailbox_attribute_iter *aiter =
 		(struct acl_mailbox_attribute_iter *)iter;
-	struct acl_mailbox *abox = ACL_CONTEXT(iter->box);
+	struct acl_mailbox *abox = ACL_CONTEXT_REQUIRE(iter->box);
 	int ret = aiter->failed ? -1 : 0;
 
 	if (aiter->super != NULL) {
 		if (abox->module_ctx.super.attribute_iter_deinit(aiter->super) < 0)
 			ret = -1;
 	}
-	if (aiter->acl_iter != NULL)
-		acl_object_list_deinit(&aiter->acl_iter);
-	if (aiter->acl_name != NULL)
-		str_free(&aiter->acl_name);
+	if (aiter->acl_iter != NULL && acl_object_list_deinit(&aiter->acl_iter) < 0) {
+		mail_storage_set_internal_error(aiter->iter.box->storage);
+		ret = -1;
+	}
+	str_free(&aiter->acl_name);
 	i_free(aiter);
 	return ret;
 }

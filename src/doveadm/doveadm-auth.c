@@ -25,6 +25,10 @@
 #include <stdio.h>
 #include <unistd.h>
 
+static struct event_category event_category_auth = {
+	.name = "auth",
+};
+
 struct authtest_input {
 	pool_t pool;
 	const char *username;
@@ -88,7 +92,7 @@ cmd_user_input(struct auth_master_connection *conn,
 	} else if (show_field != NULL) {
 		size_t show_field_len = strlen(show_field);
 
-		for (; *fields; fields++) {
+		for (; *fields != NULL; fields++) {
 			if (strncmp(*fields, show_field, show_field_len) == 0 &&
 			    (*fields)[show_field_len] == '=')
 				printf("%s\n", *fields + show_field_len + 1);
@@ -98,7 +102,7 @@ cmd_user_input(struct auth_master_connection *conn,
 
 		if (updated_username != NULL)
 			printf("  %-10s: %s\n", "user", updated_username);
-		for (; *fields; fields++) {
+		for (; *fields != NULL; fields++) {
 			p = strchr(*fields, '=');
 			if (p == NULL)
 				printf("  %-10s\n", *fields);
@@ -108,6 +112,7 @@ cmd_user_input(struct auth_master_connection *conn,
 			}
 		}
 	}
+	pool_unref(&pool);
 	return ret;
 }
 
@@ -159,12 +164,15 @@ auth_callback(struct auth_client_request *request ATTR_UNUSED,
 static void auth_connected(struct auth_client *client,
 			   bool connected, void *context)
 {
+	struct event *event_auth;
 	struct authtest_input *input = context;
 	struct auth_request_info info;
 	string_t *init_resp, *base64_resp;
 
 	if (!connected)
 		i_fatal("Couldn't connect to auth socket");
+	event_auth = event_create(NULL);
+	event_add_category(event_auth, &event_category_auth);
 
 	init_resp = t_str_new(128);
 	str_append(init_resp, input->username);
@@ -187,11 +195,13 @@ static void auth_connected(struct auth_client *client,
 	info.remote_ip = input->info.remote_ip;
 	info.remote_port = input->info.remote_port;
 	info.initial_resp_base64 = str_c(base64_resp);
-	if (doveadm_settings->auth_debug)
+	if (doveadm_settings->auth_debug ||
+	    event_want_debug_log(event_auth))
 		info.flags |= AUTH_REQUEST_FLAG_DEBUG;
 
 	input->request = auth_client_request_new(client, &info,
 						 auth_callback, input);
+	event_unref(&event_auth);
 }
 
 static void
@@ -216,18 +226,18 @@ cmd_auth_input(const char *auth_socket_path, struct authtest_input *input)
 
 static void auth_user_info_parse(struct auth_user_info *info, const char *arg)
 {
-	if (strncmp(arg, "service=", 8) == 0)
+	if (str_begins(arg, "service="))
 		info->service = arg + 8;
-	else if (strncmp(arg, "lip=", 4) == 0) {
+	else if (str_begins(arg, "lip=")) {
 		if (net_addr2ip(arg + 4, &info->local_ip) < 0)
 			i_fatal("lip: Invalid ip");
-	} else if (strncmp(arg, "rip=", 4) == 0) {
+	} else if (str_begins(arg, "rip=")) {
 		if (net_addr2ip(arg + 4, &info->remote_ip) < 0)
 			i_fatal("rip: Invalid ip");
-	} else if (strncmp(arg, "lport=", 6) == 0) {
+	} else if (str_begins(arg, "lport=")) {
 		if (net_str2port(arg + 6, &info->local_port) < 0)
 			i_fatal("lport: Invalid port number");
-	} else if (strncmp(arg, "rport=", 6) == 0) {
+	} else if (str_begins(arg, "rport=")) {
 		if (net_str2port(arg + 6, &info->remote_port) < 0)
 			i_fatal("rport: Invalid port number");
 	} else {
@@ -579,10 +589,14 @@ cmd_user_mail_input(struct mail_storage_service_ctx *storage_service,
 		cmd_user_mail_print_fields(input, user, userdb_fields, show_field);
 	else {
 		string_t *str = t_str_new(128);
-		var_expand_with_funcs(str, expand_field,
-				      mail_user_var_expand_table(user),
-				      mail_user_var_expand_func_table, user);
-		printf("%s\n", str_c(str));
+		if (var_expand_with_funcs(str, expand_field,
+					  mail_user_var_expand_table(user),
+					  mail_user_var_expand_func_table, user,
+					  &error) <= 0) {
+			i_error("Failed to expand %s: %s", expand_field, error);
+		} else {
+			printf("%s\n", str_c(str));
+		}
 	}
 
 	mail_user_unref(&user);

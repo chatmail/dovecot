@@ -31,8 +31,8 @@ struct ioloop {
 
 	unsigned int io_pending_count;
 
-	unsigned int running:1;
-	unsigned int iolooping:1;
+	bool running:1;
+	bool iolooping:1;
 };
 
 struct io {
@@ -42,6 +42,9 @@ struct io {
 	/* trigger I/O callback even if OS doesn't think there is input
 	   pending */
 	bool pending;
+	/* This IO event shouldn't be the only thing being waited on, because
+	   it would just result in infinite wait. */
+	bool never_wait_alone;
 
 	io_callback_t *callback;
         void *context;
@@ -77,7 +80,7 @@ struct timeout {
 	struct ioloop *ioloop;
 	struct ioloop_context *ctx;
 
-	unsigned int one_shot:1;
+	bool one_shot:1;
 };
 
 struct io_wait_timer {
@@ -102,7 +105,7 @@ struct ioloop_context {
 	ARRAY(struct ioloop_context_callback) callbacks;
 };
 
-int io_loop_get_wait_time(struct ioloop *ioloop, struct timeval *tv_r);
+int io_loop_run_get_wait_time(struct ioloop *ioloop, struct timeval *tv_r);
 void io_loop_handle_timeouts(struct ioloop *ioloop);
 void io_loop_call_io(struct io *io);
 
@@ -117,8 +120,5 @@ void io_loop_handler_deinit(struct ioloop *ioloop);
 
 void io_loop_notify_remove(struct io *io);
 void io_loop_notify_handler_deinit(struct ioloop *ioloop);
-
-void io_loop_context_activate(struct ioloop_context *ctx);
-void io_loop_context_deactivate(struct ioloop_context *ctx);
 
 #endif

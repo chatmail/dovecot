@@ -38,7 +38,7 @@ static const char *unique_fname(void)
 {
 	unsigned char randbuf[8];
 
-	random_fill_weak(randbuf, sizeof(randbuf));
+	random_fill(randbuf, sizeof(randbuf));
 	return t_strdup_printf("%s.%s.%s", my_hostname, my_pid,
 			       binary_to_hex(randbuf, sizeof(randbuf)));
 
@@ -48,7 +48,7 @@ int mailbox_list_delete_maildir_via_trash(struct mailbox_list *list,
 					  const char *name,
 					  const char *trash_dir)
 {
-	const char *src, *trash_dest;
+	const char *src, *trash_dest, *error;
 	unsigned int count;
 
 	if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_MAILBOX,
@@ -98,18 +98,18 @@ int mailbox_list_delete_maildir_via_trash(struct mailbox_list *list,
 		if (trash_dir == trash_dest) {
 			trash_dest = t_strconcat(trash_dir, "/",
 						 unique_fname(), NULL);
-		} else if (mailbox_list_delete_trash(trash_dest) < 0 &&
+		} else if (mailbox_list_delete_trash(trash_dest, &error) < 0 &&
 			   (errno != ENOTEMPTY || count >= 5)) {
 			mailbox_list_set_critical(list,
-				"unlink_directory(%s) failed: %m", trash_dest);
+				"unlink_directory(%s) failed: %s", trash_dest, error);
 			return -1;
 		}
 	}
 
-	if (mailbox_list_delete_trash(trash_dir) < 0 &&
+	if (mailbox_list_delete_trash(trash_dir, &error) < 0 &&
 	    errno != ENOTEMPTY && errno != EBUSY) {
 		mailbox_list_set_critical(list,
-			"unlink_directory(%s) failed: %m", trash_dir);
+			"unlink_directory(%s) failed: %s", trash_dir, error);
 
 		/* it's already renamed to trash dir, which means it's
 		   deleted as far as the client is concerned. Report
@@ -145,6 +145,7 @@ int mailbox_list_delete_mailbox_nonrecursive(struct mailbox_list *list,
 	struct dirent *d;
 	string_t *full_path;
 	size_t dir_len;
+	const char *error;
 	bool mailbox_dir, unlinked_something = FALSE;
 	int ret = 0;
 
@@ -186,10 +187,10 @@ int mailbox_list_delete_mailbox_nonrecursive(struct mailbox_list *list,
 		str_append(full_path, d->d_name);
 
 		if (mailbox_dir) {
-			if (mailbox_list_delete_trash(str_c(full_path)) < 0) {
+			if (mailbox_list_delete_trash(str_c(full_path), &error) < 0) {
 				mailbox_list_set_critical(list,
-					"unlink_directory(%s) failed: %m",
-					str_c(full_path));
+					"unlink_directory(%s) failed: %s",
+					str_c(full_path), error);
 			} else {
 				unlinked_something = TRUE;
 			}
@@ -286,7 +287,7 @@ void mailbox_list_delete_until_root(struct mailbox_list *list, const char *path,
 	}
 
 	root_dir = mailbox_list_get_root_forced(list, type);
-	if (strncmp(path, root_dir, strlen(root_dir)) != 0) {
+	if (!str_begins(path, root_dir)) {
 		/* mbox workaround: name=child/box, root_dir=mail/.imap/,
 		   path=mail/child/.imap/box. we'll want to try to delete
 		   the .imap/ part, but no further. */
@@ -329,6 +330,7 @@ void mailbox_list_delete_mailbox_until_root(struct mailbox_list *list,
 		MAILBOX_LIST_PATH_TYPE_CONTROL,
 		MAILBOX_LIST_PATH_TYPE_INDEX,
 		MAILBOX_LIST_PATH_TYPE_INDEX_PRIVATE,
+		MAILBOX_LIST_PATH_TYPE_INDEX_CACHE,
 	};
 	const char *path;
 
@@ -341,7 +343,7 @@ void mailbox_list_delete_mailbox_until_root(struct mailbox_list *list,
 static int mailbox_list_try_delete(struct mailbox_list *list, const char *name,
 				   enum mailbox_list_path_type type)
 {
-	const char *mailbox_path, *index_path, *path;
+	const char *mailbox_path, *index_path, *path, *error;
 	int ret;
 
 	if (mailbox_list_get_path(list, name, MAILBOX_LIST_PATH_TYPE_MAILBOX,
@@ -380,13 +382,13 @@ static int mailbox_list_try_delete(struct mailbox_list *list, const char *name,
 			ret = 0;
 		}
 	} else {
-		if (mailbox_list_delete_trash(path) == 0)
+		if (mailbox_list_delete_trash(path, &error) == 0)
 			ret = 1;
-		else if (errno == ENOENT || errno == ENOTEMPTY)
+		else if (errno == ENOTEMPTY)
 			ret = 0;
 		else {
 			mailbox_list_set_critical(list,
-				"unlink_directory(%s) failed: %m", path);
+				"unlink_directory(%s) failed: %s", path, error);
 			return -1;
 		}
 	}
@@ -403,6 +405,9 @@ int mailbox_list_delete_finish(struct mailbox_list *list, const char *name)
 	int ret, ret2;
 
 	ret = mailbox_list_try_delete(list, name, MAILBOX_LIST_PATH_TYPE_INDEX);
+	ret2 = mailbox_list_try_delete(list, name, MAILBOX_LIST_PATH_TYPE_INDEX_CACHE);
+	if (ret == 0 || ret2 < 0)
+		ret = ret2;
 	ret2 = mailbox_list_try_delete(list, name, MAILBOX_LIST_PATH_TYPE_CONTROL);
 	if (ret == 0 || ret2 < 0)
 		ret = ret2;
@@ -440,9 +445,9 @@ int mailbox_list_delete_finish_ret(struct mailbox_list *list,
 	}
 }
 
-int mailbox_list_delete_trash(const char *path)
+int mailbox_list_delete_trash(const char *path, const char **error_r)
 {
-	if (unlink_directory(path, UNLINK_DIRECTORY_FLAG_RMDIR) < 0) {
+	if (unlink_directory(path, UNLINK_DIRECTORY_FLAG_RMDIR, error_r) < 0) {
 		if (errno == ELOOP) {
 			/* it's a symlink? try just deleting it */
 			if (unlink(path) == 0)

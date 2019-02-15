@@ -127,7 +127,7 @@ static int fetch_hdr(struct fetch_cmd_context *ctx)
 		return -1;
 
 	input = i_stream_create_limit(input, hdr_size.physical_size);
-	if ((ret = doveadm_print_istream(input) < 0))
+	if ((ret = doveadm_print_istream(input)) < 0)
 		fetch_set_istream_error(ctx, input);
 	i_stream_unref(&input);
 	return ret;
@@ -167,7 +167,7 @@ static int fetch_hdr_field(struct fetch_cmd_context *ctx)
 
 		addr = message_address_parse(pool_datastack_create(),
 					     str_data(str), str_len(str),
-					     UINT_MAX, FALSE);
+					     UINT_MAX, 0);
 		str_truncate(str, 0);
 		add_lf = FALSE;
 		for (; addr != NULL; addr = addr->next) {
@@ -206,7 +206,7 @@ static int fetch_body_field(struct fetch_cmd_context *ctx)
 	bool binary;
 	int ret;
 
-	binary = strncmp(name, "binary.", 7) == 0;
+	binary = str_begins(name, "binary.");
 	name += binary ? 7 : 5;
 	if (imap_msgpart_parse(name, &msgpart) < 0)
 		i_unreached(); /* we already verified this was ok */
@@ -217,7 +217,7 @@ static int fetch_body_field(struct fetch_cmd_context *ctx)
 		imap_msgpart_free(&msgpart);
 		return -1;
 	}
-	if ((ret = doveadm_print_istream(result.input) < 0))
+	if ((ret = doveadm_print_istream(result.input)) < 0)
 		fetch_set_istream_error(ctx, result.input);
 	i_stream_unref(&result.input);
 	imap_msgpart_free(&msgpart);
@@ -234,7 +234,7 @@ static int fetch_body(struct fetch_cmd_context *ctx)
 		return -1;
 
 	i_stream_skip(input, hdr_size.physical_size);
-	if ((ret = doveadm_print_istream(input) < 0))
+	if ((ret = doveadm_print_istream(input)) < 0)
 		fetch_set_istream_error(ctx, input);
 	return ret;
 }
@@ -258,7 +258,7 @@ static int fetch_text(struct fetch_cmd_context *ctx)
 
 	if (mail_get_stream(ctx->mail, NULL, NULL, &input) < 0)
 		return -1;
-	if ((ret = doveadm_print_istream(input) < 0))
+	if ((ret = doveadm_print_istream(input)) < 0)
 		fetch_set_istream_error(ctx, input);
 	return ret;
 }
@@ -304,7 +304,7 @@ static int fetch_text_utf8(struct fetch_cmd_context *ctx)
 	}
 	i_assert(ret != 0);
 	message_decoder_deinit(&decoder);
-	(void)message_parser_deinit(&parser, &parts);
+	message_parser_deinit(&parser, &parts);
 
 	doveadm_print_stream("", 0);
 	if (input->stream_errno != 0) {
@@ -549,15 +549,15 @@ static void parse_fetch_fields(struct fetch_cmd_context *ctx, const char *str)
 		if ((field = fetch_field_find(name)) != NULL) {
 			ctx->wanted_fields |= field->wanted_fields;
 			array_append(&ctx->fields, field, 1);
-		} else if (strncmp(name, "hdr.", 4) == 0) {
+		} else if (str_begins(name, "hdr.")) {
 			name += 4;
 			hdr_field.name = name;
 			array_append(&ctx->fields, &hdr_field, 1);
 			name = t_strcut(name, '.');
 			array_append(&ctx->header_fields, &name, 1);
-		} else if (strncmp(name, "body.", 5) == 0 ||
-			   strncmp(name, "binary.", 7) == 0) {
-			bool binary = strncmp(name, "binary.", 7) == 0;
+		} else if (str_begins(name, "body.") ||
+			   str_begins(name, "binary.")) {
+			bool binary = str_begins(name, "binary.");
 			body_field.name = t_strarray_join(t_strsplit(name, ","), " ");
 
 			name += binary ? 7 : 5;

@@ -4,7 +4,7 @@ Description: Update Dovecot name to include Distribution in login greeting
  author is  Yolanda Robla <yolanda.robla@canonical.com>.  I updated it
  for Debian's 2.2.5 package.
 Author: Jaldhar H. Vyas <jaldhar@debian.org>
-Last-Update: Mon 25 May 11:27:04 UTC 2015
+Last-Update: 2018-07-04
 ---
  configure.ac                      |    7 ++++++-
  src/config/all-settings.c         |    4 ++--
@@ -14,7 +14,7 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
 
 --- a/configure.ac
 +++ b/configure.ac
-@@ -321,7 +321,12 @@
+@@ -302,7 +302,12 @@
  # SIZE_MAX is missing without this
  CXXFLAGS="$CXXFLAGS -D__STDC_LIMIT_MACROS"
  
@@ -30,10 +30,10 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
  
 --- a/src/lmtp/lmtp-settings.c
 +++ b/src/lmtp/lmtp-settings.c
-@@ -78,7 +78,7 @@
- 	.lmtp_user_concurrency_limit = 0,
- 	.lmtp_address_translate = "",
- 	.lmtp_hdr_delivery_address = "final:none:original",
+@@ -82,7 +82,7 @@
+ 	.lmtp_rawlog_dir = "",
+ 	.lmtp_proxy_rawlog_dir = "",
+ 
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
  	.login_trusted_networks = ""
@@ -41,7 +41,7 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
  
 --- a/src/login-common/login-settings.c
 +++ b/src/login-common/login-settings.c
-@@ -50,7 +50,7 @@
+@@ -48,7 +48,7 @@
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
@@ -50,3 +50,25 @@ Last-Update: Mon 25 May 11:27:04 UTC 2015
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
+--- a/src/lib-smtp/smtp-server.c
++++ b/src/lib-smtp/smtp-server.c
+@@ -37,7 +37,7 @@
+ 	if (set->login_greeting != NULL && *set->login_greeting != '\0')
+ 		server->set.login_greeting = p_strdup(pool, set->login_greeting);
+ 	else
+-		server->set.login_greeting = PACKAGE_NAME" ready.";
++		server->set.login_greeting = DOVECOT_NAME" ready.";
+ 	if (set->capabilities == 0) {
+ 		server->set.capabilities = SMTP_SERVER_DEFAULT_CAPABILITIES;
+ 	} else  {
+--- a/src/submission/submission-settings.c
++++ b/src/submission/submission-settings.c
+@@ -99,7 +99,7 @@
+ 
+ 	.hostname = "",
+ 
+-	.login_greeting = PACKAGE_NAME" ready.",
++	.login_greeting = DOVECOT_NAME" ready.",
+ 	.login_trusted_networks = "",
+ 
+ 	.submission_max_mail_size = 40*1024*1024,

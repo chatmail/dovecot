@@ -30,7 +30,7 @@ struct doveadm_print_table_context {
 	unsigned int hdr_idx;
 	unsigned int columns;
 
-	unsigned int lengths_set:1;
+	bool lengths_set:1;
 };
 
 static struct doveadm_print_table_context *ctx;
@@ -166,18 +166,18 @@ static void doveadm_print_headers(void)
 	if (i == count)
 		return;
 	for (i = 0; i < count; i++) {
-		if (i > 0) fprintf(stderr, " ");
+		if (i > 0) printf(" ");
 
 		if ((headers[i].flags &
 		     DOVEADM_PRINT_HEADER_FLAG_RIGHT_JUSTIFY) == 0) {
-			fprintf(stderr, "%-*s", (int)headers[i].length,
+			printf("%-*s", (int)headers[i].length,
 				headers[i].title);
 		} else {
-			fprintf(stderr, "%*s", (int)headers[i].length,
+			printf("%*s", (int)headers[i].length,
 				headers[i].title);
 		}
 	}
-	fprintf(stderr, "\n");
+	printf("\n");
 }
 
 static void doveadm_buffer_flush(void)
@@ -216,7 +216,7 @@ doveadm_print_table_print_stream(const unsigned char *value, size_t size)
 		i_fatal("table formatter doesn't support multi-line values");
 
 	if (size != 0)
-		str_append_n(ctx->stream, value, size);
+		str_append_data(ctx->stream, value, size);
 	else {
 		doveadm_print_table_print(str_c(ctx->stream));
 		str_truncate(ctx->stream, 0);

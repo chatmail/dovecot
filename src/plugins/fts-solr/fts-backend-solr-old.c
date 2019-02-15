@@ -6,6 +6,7 @@
 #include "hash.h"
 #include "strescape.h"
 #include "unichar.h"
+#include "iostream-ssl.h"
 #include "http-url.h"
 #include "imap-utf7.h"
 #include "mail-storage-private.h"
@@ -93,10 +94,10 @@ xml_encode_data(string_t *dest, const unsigned char *data, size_t len)
 				unsigned int char_len =
 					uni_utf8_get_char_n(data + i, len - i, &chr);
 				if (char_len > 0 && is_valid_xml_char(chr))
-					str_append_n(dest, data + i, char_len);
+					str_append_data(dest, data + i, char_len);
 				else {
-					str_append_n(dest, utf8_replacement_char,
-						     UTF8_REPLACEMENT_CHAR_LEN);
+					str_append_data(dest, utf8_replacement_char,
+							UTF8_REPLACEMENT_CHAR_LEN);
 				}
 				i += char_len - 1;
 			} else {
@@ -171,7 +172,7 @@ static void solr_quote_http(string_t *dest, const char *str)
 static void fts_solr_set_default_ns(struct solr_fts_backend *backend)
 {
 	struct mail_namespace *ns = backend->backend.ns;
-	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT(ns->user);
+	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT_REQUIRE(ns->user);
 	const struct fts_solr_settings *set = &fuser->set;
 	const char *str;
 
@@ -243,14 +244,20 @@ fts_backend_solr_init(struct fts_backend *_backend, const char **error_r)
 {
 	struct solr_fts_backend *backend = (struct solr_fts_backend *)_backend;
 	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT(_backend->ns->user);
+	struct ssl_iostream_settings ssl_set;
 	const char *str;
 
 	if (fuser == NULL) {
 		*error_r = "Invalid fts_solr setting";
 		return -1;
 	}
-	if (solr_connection_init(fuser->set.url, fuser->set.debug,
-				 &backend->solr_conn, error_r) < 0)
+
+	i_zero(&ssl_set);
+	mail_user_init_ssl_client_settings(_backend->ns->user, &ssl_set);
+
+	if (solr_connection_init(fuser->set.url, &ssl_set,
+				 fuser->set.debug, &backend->solr_conn,
+				 error_r) < 0)
 		return -1;
 
 	str = solr_escape_id_str(_backend->ns->user->username);

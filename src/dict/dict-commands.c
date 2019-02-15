@@ -5,7 +5,7 @@
 #include "ostream.h"
 #include "str.h"
 #include "strescape.h"
-#include "timing.h"
+#include "stats-dist.h"
 #include "time-util.h"
 #include "dict-client.h"
 #include "dict-settings.h"
@@ -43,8 +43,12 @@ static void dict_connection_cmd_output_more(struct dict_connection_cmd *cmd);
 
 static void dict_connection_cmd_free(struct dict_connection_cmd *cmd)
 {
-	if (cmd->iter != NULL)
-		(void)dict_iterate_deinit(&cmd->iter);
+	const char *error;
+
+	if (cmd->iter != NULL) {
+		if (dict_iterate_deinit(&cmd->iter, &error) < 0)
+			i_error("dict_iterate() failed: %s", error);
+	}
 	i_free(cmd->reply);
 
 	if (dict_connection_unref(cmd->conn))
@@ -128,7 +132,7 @@ static void dict_connection_cmd_async(struct dict_connection_cmd *cmd)
 }
 
 static void
-cmd_stats_update(struct dict_connection_cmd *cmd, struct timing *timing)
+cmd_stats_update(struct dict_connection_cmd *cmd, struct stats_dist *stats)
 {
 	long long diff;
 
@@ -138,16 +142,16 @@ cmd_stats_update(struct dict_connection_cmd *cmd, struct timing *timing)
 	diff = timeval_diff_usecs(&ioloop_timeval, &cmd->start_timeval);
 	if (diff < 0)
 		diff = 0;
-	timing_add_usecs(timing, diff);
+	stats_dist_add(stats, diff);
 	dict_proctitle_update_later();
 }
 
 static void
-dict_cmd_reply_handle_timings(struct dict_connection_cmd *cmd,
-			      string_t *str, struct timing *timing)
+dict_cmd_reply_handle_stats(struct dict_connection_cmd *cmd,
+			    string_t *str, struct stats_dist *stats)
 {
 	io_loop_time_refresh();
-	cmd_stats_update(cmd, timing);
+	cmd_stats_update(cmd, stats);
 
 	if (cmd->conn->minor_version < DICT_CLIENT_PROTOCOL_TIMINGS_MIN_VERSION)
 		return;
@@ -198,7 +202,7 @@ cmd_lookup_callback(const struct dict_lookup_result *result, void *context)
 		str_append_c(str, DICT_PROTOCOL_REPLY_FAIL);
 		str_append_tabescaped(str, result->error);
 	}
-	dict_cmd_reply_handle_timings(cmd, str, cmd_stats.lookups);
+	dict_cmd_reply_handle_stats(cmd, str, cmd_stats.lookups);
 	str_append_c(str, '\n');
 
 	cmd->reply = i_strdup(str_c(str));
@@ -231,7 +235,7 @@ static bool dict_connection_flush_if_full(struct dict_connection *conn)
 static int cmd_iterate_flush(struct dict_connection_cmd *cmd)
 {
 	string_t *str;
-	const char *key, *value;
+	const char *key, *value, *error;
 
 	if (!dict_connection_flush_if_full(cmd->conn))
 		return 0;
@@ -260,9 +264,11 @@ static int cmd_iterate_flush(struct dict_connection_cmd *cmd)
 	}
 
 	str_truncate(str, 0);
-	if (dict_iterate_deinit(&cmd->iter) < 0)
-		str_append_c(str, DICT_PROTOCOL_REPLY_FAIL);
-	dict_cmd_reply_handle_timings(cmd, str, cmd_stats.iterations);
+	if (dict_iterate_deinit(&cmd->iter, &error) < 0) {
+		i_error("dict_iterate() failed: %s", error);
+		str_printfa(str, "%c%s", DICT_PROTOCOL_REPLY_FAIL, error);
+	}
+	dict_cmd_reply_handle_stats(cmd, str, cmd_stats.iterations);
 	str_append_c(str, '\n');
 
 	cmd->reply = i_strdup(str_c(str));
@@ -386,33 +392,38 @@ dict_connection_transaction_lookup_parse(struct dict_connection *conn,
 }
 
 static void
-cmd_commit_finish(struct dict_connection_cmd *cmd, int ret, bool async)
+cmd_commit_finish(struct dict_connection_cmd *cmd,
+		  const struct dict_commit_result *result, bool async)
 {
 	string_t *str = t_str_new(64);
 	char chr;
 
-	switch (ret) {
-	case 1:
+	switch (result->ret) {
+	case DICT_COMMIT_RET_OK:
 		chr = DICT_PROTOCOL_REPLY_OK;
 		break;
-	case 0:
+	case DICT_COMMIT_RET_NOTFOUND:
 		chr = DICT_PROTOCOL_REPLY_NOTFOUND;
 		break;
 	case DICT_COMMIT_RET_WRITE_UNCERTAIN:
+		i_assert(result->error != NULL);
 		chr = DICT_PROTOCOL_REPLY_WRITE_UNCERTAIN;
 		break;
 	case DICT_COMMIT_RET_FAILED:
 	default:
+		i_assert(result->error != NULL);
 		chr = DICT_PROTOCOL_REPLY_FAIL;
 		break;
 	}
-	if (async) {
-		str_printfa(str, "%c%c%u",
-			DICT_PROTOCOL_REPLY_ASYNC_COMMIT, chr, cmd->trans_id);
-	} else {
-		str_printfa(str, "%c%u", chr, cmd->trans_id);
+	if (async)
+		str_append_c(str, DICT_PROTOCOL_REPLY_ASYNC_COMMIT);
+	str_printfa(str, "%c%u", chr, cmd->trans_id);
+	if (chr != DICT_PROTOCOL_REPLY_OK &&
+	    chr != DICT_PROTOCOL_REPLY_NOTFOUND) {
+		str_append_c(str, '\t');
+		str_append_tabescaped(str, result->error);
 	}
-	dict_cmd_reply_handle_timings(cmd, str, cmd_stats.commits);
+	dict_cmd_reply_handle_stats(cmd, str, cmd_stats.commits);
 	str_append_c(str, '\n');
 	cmd->reply = i_strdup(str_c(str));
 
@@ -420,18 +431,20 @@ cmd_commit_finish(struct dict_connection_cmd *cmd, int ret, bool async)
 	dict_connection_cmd_try_flush(&cmd);
 }
 
-static void cmd_commit_callback(int ret, void *context)
+static void cmd_commit_callback(const struct dict_commit_result *result,
+				void *context)
 {
 	struct dict_connection_cmd *cmd = context;
 
-	cmd_commit_finish(cmd, ret, FALSE);
+	cmd_commit_finish(cmd, result, FALSE);
 }
 
-static void cmd_commit_callback_async(int ret, void *context)
+static void cmd_commit_callback_async(const struct dict_commit_result *result,
+				      void *context)
 {
 	struct dict_connection_cmd *cmd = context;
 
-	cmd_commit_finish(cmd, ret, TRUE);
+	cmd_commit_finish(cmd, result, TRUE);
 }
 
 static int
@@ -510,25 +523,6 @@ static int cmd_unset(struct dict_connection_cmd *cmd, const char *line)
 	return 0;
 }
 
-static int cmd_append(struct dict_connection_cmd *cmd, const char *line)
-{
-	struct dict_connection_transaction *trans;
-	const char *const *args;
-
-	/* <id> <key> <value> */
-	args = t_strsplit_tabescaped(line);
-	if (str_array_length(args) != 3) {
-		i_error("dict client: APPEND: broken input");
-		return -1;
-	}
-
-	if (dict_connection_transaction_lookup_parse(cmd->conn, args[0], &trans) < 0)
-		return -1;
-
-        dict_append(trans->ctx, args[1], args[2]);
-	return 0;
-}
-
 static int cmd_atomic_inc(struct dict_connection_cmd *cmd, const char *line)
 {
 	struct dict_connection_transaction *trans;
@@ -586,7 +580,6 @@ static const struct dict_cmd_func cmds[] = {
 	{ DICT_PROTOCOL_CMD_ROLLBACK, cmd_rollback },
 	{ DICT_PROTOCOL_CMD_SET, cmd_set },
 	{ DICT_PROTOCOL_CMD_UNSET, cmd_unset },
-	{ DICT_PROTOCOL_CMD_APPEND, cmd_append },
 	{ DICT_PROTOCOL_CMD_ATOMIC_INC, cmd_atomic_inc },
 	{ DICT_PROTOCOL_CMD_TIMESTAMP, cmd_timestamp },
 
@@ -675,14 +668,14 @@ static void dict_connection_cmd_output_more(struct dict_connection_cmd *cmd)
 
 void dict_commands_init(void)
 {
-	cmd_stats.lookups = timing_init();
-	cmd_stats.iterations = timing_init();
-	cmd_stats.commits = timing_init();
+	cmd_stats.lookups = stats_dist_init();
+	cmd_stats.iterations = stats_dist_init();
+	cmd_stats.commits = stats_dist_init();
 }
 
 void dict_commands_deinit(void)
 {
-	timing_deinit(&cmd_stats.lookups);
-	timing_deinit(&cmd_stats.iterations);
-	timing_deinit(&cmd_stats.commits);
+	stats_dist_deinit(&cmd_stats.lookups);
+	stats_dist_deinit(&cmd_stats.iterations);
+	stats_dist_deinit(&cmd_stats.commits);
 }

@@ -9,6 +9,7 @@
 #include "maildir-keywords.h"
 #include "maildir-filename-flags.h"
 #include "maildir-sync.h"
+#include "mailbox-recent-flags.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -70,10 +71,9 @@ maildir_expunge_is_valid_guid(struct maildir_index_sync_context *ctx,
 	if (memcmp(guid_128, expunged_guid_128, sizeof(guid_128)) == 0)
 		return TRUE;
 
-	mail_storage_set_critical(&ctx->mbox->storage->storage,
-		"Mailbox %s: Expunged GUID mismatch for UID %u: %s vs %s",
-		ctx->mbox->box.vname, ctx->uid,
-		guid_128_to_string(guid_128),
+	mailbox_set_critical(&ctx->mbox->box,
+		"Expunged GUID mismatch for UID %u: %s vs %s",
+		ctx->uid, guid_128_to_string(guid_128),
 		guid_128_to_string(expunged_guid_128));
 	return FALSE;
 }
@@ -97,8 +97,7 @@ static int maildir_expunge(struct maildir_mailbox *mbox, const char *path,
 	if (UNLINK_EISDIR(errno))
 		return maildir_lose_unexpected_dir(box->storage, path);
 
-	mail_storage_set_critical(&mbox->storage->storage,
-				  "unlink(%s) failed: %m", path);
+	mailbox_set_critical(&mbox->box, "unlink(%s) failed: %m", path);
 	return -1;
 }
 
@@ -140,8 +139,7 @@ static int maildir_sync_flags(struct maildir_mailbox *mbox, const char *path,
 		if (stat(path, &st) < 0) {
 			if (errno == ENOENT)
 				return 0;
-			mail_storage_set_critical(box->storage,
-				"stat(%s) failed: %m", path);
+			mailbox_set_critical(box, "stat(%s) failed: %m", path);
 			return -1;
 		}
 	} else {
@@ -149,7 +147,7 @@ static int maildir_sync_flags(struct maildir_mailbox *mbox, const char *path,
 			if (errno == ENOENT)
 				return 0;
 			if (!ENOSPACE(errno) && errno != EACCES) {
-				mail_storage_set_critical(box->storage,
+				mailbox_set_critical(box,
 					"rename(%s, %s) failed: %m",
 					path, newpath);
 			}
@@ -206,7 +204,7 @@ static int maildir_handle_uid_insertion(struct maildir_index_sync_context *ctx,
 
 	i_warning("Maildir %s: Expunged message reappeared, giving a new UID "
 		  "(old uid=%u, file=%s)%s", mailbox_get_path(&ctx->mbox->box),
-		  uid, filename, strncmp(filename, "msg.", 4) != 0 ? "" :
+		  uid, filename, !str_begins(filename, "msg.") ? "" :
 		  " (Your MDA is saving MH files into Maildir?)");
 	return 0;
 }
@@ -702,9 +700,9 @@ maildir_list_get_ext_id(struct maildir_mailbox *mbox,
 
 int maildir_list_index_has_changed(struct mailbox *box,
 				   struct mail_index_view *list_view,
-				   uint32_t seq)
+				   uint32_t seq, bool quick)
 {
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)box;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(box);
 	const struct maildir_list_index_record *rec;
 	const void *data;
 	const char *root_dir, *new_dir, *cur_dir;
@@ -713,7 +711,7 @@ int maildir_list_index_has_changed(struct mailbox *box,
 	bool expunged;
 	int ret;
 
-	ret = index_storage_list_index_has_changed(box, list_view, seq);
+	ret = index_storage_list_index_has_changed(box, list_view, seq, quick);
 	if (ret != 0 || box->storage->set->mailbox_list_index_very_dirty_syncs)
 		return ret;
 	if (mbox->storage->set->maildir_very_dirty_syncs) {
@@ -740,8 +738,7 @@ int maildir_list_index_has_changed(struct mailbox *box,
 	/* check if new/ changed */
 	new_dir = t_strconcat(root_dir, "/new", NULL);
 	if (stat(new_dir, &st) < 0) {
-		mail_storage_set_critical(box->storage,
-					  "stat(%s) failed: %m", new_dir);
+		mailbox_set_critical(box, "stat(%s) failed: %m", new_dir);
 		return -1;
 	}
 	if ((time_t)rec->new_mtime != st.st_mtime)
@@ -750,8 +747,7 @@ int maildir_list_index_has_changed(struct mailbox *box,
 	/* check if cur/ changed */
 	cur_dir = t_strconcat(root_dir, "/cur", NULL);
 	if (stat(cur_dir, &st) < 0) {
-		mail_storage_set_critical(box->storage,
-					  "stat(%s) failed: %m", cur_dir);
+		mailbox_set_critical(box, "stat(%s) failed: %m", cur_dir);
 		return -1;
 	}
 	if ((time_t)rec->cur_mtime != st.st_mtime)
@@ -763,7 +759,7 @@ void maildir_list_index_update_sync(struct mailbox *box,
 				    struct mail_index_transaction *trans,
 				    uint32_t seq)
 {
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)box;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(box);
 	struct mail_index_view *list_view;
 	const struct maildir_index_header *mhdr = &mbox->maildir_hdr;
 	const struct maildir_list_index_record *old_rec;

@@ -90,6 +90,8 @@ struct director_kill_context {
 	/* Move timeout to make sure user's connections won't silently hang
 	   indefinitely if there is some trouble moving it. */
 	struct timeout *to_move;
+	/* IPC command to kick the user */
+	struct ipc_client_cmd *ipc_cmd;
 
 	/* these are set only for director_flush_socket handling: */
 	struct ip_addr host_ip;
@@ -164,11 +166,11 @@ struct director {
 
 	/* director ring handshaking is complete.
 	   director can start serving clients. */
-	unsigned int ring_handshaked:1;
-	unsigned int ring_handshake_warning_sent:1;
-	unsigned int ring_synced:1;
-	unsigned int sync_frozen:1;
-	unsigned int sync_pending:1;
+	bool ring_handshaked:1;
+	bool ring_handshake_warning_sent:1;
+	bool ring_synced:1;
+	bool sync_frozen:1;
+	bool sync_pending:1;
 };
 
 extern bool director_debug;
@@ -258,8 +260,9 @@ void director_update_send_version(struct director *dir,
 int director_connect_host(struct director *dir, struct director_host *host,
 			  const char *reason);
 
-unsigned int
-director_get_username_hash(struct director *dir, const char *username);
+bool
+director_get_username_hash(struct director *dir, const char *username,
+			   unsigned int *hash_r);
 
 void directors_init(void);
 void directors_deinit(void);

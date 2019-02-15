@@ -11,8 +11,8 @@ struct mail_istream {
 
 	struct mail *mail;
 	uoff_t expected_size;
-	unsigned int files_read_increased:1;
-	unsigned int input_has_body:1;
+	bool files_read_increased:1;
+	bool input_has_body:1;
 };
 
 static bool i_stream_mail_try_get_cached_size(struct mail_istream *mstream)
@@ -76,11 +76,15 @@ i_stream_mail_set_size_corrupted(struct mail_istream *mstream, size_t size)
 	char chr;
 
 	if (mstream->expected_size < cur_size) {
+		/* input stream is larger than cached message size */
 		str = "smaller";
 		chr = '<';
+		mstream->istream.istream.stream_errno = EINVAL;
 	} else {
+		/* input stream is smaller than cached message size */
 		str = "larger";
 		chr = '>';
+		mstream->istream.istream.stream_errno = EPIPE;
 	}
 
 	mail_id = i_stream_mail_get_cached_mail_id(mstream);
@@ -92,11 +96,10 @@ i_stream_mail_set_size_corrupted(struct mail_istream *mstream, size_t size)
 		mstream->expected_size, chr, cur_size,
 		mailbox_get_vname(mstream->mail->box),
 		mstream->mail->uid, mail_id);
-	mail_set_cache_corrupted_reason(mstream->mail, MAIL_FETCH_PHYSICAL_SIZE,
+	mail_set_cache_corrupted(mstream->mail, MAIL_FETCH_PHYSICAL_SIZE,
 		t_strdup_printf("read(%s) failed: %s",
 				i_stream_get_name(&mstream->istream.istream),
 				mstream->istream.iostream.error));
-	mstream->istream.istream.stream_errno = EINVAL;
 }
 
 static ssize_t
@@ -119,6 +122,9 @@ i_stream_mail_read(struct istream_private *stream)
 		}
 		if (mstream->expected_size < stream->istream.v_offset + size) {
 			i_stream_mail_set_size_corrupted(mstream, size);
+			/* istream code expects that the position has not changed
+			   when read error occurs, so move pos back. */
+			stream->pos -= size;
 			return -1;
 		}
 	} else if (ret == -1 && stream->istream.eof) {
@@ -162,5 +168,5 @@ struct istream *i_stream_create_mail(struct mail *mail, struct istream *input,
 	mstream->istream.istream.blocking = input->blocking;
 	mstream->istream.istream.seekable = input->seekable;
 	return i_stream_create(&mstream->istream, input,
-			       i_stream_get_fd(input));
+			       i_stream_get_fd(input), 0);
 }

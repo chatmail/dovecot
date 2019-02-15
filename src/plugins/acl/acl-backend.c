@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "hash.h"
+#include "sort.h"
 #include "mail-storage-settings.h"
 #include "mailbox-list.h"
 #include "mail-namespace.h"
@@ -39,15 +40,13 @@ acl_backend_init(const char *data, struct mailbox_list *list,
 	struct acl_backend *backend;
 	unsigned int i, group_count;
 
-	if (user->mail_debug) {
-		i_debug("acl: initializing backend with data: %s", data);
-		i_debug("acl: acl username = %s", acl_username);
-		i_debug("acl: owner = %d", owner);
-	}
+	e_debug(user->event, "acl: initializing backend with data: %s", data);
+	e_debug(user->event, "acl: acl username = %s", acl_username);
+	e_debug(user->event, "acl: owner = %d", owner ? 1 : 0);
 
 	group_count = str_array_length(groups);
 
-	if (strncmp(data, "vfile:", 6) == 0)
+	if (str_begins(data, "vfile:"))
 		data += 6;
 	else if (strcmp(data, "vfile") == 0)
 		data = "";
@@ -61,7 +60,7 @@ acl_backend_init(const char *data, struct mailbox_list *list,
 	backend->username = p_strdup(backend->pool, acl_username);
 	backend->owner = owner;
 	backend->globals_only =
-		mail_user_plugin_getenv(user, "acl_globals_only") != NULL;
+		mail_user_plugin_getenv_bool(user, "acl_globals_only");
 
 	if (group_count > 0) {
 		backend->group_count = group_count;
@@ -69,8 +68,7 @@ acl_backend_init(const char *data, struct mailbox_list *list,
 			p_new(backend->pool, const char *, group_count);
 		for (i = 0; i < group_count; i++) {
 			backend->groups[i] = p_strdup(backend->pool, groups[i]);
-			if (user->mail_debug)
-				i_debug("acl: group added: %s", groups[i]);
+			e_debug(user->event, "acl: group added: %s", groups[i]);
 		}
 		i_qsort(backend->groups, group_count, sizeof(const char *),
 			i_strcmp_p);
@@ -171,8 +169,7 @@ struct acl_object *acl_backend_get_default_object(struct acl_backend *backend)
 	if (backend->default_aclobj != NULL)
 		return backend->default_aclobj;
 
-	/* FIXME: this should probably be made default in v2.3 */
-	if (mail_user_plugin_getenv(user, "acl_defaults_from_inbox") != NULL) {
+	if (mail_user_plugin_getenv_bool(user, "acl_defaults_from_inbox")) {
 		if (ns->type == MAIL_NAMESPACE_TYPE_PRIVATE ||
 		    ns->type == MAIL_NAMESPACE_TYPE_SHARED)
 			default_name = "INBOX";

@@ -17,7 +17,7 @@
 #include "mail-crypt-plugin.h"
 
 #define MAIL_CRYPT_ACL_LIST_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_crypt_acl_mailbox_list_module)
+	MODULE_CONTEXT_REQUIRE(obj, mail_crypt_acl_mailbox_list_module)
 
 struct mail_crypt_acl_mailbox_list {
 	union mailbox_list_module_context module_ctx;
@@ -33,33 +33,37 @@ void mail_crypt_acl_plugin_deinit(void);
 static int
 mail_crypt_acl_has_user_read_right(struct acl_object *aclobj,
 				   const char *username,
-				   const char **error_r ATTR_UNUSED)
+				   const char **error_r)
 {
 	struct acl_object_list_iter *iter;
 	struct acl_rights rights;
-	int ret;
+	int ret = 0;
 
 	iter = acl_object_list_init(aclobj);
-	while ((ret = acl_object_list_next(iter, &rights)) > 0) {
+	while (acl_object_list_next(iter, &rights)) {
 		if (rights.id_type == ACL_ID_USER &&
 		    strcmp(rights.identifier, username) == 0) {
 			ret = str_array_find(rights.rights, MAIL_ACL_READ) ? 1 : 0;
 			break;
 		}
 	}
-	acl_object_list_deinit(&iter);
+	if (acl_object_list_deinit(&iter) < 0) {
+		*error_r = "Failed to iterate ACL objects";
+		return -1;
+	}
+
 	return ret;
 }
 
 static int mail_crypt_acl_has_nonuser_read_right(struct acl_object *aclobj,
-						 const char **error_r ATTR_UNUSED)
+						 const char **error_r)
 {
 	struct acl_object_list_iter *iter;
 	struct acl_rights rights;
-	int ret;
+	int ret = 0;
 
 	iter = acl_object_list_init(aclobj);
-	while ((ret = acl_object_list_next(iter, &rights)) > 0) {
+	while (acl_object_list_next(iter, &rights)) {
 		if (rights.id_type != ACL_ID_USER &&
 		    rights.id_type != ACL_ID_OWNER &&
 		    rights.rights != NULL &&
@@ -68,7 +72,10 @@ static int mail_crypt_acl_has_nonuser_read_right(struct acl_object *aclobj,
 			break;
 		}
 	}
-	acl_object_list_deinit(&iter);
+	if (acl_object_list_deinit(&iter) < 0) {
+		*error_r = "Failed to iterate ACL objects";
+		return -1;
+	}
 	return ret;
 }
 
@@ -82,6 +89,14 @@ mail_crypt_acl_unset_private_keys(struct mailbox *src_box,
 	const char *error;
 	int ret = 1;
 
+	if (mailbox_open(src_box) < 0) {
+		*error_r = t_strdup_printf("mail-crypt-acl-plugin: "
+					   "mailbox_open(%s) failed: %s",
+					   mailbox_get_vname(src_box),
+					   mailbox_get_last_internal_error(src_box, NULL));
+		return -1;
+	}
+
 	t_array_init(&digests, 4);
 	if (mail_crypt_box_get_pvt_digests(src_box, pool_datastack_create(),
 					   type, &digests, &error) < 0) {
@@ -93,7 +108,7 @@ mail_crypt_acl_unset_private_keys(struct mailbox *src_box,
 	}
 
 	struct mailbox_transaction_context *t;
-	t = mailbox_transaction_begin(src_box, 0);
+	t = mailbox_transaction_begin(src_box, 0, __func__);
 
 	const char *const *hash;
 	array_foreach(&digests, hash) {
@@ -197,15 +212,17 @@ mail_crypt_acl_update_private_key(struct mailbox *src_box,
 	t_array_init(&keys, 8);
 
 	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(src_box, 0);
+		mailbox_transaction_begin(src_box, 0, __func__);
 
 	/* get private keys from box */
-	if (mail_crypt_box_get_private_keys(t, &keys, error_r) < 0 ||
+	if (mail_crypt_box_get_private_keys(src_box, &keys, error_r) < 0 ||
 	    mail_crypt_box_share_private_keys(t, key,
 					      dest_user == NULL ? NULL :
 					      dest_user->username,
 					      &keys, error_r) < 0)
 		ret = -1;
+	if (key != NULL)
+		dcrypt_key_unref_public(&key);
 
 	if (ret >= 0) {
 		array_foreach_modifiable(&keys, keyp) {
@@ -244,25 +261,18 @@ static int mail_crypt_acl_object_update(struct acl_object *aclobj,
 						      aclobj->name);
 	struct mailbox *box = mailbox_alloc(aclobj->backend->list, box_name, 0);
 
-	if (mailbox_open(box) < 0) {
-		i_error("mail-crypt-acl-plugin: "
-			"mailbox_open(%s) failed: %s",
-			mailbox_get_vname(box),
-			mailbox_get_last_internal_error(box, NULL));
-		return -1;
-	}
-
 	switch (update->rights.id_type) {
 	case ACL_ID_USER:
 		/* setting rights for specific user: we can encrypt the
 		   mailbox key for the user. */
 		username = update->rights.identifier;
-		ret = mail_crypt_acl_has_user_read_right(aclobj, username, NULL);
+		ret = mail_crypt_acl_has_user_read_right(aclobj, username, &error);
 
 		if (ret < 0) {
 			i_error("mail-crypt-acl-plugin: "
-				"mail_crypt_acl_has_user_read_right(%s) failed",
-				username);
+				"mail_crypt_acl_has_user_read_right(%s) failed: %s",
+				username,
+				error);
 			break;
 		}
 
@@ -286,7 +296,12 @@ static int mail_crypt_acl_object_update(struct acl_object *aclobj,
 			break;
 		} else {
 			i_assert(dest_user != NULL);
-			if ((ret = mail_crypt_acl_update_private_key(box, dest_user,
+			if ((ret = mailbox_open(box)) < 0) {
+				i_error("mail-crypt-acl-plugin: "
+					"mailbox_open(%s) failed: %s",
+					mailbox_get_vname(box),
+					mailbox_get_last_internal_error(box, NULL));
+			} else if ((ret = mail_crypt_acl_update_private_key(box, dest_user,
 									have_rights,
 									disallow_insecure,
 									&error)) < 0) {
@@ -332,9 +347,13 @@ static int mail_crypt_acl_object_update(struct acl_object *aclobj,
 		   we could in theory use per-group encrypted keys, which the
 		   users belonging to the group would able to decrypt with
 		   their private key, but that becomes quite complicated. */
-		if ((ret = mail_crypt_acl_has_nonuser_read_right(aclobj, NULL)) < 0) {
-		    i_error("mail-crypt-acl-plugin: "
-			    "mail_crypt_acl_has_nonuser_read_right failed");
+		if ((ret = mail_crypt_acl_has_nonuser_read_right(aclobj, &error)) < 0) {
+		    i_error("mail-crypt-acl-plugin: %s", error);
+		} else if ((ret = mailbox_open(box)) < 0) {
+			i_error("mail-crypt-acl-plugin: "
+				"mailbox_open(%s) failed: %s",
+				mailbox_get_vname(box),
+				mailbox_get_last_internal_error(box, NULL));
 		} else if ((ret = mail_crypt_acl_update_private_key(box,
 								    NULL,
 								    TRUE,

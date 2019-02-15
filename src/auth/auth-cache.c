@@ -57,7 +57,7 @@ auth_cache_key_add_var(string_t *str, const char *data, unsigned int len)
 		str_append_c(str, data[0]);
 	else {
 		str_append_c(str, '{');
-		str_append_n(str, data, len);
+		str_append_data(str, data, len);
 		str_append_c(str, '}');
 	}
 }
@@ -295,7 +295,7 @@ static bool auth_cache_node_is_user(struct auth_cache_node *node,
 	data++;
 
 	username_len = strlen(username);
-	return strncmp(data, username, username_len) == 0 &&
+	return str_begins(data, username) &&
 		(data[username_len] == '\t' || data[username_len] == '\0');
 }
 
@@ -340,13 +340,28 @@ static const char *
 auth_request_expand_cache_key(const struct auth_request *request,
 			      const char *key)
 {
+	static bool error_logged = FALSE;
+	const char *value, *error;
+
 	/* Uniquely identify the request's passdb/userdb with the P/U prefix
 	   and by "%!", which expands to the passdb/userdb ID number. */
 	key = t_strconcat(request->userdb_lookup ? "U" : "P", "%!",
 			  request->master_user == NULL ? "" : "+%{master_user}",
 			  "\t", key, NULL);
 
-	return t_auth_request_var_expand(key, request, auth_cache_escape);
+	/* It's fine to have unknown %variables in the cache key.
+	   For example db-ldap can have pass_attrs containing
+	   %{ldap:fields} which are used for output, not as part of
+	   the input needed for cache_key. Those could in theory be
+	   filtered out early in the cache_key, but that gets more
+	   problematic when it needs to support also filtering out
+	   e.g. %{sha256:ldap:fields}. */
+	if (t_auth_request_var_expand(key, request, auth_cache_escape,
+				      &value, &error) < 0 && !error_logged) {
+		error_logged = TRUE;
+		i_error("Failed to expand auth cache key %s: %s", key, error);
+	}
+	return value;
 }
 
 const char *

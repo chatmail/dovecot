@@ -8,6 +8,7 @@ EXTRA_DIST = \
 
 wikifiles = ACL.txt \
 	AixPluginsSupport.txt \
+	AttachmentIndicator.txt \
 	AuthDatabase.CheckPassword.txt \
 	AuthDatabase.Dict.txt \
 	AuthDatabase.LDAP.AuthBinds.txt \
@@ -63,6 +64,7 @@ wikifiles = ACL.txt \
 	Design.MailProcess.txt \
 	Design.Memory.txt \
 	Design.OutputStreams.txt \
+	Design.ParameterForwarding.txt \
 	Design.Plugins.txt \
 	Design.Processes.txt \
 	Design.Storage.ErrorHandling.txt \
@@ -84,6 +86,7 @@ wikifiles = ACL.txt \
 	Director.txt \
 	DomainLost.txt \
 	Errors.ChgrpNoPerm.txt \
+	Events.txt \
 	FindMailLocation.txt \
 	FinishBasicConfiguration.txt \
 	HAProxy.txt \
@@ -97,6 +100,7 @@ wikifiles = ACL.txt \
 	HowTo.SimpleVirtualInstall.txt \
 	HowTo.WriteConfiguration.txt \
 	HowTo.txt \
+	IMAPServer.Hibernation.txt \
 	IMAPServer.txt \
 	ImapMetadata.txt \
 	IndexFiles.txt \
@@ -180,9 +184,11 @@ wikifiles = ACL.txt \
 	Pigeonhole.Sieve.Extensions.Include.txt \
 	Pigeonhole.Sieve.Extensions.SpamtestVirustest.txt \
 	Pigeonhole.Sieve.Extensions.Vacation.txt \
+	Pigeonhole.Sieve.Extensions.Variables.txt \
 	Pigeonhole.Sieve.Extensions.txt \
 	Pigeonhole.Sieve.Plugins.Extdata.txt \
 	Pigeonhole.Sieve.Plugins.Extprograms.txt \
+	Pigeonhole.Sieve.Plugins.IMAPFilterSieve.txt \
 	Pigeonhole.Sieve.Plugins.IMAPSieve.txt \
 	Pigeonhole.Sieve.Plugins.Pipe.txt \
 	Pigeonhole.Sieve.Plugins.txt \
@@ -247,6 +253,7 @@ wikifiles = ACL.txt \
 	SocketUnavailable.txt \
 	Statistics.Old.txt \
 	Statistics.txt \
+	Submission.txt \
 	SystemUsers.txt \
 	TestInstallation.txt \
 	TestPop3Installation.txt \

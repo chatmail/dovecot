@@ -6,6 +6,7 @@
 #include "hash.h"
 #include "strescape.h"
 #include "unichar.h"
+#include "iostream-ssl.h"
 #include "http-url.h"
 #include "mail-storage-private.h"
 #include "mailbox-list-private.h"
@@ -55,12 +56,12 @@ struct solr_fts_backend_update_context {
 	uint32_t last_indexed_uid;
 	unsigned int mails_since_flush;
 
-	unsigned int tokenized_input:1;
-	unsigned int last_indexed_uid_set:1;
-	unsigned int body_open:1;
-	unsigned int documents_added:1;
-	unsigned int expunges:1;
-	unsigned int truncate_header:1;
+	bool tokenized_input:1;
+	bool last_indexed_uid_set:1;
+	bool body_open:1;
+	bool documents_added:1;
+	bool expunges:1;
+	bool truncate_header:1;
 };
 
 static const char *solr_escape_chars = "+-&|!(){}[]^\"~*?:\\/ ";
@@ -119,10 +120,10 @@ xml_encode_data_max(string_t *dest, const unsigned char *data, size_t len,
 				unsigned int char_len =
 					uni_utf8_get_char_n(data + i, len - i, &chr);
 				if (char_len > 0 && is_valid_xml_char(chr))
-					str_append_n(dest, data + i, char_len);
+					str_append_data(dest, data + i, char_len);
 				else {
-					str_append_n(dest, utf8_replacement_char,
-						     UTF8_REPLACEMENT_CHAR_LEN);
+					str_append_data(dest, utf8_replacement_char,
+							UTF8_REPLACEMENT_CHAR_LEN);
 				}
 				i += char_len - 1;
 			} else {
@@ -164,7 +165,7 @@ static void solr_quote_http(string_t *dest, const char *str)
 	if (str[0] != '\0')
 		http_url_escape_param(dest, solr_escape(str));
 	else
-		str_append(dest, "\"\"");
+		str_append(dest, "%22%22");
 }
 
 static struct fts_backend *fts_backend_solr_alloc(void)
@@ -181,6 +182,7 @@ fts_backend_solr_init(struct fts_backend *_backend, const char **error_r)
 {
 	struct solr_fts_backend *backend = (struct solr_fts_backend *)_backend;
 	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT(_backend->ns->user);
+	struct ssl_iostream_settings ssl_set;
 
 	if (fuser == NULL) {
 		*error_r = "Invalid fts_solr setting";
@@ -191,8 +193,13 @@ fts_backend_solr_init(struct fts_backend *_backend, const char **error_r)
 		_backend->flags &= ~FTS_BACKEND_FLAG_FUZZY_SEARCH;
 		_backend->flags |= FTS_BACKEND_FLAG_TOKENIZED_INPUT;
 	}
-	return solr_connection_init(fuser->set.url, fuser->set.debug,
-				    &backend->solr_conn, error_r);
+
+	i_zero(&ssl_set);
+	mail_user_init_ssl_client_settings(_backend->ns->user, &ssl_set);
+
+	return solr_connection_init(fuser->set.url, &ssl_set,
+				    fuser->set.debug, &backend->solr_conn,
+				    error_r);
 }
 
 static void fts_backend_solr_deinit(struct fts_backend *_backend)
@@ -217,7 +224,7 @@ get_last_uid_fallback(struct fts_backend *_backend, struct mailbox *box,
 	int ret = 0;
 
 	str = t_str_new(256);
-	str_append(str, "fl=uid&rows=1&sort=uid+desc&q=");
+	str_append(str, "wt=xml&fl=uid&rows=1&sort=uid+desc&q=");
 
 	if (fts_mailbox_get_guid(box, &box_guid) < 0)
 		return -1;
@@ -403,10 +410,8 @@ fts_backend_solr_update_deinit(struct fts_backend_update_context *_ctx)
 			ret = -1;
 	}
 
-	if (ctx->cmd != NULL)
-		str_free(&ctx->cmd);
-	if (ctx->cmd_expunge != NULL)
-		str_free(&ctx->cmd_expunge);
+	str_free(&ctx->cmd);
+	str_free(&ctx->cmd_expunge);
 	array_foreach_modifiable(&ctx->fields, field) {
 		str_free(&field->value);
 		i_free(field->key);
@@ -829,7 +834,7 @@ fts_backend_solr_lookup(struct fts_backend *_backend, struct mailbox *box,
 	mailbox_get_open_status(box, STATUS_UIDNEXT, &status);
 
 	str = t_str_new(256);
-	str_printfa(str, "fl=uid,score&rows=%u&sort=uid+asc&q=%%7b!lucene+q.op%%3dAND%%7d",
+	str_printfa(str, "wt=xml&fl=uid,score&rows=%u&sort=uid+asc&q=%%7b!lucene+q.op%%3dAND%%7d",
 		    status.uidnext);
 	prefix_len = str_len(str);
 
@@ -939,7 +944,7 @@ fts_backend_solr_lookup_multi(struct fts_backend *backend,
 	string_t *str;
 
 	str = t_str_new(256);
-	str_printfa(str, "fl=box,uid,score&rows=%u&sort=box+asc,uid+asc&q=%%7b!lucene+q.op%%3dAND%%7d",
+	str_printfa(str, "wt=xml&fl=box,uid,score&rows=%u&sort=box+asc,uid+asc&q=%%7b!lucene+q.op%%3dAND%%7d",
 		    SOLR_MAX_MULTI_ROWS);
 
 	if (solr_add_definite_query_args(str, args, and_args)) {

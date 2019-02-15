@@ -31,8 +31,7 @@ static int
 shared_storage_create(struct mail_storage *_storage, struct mail_namespace *ns,
 		      const char **error_r)
 {
-	struct shared_storage *storage = (struct shared_storage *)_storage;
-	struct mail_storage *storage_class;
+	struct shared_storage *storage = SHARED_STORAGE(_storage);
 	const char *driver, *p;
 	char *wildcardp, key;
 	bool have_username;
@@ -49,10 +48,8 @@ shared_storage_create(struct mail_storage *_storage, struct mail_namespace *ns,
 		p_strdup(_storage->pool, ns->unexpanded_set->location);
 	storage->storage_class_name = p_strdup(_storage->pool, driver);
 
-	storage_class = mail_user_get_storage_class(_storage->user, driver);
-	if (storage_class != NULL)
-		_storage->class_flags = storage_class->class_flags;
-	else if (strcmp(driver, "auto") != 0) {
+	if (mail_user_get_storage_class(_storage->user, driver) == NULL &&
+	    strcmp(driver, "auto") != 0) {
 		*error_r = t_strconcat("Unknown shared storage driver: ",
 				       driver, NULL);
 		return -1;
@@ -138,16 +135,8 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 {
 	struct mail_storage *_storage = (*_ns)->storage;
 	struct mailbox_list *list = (*_ns)->list;
-	struct shared_storage *storage = (struct shared_storage *)_storage;
+	struct shared_storage *storage = SHARED_STORAGE(_storage);
 	struct mail_user *user = _storage->user;
-	static struct var_expand_table static_tab[] = {
-		{ 'u', NULL, "user" },
-		{ 'n', NULL, "username" },
-		{ 'd', NULL, "domain" },
-		{ 'h', NULL, "home" },
-		{ '\0', NULL, NULL }
-	};
-	struct var_expand_table *tab;
 	struct mail_namespace *new_ns, *ns = *_ns;
 	struct mail_namespace_settings *ns_set, *unexpanded_ns_set;
 	struct mail_user *owner;
@@ -222,8 +211,7 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 	} else {
 		if (domain == NULL) {
 			/* no domain given, use ours (if we have one) */
-			domain = strchr(user->username, '@');
-			if (domain != NULL) domain++;
+			domain = i_strchr_to_next(user->username, '@');
 		}
 		userdomain = domain == NULL ? username :
 			t_strconcat(username, "@", domain, NULL);
@@ -236,15 +224,22 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 
 	/* expand the namespace prefix and see if it already exists.
 	   this should normally happen only when the mailbox is being opened */
-	tab = t_malloc(sizeof(static_tab));
-	memcpy(tab, static_tab, sizeof(static_tab));
-	tab[0].value = userdomain;
-	tab[1].value = username;
-	tab[2].value = domain;
+	struct var_expand_table tab[] = {
+		{ 'u', userdomain, "user" },
+		{ 'n', username, "username" },
+		{ 'd', domain, "domain" },
+		{ 'h', NULL, "home" },
+		{ '\0', NULL, NULL }
+	};
 
 	prefix = t_str_new(128);
 	str_append(prefix, ns->prefix);
-	var_expand(prefix, storage->ns_prefix_pattern, tab);
+	if (var_expand(prefix, storage->ns_prefix_pattern, tab, &error) <= 0) {
+		mailbox_list_set_critical(list,
+			"Failed to expand namespace prefix '%s': %s",
+			storage->ns_prefix_pattern, error);
+		return -1;
+	}
 
 	*_ns = mail_namespace_find_prefix(user->namespaces, str_c(prefix));
 	if (*_ns != NULL) {
@@ -253,8 +248,8 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 		return 0;
 	}
 
-	owner = mail_user_alloc(userdomain, user->set_info,
-				user->unexpanded_set);
+	owner = mail_user_alloc(event_get_parent(user->event), userdomain,
+				user->set_info, user->unexpanded_set);
 	owner->_service_user = user->_service_user;
 	mail_storage_service_user_ref(owner->_service_user);
 	owner->creator = user;
@@ -282,6 +277,15 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 		}
 	}
 
+	location = t_str_new(256);
+	if (ret > 0 &&
+	    var_expand(location, storage->location, tab, &error) <= 0) {
+		mailbox_list_set_critical(list,
+			"Failed to expand namespace location '%s': %s",
+			storage->location, error);
+		return -1;
+	}
+
 	/* create the new namespace */
 	new_ns = i_new(struct mail_namespace, 1);
 	new_ns->refcount = 1;
@@ -296,16 +300,12 @@ int shared_storage_get_namespace(struct mail_namespace **_ns,
 	new_ns->mail_set = _storage->set;
 	i_array_init(&new_ns->all_storages, 2);
 
-	location = t_str_new(256);
-	if (ret > 0)
-		var_expand(location, storage->location, tab);
-	else {
+	if (ret <= 0) {
 		get_nonexistent_user_location(storage, userdomain, location);
 		new_ns->flags |= NAMESPACE_FLAG_UNUSABLE;
-		if (ns->user->mail_debug) {
-			i_debug("shared: Tried to access mails of "
-				"nonexistent user %s", userdomain);
-		}
+		e_debug(ns->user->event,
+			"shared: Tried to access mails of "
+			"nonexistent user %s", userdomain);
 	}
 
 	ns_set = p_new(user->pool, struct mail_namespace_settings, 1);

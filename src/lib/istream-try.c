@@ -76,6 +76,11 @@ static int i_stream_try_detect(struct try_istream *tstream)
 		}
 		if (ret == 0)
 			return 0;
+		if (try_input->stream_errno == 0) {
+			/* empty file */
+			tstream->istream.istream.eof = TRUE;
+			return -1;
+		}
 		if (try_input->stream_errno != EINVAL) {
 			tstream->istream.istream.stream_errno =
 				try_input->stream_errno;
@@ -140,5 +145,5 @@ struct istream *istream_try_create(struct istream *const input[])
 	tstream->istream.istream.readable_fd = FALSE;
 	tstream->istream.istream.blocking = blocking;
 	tstream->istream.istream.seekable = seekable;
-	return i_stream_create(&tstream->istream, NULL, -1);
+	return i_stream_create(&tstream->istream, NULL, -1, 0);
 }

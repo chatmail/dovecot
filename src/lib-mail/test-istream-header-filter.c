@@ -188,7 +188,7 @@ static void add_random_text(string_t *dest, unsigned int count)
 	unsigned int i;
 
 	for (i = 0; i < count; i++)
-		str_append_c(dest, rand() % ('z'-'a'+1) + 'a');
+		str_append_c(dest, i_rand_minmax('a', 'z'));
 }
 
 static void ATTR_NULL(3)
@@ -243,7 +243,7 @@ static void test_istream_filter_large_buffer(void)
 				break;
 			if (ret == -2) {
 				data = i_stream_get_data(filter, &size);
-				str_append_n(output, data, size);
+				str_append_data(output, data, size);
 				i_stream_skip(filter, size);
 			}
 		}
@@ -252,7 +252,7 @@ static void test_istream_filter_large_buffer(void)
 
 		data = i_stream_get_data(filter, &size);
 		test_assert(size <= 8192);
-		str_append_n(output, data, size);
+		str_append_data(output, data, size);
 
 		p = strstr(str_c(input), "To: ");
 		i_assert(p != NULL);
@@ -311,7 +311,7 @@ static void test_istream_filter_large_buffer2(void)
 
 	for (i = 0; i < 2; i++) {
 		while ((ret = i_stream_read_more(filter, &data, &size)) > 0) {
-			str_append_n(output, data, size);
+			str_append_data(output, data, size);
 			i_stream_skip(filter, size);
 		}
 		test_assert(ret == -1);
@@ -402,7 +402,7 @@ edit_callback(struct header_filter_istream *input,
 		/* add a new header */
 		const char *new_hdr = "Added: header\n\n";
 		i_stream_header_filter_add(input, new_hdr, strlen(new_hdr));
-		*matched = FALSE;
+		*matched = TRUE;
 	} else if (strcasecmp(hdr->name, "To") == 0) {
 		/* modify To header */
 		const char *new_to = "To: 123\n";
@@ -473,7 +473,7 @@ static void test_istream_end_body_with_lf(void)
 
 		data = i_stream_get_data(filter, &size);
 		if (size > 0)
-			str_append_n(str, data, size);
+			str_append_data(str, data, size);
 		i_stream_skip(filter, size);
 	}
 	test_istream_set_size(istream, input_len);
@@ -482,7 +482,7 @@ static void test_istream_end_body_with_lf(void)
 	test_assert(i_stream_read(filter) == -1);
 
 	data = i_stream_get_data(filter, &size);
-	str_append_n(str, data, size);
+	str_append_data(str, data, size);
 	test_assert(strcmp(str_c(str), output) == 0);
 
 	i_stream_unref(&filter);
@@ -493,7 +493,7 @@ static void test_istream_end_body_with_lf(void)
 
 static void test_istream_add_missing_eoh(void)
 {
-	struct {
+	static const struct {
 		const char *input;
 		const char *output;
 		unsigned int extra;
@@ -545,7 +545,7 @@ static void test_istream_add_missing_eoh_and_edit(void)
 
 static void test_istream_hide_body(void)
 {
-	struct {
+	static const struct {
 		const char *input;
 		const char *output;
 		int extra;
@@ -582,7 +582,7 @@ strip_eoh_callback(struct header_filter_istream *input ATTR_UNUSED,
 		   bool *matched, void *context ATTR_UNUSED)
 {
 	if (hdr != NULL && hdr->eoh)
-		*matched = FALSE;
+		*matched = TRUE;
 }
 
 static void test_istream_strip_eoh(void)
@@ -644,7 +644,7 @@ static void test_istream_empty_missing_eoh_callback(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_istream_filter,
 		test_istream_filter_large_buffer,
 		test_istream_filter_large_buffer2,

@@ -2,7 +2,8 @@ Doveadm HTTP API
 ================
 
 Doveadm HTTP API is available since v2.2.22. It is considered *experimental* in
-v2.2.22. It lets you perform doveadm commands over HTTP transport.
+v2.2.22. Can be considered as stable since 2.2.23. It lets you perform doveadm
+commands over HTTP transport.
 
 Configuration
 -------------
@@ -105,7 +106,8 @@ missing.
 Example clients
 ---------------
 
-A PoC API client/library written in Python is available at
-https://github.com/hnsk/doveadm-http-cli
+ * A PoC API client/library written in Python is available at
+   https://github.com/hnsk/doveadm-http-cli
+ * See also internal doveadm protocol clients in <Design.DoveadmProtocol.txt>
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

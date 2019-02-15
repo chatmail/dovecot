@@ -10,12 +10,12 @@ if BUILD_SOLR
 FTS_SOLR = fts-solr
 endif
 
-if HAVE_LDAP
-DICT_LDAP = dict-ldap
-endif
-
 if HAVE_APPARMOR
 APPARMOR = apparmor
+endif
+
+if HAVE_LUA
+MAIL_LUA = mail-lua
 endif
 
 SUBDIRS = \
@@ -33,6 +33,7 @@ SUBDIRS = \
 	push-notification \
 	mail-filter \
 	mail-log \
+	$(MAIL_LUA) \
 	mailbox-alias \
 	quota \
 	quota-clone \
@@ -40,8 +41,8 @@ SUBDIRS = \
 	pop3-migration \
 	replication \
 	snarf \
-	stats \
-	imap-stats \
+	old-stats \
+	imap-old-stats \
 	mail-crypt \
 	trash \
 	virtual \

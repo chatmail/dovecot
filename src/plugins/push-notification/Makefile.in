@@ -89,12 +89,65 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+@HAVE_LUA_TRUE@am__append_1 = \
+@HAVE_LUA_TRUE@	lib22_push_notification_lua_plugin.la
+
 subdir = src/plugins/push-notification
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/m4/want_apparmor.m4 \
-	$(top_srcdir)/dovecot.m4 $(top_srcdir)/libtool.m4 \
-	$(top_srcdir)/ltoptions.m4 $(top_srcdir)/ltsugar.m4 \
-	$(top_srcdir)/ltversion.m4 $(top_srcdir)/lt~obsolete.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
+	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
+	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
+	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
+	$(top_srcdir)/m4/cc_pie.m4 $(top_srcdir)/m4/cc_retpoline.m4 \
+	$(top_srcdir)/m4/cc_stack_protector.m4 \
+	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
+	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
+	$(top_srcdir)/m4/dbqlk.m4 $(top_srcdir)/m4/dirent_dtype.m4 \
+	$(top_srcdir)/m4/dovecot.m4 $(top_srcdir)/m4/fd_passing.m4 \
+	$(top_srcdir)/m4/fdatasync.m4 \
+	$(top_srcdir)/m4/flexible_array_member.m4 \
+	$(top_srcdir)/m4/glibc.m4 $(top_srcdir)/m4/gmtime_max.m4 \
+	$(top_srcdir)/m4/gmtime_tm_gmtoff.m4 \
+	$(top_srcdir)/m4/ioloop.m4 $(top_srcdir)/m4/iovec.m4 \
+	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/ld_relro.m4 \
+	$(top_srcdir)/m4/ld_whole_archive.m4 \
+	$(top_srcdir)/m4/libcap.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/libwrap.m4 $(top_srcdir)/m4/linux_mremap.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/m4/mmap_write.m4 $(top_srcdir)/m4/mntctl.m4 \
+	$(top_srcdir)/m4/modules.m4 $(top_srcdir)/m4/notify.m4 \
+	$(top_srcdir)/m4/nsl.m4 $(top_srcdir)/m4/off_t_max.m4 \
+	$(top_srcdir)/m4/pr_set_dumpable.m4 \
+	$(top_srcdir)/m4/q_quotactl.m4 $(top_srcdir)/m4/quota.m4 \
+	$(top_srcdir)/m4/random.m4 $(top_srcdir)/m4/rlimit.m4 \
+	$(top_srcdir)/m4/sendfile.m4 $(top_srcdir)/m4/size_t_signed.m4 \
+	$(top_srcdir)/m4/sockpeercred.m4 $(top_srcdir)/m4/sql.m4 \
+	$(top_srcdir)/m4/ssl.m4 $(top_srcdir)/m4/st_tim.m4 \
+	$(top_srcdir)/m4/static_array.m4 $(top_srcdir)/m4/test_with.m4 \
+	$(top_srcdir)/m4/time_t.m4 $(top_srcdir)/m4/typeof.m4 \
+	$(top_srcdir)/m4/typeof_dev_t.m4 $(top_srcdir)/m4/unsetenv.m4 \
+	$(top_srcdir)/m4/uoff_t_max.m4 $(top_srcdir)/m4/vararg.m4 \
+	$(top_srcdir)/m4/want_apparmor.m4 \
+	$(top_srcdir)/m4/want_bsdauth.m4 \
+	$(top_srcdir)/m4/want_bzlib.m4 \
+	$(top_srcdir)/m4/want_cassandra.m4 \
+	$(top_srcdir)/m4/want_cdb.m4 \
+	$(top_srcdir)/m4/want_checkpassword.m4 \
+	$(top_srcdir)/m4/want_clucene.m4 $(top_srcdir)/m4/want_db.m4 \
+	$(top_srcdir)/m4/want_gssapi.m4 $(top_srcdir)/m4/want_icu.m4 \
+	$(top_srcdir)/m4/want_ldap.m4 $(top_srcdir)/m4/want_lua.m4 \
+	$(top_srcdir)/m4/want_lz4.m4 $(top_srcdir)/m4/want_lzma.m4 \
+	$(top_srcdir)/m4/want_mysql.m4 $(top_srcdir)/m4/want_pam.m4 \
+	$(top_srcdir)/m4/want_passwd.m4 $(top_srcdir)/m4/want_pgsql.m4 \
+	$(top_srcdir)/m4/want_prefetch.m4 \
+	$(top_srcdir)/m4/want_shadow.m4 $(top_srcdir)/m4/want_sia.m4 \
+	$(top_srcdir)/m4/want_sodium.m4 $(top_srcdir)/m4/want_solr.m4 \
+	$(top_srcdir)/m4/want_sqlite.m4 \
+	$(top_srcdir)/m4/want_stemmer.m4 \
+	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_vpopmail.m4 \
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/warnings.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -134,8 +187,7 @@ am__uninstall_files_from_dir = { \
 am__installdirs = "$(DESTDIR)$(moduledir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
 LTLIBRARIES = $(module_LTLIBRARIES)
-@DOVECOT_PLUGIN_DEPS_TRUE@lib20_push_notification_plugin_la_DEPENDENCIES =  \
-@DOVECOT_PLUGIN_DEPS_TRUE@	../notify/lib15_notify_plugin.la
+lib20_push_notification_plugin_la_DEPENDENCIES = $(notify_deps)
 am_lib20_push_notification_plugin_la_OBJECTS =  \
 	push-notification-driver-dlog.lo \
 	push-notification-driver-ox.lo push-notification-drivers.lo \
@@ -165,6 +217,21 @@ lib20_push_notification_plugin_la_LINK = $(LIBTOOL) $(AM_V_lt) \
 	--tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link \
 	$(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(lib20_push_notification_plugin_la_LDFLAGS) $(LDFLAGS) -o $@
+am__DEPENDENCIES_1 =
+@HAVE_LUA_TRUE@lib22_push_notification_lua_plugin_la_DEPENDENCIES =  \
+@HAVE_LUA_TRUE@	$(notify_deps) $(am__DEPENDENCIES_1)
+am__lib22_push_notification_lua_plugin_la_SOURCES_DIST =  \
+	push-notification-driver-lua.c
+@HAVE_LUA_TRUE@am_lib22_push_notification_lua_plugin_la_OBJECTS = lib22_push_notification_lua_plugin_la-push-notification-driver-lua.lo
+lib22_push_notification_lua_plugin_la_OBJECTS =  \
+	$(am_lib22_push_notification_lua_plugin_la_OBJECTS)
+lib22_push_notification_lua_plugin_la_LINK = $(LIBTOOL) $(AM_V_lt) \
+	--tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link \
+	$(CCLD) $(lib22_push_notification_lua_plugin_la_CFLAGS) \
+	$(CFLAGS) $(lib22_push_notification_lua_plugin_la_LDFLAGS) \
+	$(LDFLAGS) -o $@
+@HAVE_LUA_TRUE@am_lib22_push_notification_lua_plugin_la_rpath =  \
+@HAVE_LUA_TRUE@	-rpath $(moduledir)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -199,8 +266,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(lib20_push_notification_plugin_la_SOURCES)
-DIST_SOURCES = $(lib20_push_notification_plugin_la_SOURCES)
+SOURCES = $(lib20_push_notification_plugin_la_SOURCES) \
+	$(lib22_push_notification_lua_plugin_la_SOURCES)
+DIST_SOURCES = $(lib20_push_notification_plugin_la_SOURCES) \
+	$(am__lib22_push_notification_lua_plugin_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -240,6 +309,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BINARY_CFLAGS = @BINARY_CFLAGS@
+BINARY_LDFLAGS = @BINARY_LDFLAGS@
 CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
 CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
@@ -281,6 +352,8 @@ KRB5_LIBS = @KRB5_LIBS@
 LD = @LD@
 LDAP_LIBS = @LDAP_LIBS@
 LDFLAGS = @LDFLAGS@
+LD_NO_WHOLE_ARCHIVE = @LD_NO_WHOLE_ARCHIVE@
+LD_WHOLE_ARCHIVE = @LD_WHOLE_ARCHIVE@
 LIBCAP = @LIBCAP@
 LIBDOVECOT = @LIBDOVECOT@
 LIBDOVECOT_COMPRESS = @LIBDOVECOT_COMPRESS@
@@ -302,15 +375,20 @@ LIBICU_CFLAGS = @LIBICU_CFLAGS@
 LIBICU_LIBS = @LIBICU_LIBS@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
+LIBSODIUM_CFLAGS = @LIBSODIUM_CFLAGS@
+LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
+LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
+LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
-LINKED_STORAGE_LIBS = @LINKED_STORAGE_LIBS@
 LIPO = @LIPO@
 LN_S = @LN_S@
 LTLIBICONV = @LTLIBICONV@
 LTLIBOBJS = @LTLIBOBJS@
 LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
+LUA_CFLAGS = @LUA_CFLAGS@
+LUA_LIBS = @LUA_LIBS@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
@@ -334,15 +412,19 @@ PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
+PANDOC = @PANDOC@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PGSQL_CFLAGS = @PGSQL_CFLAGS@
 PGSQL_LIBS = @PGSQL_LIBS@
 PG_CONFIG = @PG_CONFIG@
+PIE_CFLAGS = @PIE_CFLAGS@
+PIE_LDFLAGS = @PIE_LDFLAGS@
 PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 QUOTA_LIBS = @QUOTA_LIBS@
 RANLIB = @RANLIB@
+RELRO_LDFLAGS = @RELRO_LDFLAGS@
 RPCGEN = @RPCGEN@
 RUN_TEST = @RUN_TEST@
 SED = @SED@
@@ -397,8 +479,6 @@ libdir = @libdir@
 libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
-mail_storages = @mail_storages@
-mailbox_list_drivers = @mailbox_list_drivers@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 moduledir = @moduledir@
@@ -428,12 +508,14 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-storage \
+	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-I$(top_srcdir)/src/plugins/notify
 
 lib20_push_notification_plugin_la_LDFLAGS = -module -avoid-version
-module_LTLIBRARIES = lib20_push_notification_plugin.la
-@DOVECOT_PLUGIN_DEPS_TRUE@lib20_push_notification_plugin_la_LIBADD = \
-@DOVECOT_PLUGIN_DEPS_TRUE@        ../notify/lib15_notify_plugin.la
+module_LTLIBRARIES = lib20_push_notification_plugin.la $(am__append_1)
+@DOVECOT_PLUGIN_DEPS_TRUE@notify_deps = ../notify/lib15_notify_plugin.la
+lib20_push_notification_plugin_la_LIBADD = \
+	$(notify_deps)
 
 lib20_push_notification_plugin_la_SOURCES = \
 	push-notification-driver-dlog.c \
@@ -482,6 +564,16 @@ headers = \
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
+@HAVE_LUA_TRUE@lib22_push_notification_lua_plugin_la_CFLAGS = $(AM_CPPFLAGS) \
+@HAVE_LUA_TRUE@	-I$(top_srcdir)/src/lib-lua \
+@HAVE_LUA_TRUE@	-I$(top_srcdir)/src/plugins/mail-lua \
+@HAVE_LUA_TRUE@	$(LUA_CFLAGS)
+
+@HAVE_LUA_TRUE@lib22_push_notification_lua_plugin_la_LDFLAGS = module -avoid-version
+@HAVE_LUA_TRUE@lib22_push_notification_lua_plugin_la_LIBADD = $(notify_deps) $(LUA_LIBS)
+@HAVE_LUA_TRUE@lib22_push_notification_lua_plugin_la_SOURCES = \
+@HAVE_LUA_TRUE@	push-notification-driver-lua.c
+
 all: all-am
 
 .SUFFIXES:
@@ -554,12 +646,16 @@ clean-moduleLTLIBRARIES:
 lib20_push_notification_plugin.la: $(lib20_push_notification_plugin_la_OBJECTS) $(lib20_push_notification_plugin_la_DEPENDENCIES) $(EXTRA_lib20_push_notification_plugin_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(lib20_push_notification_plugin_la_LINK) -rpath $(moduledir) $(lib20_push_notification_plugin_la_OBJECTS) $(lib20_push_notification_plugin_la_LIBADD) $(LIBS)
 
+lib22_push_notification_lua_plugin.la: $(lib22_push_notification_lua_plugin_la_OBJECTS) $(lib22_push_notification_lua_plugin_la_DEPENDENCIES) $(EXTRA_lib22_push_notification_lua_plugin_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(lib22_push_notification_lua_plugin_la_LINK) $(am_lib22_push_notification_lua_plugin_la_rpath) $(lib22_push_notification_lua_plugin_la_OBJECTS) $(lib22_push_notification_lua_plugin_la_LIBADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/lib22_push_notification_lua_plugin_la-push-notification-driver-lua.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/push-notification-driver-dlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/push-notification-driver-ox.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/push-notification-drivers.Plo@am__quote@
@@ -602,6 +698,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+lib22_push_notification_lua_plugin_la-push-notification-driver-lua.lo: push-notification-driver-lua.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib22_push_notification_lua_plugin_la_CFLAGS) $(CFLAGS) -MT lib22_push_notification_lua_plugin_la-push-notification-driver-lua.lo -MD -MP -MF $(DEPDIR)/lib22_push_notification_lua_plugin_la-push-notification-driver-lua.Tpo -c -o lib22_push_notification_lua_plugin_la-push-notification-driver-lua.lo `test -f 'push-notification-driver-lua.c' || echo '$(srcdir)/'`push-notification-driver-lua.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/lib22_push_notification_lua_plugin_la-push-notification-driver-lua.Tpo $(DEPDIR)/lib22_push_notification_lua_plugin_la-push-notification-driver-lua.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='push-notification-driver-lua.c' object='lib22_push_notification_lua_plugin_la-push-notification-driver-lua.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(lib22_push_notification_lua_plugin_la_CFLAGS) $(CFLAGS) -c -o lib22_push_notification_lua_plugin_la-push-notification-driver-lua.lo `test -f 'push-notification-driver-lua.c' || echo '$(srcdir)/'`push-notification-driver-lua.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

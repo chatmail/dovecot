@@ -24,7 +24,7 @@
 #define VIRTUAL_DEFAULT_MAX_OPEN_MAILBOXES 64
 
 #define VIRTUAL_BACKEND_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, virtual_backend_storage_module)
+	MODULE_CONTEXT_REQUIRE(obj, virtual_backend_storage_module)
 
 struct virtual_backend_mailbox {
 	union mailbox_module_context module_ctx;
@@ -197,15 +197,20 @@ static int virtual_backend_box_alloc(struct virtual_mailbox *mbox,
 		t_strdup_printf("virtual mailbox %s", mailbox_get_vname(&mbox->box)) :
 		t_strdup_printf("virtual mailbox %s: %s", mailbox_get_vname(&mbox->box), mbox->box.reason));
 
-	if (mailbox_exists(bbox->box, TRUE, &existence) < 0)
-		return virtual_backend_box_open_failed(mbox, bbox);
+	if (bbox == mbox->save_bbox) {
+		/* Assume that the save_bbox exists, whether or not it truly
+		   does. This at least gives a better error message than crash
+		   later on. */
+		existence = MAILBOX_EXISTENCE_SELECT;
+	} else {
+		if (mailbox_exists(bbox->box, TRUE, &existence) < 0)
+			return virtual_backend_box_open_failed(mbox, bbox);
+	}
 	if (existence != MAILBOX_EXISTENCE_SELECT) {
 		/* ignore this. it could be intentional. */
-		if (mbox->storage->storage.user->mail_debug) {
-			i_debug("virtual mailbox %s: "
-				"Skipping non-existing mailbox %s",
-				mbox->box.vname, bbox->box->vname);
-		}
+		e_debug(mbox->box.event,
+			"Skipping non-existing mailbox %s",
+			bbox->box->vname);
 		mailbox_free(&bbox->box);
 		return 0;
 	}
@@ -480,7 +485,7 @@ static int virtual_mailbox_open(struct mailbox *box)
 	int ret = 0;
 
 	if (virtual_mailbox_is_in_open_stack(mbox->storage, box->name)) {
-		mail_storage_set_critical(box->storage,
+		mailbox_set_critical(box,
 			"Virtual mailbox loops: %s", box->name);
 		return -1;
 	}
@@ -523,9 +528,8 @@ static int virtual_mailbox_open(struct mailbox *box)
 		mail_index_update_header_ext(t, mbox->virtual_guid_ext_id,
 					     0, mbox->guid, GUID_128_SIZE);
 		if (mail_index_transaction_commit(&t) < 0) {
-			mail_storage_set_critical(box->storage,
-						  "Cannot write GUID for virtual mailbox %s to index",
-						  mailbox_get_vname(box));
+			mailbox_set_critical(box,
+				"Cannot write GUID for virtual mailbox to index");
 			virtual_mailbox_close_internal(mbox);
 			index_storage_mailbox_close(box);
 			return -1;
@@ -599,9 +603,8 @@ static int virtual_storage_set_have_guid_flags(struct virtual_mailbox *mbox)
 			   since this could be called from
 			   mailbox_get_open_status() and it would panic.
 			   So just log the error and skip the mailbox. */
-			mail_storage_set_critical(mbox->box.storage,
-				"Virtual mailbox %s: Failed to get have_guid existence for backend mailbox %s: %s",
-				mailbox_get_vname(&mbox->box),
+			mailbox_set_critical(&mbox->box,
+				"Virtual mailbox: Failed to get have_guid existence for backend mailbox %s: %s",
 				mailbox_get_vname(bboxes[i]->box), errstr);
 			continue;
 		}
@@ -659,8 +662,7 @@ virtual_mailbox_get_metadata(struct mailbox *box,
 	i_assert(box->opened);
 	if ((items & MAILBOX_METADATA_GUID) != 0) {
 		if (guid_128_is_empty(mbox->guid)) {
-			mail_storage_set_critical(box->storage, "GUID missing for virtual folder %s",
-						  mailbox_get_vname(box));
+			mailbox_set_critical(box, "GUID missing for virtual folder");
 			return -1;
 		}
 		guid_128_copy(metadata_r->guid, mbox->guid);
@@ -737,6 +739,16 @@ static void virtual_notify_changes(struct mailbox *box)
 }
 
 static void
+virtual_uidmap_to_uid_array(struct virtual_backend_box *bbox,
+			    ARRAY_TYPE(seq_range) *uids_r)
+{
+	const struct virtual_backend_uidmap *uid;
+	array_foreach(&bbox->uids, uid) {
+		seq_range_array_add(uids_r, uid->real_uid);
+	}
+}
+
+static void
 virtual_get_virtual_uids(struct mailbox *box,
 			 struct mailbox *backend_mailbox,
 			 const ARRAY_TYPE(seq_range) *backend_uids,
@@ -745,6 +757,7 @@ virtual_get_virtual_uids(struct mailbox *box,
 	struct virtual_mailbox *mbox = (struct virtual_mailbox *)box;
 	struct virtual_backend_box *bbox;
 	const struct virtual_backend_uidmap *uids;
+	ARRAY_TYPE(seq_range) uid_range;
 	struct seq_range_iter iter;
 	unsigned int n, i, count;
 	uint32_t uid;
@@ -760,7 +773,12 @@ virtual_get_virtual_uids(struct mailbox *box,
 		return;
 
 	uids = array_get(&bbox->uids, &count); i = 0;
-	seq_range_array_iter_init(&iter, backend_uids); n = 0;
+
+	t_array_init(&uid_range, 8);
+	virtual_uidmap_to_uid_array(bbox, &uid_range);
+	seq_range_array_intersect(&uid_range, backend_uids);
+
+	seq_range_array_iter_init(&iter, &uid_range); n = 0;
 	while (seq_range_array_iter_nth(&iter, n++, &uid)) {
 		while (i < count && uids[i].real_uid < uid) i++;
 		if (i < count && uids[i].real_uid == uid) {
@@ -840,7 +858,7 @@ static bool virtual_is_inconsistent(struct mailbox *box)
 static int
 virtual_list_index_has_changed(struct mailbox *box ATTR_UNUSED,
 			       struct mail_index_view *list_view ATTR_UNUSED,
-			       uint32_t seq ATTR_UNUSED)
+			       uint32_t seq ATTR_UNUSED, bool quick ATTR_UNUSED)
 {
 	/* we don't have any quick and easy optimizations for tracking
 	   virtual folders. ideally we'd completely disable mailbox list

@@ -41,7 +41,7 @@ static struct {
 
 extern struct mailbox_list imapc_mailbox_list;
 
-static void imapc_list_send_hierarcy_sep_lookup(struct imapc_mailbox_list *list);
+static void imapc_list_send_hierarchy_sep_lookup(struct imapc_mailbox_list *list);
 static void imapc_untagged_list(const struct imapc_untagged_reply *reply,
 				struct imapc_storage_client *client);
 static void imapc_untagged_lsub(const struct imapc_untagged_reply *reply,
@@ -78,7 +78,7 @@ static int imapc_list_init(struct mailbox_list *_list, const char **error_r)
 					       imapc_untagged_list);
 	imapc_storage_client_register_untagged(list->client, "LSUB",
 					       imapc_untagged_lsub);
-	imapc_list_send_hierarcy_sep_lookup(list);
+	imapc_list_send_hierarchy_sep_lookup(list);
 	return 0;
 }
 
@@ -295,7 +295,7 @@ static void imapc_storage_sep_callback(const struct imapc_command_reply *reply,
 	imapc_client_stop(list->client->client);
 }
 
-static void imapc_list_send_hierarcy_sep_lookup(struct imapc_mailbox_list *list)
+static void imapc_list_send_hierarchy_sep_lookup(struct imapc_mailbox_list *list)
 {
 	struct imapc_command *cmd;
 
@@ -314,7 +314,7 @@ int imapc_list_try_get_root_sep(struct imapc_mailbox_list *list, char *sep_r)
 	if (list->root_sep == '\0') {
 		if (imapc_storage_client_handle_auth_failure(list->client))
 			return -1;
-		imapc_list_send_hierarcy_sep_lookup(list);
+		imapc_list_send_hierarchy_sep_lookup(list);
 		while (list->root_sep_pending)
 			imapc_client_run(list->client->client);
 		if (list->root_sep == '\0')
@@ -365,7 +365,7 @@ imapc_list_get_vname(struct mailbox_list *_list, const char *storage_name)
 		/* ACL plugin does these lookups */
 	} else if (*prefix != '\0' && strcasecmp(storage_name, "INBOX") != 0) {
 		prefix_len = strlen(prefix);
-		i_assert(strncmp(prefix, storage_name, prefix_len) == 0);
+		i_assert(str_begins(storage_name, prefix));
 		storage_name += prefix_len;
 		if (storage_name[0] == '\0') {
 			/* we're looking up the prefix itself */
@@ -475,7 +475,6 @@ imapc_list_get_temp_prefix(struct mailbox_list *_list, bool global)
 	} else {
 		i_panic("imapc: Can't return a temp prefix for '%s'",
 			_list->ns->prefix);
-		return NULL;
 	}
 }
 
@@ -570,7 +569,7 @@ static int imapc_list_refresh(struct imapc_mailbox_list *list)
 	mailbox_tree_deinit(&list->mailboxes);
 	list->mailboxes = mailbox_tree_init(mail_namespace_get_sep(list->list.ns));
 	mailbox_tree_set_parents_nonexistent(list->mailboxes);
-	imapc_simple_run(&ctx);
+	imapc_simple_run(&ctx, &cmd);
 
 	if ((list->list.ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0) {
 		/* INBOX always exists in IMAP server. since this namespace is
@@ -804,7 +803,7 @@ imapc_list_subscriptions_refresh(struct mailbox_list *_src_list,
 		pattern = t_strdup_printf("%s*", src_list->set->imapc_list_prefix);
 	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_RETRIABLE);
 	imapc_command_sendf(cmd, "LSUB \"\" %s", pattern);
-	imapc_simple_run(&ctx);
+	imapc_simple_run(&ctx, &cmd);
 
 	if (ctx.ret < 0)
 		return -1;
@@ -831,7 +830,7 @@ static int imapc_list_set_subscribed(struct mailbox_list *_list,
 	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_RETRIABLE);
 	imapc_command_sendf(cmd, set ? "SUBSCRIBE %s" : "UNSUBSCRIBE %s",
 			    imapc_list_to_remote(list, name));
-	imapc_simple_run(&ctx);
+	imapc_simple_run(&ctx, &cmd);
 	return ctx.ret;
 }
 
@@ -859,13 +858,13 @@ imapc_list_delete_mailbox(struct mailbox_list *_list, const char *name)
 			imapc_command_sendf(cmd, "UNSELECT");
 		else
 			imapc_command_sendf(cmd, "SELECT \"~~~\"");
-		imapc_simple_run(&ctx);
+		imapc_simple_run(&ctx, &cmd);
 	}
 
 	cmd = imapc_list_simple_context_init(&ctx, list);
 	imapc_command_set_flags(cmd, IMAPC_COMMAND_FLAG_RETRIABLE);
 	imapc_command_sendf(cmd, "DELETE %s", imapc_list_to_remote(list, name));
-	imapc_simple_run(&ctx);
+	imapc_simple_run(&ctx, &cmd);
 
 	if (fs_list != NULL && ctx.ret == 0) {
 		name = imapc_list_get_fs_name(list, name);
@@ -914,7 +913,7 @@ imapc_list_rename_mailbox(struct mailbox_list *oldlist, const char *oldname,
 	imapc_command_sendf(cmd, "RENAME %s %s",
 			    imapc_list_to_remote(list, oldname),
 			    imapc_list_to_remote(list, newname));
-	imapc_simple_run(&ctx);
+	imapc_simple_run(&ctx, &cmd);
 	if (ctx.ret == 0 && fs_list != NULL && oldlist == newlist) {
 		oldname = imapc_list_get_fs_name(list, oldname);
 		newname = imapc_list_get_fs_name(list, newname);
@@ -953,7 +952,8 @@ int imapc_list_get_mailbox_flags(struct mailbox_list *_list, const char *name,
 
 struct mailbox_list imapc_mailbox_list = {
 	.name = MAILBOX_LIST_NAME_IMAPC,
-	.props = MAILBOX_LIST_PROP_NO_ROOT | MAILBOX_LIST_PROP_AUTOCREATE_DIRS,
+	.props = MAILBOX_LIST_PROP_NO_ROOT | MAILBOX_LIST_PROP_AUTOCREATE_DIRS |
+		 MAILBOX_LIST_PROP_NO_LIST_INDEX,
 	.mailbox_name_max_length = MAILBOX_LIST_NAME_MAX_LENGTH,
 
 	.v = {

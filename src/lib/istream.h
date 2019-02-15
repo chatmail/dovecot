@@ -4,6 +4,8 @@
 /* Note that some systems (Solaris) may use a macro to redefine struct stat */
 #include <sys/stat.h>
 
+struct ioloop;
+
 struct istream {
 	uoff_t v_offset;
 
@@ -16,25 +18,27 @@ struct istream {
 	   EIO     - Internal error. Retrying may work, but it may also be
 	             because of a misconfiguration.
 	   EINVAL  - Stream is corrupted.
+
+	   If stream_errno != 0, eof==TRUE as well.
 	*/
 	int stream_errno;
 
-	unsigned int mmaped:1; /* be careful when copying data */
-	unsigned int blocking:1; /* read() shouldn't return 0 */
-	unsigned int closed:1;
-	unsigned int readable_fd:1; /* fd can be read directly if necessary
+	bool mmaped:1; /* be careful when copying data */
+	bool blocking:1; /* read() shouldn't return 0 */
+	bool closed:1;
+	bool readable_fd:1; /* fd can be read directly if necessary
 	                               (for sendfile()) */
-	unsigned int seekable:1; /* we can seek() backwards */
-	unsigned int eof:1; /* read() has reached to end of file
-	                       (but may still be data available in buffer) */
+	bool seekable:1; /* we can seek() backwards */
+	/* read() has reached to end of file (but there may still be data
+	   available in buffer) or stream_errno != 0 */
+	bool eof:1;
 
 	struct istream_private *real_stream;
 };
 
 typedef void istream_callback_t(void *context);
 
-struct istream *i_stream_create_fd(int fd, size_t max_buffer_size,
-				   bool autoclose_fd);
+struct istream *i_stream_create_fd(int fd, size_t max_buffer_size);
 /* The fd is set to -1 immediately to avoid accidentally closing it twice. */
 struct istream *i_stream_create_fd_autoclose(int *fd, size_t max_buffer_size);
 /* Open the given path only when something is actually tried to be read from
@@ -120,7 +124,7 @@ void i_stream_set_init_buffer_size(struct istream *stream, size_t size);
    parent streams' max buffer size. */
 void i_stream_set_max_buffer_size(struct istream *stream, size_t max_size);
 /* Returns the current max. buffer size for the stream. This function also
-   goesthrough all of the parent streams and returns the highest seen max
+   goes through all of the parent streams and returns the highest seen max
    buffer size. This is needed because some streams (e.g. istream-chain) change
    their max buffer size dynamically. */
 size_t i_stream_get_max_buffer_size(struct istream *stream);
@@ -131,9 +135,16 @@ void i_stream_set_return_partial_line(struct istream *stream, bool set);
    the memory usage is minimized by freeing the stream's buffers whenever they
    become empty. */
 void i_stream_set_persistent_buffers(struct istream *stream, bool set);
+/* Set the istream blocking or nonblocking, including its parent streams.
+   If any of the istreams have an fd, its O_NONBLOCK flag is changed. */
+void i_stream_set_blocking(struct istream *stream, bool blocking);
 
-/* Returns number of bytes read if read was ok, -1 if EOF or error, -2 if the
-   input buffer is full. */
+/* Returns number of bytes read if read was ok, 0 if stream is non-blocking and
+   no more data is available, -1 if EOF or error, -2 if the input buffer is
+   full. If <=0 is returned, pointers to existing data returned by the previous
+   i_stream_get_data() will stay valid, although calling it again may return
+   a different pointer. The pointers to old data are invalidated again when
+   return value is >0. */
 ssize_t i_stream_read(struct istream *stream);
 /* Skip forward a number of bytes. Never fails, the next read tells if it
    was successful. */
@@ -160,8 +171,11 @@ int i_stream_stat(struct istream *stream, bool exact, const struct stat **st_r);
 int i_stream_get_size(struct istream *stream, bool exact, uoff_t *size_r);
 /* Returns TRUE if there are any bytes left to be read or in buffer. */
 bool i_stream_have_bytes_left(struct istream *stream);
-/* Returns TRUE if there are no bytes buffered and read() returns EOF. */
-bool i_stream_is_eof(struct istream *stream);
+/* Returns TRUE if there are no bytes currently buffered and i_stream_read()
+   returns EOF/error. Usually it's enough to check for stream->eof instead of
+   calling this function. Note that if the stream isn't at EOF, this function
+   has now read data into the stream buffer. */
+bool i_stream_read_eof(struct istream *stream);
 /* Returns the absolute offset of the stream. This is the stream's current
    v_offset + the parent's absolute offset when the stream was created. */
 uoff_t i_stream_get_absolute_offset(struct istream *stream);
@@ -178,8 +192,7 @@ char *i_stream_read_next_line(struct istream *stream);
    CRLF (instead of LF). */
 bool i_stream_last_line_crlf(struct istream *stream);
 
-/* Returns pointer to beginning of read data, or NULL if there's no data
-   buffered. */
+/* Returns pointer to beginning of read data. */
 const unsigned char *i_stream_get_data(struct istream *stream, size_t *size_r);
 size_t i_stream_get_data_size(struct istream *stream);
 /* Like i_stream_get_data(), but returns non-const data. This only works with
@@ -210,6 +223,9 @@ i_stream_read_more(struct istream *stream, const unsigned char **data_r,
 {
 	return i_stream_read_bytes(stream, data_r, size_r, 1);
 }
+/* Return the timestamp when istream last successfully read something.
+   The timestamp is 0 if nothing has ever been read. */
+void i_stream_get_last_read_time(struct istream *stream, struct timeval *tv_r);
 
 /* Append external data to input stream. Returns TRUE if successful, FALSE if
    there is not enough space in the stream. */
@@ -219,7 +235,8 @@ bool i_stream_add_data(struct istream *stream, const unsigned char *data,
 void i_stream_set_input_pending(struct istream *stream, bool pending);
 
 /* If there are any I/O loop items associated with the stream, move all of
-   them to current_ioloop. */
+   them to provided/current ioloop. */
+void i_stream_switch_ioloop_to(struct istream *stream, struct ioloop *ioloop);
 void i_stream_switch_ioloop(struct istream *stream);
 
 #endif

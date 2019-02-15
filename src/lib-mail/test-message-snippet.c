@@ -6,7 +6,7 @@
 #include "message-snippet.h"
 #include "test-common.h"
 
-static struct {
+static const struct {
 	const char *input;
 	unsigned int max_snippet_chars;
 	const char *output;
@@ -84,10 +84,26 @@ static void test_message_snippet(void)
 	test_end();
 }
 
+static void test_message_snippet_nuls(void)
+{
+	const char input_text[] = "\nfoo\0bar";
+	string_t *str = t_str_new(128);
+	struct istream *input;
+
+	test_begin("message snippet with NULs");
+
+	input = i_stream_create_from_data(input_text, sizeof(input_text)-1);
+	test_assert(message_snippet_generate(input, 5, str) == 0);
+	test_assert(strcmp(str_c(str), "fooba") == 0);
+	i_stream_destroy(&input);
+	test_end();
+}
+
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_message_snippet,
+		test_message_snippet_nuls,
 		NULL
 	};
 	return test_run(test_functions);

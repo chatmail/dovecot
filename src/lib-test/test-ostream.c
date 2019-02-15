@@ -18,10 +18,8 @@ static void o_stream_test_destroy(struct iostream_private *stream)
 {
 	struct test_ostream *tstream = (struct test_ostream *)stream;
 
-	if (tstream->to != NULL)
-		timeout_remove(&tstream->to);
-	if (tstream->internal_buf != NULL)
-		buffer_free(&tstream->internal_buf);
+	timeout_remove(&tstream->to);
+	buffer_free(&tstream->internal_buf);
 }
 
 static int o_stream_test_flush(struct ostream_private *stream)
@@ -133,7 +131,7 @@ o_stream_test_flush_pending(struct ostream_private *stream, bool set)
 }
 
 static size_t
-o_stream_test_get_used_size(const struct ostream_private *stream)
+o_stream_test_get_buffer_used_size(const struct ostream_private *stream)
 {
 	struct test_ostream *tstream = (struct test_ostream *)stream;
 
@@ -152,7 +150,8 @@ struct ostream *test_ostream_create(buffer_t *output)
 	tstream->ostream.sendv = o_stream_test_sendv;
 	tstream->ostream.flush = o_stream_test_flush;
 	tstream->ostream.flush_pending = o_stream_test_flush_pending;
-	tstream->ostream.get_used_size = o_stream_test_get_used_size;
+	tstream->ostream.get_buffer_used_size =
+		o_stream_test_get_buffer_used_size;
 	tstream->ostream.ostream.blocking = TRUE;
 
 	tstream->output_buf = output;

@@ -128,10 +128,7 @@ static void part_write_body_multipart(const struct message_part *part,
 	}
 
 	str_append_c(str, ' ');
-	if (data->content_subtype != NULL)
-		imap_append_string(str, data->content_subtype);
-	else
-		str_append(str, "\"x-unknown\"");
+	imap_append_string(str, data->content_subtype);
 
 	if (!extended)
 		return;
@@ -160,20 +157,12 @@ static void part_write_body(const struct message_part *part,
 		/* "content type" "subtype" */
 		if (data->content_type == NULL) {
 			text = TRUE;
-			str_append(str, "\"text\"");
+			str_append(str, "\"text\" \"plain\"");
 		} else {
 			text = (strcasecmp(data->content_type, "text") == 0);
 			imap_append_string(str, data->content_type);
-		}
-		str_append_c(str, ' ');
-
-		if (data->content_subtype != NULL)
+			str_append_c(str, ' ');
 			imap_append_string(str, data->content_subtype);
-		else {
-			if (text)
-				str_append(str, "\"plain\"");
-			else
-				str_append(str, "\"unknown\"");
 		}
 	}
 
@@ -196,7 +185,7 @@ static void part_write_body(const struct message_part *part,
 	if (text) {
 		/* text/.. contains line count */
 		str_printfa(str, " %u", part->body_size.lines);
-	} else if (part->flags & MESSAGE_PART_FLAG_MESSAGE_RFC822) {
+	} else if ((part->flags & MESSAGE_PART_FLAG_MESSAGE_RFC822) != 0) {
 		/* message/rfc822 contains envelope + body + line count */
 		const struct message_part_data *child_data;
 
@@ -228,7 +217,7 @@ static void part_write_body(const struct message_part *part,
 void imap_bodystructure_write(const struct message_part *part,
 			      string_t *dest, bool extended)
 {
-	if (part->flags & MESSAGE_PART_FLAG_MULTIPART)
+	if ((part->flags & MESSAGE_PART_FLAG_MULTIPART) != 0)
 		part_write_body_multipart(part, dest, extended);
 	else
 		part_write_body(part, dest, extended);
@@ -636,9 +625,8 @@ int imap_bodystructure_parse_full(const char *bodystructure,
 	struct istream *input;
 	struct imap_parser *parser;
 	const struct imap_arg *args;
-	char *error;
+	char *error = NULL;
 	int ret;
-	bool fatal;
 
 	i_assert(*parts == NULL || (*parts)->next == NULL);
 
@@ -650,7 +638,7 @@ int imap_bodystructure_parse_full(const char *bodystructure,
 				      IMAP_PARSE_FLAG_LITERAL_TYPE, &args);
 	if (ret < 0) {
 		*error_r = t_strdup_printf("IMAP parser failed: %s",
-					   imap_parser_get_error(parser, &fatal));
+					   imap_parser_get_error(parser, NULL));
 	} else if (ret == 0) {
 		*error_r = "Empty bodystructure";
 		ret = -1;
@@ -887,7 +875,6 @@ int imap_body_parse_from_bodystructure(const char *bodystructure,
 	struct istream *input;
 	struct imap_parser *parser;
 	const struct imap_arg *args;
-	bool fatal;
 	int ret;
 
 	input = i_stream_create_from_data(bodystructure, strlen(bodystructure));
@@ -898,7 +885,7 @@ int imap_body_parse_from_bodystructure(const char *bodystructure,
 				      IMAP_PARSE_FLAG_LITERAL_TYPE, &args);
 	if (ret < 0) {
 		*error_r = t_strdup_printf("IMAP parser failed: %s",
-					   imap_parser_get_error(parser, &fatal));
+					   imap_parser_get_error(parser, NULL));
 	} else if (ret == 0) {
 		*error_r = "Empty bodystructure";
 		ret = -1;

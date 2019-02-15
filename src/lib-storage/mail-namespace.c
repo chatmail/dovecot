@@ -155,17 +155,15 @@ int mail_namespaces_init_add(struct mail_user *user,
 	if (*ns_set->location == '\0')
 		ns_set->location = mail_set->mail_location;
 
-	if (mail_set->mail_debug) {
-		i_debug("Namespace %s: type=%s, prefix=%s, sep=%s, "
-			"inbox=%s, hidden=%s, list=%s, subscriptions=%s "
-			"location=%s",
-			ns_set->name, ns_set->type, ns_set->prefix,
-			ns_set->separator == NULL ? "" : ns_set->separator,
-			ns_set->inbox ? "yes" : "no",
-			ns_set->hidden ? "yes" : "no",
-			ns_set->list,
-			ns_set->subscriptions ? "yes" : "no", ns_set->location);
-	}
+	e_debug(user->event, "Namespace %s: type=%s, prefix=%s, sep=%s, "
+		"inbox=%s, hidden=%s, list=%s, subscriptions=%s "
+		"location=%s",
+		ns_set->name, ns_set->type, ns_set->prefix,
+		ns_set->separator == NULL ? "" : ns_set->separator,
+		ns_set->inbox ? "yes" : "no",
+		ns_set->hidden ? "yes" : "no",
+		ns_set->list,
+		ns_set->subscriptions ? "yes" : "no", ns_set->location);
 
 	if ((ret = mail_namespace_alloc(user, user->set,
 					ns_set, unexpanded_ns_set,
@@ -258,6 +256,56 @@ namespace_set_alias_for(struct mail_namespace *ns,
 	return 0;
 }
 
+static bool get_listindex_path(struct mail_namespace *ns, const char **path_r)
+{
+	const char *root;
+
+	if (ns->list->set.list_index_fname[0] == '\0' ||
+	    !mailbox_list_get_root_path(ns->list,
+					MAILBOX_LIST_PATH_TYPE_LIST_INDEX,
+					&root))
+		return FALSE;
+
+	*path_r = t_strconcat(root, "/", ns->list->set.list_index_fname, NULL);
+	return TRUE;
+}
+
+static bool
+namespace_has_duplicate_listindex(struct mail_namespace *ns,
+				  const char **error_r)
+{
+	struct mail_namespace *ns2;
+	const char *ns_list_index_path, *ns_mailboxes_root;
+	const char *ns2_list_index_path, *ns2_mailboxes_root;
+
+	if (!ns->mail_set->mailbox_list_index) {
+		/* mailbox list indexes not in use */
+		return FALSE;
+	}
+
+	if (!get_listindex_path(ns, &ns_list_index_path) ||
+	    !mailbox_list_get_root_path(ns->list, MAILBOX_LIST_PATH_TYPE_MAILBOX,
+					&ns_mailboxes_root))
+		return FALSE;
+
+	for (ns2 = ns->next; ns2 != NULL; ns2 = ns2->next) {
+		if (!get_listindex_path(ns2, &ns2_list_index_path) ||
+		    !mailbox_list_get_root_path(ns2->list, MAILBOX_LIST_PATH_TYPE_MAILBOX,
+						&ns2_mailboxes_root))
+			continue;
+
+		if (strcmp(ns_list_index_path, ns2_list_index_path) == 0 &&
+		    strcmp(ns_mailboxes_root, ns2_mailboxes_root) != 0) {
+			*error_r = t_strdup_printf(
+				"Namespaces '%s' and '%s' have different mailboxes paths, but duplicate LISTINDEX path. "
+				"Add a unique LISTINDEX=<fname>",
+				ns->prefix, ns2->prefix);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 static bool
 namespaces_check(struct mail_namespace *namespaces, const char **error_r)
 {
@@ -286,6 +334,8 @@ namespaces_check(struct mail_namespace *namespaces, const char **error_r)
 			inbox_ns = ns;
 		}
 		if (namespace_set_alias_for(ns, namespaces, error_r) < 0)
+			return FALSE;
+		if (namespace_has_duplicate_listindex(ns, error_r))
 			return FALSE;
 
 		if (*ns->prefix != '\0' &&
@@ -400,7 +450,6 @@ int mail_namespaces_init_finish(struct mail_namespace *namespaces,
 
 int mail_namespaces_init(struct mail_user *user, const char **error_r)
 {
-	const struct mail_storage_settings *mail_set;
 	struct mail_namespace_settings *const *ns_set;
 	struct mail_namespace_settings *const *unexpanded_ns_set;
 	struct mail_namespace *namespaces, **ns_p;
@@ -410,7 +459,6 @@ int mail_namespaces_init(struct mail_user *user, const char **error_r)
 
         namespaces = NULL; ns_p = &namespaces;
 
-	mail_set = mail_user_set_get_storage_set(user);
 	if (array_is_created(&user->set->namespaces)) {
 		ns_set = array_get(&user->set->namespaces, &count);
 		unexpanded_ns_set =
@@ -431,10 +479,8 @@ int mail_namespaces_init(struct mail_user *user, const char **error_r)
 				mail_namespaces_deinit(&namespaces);
 				return -1;
 			}
-			if (mail_set->mail_debug) {
-				i_debug("Skipping namespace %s: %s",
-					ns_set[i]->prefix, *error_r);
-			}
+			e_debug(user->event, "Skipping namespace %s: %s",
+				ns_set[i]->prefix, *error_r);
 		} else {
 			ns_p = &(*ns_p)->next;
 		}
@@ -636,7 +682,7 @@ static bool mail_namespace_is_usable_prefix(struct mail_namespace *ns,
 		return TRUE;
 	}
 
-	if (inbox && strncmp(ns->prefix, "INBOX", 5) == 0 &&
+	if (inbox && str_begins(ns->prefix, "INBOX") &&
 	    strncmp(ns->prefix+5, mailbox+5, ns->prefix_len-5) == 0) {
 		/* we already checked that mailbox begins with case-insensitive
 		   INBOX. this namespace also begins with INBOX and the rest

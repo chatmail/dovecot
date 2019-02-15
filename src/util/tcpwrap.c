@@ -58,10 +58,7 @@ static void tcpwrap_client_input(struct tcpwrap_client *client)
 		i_error("Invalid input from client");
 	}
 
-	if (check_fd != -1) {
-		if (close(check_fd) < 0)
-			i_error("close(fdread fd) failed: %m");
-	}
+	i_close_fd(&check_fd);
 	tcpwrap_client_destroy(&client);
 }
 
@@ -111,13 +108,16 @@ static void client_connected(struct master_service_connection *conn)
 
 int main(int argc, char *argv[])
 {
-	master_service = master_service_init("tcpwrap", 0,
+	const enum master_service_flags service_flags =
+		MASTER_SERVICE_FLAG_DONT_SEND_STATS;
+
+	master_service = master_service_init("tcpwrap", service_flags,
 					     &argc, &argv, "");
 	if (master_getopt(master_service) > 0)
 		return FATAL_DEFAULT;
 
 	master_service_init_log(master_service, "tcpwrap: ");
-	restrict_access_by_env(NULL, FALSE);
+	restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 	restrict_access_allow_coredumps(TRUE);
 
 	master_service_init_finish(master_service);

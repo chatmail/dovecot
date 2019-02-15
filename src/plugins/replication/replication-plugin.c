@@ -4,7 +4,6 @@
 #include "array.h"
 #include "str.h"
 #include "strescape.h"
-#include "fd-set-nonblock.h"
 #include "ioloop.h"
 #include "net.h"
 #include "write-full.h"
@@ -38,6 +37,7 @@ struct replication_mail_txn_context {
 	struct mail_namespace *ns;
 	bool new_messages;
 	bool sync_trans;
+	char *reason;
 };
 
 static MODULE_CONTEXT_DEFINE_INIT(replication_user_module,
@@ -106,6 +106,7 @@ static void replication_notify_now(struct mail_user *user)
 	struct replication_user *ruser = REPLICATION_USER_CONTEXT(user);
 	int ret;
 
+	i_assert(ruser != NULL);
 	i_assert(ruser->priority != REPLICATION_PRIORITY_NONE);
 	i_assert(ruser->priority != REPLICATION_PRIORITY_SYNC);
 
@@ -128,6 +129,8 @@ static int replication_notify_sync(struct mail_user *user)
 	int fd;
 	ssize_t ret;
 	bool success = FALSE;
+
+	i_assert(ruser != NULL);
 
 	fd = net_connect_unix(ruser->socket_path);
 	if (fd == -1) {
@@ -186,10 +189,9 @@ static void replication_notify(struct mail_namespace *ns,
 	if (ruser == NULL)
 		return;
 
-	if (ns->user->mail_debug) {
-		i_debug("replication: Replication requested by '%s', priority=%d",
-			event, priority);
-	}
+	e_debug(ns->user->event,
+		"replication: Replication requested by '%s', priority=%d",
+		event, priority);
 
 	if (priority == REPLICATION_PRIORITY_SYNC) {
 		if (replication_notify_sync(ns->user) == 0) {
@@ -216,6 +218,7 @@ replication_mail_transaction_begin(struct mailbox_transaction_context *t)
 
 	ctx = i_new(struct replication_mail_txn_context, 1);
 	ctx->ns = mailbox_get_namespace(t->box);
+	ctx->reason = i_strdup(t->reason);
 	if ((t->flags & MAILBOX_TRANSACTION_FLAG_SYNC) != 0) {
 		/* Transaction is from dsync. Don't trigger replication back. */
 		ctx->sync_trans = TRUE;
@@ -247,6 +250,15 @@ static void replication_mail_copy(void *txn, struct mail *src,
 	}
 }
 
+static bool
+replication_want_sync_changes(const struct mail_transaction_commit_changes *changes)
+{
+	/* Replication needs to be triggered on all the user-visible changes,
+	   but not e.g. due to writes to cache file. */
+	return (changes->changes_mask &
+		~MAIL_INDEX_TRANSACTION_CHANGE_OTHERS) != 0;
+}
+
 static void
 replication_mail_transaction_commit(void *txn,
 				    struct mail_transaction_commit_changes *changes)
@@ -258,12 +270,13 @@ replication_mail_transaction_commit(void *txn,
 	enum replication_priority priority;
 
 	if (ruser != NULL && !ctx->sync_trans &&
-	    (ctx->new_messages || changes->changed)) {
+	    (ctx->new_messages || replication_want_sync_changes(changes))) {
 		priority = !ctx->new_messages ? REPLICATION_PRIORITY_LOW :
 			ruser->sync_secs == 0 ? REPLICATION_PRIORITY_HIGH :
 			REPLICATION_PRIORITY_SYNC;
-		replication_notify(ctx->ns, priority, "transaction commit");
+		replication_notify(ctx->ns, priority, ctx->reason);
 	}
+	i_free(ctx->reason);
 	i_free(ctx);
 }
 
@@ -300,6 +313,8 @@ static void replication_user_deinit(struct mail_user *user)
 {
 	struct replication_user *ruser = REPLICATION_USER_CONTEXT(user);
 
+	i_assert(ruser != NULL);
+
 	if (ruser->to != NULL) {
 		replication_notify_now(user);
 		if (ruser->to != NULL) {
@@ -320,16 +335,14 @@ static void replication_user_created(struct mail_user *user)
 
 	value = mail_user_plugin_getenv(user, "mail_replica");
 	if (value == NULL || value[0] == '\0') {
-		if (user->mail_debug)
-			i_debug("replication: No mail_replica setting - replication disabled");
+		e_debug(user->event, "replication: No mail_replica setting - replication disabled");
 		return;
 	}
 
 	if (user->dsyncing) {
 		/* we're running dsync, which means that the remote is telling
 		   us about a change. don't trigger a replication back to it */
-		if (user->mail_debug)
-			i_debug("replication: We're running dsync - replication disabled");
+		e_debug(user->event, "replication: We're running dsync - replication disabled");
 		return;
 	}
 
@@ -381,11 +394,7 @@ void replication_plugin_init(struct module *module)
 
 void replication_plugin_deinit(void)
 {
-	if (fifo_fd != -1) {
-		if (close(fifo_fd) < 0)
-			i_error("close(%s) failed: %m", fifo_path);
-		fifo_fd = -1;
-	}
+	i_close_fd_path(&fifo_fd, fifo_path);
 	i_free_and_null(fifo_path);
 
 	mail_storage_hooks_remove(&replication_mail_storage_hooks);

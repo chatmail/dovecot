@@ -13,7 +13,7 @@ License: LGPL-2.1
 
 Files: src/lib/*
        src/lib-sql/*
-Copyright: (c) 2001-2017 Dovecot authors
+Copyright: (c) 2001-2018 Dovecot authors
 Comment: see AUTHORS
 License: MIT
 
@@ -111,9 +111,9 @@ Copyright: (c) 2006-2016 Jaldhar H. Vyas <jaldhar@debian.org>
            (c) 2016-2018 Apollon Oikonomopoulos <apoikos@debian.org>
 License: GPL-2+
 
-Files: debian/patches/pigeonhole.patch
-Copyright: (c) 2002-2017 Stephan Bosch <stephan@rename-it.nl>
-           (c) 2002-2016 Dovecot authors
+Files: pigeonhole/*
+Copyright: (c) 2002-2018 Stephan Bosch <stephan@rename-it.nl>
+           (c) 2002-2018 Dovecot authors
 Comment: Source obtained from https://pigeonhole.dovecot.org/
 License: LGPL-2.1
 

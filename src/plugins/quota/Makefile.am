@@ -10,6 +10,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-index \
 	-I$(top_srcdir)/src/lib-mail \
+	-I$(top_srcdir)/src/lib-smtp \
 	-I$(top_srcdir)/src/lib-imap \
 	-I$(top_srcdir)/src/lib-imap-client \
 	-I$(top_srcdir)/src/lib-settings \
@@ -17,7 +18,9 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-storage/index \
 	-I$(top_srcdir)/src/lib-storage/index/imapc \
 	-I$(top_srcdir)/src/lib-storage/index/maildir \
-	-I$(top_srcdir)/src/doveadm
+	-I$(top_srcdir)/src/lib-program-client \
+	-I$(top_srcdir)/src/doveadm \
+	$(LIBTIRPC_CFLAGS)
 
 NOPLUGIN_LDFLAGS =
 lib10_doveadm_quota_plugin_la_LDFLAGS = -module -avoid-version
@@ -65,11 +68,13 @@ quota_status_SOURCES = \
 	quota-status.c \
 	quota-status-settings.c
 
+quota_status_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
 quota_status_LDADD = \
 	$(quota_common_objects) \
 	$(LIBDOVECOT_STORAGE) \
 	$(LIBDOVECOT) \
-	$(QUOTA_LIBS)
+	$(QUOTA_LIBS) \
+	$(BINARY_LDFLAGS)
 quota_status_DEPENDENCIES = \
 	$(quota_common_objects) \
 	$(LIBDOVECOT_STORAGE_DEPS) \
@@ -85,9 +90,12 @@ rquota_xdr.c: Makefile rquota.h
 	  cp $(RQUOTA_X) $(top_builddir)/src/plugins/quota/; \
 	fi; \
 	(echo '#include "lib.h"'; \
+	 echo '#undef FALSE'; \
+	 echo '#undef TRUE'; \
 	 echo '#include <rpc/rpc.h>'; \
 	 $(RPCGEN) -c $(top_builddir)/src/plugins/quota/rquota.x | \
 	  sed -e 's/IXDR_PUT/(void)IXDR_PUT/g' \
+	    -e 's,!xdr_,0 == xdr_,' \
 	    -e 's,/usr/include/rpcsvc/rquota.h,rquota.h,' \
 	    -e 's/int32_t \*buf/int32_t *buf ATTR_UNUSED/' \
 	    -e 's/^static char rcsid.*//' ) > rquota_xdr.c
@@ -129,8 +137,7 @@ test_quota_util_SOURCES = test-quota-util.c
 test_quota_util_LDADD = quota-util.lo $(test_libs)
 test_quota_util_DEPENDENCIES = quota-util.lo $(test_deps)
 
-check: check-am check-test
-check-test: all-am
+check-local:
 	for bin in $(test_programs); do \
 	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
 	done

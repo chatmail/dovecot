@@ -32,7 +32,7 @@ imapc_mail_alloc(struct mailbox_transaction_context *t,
 
 static bool imapc_mail_is_expunged(struct mail *_mail)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(_mail->box);
 	struct imapc_msgmap *msgmap;
 	uint32_t lseq, rseq;
 
@@ -65,8 +65,8 @@ static bool imapc_mail_is_expunged(struct mail *_mail)
 
 static int imapc_mail_failed(struct mail *mail, const char *field)
 {
-	struct imapc_mail *imail = (struct imapc_mail *)mail;
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)mail->box;
+	struct imapc_mail *imail = IMAPC_MAIL(mail);
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(mail->box);
 	bool fix_broken_mail = FALSE;
 
 	if (mail->expunged || imapc_mail_is_expunged(mail)) {
@@ -87,10 +87,9 @@ static int imapc_mail_failed(struct mail *mail, const char *field)
 		   mailbox. This seems to be fixed in newer versions.
 		   */
 		fix_broken_mail = imail->fetch_ignore_if_missing;
-		mail_storage_set_critical(mail->box->storage,
-			"imapc: Remote server didn't send %s for UID %u in %s%s (FETCH replied: %s)",
-			field, mail->uid, mail->box->vname,
-			fix_broken_mail ? " - treating it as empty" : "",
+		mail_set_critical(mail,
+			"imapc: Remote server didn't send %s%s (FETCH replied: %s)",
+			field, fix_broken_mail ? " - treating it as empty" : "",
 			imail->last_fetch_reply);
 	}
 	return fix_broken_mail ? 0 : -1;
@@ -98,7 +97,7 @@ static int imapc_mail_failed(struct mail *mail, const char *field)
 
 static uint64_t imapc_mail_get_modseq(struct mail *_mail)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(_mail->box);
 	struct imapc_msgmap *msgmap;
 	const uint64_t *modseqs;
 	unsigned int count;
@@ -118,7 +117,7 @@ static uint64_t imapc_mail_get_modseq(struct mail *_mail)
 
 static int imapc_mail_get_received_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 
 	if (index_mail_get_received_date(_mail, date_r) == 0)
@@ -141,7 +140,7 @@ static int imapc_mail_get_received_date(struct mail *_mail, time_t *date_r)
 
 static int imapc_mail_get_save_date(struct mail *_mail, time_t *date_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 
 	if (data->save_date == (time_t)-1) {
@@ -154,8 +153,8 @@ static int imapc_mail_get_save_date(struct mail *_mail, time_t *date_r)
 
 static int imapc_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(_mail->box);
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct istream *input;
 	uoff_t old_offset;
@@ -170,7 +169,9 @@ static int imapc_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 
 	if (IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_RFC822_SIZE) &&
 	    data->stream == NULL) {
-		/* trust RFC822.SIZE to be correct */
+		/* Trust RFC822.SIZE to be correct enough to present to the
+		   IMAP client. However, it can be wrong in some implementation
+		   so try not to trust it too much. */
 		if (imapc_mail_fetch(_mail, MAIL_FETCH_PHYSICAL_SIZE, NULL) < 0)
 			return -1;
 		if (data->physical_size == (uoff_t)-1) {
@@ -194,9 +195,8 @@ static int imapc_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 				&data->physical_size);
 	if (ret <= 0) {
 		i_assert(ret != 0);
-		mail_storage_set_critical(_mail->box->storage,
-					  "imapc: stat(%s) failed: %m",
-					  i_stream_get_name(data->stream));
+		mail_set_critical(_mail, "imapc: stat(%s) failed: %m",
+				  i_stream_get_name(data->stream));
 		return -1;
 	}
 	*size_r = data->physical_size;
@@ -205,7 +205,7 @@ static int imapc_mail_get_physical_size(struct mail *_mail, uoff_t *size_r)
 
 static int imapc_mail_get_virtual_size(struct mail *_mail, uoff_t *size_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 
 	if (imapc_mail_get_physical_size(_mail, size_r) < 0)
@@ -219,8 +219,8 @@ imapc_mail_get_header_stream(struct mail *_mail,
 			     struct mailbox_header_lookup_ctx *headers,
 			     struct istream **stream_r)
 {
-	struct imapc_mail *mail = (struct imapc_mail *)_mail;
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
+	struct imapc_mail *mail = IMAPC_MAIL(_mail);
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(_mail->box);
 	enum mail_lookup_abort old_abort = _mail->lookup_abort;
 	int ret;
 
@@ -263,7 +263,7 @@ imapc_mail_get_headers(struct mail *_mail, const char *field,
 	if (ret < 0)
 		return -1;
 
-	while (i_stream_read_data(input, &data, &size, 0) > 0)
+	while (i_stream_read_more(input, &data, &size) > 0)
 		i_stream_skip(input, size);
 	/* the header should cached now. */
 	return index_mail_get_headers(_mail, field, decode_to_utf8, value_r);
@@ -288,7 +288,7 @@ imapc_mail_get_stream(struct mail *_mail, bool get_body,
 		      struct message_size *hdr_size,
 		      struct message_size *body_size, struct istream **stream_r)
 {
-	struct imapc_mail *mail = (struct imapc_mail *)_mail;
+	struct imapc_mail *mail = IMAPC_MAIL(_mail);
 	struct index_mail_data *data = &mail->imail.data;
 	enum mail_fetch_field fetch_field;
 
@@ -312,6 +312,12 @@ imapc_mail_get_stream(struct mail *_mail, bool get_body,
 			mail_set_aborted(_mail);
 			return -1;
 		}
+		if (_mail->expunged) {
+			/* We already detected that the mail is expunged.
+			   Don't spend time trying to FETCH it again. */
+			mail_set_expunged(_mail);
+			return -1;
+		}
 		fetch_field = get_body ||
 			(data->access_part & READ_BODY) != 0 ?
 			MAIL_FETCH_STREAM_BODY : MAIL_FETCH_STREAM_HEADER;
@@ -319,7 +325,7 @@ imapc_mail_get_stream(struct mail *_mail, bool get_body,
 			return -1;
 
 		if (data->stream == NULL) {
-			if (imapc_mail_failed(_mail, "BODY[]"))
+			if (imapc_mail_failed(_mail, "BODY[]") < 0)
 				return -1;
 			i_assert(data->stream == NULL);
 
@@ -351,7 +357,7 @@ bool imapc_mail_has_headers_in_cache(struct index_mail *mail,
 void imapc_mail_update_access_parts(struct index_mail *mail)
 {
 	struct mail *_mail = &mail->mail.mail;
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(_mail->box);
 	struct index_mail_data *data = &mail->data;
 	struct mailbox_header_lookup_ctx *header_ctx;
 	const char *str;
@@ -400,10 +406,16 @@ void imapc_mail_update_access_parts(struct index_mail *mail)
 
 static void imapc_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
 {
-	struct imapc_mail *imail = (struct imapc_mail *)_mail;
+	struct imapc_mail *imail = IMAPC_MAIL(_mail);
 	struct index_mail *mail = &imail->imail;
+	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
 
 	index_mail_set_seq(_mail, seq, saving);
+	if (IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_RFC822_SIZE)) {
+		/* RFC822.SIZE may be read from vsize record or cache. It may
+		   not be exactly correct. */
+		mail->data.inexact_total_sizes = TRUE;
+	}
 
 	/* searching code handles prefetching internally,
 	   elsewhere we want to do it immediately */
@@ -416,7 +428,7 @@ imapc_mail_add_temp_wanted_fields(struct mail *_mail,
 				  enum mail_fetch_field fields,
 				  struct mailbox_header_lookup_ctx *headers)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 
 	index_mail_add_temp_wanted_fields(_mail, fields, headers);
 	if (_mail->seq != 0)
@@ -425,8 +437,8 @@ imapc_mail_add_temp_wanted_fields(struct mail *_mail,
 
 static void imapc_mail_close(struct mail *_mail)
 {
-	struct imapc_mail *mail = (struct imapc_mail *)_mail;
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
+	struct imapc_mail *mail = IMAPC_MAIL(_mail);
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(_mail->box);
 	struct imapc_mail_cache *cache = &mbox->prev_mail_cache;
 
 	if (mail->fetch_count > 0) {
@@ -449,15 +461,12 @@ static void imapc_mail_close(struct mail *_mail)
 			mail->body = NULL;
 		}
 	}
-	if (mail->fd != -1) {
-		if (close(mail->fd) < 0)
-			i_error("close(imapc mail) failed: %m");
-		mail->fd = -1;
-	}
-	if (mail->body != NULL)
-		buffer_free(&mail->body);
+	i_close_fd(&mail->fd);
+	buffer_free(&mail->body);
 	mail->header_fetched = FALSE;
 	mail->body_fetched = FALSE;
+
+	i_assert(mail->fetch_count == 0);
 }
 
 static int imapc_mail_get_hdr_hash(struct index_mail *imail)
@@ -476,7 +485,7 @@ static int imapc_mail_get_hdr_hash(struct index_mail *imail)
 	if (mail_get_hdr_stream(&imail->mail.mail, NULL, &input) < 0)
 		return -1;
 	i_assert(imail->data.stream != NULL);
-	while (i_stream_read_data(input, &data, &size, 0) > 0) {
+	while (i_stream_read_more(input, &data, &size) > 0) {
 		sha1_loop(&sha1_ctx, data, size);
 		i_stream_skip(input, size);
 	}
@@ -490,7 +499,7 @@ static int imapc_mail_get_hdr_hash(struct index_mail *imail)
 
 static bool imapc_mail_get_cached_guid(struct mail *_mail)
 {
-	struct index_mail *imail = (struct index_mail *)_mail;
+	struct index_mail *imail = INDEX_MAIL(_mail);
 	const enum index_cache_field cache_idx =
 		imail->ibox->cache_fields[MAIL_CACHE_GUID].idx;
 	string_t *str;
@@ -516,8 +525,8 @@ static bool imapc_mail_get_cached_guid(struct mail *_mail)
 
 static int imapc_mail_get_guid(struct mail *_mail, const char **value_r)
 {
-	struct index_mail *imail = (struct index_mail *)_mail;
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
+	struct index_mail *imail = INDEX_MAIL(_mail);
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(_mail->box);
 	const enum index_cache_field cache_idx =
 		imail->ibox->cache_fields[MAIL_CACHE_GUID].idx;
 
@@ -550,8 +559,8 @@ static int
 imapc_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 		       const char **value_r)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)_mail->box;
-	struct index_mail *imail = (struct index_mail *)_mail;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(_mail->box);
+	struct index_mail *imail = INDEX_MAIL(_mail);
 	uint64_t num;
 
 	switch (field) {
@@ -569,13 +578,13 @@ imapc_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 		if (imapc_mail_get_guid(_mail, value_r) < 0)
 			return -1;
 		if (str_to_uint64(*value_r, &num) < 0) {
-			mail_storage_set_critical(_mail->box->storage,
+			mail_set_critical(_mail,
 				"X-GM-MSGID not 64bit integer as expected for POP3 UIDL generation: %s", *value_r);
 			return -1;
 		}
 
-		*value_r = p_strdup_printf(imail->mail.data_pool, "GmailId%llx",
-					   (unsigned long long)num);
+		*value_r = p_strdup_printf(imail->mail.data_pool,
+					   "GmailId%"PRIx64, num);
 		return 0;
 	case MAIL_FETCH_IMAP_BODY:
 		if (!IMAPC_BOX_HAS_FEATURE(mbox, IMAPC_FEATURE_FETCH_BODYSTRUCTURE))
@@ -639,7 +648,7 @@ struct mail_vfuncs imapc_mail_vfuncs = {
 	imapc_mail_get_stream,
 	index_mail_get_binary_stream,
 	imapc_mail_get_special,
-	index_mail_get_real_mail,
+	index_mail_get_backend_mail,
 	index_mail_update_flags,
 	index_mail_update_keywords,
 	index_mail_update_modseq,
@@ -648,5 +657,4 @@ struct mail_vfuncs imapc_mail_vfuncs = {
 	index_mail_expunge,
 	index_mail_set_cache_corrupted,
 	index_mail_opened,
-	index_mail_set_cache_corrupted_reason
 };

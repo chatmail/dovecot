@@ -27,6 +27,10 @@
 
 struct mail_index_module_register mail_index_module_register = { 0 };
 
+struct event_category event_category_index = {
+	.name = "index",
+};
+
 static void mail_index_close_nonopened(struct mail_index *index);
 
 static const struct mail_index_optimization_settings default_optimization_set = {
@@ -50,7 +54,8 @@ static const struct mail_index_optimization_settings default_optimization_set = 
 	},
 };
 
-struct mail_index *mail_index_alloc(const char *dir, const char *prefix)
+struct mail_index *mail_index_alloc(struct event *parent_event,
+				    const char *dir, const char *prefix)
 {
 	struct mail_index *index;
 
@@ -58,6 +63,8 @@ struct mail_index *mail_index_alloc(const char *dir, const char *prefix)
 	index->dir = i_strdup(dir);
 	index->prefix = i_strdup(prefix);
 	index->fd = -1;
+	index->event = event_create(parent_event);
+	event_add_category(index->event, &event_category_index);
 
 	index->extension_pool =
 		pool_alloconly_create(MEMPOOL_GROWING"index extension", 1024);
@@ -101,12 +108,20 @@ void mail_index_free(struct mail_index **_index)
 	array_free(&index->keywords);
 	array_free(&index->module_contexts);
 
+	event_unref(&index->event);
+	i_free(index->cache_dir);
 	i_free(index->ext_hdr_init_data);
 	i_free(index->gid_origin);
 	i_free(index->error);
 	i_free(index->dir);
 	i_free(index->prefix);
 	i_free(index);
+}
+
+void mail_index_set_cache_dir(struct mail_index *index, const char *dir)
+{
+	i_free(index->cache_dir);
+	index->cache_dir = i_strdup(dir);
 }
 
 void mail_index_set_fsync_mode(struct mail_index *index,
@@ -315,31 +330,6 @@ void mail_index_unregister_expunge_handler(struct mail_index *index,
 	rext->expunge_handler = NULL;
 }
 
-void mail_index_register_sync_handler(struct mail_index *index, uint32_t ext_id,
-				      mail_index_sync_handler_t *cb,
-				      enum mail_index_sync_handler_type type)
-{
-	struct mail_index_registered_ext *rext;
-
-	rext = array_idx_modifiable(&index->extensions, ext_id);
-	i_assert(rext->sync_handler.callback == NULL);
-
-	rext->sync_handler.callback = cb;
-	rext->sync_handler.type = type;
-}
-
-void mail_index_unregister_sync_handler(struct mail_index *index,
-					uint32_t ext_id)
-{
-	struct mail_index_registered_ext *rext;
-
-	rext = array_idx_modifiable(&index->extensions, ext_id);
-	i_assert(rext->sync_handler.callback != NULL);
-
-	rext->sync_handler.callback = NULL;
-	rext->sync_handler.type = 0;
-}
-
 void mail_index_register_sync_lost_handler(struct mail_index *index,
 					   mail_index_sync_lost_handler_t *cb)
 {
@@ -425,7 +415,7 @@ mail_index_keywords_create(struct mail_index *index,
 
 	/* @UNSAFE */
 	k = i_malloc(MALLOC_ADD(sizeof(struct mail_keywords),
-				MALLOC_MULTIPLY(sizeof(k->idx), (count-1))));
+				MALLOC_MULTIPLY(sizeof(k->idx[0]), count)));
 	k->index = index;
 	k->refcount = 1;
 
@@ -465,7 +455,7 @@ mail_index_keywords_create_from_indexes(struct mail_index *index,
 
 	/* @UNSAFE */
 	k = i_malloc(MALLOC_ADD(sizeof(struct mail_keywords),
-				MALLOC_MULTIPLY(sizeof(k->idx), (count-1))));
+				MALLOC_MULTIPLY(sizeof(k->idx[0]), count)));
 	k->index = index;
 	k->refcount = 1;
 
@@ -581,6 +571,20 @@ int mail_index_create_tmp_file(struct mail_index *index,
 	return fd;
 }
 
+static const char *mail_index_get_cache_path(struct mail_index *index)
+{
+	const char *dir;
+
+	if (index->cache_dir != NULL)
+		dir = index->cache_dir;
+	else if (index->dir != NULL)
+		dir = index->dir;
+	else
+		return NULL;
+	return t_strconcat(dir, "/", index->prefix,
+			   MAIL_CACHE_FILE_SUFFIX, NULL);
+}
+
 static int mail_index_open_files(struct mail_index *index,
 				 enum mail_index_open_flags flags)
 {
@@ -634,8 +638,10 @@ static int mail_index_open_files(struct mail_index *index,
 			return -1;
 	}
 
-	if (index->cache == NULL)
-		index->cache = mail_cache_open_or_create(index);
+	if (index->cache == NULL) {
+		const char *path = mail_index_get_cache_path(index);
+		index->cache = mail_cache_open_or_create_path(index, path);
+	}
 	return 1;
 }
 
@@ -736,6 +742,12 @@ void mail_index_close_file(struct mail_index *index)
 static void mail_index_close_nonopened(struct mail_index *index)
 {
 	i_assert(!index->syncing);
+
+	if (index->views != NULL) {
+		i_panic("Leaked view for index %s: Opened in %s:%u",
+			index->filepath, index->views->source_filename,
+			index->views->source_linenum);
+	}
 	i_assert(index->views == NULL);
 
 	if (index->map != NULL)
@@ -874,7 +886,7 @@ void mail_index_set_error(struct mail_index *index, const char *fmt, ...)
 		index->error = i_strdup_vprintf(fmt, va);
 		va_end(va);
 
-		i_error("%s", index->error);
+		e_error(index->event, "%s", index->error);
 	}
 }
 
@@ -892,6 +904,14 @@ bool mail_index_is_in_memory(struct mail_index *index)
 	return MAIL_INDEX_IS_IN_MEMORY(index);
 }
 
+static void mail_index_set_as_in_memory(struct mail_index *index)
+{
+	i_free_and_null(index->dir);
+
+	i_free(index->filepath);
+	index->filepath = i_strdup("(in-memory index)");
+}
+
 int mail_index_move_to_memory(struct mail_index *index)
 {
 	struct mail_index_map *map;
@@ -902,16 +922,11 @@ int mail_index_move_to_memory(struct mail_index *index)
 	if ((index->flags & MAIL_INDEX_OPEN_FLAG_NEVER_IN_MEMORY) != 0)
 		return -1;
 
-	/* set the index as being into memory */
-	i_free_and_null(index->dir);
-
-	i_free(index->filepath);
-	index->filepath = i_strdup("(in-memory index)");
-
 	if (index->map == NULL) {
 		/* index was never even opened. just mark it as being in
 		   memory and let the caller re-open the index. */
 		i_assert(index->fd == -1);
+		mail_index_set_as_in_memory(index);
 		return -1;
 	}
 
@@ -924,7 +939,8 @@ int mail_index_move_to_memory(struct mail_index *index)
 
 	if (index->log != NULL) {
 		/* move transaction log to memory */
-		mail_transaction_log_move_to_memory(index->log);
+		if (mail_transaction_log_move_to_memory(index->log) < 0)
+			return -1;
 	}
 
 	if (index->fd != -1) {
@@ -932,6 +948,7 @@ int mail_index_move_to_memory(struct mail_index *index)
 			mail_index_set_syscall_error(index, "close()");
 		index->fd = -1;
 	}
+	mail_index_set_as_in_memory(index);
 	return 0;
 }
 
@@ -1050,7 +1067,7 @@ void mail_index_file_set_syscall_error(struct mail_index *index,
 	if (errno == EACCES) {
 		function = t_strcut(function, '(');
 		if (strcmp(function, "creat") == 0 ||
-		    strncmp(function, "file_dotlock_", 13) == 0)
+		    str_begins(function, "file_dotlock_"))
 			errstr = eacces_error_get_creating(function, filepath);
 		else
 			errstr = eacces_error_get(function, filepath);

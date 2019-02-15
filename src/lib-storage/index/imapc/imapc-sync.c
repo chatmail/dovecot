@@ -39,9 +39,9 @@ static void imapc_sync_callback(const struct imapc_command_reply *reply,
 		mail_storage_set_internal_error(&ctx->mbox->storage->storage);
 		ctx->failed = TRUE;
 	} else {
-		mail_storage_set_critical(&ctx->mbox->storage->storage,
-					  "imapc: Sync command '%s' failed: %s",
-					  cmd->cmd_str, reply->text_full);
+		mailbox_set_critical(&ctx->mbox->box,
+				     "imapc: Sync command '%s' failed: %s",
+				     cmd->cmd_str, reply->text_full);
 		ctx->failed = TRUE;
 	}
 	
@@ -411,6 +411,12 @@ static void imapc_sync_index(struct imapc_sync_context *ctx)
 		imapc_mailbox_run(mbox);
 	array_free(&ctx->expunged_uids);
 
+	if (!mbox->state_fetched_success) {
+		/* All the sync commands succeeded, but we got disconnected.
+		   imapc_initial_sync_check() will crash if we go there. */
+		ctx->failed = TRUE;
+	}
+
 	/* add uidnext & highestmodseq after all appends */
 	imapc_sync_uid_next(ctx);
 	imapc_sync_highestmodseq(ctx);
@@ -490,16 +496,16 @@ static int imapc_sync_finish(struct imapc_sync_context **_ctx)
 	int ret = ctx->failed ? -1 : 0;
 
 	*_ctx = NULL;
-	if (ret == 0) {
-		if (mail_index_sync_commit(&ctx->index_sync_ctx) < 0) {
-			mailbox_set_index_error(&ctx->mbox->box);
-			ret = -1;
-		}
-	} else {
-		mail_index_sync_rollback(&ctx->index_sync_ctx);
+	/* Commit the transaction even if we failed. This is important, because
+	   during the sync delayed_sync_trans points to the sync transaction.
+	   Even if the syncing doesn't fully succeed, we don't want to lose
+	   changes in delayed_sync_trans. */
+	if (mail_index_sync_commit(&ctx->index_sync_ctx) < 0) {
+		mailbox_set_index_error(&ctx->mbox->box);
+		ret = -1;
 	}
 	if (ctx->mbox->sync_gmail_pop3_search_tag != NULL) {
-		mail_storage_set_critical(&ctx->mbox->storage->storage,
+		mailbox_set_critical(&ctx->mbox->box,
 			"gmail-pop3 search not successful");
 		i_free_and_null(ctx->mbox->sync_gmail_pop3_search_tag);
 		ret = -1;
@@ -512,7 +518,7 @@ static int imapc_sync_finish(struct imapc_sync_context **_ctx)
 
 	/* this is done simply to commit delayed expunges if there are any
 	   (has to be done after sync is committed) */
-	if (imapc_mailbox_commit_delayed_trans(ctx->mbox, &changes) < 0)
+	if (imapc_mailbox_commit_delayed_trans(ctx->mbox, FALSE, &changes) < 0)
 		ctx->failed = TRUE;
 
 	i_free(ctx);
@@ -559,7 +565,7 @@ imapc_noop_if_needed(struct imapc_mailbox *mbox, enum mailbox_sync_flags flags)
 struct mailbox_sync_context *
 imapc_mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)box;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(box);
 	struct imapc_mailbox_list *list = mbox->storage->client->_list;
 	bool changes;
 	int ret = 0;
@@ -579,7 +585,7 @@ imapc_mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 		/* initial FETCH failed already */
 		ret = -1;
 	}
-	if (imapc_mailbox_commit_delayed_trans(mbox, &changes) < 0)
+	if (imapc_mailbox_commit_delayed_trans(mbox, FALSE, &changes) < 0)
 		ret = -1;
 	if ((changes || mbox->sync_fetch_first_uid != 0 ||
 	     index_mailbox_want_full_sync(&mbox->box, flags)) &&
@@ -592,7 +598,7 @@ imapc_mailbox_sync_init(struct mailbox *box, enum mailbox_sync_flags flags)
 int imapc_mailbox_sync_deinit(struct mailbox_sync_context *ctx,
 			      struct mailbox_sync_status *status_r)
 {
-	struct imapc_mailbox *mbox = (struct imapc_mailbox *)ctx->box;
+	struct imapc_mailbox *mbox = IMAPC_MAILBOX(ctx->box);
 	int ret;
 
 	ret = index_mailbox_sync_deinit(ctx, status_r);

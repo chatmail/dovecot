@@ -75,6 +75,14 @@ enum master_login_state {
    environments that should be preserved. */
 #define DOVECOT_PRESERVE_ENVS_ENV "DOVECOT_PRESERVE_ENVS"
 
+/* getenv(DOVECOT_LOG_DEBUG_ENV) returns the global log_debug setting. This can
+   be used to initialize debug logging immediately at startup. */
+#define DOVECOT_LOG_DEBUG_ENV "LOG_DEBUG"
+
+/* getenv(DOVECOT_STATS_WRITER_SOCKET_PATH) returns path to the stats-writer
+   socket. */
+#define DOVECOT_STATS_WRITER_SOCKET_PATH "STATS_WRITER_SOCKET_PATH"
+
 /* Write pipe to anvil. */
 #define MASTER_ANVIL_FD 3
 /* Anvil reads new log fds from this fd */

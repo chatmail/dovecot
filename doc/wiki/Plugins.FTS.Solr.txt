@@ -4,33 +4,144 @@ Solr Full Text Search Indexing
 Solr [http://lucene.apache.org/solr/] is a Lucene indexing server. Dovecot
 communicates to it using HTTP/XML queries.
 
+The steps described in this wiki page are tested for Solr 7.5.x. For other
+versions, this these steps may need to be adjusted.
+
 Compiling
 ---------
 
-Give '--with-solr' parameter to 'configure' script. You'll also need to have
-libexpat and libcurl installed (if packages do not exist dovecot will compile
-without solr support). YUM: expat-devel, curl-devel
+Dovecot is not compiled with Solr FTS support by default. To enable it, you
+need to add the '--with-solr' parameter to your invocation of the 'configure'
+script. You will also need to have libexpat installed, including development
+headers (typically from a separate development package). Configuration will
+fail if '--with-solr' is enabled while libexpat headers cannot be found. Older
+versions of Dovecot also required libcurl for Solr support, but recent versions
+of Dovecot include a custom HTTP client.
 
 Configuration
 -------------
 
-Solr Schema
------------
+Solr Installation
+-----------------
 
-Replace Solr's existing 'solr/conf/schema.xml' using 'doc/solr-schema.xml' from
-Dovecot.
+First, the Solr server needs to be installed. Most operating systems will have
+packages for this. The latest version can be downloaded and installed from
+official website. For example, to install Solr 7.5.0
+[https://tecadmin.net/install-apache-solr-on-debian/]:
 
-If you only have a 'managed-schema' file: copy 'schema.xml' to that folder,
-delete 'managed-schema' file and remove or comment out (be aware not to have
-recursive comment) the block '<updateRequestProcessorChain
-name="add-unknown-fields-to-the-schema">' from 'solrconfig.xml'. Then restart
-Solr. The 'managed-schema' file will be rebuild from 'schema.xml'. (See 1
+---%<-------------------------------------------------------------------------
+wget http://www-eu.apache.org/dist/lucene/solr/7.5.0/solr-7.5.0.tgz
+tar xzf solr-7.5.0.tgz solr-7.5.0/bin/install_solr_service.sh
+--strip-components=2
+sudo bash ./install_solr_service.sh solr-7.5.0.tgz
+---%<-------------------------------------------------------------------------
+
+To use Solr with Dovecot, it needs to configured specifically for use with
+Dovecot. To that end, it needs to be running an instance (also called
+"collection" or "core") with a schema that provides the fields and semantics
+that Dovecot requires. Issue the following command to create a Solr instance
+called "dovecot":
+
+---%<-------------------------------------------------------------------------
+sudo -u solr solr create -c dovecot
+---%<-------------------------------------------------------------------------
+
+When you installed Solr from tarball, the solr command is likely not in the
+'PATH', so you will need to specify the full path tho the solr command:
+
+---%<-------------------------------------------------------------------------
+sudo -u solr /opt/solr/bin/solr create -c dovecot
+---%<-------------------------------------------------------------------------
+
+The location of the files for the newly created instance on the filesystem
+varies between operating systems and installation methods. For example, in
+Archlinux, the config files are located in '/opt/solr/server/solr/dovecot/conf'
+and data files can be found in '/opt/solr/server/solr/dovecot/data'. When
+installed from tarball, these directories can be found in
+'/var/solr/data/dovecot/'.
+
+Once the instance is created, you can start Solr. The means of starting,
+stopping and querying the status of the 'solr' service varies between systems.
+For systemd, these commands are as follows:
+
+---%<-------------------------------------------------------------------------
+sudo systemctl stop solr
+sudo systemctl start solr
+sudo systemctl status solr
+---%<-------------------------------------------------------------------------
+
+By default, the Solr administation page for the newly created instance is
+located at http://localhost:8983/solr/#/~cores/dovecot. It can be used to check
+the status of the Solr instance. Configuration errors are often most
+conveniently viewed here. Solr also writes log files. For a tarball
+installation, these can be found at '/var/solr/logs/'.
+
+Solr Configuration
+------------------
+
+There are two primary configuration files that need to be changed to
+accommodate the Dovecot FTS needs: these are the instance configuration file
+'solrconfig.xml' and the schema file 'schema.xml' used by the instance. These
+files are both located in the 'conf' directory of the Solr instance (e.g.,
+'/var/solr/data/dovecot/conf/').
+
+schema.xml
+----------
+
+An example schema is distributed with Dovecot as 'doc/solr-schema.xml'.
+However, this currently works only with older versions of Solr. For Solr v7+,
+you can use:
+
+ * The example [attachment:solr-7.x-schema.xml] by Daniel Miller '<dmiller AT
+   SPAMFREE amfes DOT com>'.
+
+Installing the schema is normally a matter of replacing Solr's existing
+'conf/schema.xml' with the 'schema.xml' for Dovecot. However, for some
+configurations, there is only a 'managed-schema' file. In that case, you can
+either amend your configuration (see next section) to avoid this or copy
+'schema.xml' to that folder, delete 'managed-schema' file and remove or comment
+out (be aware not to have recursive comment) the block
+'<updateRequestProcessorChain name="add-unknown-fields-to-the-schema">' from
+'solrconfig.xml'. Then restart Solr. The 'managed-schema' file will be rebuild
+from 'schema.xml'. (See 1
 [http://stackoverflow.com/questions/37989084/solr-6-1-where-is-my-collections-managed-schema-file],
 2
 [http://stackoverflow.com/questions/30673095/using-schema-xml-instead-of-managed-schema-with-solr-5-1-x])
 
+solrconfig.xml
+--------------
+
+The default 'solrconfig.xml' contains many definitions that are not needed for
+Dovecot and actually cause problems.
+
+There may be other errors on Solr (while looking at
+http://localhost:8983/solr):
+
+ * If you see the error /fieldType 'text_general' not found in the schema/ in
+   your solr dovecot core, look at solrconfig.xml, and ensure it is not using
+   the spellcheck component, or configure it to use your email body or from/to
+   fields instead. It may also come from the updateRequestProcessorChain above
+   that you would have incorrectly commented out.
+ * If solr tells you it can't find /mapping-FoldToASCII.txt/ or
+   /mapping-ISOLatin1Accent.txt/, copy those files, that exist in your
+   /opt/solr distribution into your core dovecot/conf/ folder.
+
 You may want to check if the file contains something you want to modify. See
 Solr wiki [http://wiki.apache.org/solr/SchemaXml] for how to configure it.
+
+Remember to configure Solr to accept and response in XML format. This can be
+done by editing 'solrconfig.xml' and adding
+
+---CodeArea-------------------------------------------------------------------
+<queryResponseWriter name="xml"    1
+                     default="true"    2
+                     class="solr.XMLResponseWriter" />    3
+---CodeArea-------------------------------------------------------------------
+
+*FIXME:
+
+ * make this a coherent story
+ * provide stripped example and example with more features*
 
 Dovecot Plugin
 --------------
@@ -55,10 +166,13 @@ plugin {
 Fields listed in 'fts_solr' plugin setting are space separated. They can
 contain:
 
- * url=<solr url> : Required base URL for Solr.
+ * url=<solr url> : Required base URL for Solr. (remember to add your core name
+   if using solr 7+ : "/solr/dovecot/"). The default URL for Solr 7+ is
+   http://localhost:8983/solr/dovecot
  * debug : Enable HTTP debugging. Writes to error log.
  * break-imap-search : Use Solr also for indexing TEXT and BODY searches. This
-   makes your server non-IMAP-compliant. (This is always enabled in v2.1+)
+   makes your server non-IMAP-compliant. (This is always enabled in v2.1+, and
+   removed since v2.3+ as it's default behaviour)
 
 Important notes:
 
@@ -82,10 +196,16 @@ Solr every few minutes.
 
 ---%<-------------------------------------------------------------------------
 # Optimize should be run somewhat rarely, e.g. once a day
-curl http://<hostname/ip>:<port|default 8983>/solr/update?optimize=true
+curl http://<hostname/ip>:<port|default 8983>/solr/dovecot/update?optimize=true
 # Commit should be run pretty often, e.g. every minute
-curl http://<hostname/ip>:<port|default 8983>/solr/update?commit=true
+curl http://<hostname/ip>:<port|default 8983>/solr/dovecot/update?commit=true
 ---%<-------------------------------------------------------------------------
+
+You may not need those if you are using a recent Solr (7+) or <SolrCloud.txt>.
+The default configuration of Solr is to auto-commit every once in a while
+(~15sec) so commit is not necessary. Also, the default /
+<TieredMergePolicy.txt>/ in Solr will automatically purge removed documents
+later, so optimize is not necessary.
 
 Re-index mailbox
 ----------------
@@ -165,25 +285,32 @@ to different servers. A couple of different ways you could do it are:
  * Have some HTTP proxy redirecting the connections based on the URL
  * Configure Dovecot's userdb lookup to return a different host for 'fts_solr'
    setting using <extra fields> [UserDatabase.ExtraFields.txt].
-    * LDAP: 'user_attrs = ..., solrHost=fts_solr=url=http://%$:8983/solr/'
+    * LDAP: 'user_attrs = ...,
+      solrHost=fts_solr=url=http://%$:8983/solr/dovecot/'
     * MySQL: 'user_query = SELECT concat('url=http://', solr_host,
-      ':8983/solr/') AS fts_solr, ...'
+      ':8983/solr/dovecot/') AS fts_solr, ...'
+
+You can also use SolrCloud
+[https://lucene.apache.org/solr/guide/7_6/solrcloud.html], the clustered
+version of Solr, that allows you to scale up, and adds failover / high
+availability to your FTS system. Dovecot-solr works fine with a <SolrCloud.txt>
+cluster as long as the solr schema is the right one.
 
 External Tutorials
 ------------------
 
 External sites with tutorials on using Solr under Dovecot
 
- * Installing Apache Solr with Dovecot for fulltext search results
-   [http://atmail.com/kb/2009/installing-apache-solr-with-dovecot-for-fulltext-search-results/]
-   - Guide for installing all the dependencies for Solr to work under
-   CentOS/Fedora. Step by step tutorial.
  * Installing Apache Solr with Dovecot for fulltext search results (ATmail
    support guide)
-   [http://support.atmail.com/display/AKB/Installing+Apache+Solr+with+Dovecot+for+fulltext+search+results]
+   [https://help.atmail.com/hc/en-us/articles/201566404-Installing-Apache-Solr-with-Dovecot-for-fulltext-search-results]
+ * Linux: http://things.m31.ch/?p=379
+ * FreeBSD: http://mor-pah.net/2016/08/15/dovecot-2-2-with-solr-6-or-5/
+ * Substring searches with ngrams:
+   https://www.dovecot.org/list/dovecot/2011-May/059338.html
 
-Tipps
------
+Tips
+----
 
 Some additional things which might help you configuring Solr search:
 
@@ -192,16 +319,7 @@ Some additional things which might help you configuring Solr search:
    query strings (iPhones tend to send multi-kilobyte-sized queries)
  * Set 'df' to 'hdr' in '/etc/solr/conf/solrconfig.xml' ('/select' request
    handler) to avoid strange 'undefined field text' errors.
+ * Please keep in mind that you will have to change the Solr URL to include the
+   core name (ie:'dovecot': 'http://localhost:8939/solr/dovecot').
 
-Recent versions of Solr
------------------------
-
-With recent versions of Solr (5+), you should have a look at these guides:
-
- * Linux: http://things.m31.ch/?p=379
- * FreeBSD: http://mor-pah.net/2016/08/15/dovecot-2-2-with-solr-6-or-5/
-
-Please keep in mind that you will have to change the Solr URL to include the
-core name (ie:'dovecot': 'http://localhost:8939/solr/dovecot').
-
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

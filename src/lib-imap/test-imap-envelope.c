@@ -194,7 +194,7 @@ static void test_imap_envelope_parse(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_imap_envelope_write,
 		test_imap_envelope_parse,
 		NULL

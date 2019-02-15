@@ -24,7 +24,7 @@ struct auth_penalty_request {
 struct auth_penalty {
 	struct anvil_client *client;
 
-	unsigned int disabled:1;
+	bool disabled:1;
 };
 
 struct auth_penalty *auth_penalty_init(const char *path)
@@ -105,13 +105,11 @@ auth_penalty_get_ident(struct auth_request *auth_request)
 	struct ip_addr ip;
 
 	ip = auth_request->remote_ip;
-#ifdef HAVE_IPV6
 	if (IPADDR_IS_V6(&ip)) {
 		memset(ip.u.ip6.s6_addr + PENALTY_IPV6_MASK_BITS/CHAR_BIT, 0,
 		       sizeof(ip.u.ip6.s6_addr) -
 		       PENALTY_IPV6_MASK_BITS/CHAR_BIT);
 	}
-#endif
 	return net_ip2addr(&ip);
 }
 

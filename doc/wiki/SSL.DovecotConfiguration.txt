@@ -1,6 +1,41 @@
 Dovecot SSL configuration
 =========================
 
+Contents
+
+
+ 1. Dovecot SSL configuration
+
+     1. Multiple SSL certificates
+
+         1. Different certificates per algorithm
+
+         2. Different certificates per IP and protocol
+
+         3. With client TLS SNI (Server Name Indication) support
+
+     2. Password protected key files
+
+     3. Chained SSL certificates
+
+     4. SSL security settings
+
+     5. SSL verbosity
+
+     6. Client certificate verification/authentication
+
+     7. Testing
+
+     8. Testing CA
+
+         1. Testing CA On Debian
+
+         2. Testing CA On RHEL
+
+         3. Testing CA Success
+
+     9. Client connections
+
 The most important SSL settings are (in 'conf.d/10-ssl.conf'):
 
 ---%<-------------------------------------------------------------------------
@@ -10,6 +45,9 @@ ssl_cert = </etc/ssl/certs/dovecot.pem
 # Preferred permissions: root:root 0400
 ssl_key = </etc/ssl/private/dovecot.pem
 ---%<-------------------------------------------------------------------------
+
+The '<' is mandatory. It indicates that the variable should contain *contents*
+of the file, instead of the file name. Not using it will cause an error.
 
 The certificate file can be world-readable, since it doesn't contain anything
 sensitive (in fact it's sent to each connecting SSL client). The key file's
@@ -208,6 +246,9 @@ regenerated them every week by default, but because the extra security gained
 by the regeneration is quite small, Dovecot v2.2 disabled the regeneration
 feature completely.
 
+ * Since v2.3.3+ Diffie-Hellman parameters have been made optional, and you are
+   encouraged to disable non-ECC DH algorithms completely.
+
 From and up to version 2.2, you can specify the wanted DH parameters length
 using:
 
@@ -221,9 +262,15 @@ From version 2.3, you must specify path to DH parameters file using:
 ssl_dh=</path/to/dh.pem
 ---%<-------------------------------------------------------------------------
 
-To generate new parameters file, you can use 'openssl dhparam 4096' (this will
-take *very long* time, run it on machine with sufficient entropy). You can also
-convert old parameters file v2.2 with command
+To generate new parameters file, you can use:
+
+---%<-------------------------------------------------------------------------
+# This might take a very long time. Run it on a machine with sufficient
+entropy.
+openssl dhparam 4096 > dh.pem
+---%<-------------------------------------------------------------------------
+
+You can also convert an old v2.2 parameters file with command:
 
 ---%<-------------------------------------------------------------------------
 dd if=/path/to/ssl-parameters.dat bs=1 skip=88 | openssl dhparam -inform DER
@@ -453,4 +500,14 @@ Testing CA Success
     Verify return code: 0 (ok)
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2018-02-28 04:42)
+Client connections
+------------------
+
+Since v2.3.4 dovecot accepts default system CAs for outgoing connections.
+
+---%<-------------------------------------------------------------------------
+ssl_client_ca_dir = /path/to/pem/certificates
+ssl_client_ca_file = /path/to/pem/bundle
+---%<-------------------------------------------------------------------------
+
+(This file was created from the wiki on 2019-02-05 04:42)

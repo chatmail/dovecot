@@ -49,9 +49,9 @@ struct fs_list_iterate_context {
 	/* current directory we're handling */
 	struct list_dir_context *dir;
 
-	unsigned int inbox_found:1;
-	unsigned int inbox_has_children:1;
-	unsigned int listed_prefix_inbox:1;
+	bool inbox_found:1;
+	bool inbox_has_children:1;
+	bool listed_prefix_inbox:1;
 };
 
 static int
@@ -111,8 +111,9 @@ fs_list_rename_invalid(struct fs_list_iterate_context *ctx,
 					  MAILBOX_LIST_PATH_TYPE_MAILBOX);
 	src = t_strconcat(root, "/", storage_name, NULL);
 
-	(void)uni_utf8_get_valid_data((const void *)storage_name,
-				      strlen(storage_name), destname);
+	if (uni_utf8_get_valid_data((const void *)storage_name,
+				    strlen(storage_name), destname))
+		i_unreached(); /* already checked that it was invalid */
 
 	str_append(dest, root);
 	str_append_c(dest, '/');
@@ -292,7 +293,7 @@ fs_list_dir_read(struct fs_list_iterate_context *ctx,
 	fsdir = opendir(path);
 	if (fsdir == NULL) {
 		if (ENOTFOUND(errno)) {
-			/* root) user gave invalid hiearchy, ignore
+			/* root) user gave invalid hierarchy, ignore
 			   sub) probably just race condition with other client
 			   deleting the mailbox. */
 			return 0;
@@ -481,7 +482,7 @@ static void fs_list_get_roots(struct fs_list_iterate_context *ctx)
 		parentp = array_idx(&ctx->roots, i-1);
 		childp = array_idx(&ctx->roots, i);
 		parentlen = strlen(*parentp);
-		if (strncmp(*parentp, *childp, parentlen) == 0 &&
+		if (str_begins(*childp, *parentp) &&
 		    (parentlen == 0 ||
 		     (*childp)[parentlen] == ctx->sep ||
 		     (*childp)[parentlen] == '\0'))
@@ -561,8 +562,7 @@ int fs_list_iter_deinit(struct mailbox_list_iterate_context *_ctx)
 		pool_unref(&dir->pool);
 	}
 
-	if (ctx->info_pool != NULL)
-		pool_unref(&ctx->info_pool);
+	pool_unref(&ctx->info_pool);
 	pool_unref(&_ctx->pool);
 	return ret;
 }

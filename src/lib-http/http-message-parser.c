@@ -31,12 +31,9 @@ void http_message_parser_deinit(struct http_message_parser *parser)
 {
 	if (parser->header_parser != NULL)
 		http_header_parser_deinit(&parser->header_parser);
-	if (parser->msg.pool != NULL)
-		pool_unref(&parser->msg.pool);
-	if (parser->payload != NULL)
-		i_stream_unref(&parser->payload);
-	if (parser->input != NULL)
-		i_stream_unref(&parser->input);
+	pool_unref(&parser->msg.pool);
+	i_stream_unref(&parser->payload);
+	i_stream_unref(&parser->input);
 }
 
 void http_message_parser_restart(struct http_message_parser *parser,
@@ -55,8 +52,7 @@ void http_message_parser_restart(struct http_message_parser *parser,
 		http_header_parser_reset(parser->header_parser);
 	}
 
-	if (parser->msg.pool != NULL)
-		pool_unref(&parser->msg.pool);
+	pool_unref(&parser->msg.pool);
 	i_zero(&parser->msg);
 	if (pool != NULL) {
 		parser->msg.pool = pool;
@@ -111,7 +107,7 @@ int http_message_parse_finish_payload(struct http_message_parser *parser)
 	if (parser->payload == NULL)
 		return 1;
 
-	while ((ret = i_stream_read_data(parser->payload, &data, &size, 0)) > 0)
+	while ((ret = i_stream_read_more(parser->payload, &data, &size)) > 0)
 		i_stream_skip(parser->payload, size);
 	if (ret == 0 || parser->payload->stream_errno != 0) {
 		if (ret < 0) {
@@ -123,7 +119,8 @@ int http_message_parse_finish_payload(struct http_message_parser *parser)
 				parser->error = "Invalid payload";
 			} else {
 				parser->error_code = HTTP_MESSAGE_PARSE_ERROR_BROKEN_STREAM;
-				parser->error = "Stream error while skipping payload";
+				parser->error = t_strdup_printf("Stream error while skipping payload: %s",
+								i_stream_get_error(parser->payload));
 			}
 		}
 		return ret;

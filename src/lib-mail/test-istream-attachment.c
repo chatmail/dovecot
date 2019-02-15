@@ -181,7 +181,7 @@ static int test_close_attachment_ostream(struct ostream *output, bool success,
 	a = array_idx_modifiable(&attachments, array_count(&attachments)-1);
 	a->decoded_size = output->offset - a->buffer_offset;
 
-	if (o_stream_nfinish(output) < 0)
+	if (o_stream_finish(output) < 0)
 		i_unreached();
 	o_stream_destroy(&output);
 	return 0;
@@ -194,7 +194,7 @@ test_close_attachment_ostream_error(struct ostream *output,
 {
 	if (success)
 		*error = "test output error";
-	o_stream_ignore_last_errors(output);
+	o_stream_abort(output);
 	o_stream_destroy(&output);
 	return -1;
 }
@@ -256,7 +256,7 @@ static int test_input_stream(struct istream *file_input)
 	/* get hash when directly reading input */
 	input = i_stream_create_crlf(file_input);
 	sha1_init(&hash);
-	while (i_stream_read_data(input, &data, &size, 0) > 0) {
+	while (i_stream_read_more(input, &data, &size) > 0) {
 		sha1_loop(&hash, data, size);
 		i_stream_skip(input, size);
 	}
@@ -272,7 +272,7 @@ static int test_input_stream(struct istream *file_input)
 	input2 = i_stream_create_attachment_extractor(input, &set, NULL);
 	i_stream_unref(&input);
 	base_buf = buffer_create_dynamic(default_pool, 1024);
-	while (i_stream_read_data(input2, &data, &size, 0) > 0) {
+	while (i_stream_read_more(input2, &data, &size) > 0) {
 		buffer_append(base_buf, data, size);
 		i_stream_skip(input2, size);
 	}
@@ -313,8 +313,7 @@ static int test_input_stream(struct istream *file_input)
 	}
 
 	buffer_free(&base_buf);
-	if (attachment_data != NULL)
-		buffer_free(&attachment_data);
+	buffer_free(&attachment_data);
 	if (array_is_created(&attachments))
 		array_free(&attachments);
 	return ret;
@@ -357,8 +356,7 @@ static void test_istream_attachment(void)
 	i_stream_unref(&input);
 	i_stream_unref(&datainput);
 
-	if (attachment_data != NULL)
-		buffer_free(&attachment_data);
+	buffer_free(&attachment_data);
 	if (array_is_created(&attachments))
 		array_free(&attachments);
 	test_end();
@@ -406,8 +404,7 @@ static bool test_istream_attachment_extractor_one(const char *body, int err_type
 		memcmp(data, body + attachment_data->used, size) == 0;
 
 cleanup:
-	if (attachment_data != NULL)
-		buffer_free(&attachment_data);
+	buffer_free(&attachment_data);
 	if (array_is_created(&attachments))
 		array_free(&attachments);
 
@@ -475,7 +472,7 @@ static int test_input_file(const char *path)
 
 int main(int argc, char *argv[])
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_istream_attachment,
 		test_istream_attachment_extractor,
 		test_istream_attachment_extractor_error,

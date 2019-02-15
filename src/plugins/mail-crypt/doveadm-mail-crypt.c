@@ -109,7 +109,7 @@ mcp_update_shared_key(struct mailbox_transaction_context *t,
 	const char *dest_username;
 	int ret = 0;
 
-        bool disallow_insecure = mail_crypt_acl_secure_sharing_enabled(user);
+	bool disallow_insecure = mail_crypt_acl_secure_sharing_enabled(user);
 
 	ret = mcp_user_create(user, target_uid, &dest_user,
 			      &dest_service_user, &error);
@@ -192,7 +192,7 @@ static int mcp_update_shared_keys(struct mailbox *box, struct mail_user *user,
 	string_t *uid = t_str_new(64);
 
 	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(box, 0);
+		mailbox_transaction_begin(box, 0, __func__);
 	
 	ret = 0;
 
@@ -246,10 +246,7 @@ static int mcp_keypair_generate(struct mcp_cmd_context *ctx,
 
 	int ret;
 
-	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(box, 0);
-
-	if ((ret = mail_crypt_box_get_public_key(t, &pair.pub, error_r)) < 0) {
+	if ((ret = mail_crypt_box_get_public_key(box, &pair.pub, error_r)) < 0) {
 		ret = -1;
 	} else if (ret == 1 && !ctx->force) {
 		i_info("Folder key exists. Use -f to generate a new one");
@@ -260,13 +257,12 @@ static int mcp_keypair_generate(struct mcp_cmd_context *ctx,
 					key_id, &error)) {
 			i_error("dcrypt_key_id_public() failed: %s",
 				error);
-			ret = -1;
-		} else {
-			*pubid_r = p_strdup(ctx->ctx.pool, binary_to_hex(key_id->data,
-									 key_id->used));
-			*pair_r = pair;
-			ret = 1;
+			return -1;
 		}
+		*pubid_r = p_strdup(ctx->ctx.pool, binary_to_hex(key_id->data,
+								 key_id->used));
+		*pair_r = pair;
+		return 1;
 	} else if (ret == 1 && ctx->recrypt_box_keys) {
 		/* do nothing, because force isn't being used *OR*
 		   we are recrypting box keys and force refers to
@@ -281,18 +277,14 @@ static int mcp_keypair_generate(struct mcp_cmd_context *ctx,
 		} else {
 			*pubid_r = p_strdup(ctx->ctx.pool, *pubid_r);
 			*pair_r = pair;
-			ret = 1;
+			return 1;
 		}
 	}
 
-	if (ret < 1) {
-		if (pair.pub != NULL)
-			dcrypt_key_unref_public(&pair.pub);
-		if (pair.priv != NULL)
-			dcrypt_key_unref_private(&pair.priv);
-	}
-
-	(void)mailbox_transaction_commit(&t);
+	if (pair.pub != NULL)
+		dcrypt_key_unref_public(&pair.pub);
+	if (pair.priv != NULL)
+		dcrypt_key_unref_private(&pair.priv);
 
 	return ret;
 }
@@ -350,6 +342,7 @@ static int mcp_keypair_generate_run(struct doveadm_mail_cmd_context *_ctx,
 						key_id, &error)) {
 				i_error("dcrypt_key_id_public() failed: %s",
 					error);
+				dcrypt_key_unref_public(&user_key);
 				return -1;
 			}
 			const char *hash = binary_to_hex(key_id->data,
@@ -359,6 +352,7 @@ static int mcp_keypair_generate_run(struct doveadm_mail_cmd_context *_ctx,
 			res->id = p_strdup(_ctx->pool, hash);
 			res->success = TRUE;
 			ctx->matched_keys++;
+			dcrypt_key_unref_public(&user_key);
 			return 1;
 		}
 		struct dcrypt_keypair pair;
@@ -379,8 +373,10 @@ static int mcp_keypair_generate_run(struct doveadm_mail_cmd_context *_ctx,
 		ctx->matched_keys++;
 	}
 
-	if (ctx->userkey_only)
+	if (ctx->userkey_only) {
+		dcrypt_key_unref_public(&user_key);
 		return 0;
+	}
 
 	const char *const *patterns = (const char *const[]){ "*", NULL };
 
@@ -487,15 +483,15 @@ static int cmd_mcp_keypair_generate_run(struct doveadm_mail_cmd_context *_ctx,
 }
 
 static void mcp_key_list(struct mcp_cmd_context *ctx,
-			 struct mail_user *user,
-			 void(*callback)(const struct generated_key *, void *),
-			 void *context)
+			struct mail_user *user,
+			void(*callback)(const struct generated_key *, void *),
+			void *context)
 {
 	const char *error;
 	int ret;
 
 	/* we need to use the mailbox attribute API here, as we
-	   are not necessarely able to decrypt any of these keys
+	   are not necessarily able to decrypt any of these keys
 	*/
 
 	ARRAY_TYPE(const_string) ids;
@@ -509,17 +505,8 @@ static void mcp_key_list(struct mcp_cmd_context *ctx,
 			mailbox_alloc(ns->list, "INBOX", MAILBOX_FLAG_READONLY);
 		struct mail_attribute_value value;
 		i_zero(&value);
-		if (mailbox_open(box) < 0) {
-			i_error("mailbox_open(%s) failed: %s",
-				mailbox_get_vname(box),
-				mailbox_get_last_internal_error(box, NULL));
-			mailbox_free(&box);
-			return;
-		}
-		struct mailbox_transaction_context *t =
-			mailbox_transaction_begin(box, 0);
 
-		if ((ret = mailbox_attribute_get(t, MAIL_ATTRIBUTE_TYPE_SHARED,
+		if ((ret = mailbox_attribute_get(box, MAIL_ATTRIBUTE_TYPE_SHARED,
 						 USER_CRYPT_PREFIX
 						 ACTIVE_KEY_NAME,
 						 &value)) < 0) {
@@ -545,14 +532,10 @@ static void mcp_key_list(struct mcp_cmd_context *ctx,
 			callback(&key, context);
 			ctx->matched_keys++;
 		}
-
 		if (mailbox_attribute_iter_deinit(&iter) < 0)
 			i_error("mailbox_attribute_iter_deinit(%s) failed: %s",
 				mailbox_get_vname(box),
 				mailbox_get_last_internal_error(box, NULL));
-
-		(void)mailbox_transaction_commit(&t);
-
 		mailbox_free(&box);
 		return;
 	}
@@ -573,23 +556,12 @@ static void mcp_key_list(struct mcp_cmd_context *ctx,
 		struct mailbox *box =
 			mailbox_alloc(info->ns->list,
 				      info->vname, MAILBOX_FLAG_READONLY);
-
-		if (mailbox_open(box) < 0) {
-			i_error("mailbox_open(%s) failed: %s",
-				mailbox_get_vname(box),
-				mailbox_get_last_internal_error(box, NULL));
-			mailbox_free(&box);
-			continue;
-		}
-		struct mailbox_transaction_context *t =
-			mailbox_transaction_begin(box, 0);
-
 		struct mail_attribute_value value;
 		i_zero(&value);
 		array_clear(&ids);
 
 		/* get active ID */
-		if ((ret = mailbox_attribute_get(t, MAIL_ATTRIBUTE_TYPE_SHARED,
+		if ((ret = mailbox_attribute_get(box, MAIL_ATTRIBUTE_TYPE_SHARED,
 					  	 BOX_CRYPT_PREFIX
 						 ACTIVE_KEY_NAME,
 						 &value)) < 0) {
@@ -621,8 +593,6 @@ static void mcp_key_list(struct mcp_cmd_context *ctx,
 				ctx->matched_keys++;
 			}
 		}
-
-		(void)mailbox_transaction_commit(&t);
 		mailbox_free(&box);
 	}
 
@@ -683,11 +653,8 @@ static void cmd_mcp_key_export_cb(const struct generated_key *key,
 	doveadm_print(key->name);
 	doveadm_print(key->id);
 
-	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(key->box, 0);
-
-	if ((ret = mail_crypt_get_private_key(t, key->id, user_key, FALSE,
-				  	      &pkey, &error)) <= 0) {
+	if ((ret = mail_crypt_get_private_key(key->box, key->id, user_key, FALSE,
+					      &pkey, &error)) <= 0) {
 		if (ret == 0)
 			error = "key not found";
 		doveadm_print(t_strdup_printf("ERROR: %s", error));
@@ -705,8 +672,6 @@ static void cmd_mcp_key_export_cb(const struct generated_key *key,
 		}
 		dcrypt_key_unref_private(&pkey);
 	}
-
-	(void)mailbox_transaction_commit(&t);
 }
 
 static int cmd_mcp_key_export_run(struct doveadm_mail_cmd_context *_ctx,
@@ -731,6 +696,7 @@ static int cmd_mcp_key_password_run(struct doveadm_mail_cmd_context *_ctx,
 {
 	struct mcp_cmd_context *ctx =
 		(struct mcp_cmd_context *)_ctx;
+	bool cli = (_ctx->cctx->conn_type == DOVEADM_CONNECTION_TYPE_CLI);
 
 	struct raw_key {
 		const char *attr;
@@ -750,7 +716,7 @@ static int cmd_mcp_key_password_run(struct doveadm_mail_cmd_context *_ctx,
 			_ctx->exit_code = EX_USAGE;
 			return -1;
 		}
-		if (!_ctx->cli) {
+		if (!cli) {
 			doveadm_print("No cli - cannot ask for password");
 			_ctx->exit_code = EX_USAGE;
 			return -1;
@@ -765,7 +731,7 @@ static int cmd_mcp_key_password_run(struct doveadm_mail_cmd_context *_ctx,
 			_ctx->exit_code = EX_USAGE;
 			return -1;
 		}
-		if (!_ctx->cli) {
+		if (!cli) {
 			doveadm_print("No cli - cannot ask for password");
 			_ctx->exit_code = EX_USAGE;
 			return -1;
@@ -792,9 +758,6 @@ static int cmd_mcp_key_password_run(struct doveadm_mail_cmd_context *_ctx,
 		return -1;
 	}
 
-	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(box, 0);
-
 	t_array_init(&raw_keys, 8);
 
 	/* then get the current user keys, all of them */
@@ -814,7 +777,7 @@ static int cmd_mcp_key_password_run(struct doveadm_mail_cmd_context *_ctx,
 					key_id);
 
 		struct mail_attribute_value value;
-		if ((ret = mailbox_attribute_get(t, MAIL_ATTRIBUTE_TYPE_PRIVATE,
+		if ((ret = mailbox_attribute_get(box, MAIL_ATTRIBUTE_TYPE_PRIVATE,
 						 attr, &value)) < 0) {
 			doveadm_print(t_strdup_printf("mailbox_attribute_get(%s, %s) failed: %s",
 				mailbox_get_vname(box), attr,
@@ -830,6 +793,8 @@ static int cmd_mcp_key_password_run(struct doveadm_mail_cmd_context *_ctx,
 	}
 
 	if (ret == 1) {
+		struct mailbox_transaction_context *t =
+			mailbox_transaction_begin(box, 0, __func__);
 		struct dcrypt_private_key *key;
 		const struct raw_key *raw_key;
 		const char *algo = ctx->new_password != NULL ?
@@ -884,18 +849,18 @@ static int cmd_mcp_key_password_run(struct doveadm_mail_cmd_context *_ctx,
 			}
 			count++;
 		}
-	}
 
-	if (ret < 1) {
-		mailbox_transaction_rollback(&t);
-	} else {
-		if (mailbox_transaction_commit(&t) < 0) {
-			doveadm_print(t_strdup_printf("mailbox_transaction_commit(%s) failed: %s",
-				mailbox_get_vname(box),
-				mailbox_get_last_internal_error(box, NULL)));
+		if (ret < 1) {
+			mailbox_transaction_rollback(&t);
 		} else {
-			doveadm_print(t_strdup_printf("Changed password for %u key(s)",
-						     count));
+			if (mailbox_transaction_commit(&t) < 0) {
+				doveadm_print(t_strdup_printf("mailbox_transaction_commit(%s) failed: %s",
+					mailbox_get_vname(box),
+					mailbox_get_last_internal_error(box, NULL)));
+			} else {
+				doveadm_print(t_strdup_printf("Changed password for %u key(s)",
+							     count));
+			}
 		}
 	}
 

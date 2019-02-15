@@ -68,7 +68,7 @@ static void test_istream_dot_one(const struct dot_test *test,
 				test_assert(ret > 0);
 
 				data = i_stream_get_data(input, &size);
-				str_append_n(str, data, size);
+				str_append_data(str, data, size);
 				i_stream_skip(input, size);
 			}
 		}
@@ -91,7 +91,7 @@ static void test_istream_dot_one(const struct dot_test *test,
 
 		data = i_stream_get_data(input, &size);
 		if (size > 0)
-			str_append_n(str, data, size);
+			str_append_data(str, data, size);
 	}
 	test_assert(input->stream_errno == 0);
 	test_assert(str_len(str) == output_len);
@@ -222,7 +222,7 @@ static void test_istream_dot(void)
 
 int main(void)
 {
-	static void (*test_functions[])(void) = {
+	static void (*const test_functions[])(void) = {
 		test_istream_dot,
 		NULL
 	};

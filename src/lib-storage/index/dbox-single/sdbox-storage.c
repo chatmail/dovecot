@@ -34,7 +34,7 @@ static int sdbox_storage_create(struct mail_storage *_storage,
 				struct mail_namespace *ns,
 				const char **error_r)
 {
-	struct dbox_storage *storage = (struct dbox_storage *)_storage;
+	struct dbox_storage *storage = DBOX_STORAGE(_storage);
 	enum fs_properties props;
 
 	if (dbox_storage_create(_storage, ns, error_r) < 0)
@@ -134,7 +134,7 @@ sdbox_mailbox_alloc(struct mail_storage *storage, struct mailbox_list *list,
 	ibox->index_flags |= MAIL_INDEX_OPEN_FLAG_KEEP_BACKUPS |
 		MAIL_INDEX_OPEN_FLAG_NEVER_IN_MEMORY;
 
-	mbox->storage = (struct sdbox_storage *)storage;
+	mbox->storage = SDBOX_STORAGE(storage);
 	return &mbox->box;
 }
 
@@ -155,10 +155,8 @@ int sdbox_read_header(struct sdbox_mailbox *mbox,
 	if (data_size < SDBOX_INDEX_HEADER_MIN_SIZE &&
 	    (!mbox->box.creating || data_size != 0)) {
 		if (log_error) {
-			mail_storage_set_critical(
-				&mbox->storage->storage.storage,
-				"sdbox %s: Invalid dbox header size",
-				mailbox_get_path(&mbox->box));
+			mailbox_set_critical(&mbox->box,
+				"sdbox: Invalid dbox header size");
 		}
 		ret = -1;
 	} else {
@@ -216,7 +214,7 @@ int sdbox_mailbox_create_indexes(struct mailbox *box,
 				 const struct mailbox_update *update,
 				 struct mail_index_transaction *trans)
 {
-	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)box;
+	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(box);
 	struct mail_index_transaction *new_trans = NULL;
 	const struct mail_index_header *hdr;
 	uint32_t uid_validity, uid_next;
@@ -291,7 +289,7 @@ sdbox_get_attachment_path_suffix(struct dbox_file *_file)
 
 void sdbox_set_mailbox_corrupted(struct mailbox *box)
 {
-	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)box;
+	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(box);
 	struct sdbox_index_header hdr;
 	bool need_resize;
 
@@ -329,7 +327,7 @@ static int sdbox_mailbox_alloc_index(struct sdbox_mailbox *mbox)
 
 static int sdbox_mailbox_open(struct mailbox *box)
 {
-	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)box;
+	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(box);
 	struct sdbox_index_header hdr;
 	bool need_resize;
 	time_t path_ctime;
@@ -369,7 +367,7 @@ static int sdbox_mailbox_open(struct mailbox *box)
 
 static void sdbox_mailbox_close(struct mailbox *box)
 {
-	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)box;
+	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(box);
 
 	if (mbox->corrupted_rebuild_count != 0)
 		(void)sdbox_sync(mbox, 0);
@@ -380,7 +378,7 @@ static int
 sdbox_mailbox_create(struct mailbox *box,
 		     const struct mailbox_update *update, bool directory)
 {
-	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)box;
+	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(box);
 	struct sdbox_index_header hdr;
 	bool need_resize;
 
@@ -391,9 +389,8 @@ sdbox_mailbox_create(struct mailbox *box,
 
 	/* another process just created the mailbox. read the mailbox_guid. */
 	if (sdbox_read_header(mbox, &hdr, FALSE, &need_resize) < 0) {
-		mail_storage_set_critical(box->storage,
-			"sdbox %s: Failed to read newly created dbox header",
-			mailbox_get_path(&mbox->box));
+		mailbox_set_critical(box,
+			"sdbox: Failed to read newly created dbox header");
 		return -1;
 	}
 	memcpy(mbox->mailbox_guid, hdr.mailbox_guid,
@@ -407,7 +404,7 @@ sdbox_mailbox_get_metadata(struct mailbox *box,
 			   enum mailbox_metadata_items items,
 			   struct mailbox_metadata *metadata_r)
 {
-	struct sdbox_mailbox *mbox = (struct sdbox_mailbox *)box;
+	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(box);
 
 	if (index_mailbox_get_metadata(box, items, metadata_r) < 0)
 		return -1;

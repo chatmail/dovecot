@@ -32,7 +32,7 @@ static int sync_pvt_expunges(struct index_mailbox_sync_pvt_context *ctx)
 			mail_index_expunge(ctx->trans_pvt, seq_pvt);
 			seq_pvt++;
 		} else {
-			mail_storage_set_critical(ctx->box->storage,
+			mailbox_set_critical(ctx->box,
 				"%s: Message UID=%u unexpectedly inserted to mailbox",
 				ctx->box->index_pvt->filepath, uid_shared);
 			return -1;
@@ -156,6 +156,7 @@ index_mailbox_sync_pvt_index(struct index_mailbox_sync_pvt_context *ctx,
 	uint32_t seq_shared, seq_pvt, seq_old_pvt, seq2, count_shared, uid;
 	unsigned int pc_idx = 0;
 	bool reset = FALSE, preserve_old_flags = FALSE, copy_shared_flags;
+	bool initial_index = FALSE;
 	int ret;
 
 	if (ctx->sync_ctx == NULL) {
@@ -173,9 +174,16 @@ index_mailbox_sync_pvt_index(struct index_mailbox_sync_pvt_context *ctx,
 			preserve_old_flags = TRUE;
 			t_array_init(&keywords, 32);
 		}
-	} else if (hdr_pvt->uid_validity == 0 || hdr_pvt->uid_validity != 0) {
+	} else if (hdr_pvt->uid_validity == 0 && hdr_pvt->next_uid <= 1) {
+		/* creating the initial index - no logging */
+		reset = TRUE;
+		initial_index = TRUE;
+	} else {
 		/* mailbox created/recreated */
 		reset = TRUE;
+		i_info("Mailbox %s UIDVALIDITY changed (%u -> %u), reseting private index",
+		       ctx->box->vname, hdr_pvt->uid_validity,
+		       hdr_shared->uid_validity);
 	}
 	/* for public namespaces copy the initial private flags from the shared
 	   index. this allows Sieve scripts to set the initial flags. */
@@ -192,7 +200,8 @@ index_mailbox_sync_pvt_index(struct index_mailbox_sync_pvt_context *ctx,
 			seq_shared = count_shared+1;
 		}
 	} else {
-		mail_index_reset(ctx->trans_pvt);
+		if (!initial_index)
+			mail_index_reset(ctx->trans_pvt);
 		mail_index_update_header(ctx->trans_pvt,
 			offsetof(struct mail_index_header, uid_validity),
 			&hdr_shared->uid_validity,

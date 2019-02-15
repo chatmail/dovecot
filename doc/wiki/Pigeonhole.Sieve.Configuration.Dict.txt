@@ -184,4 +184,4 @@ dict:file:/etc/dovecot/sieve.dict;name=keep;bindir=/var/sieve-scripts/%u
 compile. Therefore, if a script is changed, then its ID must also be changed
 for it to be reloaded.
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

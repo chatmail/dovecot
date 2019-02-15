@@ -152,15 +152,13 @@ static void client_username_check(struct imap_client *client)
 	user->last_seen = ioloop_time;
 	user->host->refcount++;
 
-	if (user->to != NULL)
-		timeout_remove(&user->to);
+	timeout_remove(&user->to);
 }
 
 static void user_free(struct user *user)
 {
 	host_unref(&user->host);
-	if (user->to != NULL)
-		timeout_remove(&user->to);
+	timeout_remove(&user->to);
 	hash_table_remove(users, user->username);
 	i_free(user->username);
 	i_free(user);
@@ -247,8 +245,8 @@ static void imap_client_create(int fd)
 
 	client = i_new(struct imap_client, 1);
 	client->fd = fd;
-	client->input = i_stream_create_fd(fd, 4096, FALSE);
-	client->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	client->input = i_stream_create_fd(fd, 4096);
+	client->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(client->output, TRUE);
 	client->io = io_add(fd, IO_READ, imap_client_input, client);
 	client->parser =
@@ -294,7 +292,7 @@ director_connection_input(struct director_connection *conn,
 	const unsigned char *data;
 	size_t size;
 
-	if (i_stream_read_data(input, &data, &size, 0) == -1) {
+	if (i_stream_read_more(input, &data, &size) == -1) {
 		director_connection_destroy(&conn);
 		return;
 	}
@@ -302,9 +300,9 @@ director_connection_input(struct director_connection *conn,
 	o_stream_nsend(output, data, size);
 	i_stream_skip(input, size);
 
-	if (rand() % 3 == 0 && conn->to_delay == NULL) {
+	if (i_rand_limit(3) == 0 && conn->to_delay == NULL) {
 		conn->to_delay =
-			timeout_add(rand() % DIRECTOR_CONN_MAX_DELAY_MSECS,
+			timeout_add(i_rand_limit(DIRECTOR_CONN_MAX_DELAY_MSECS),
 				    director_connection_timeout, conn);
 		io_remove(&conn->in_io);
 		io_remove(&conn->out_io);
@@ -345,15 +343,15 @@ director_connection_create(int in_fd, const struct ip_addr *local_ip,
 
 	conn = i_new(struct director_connection, 1);
 	conn->in_fd = in_fd;
-	conn->in_input = i_stream_create_fd(conn->in_fd, (size_t)-1, FALSE);
-	conn->in_output = o_stream_create_fd(conn->in_fd, (size_t)-1, FALSE);
+	conn->in_input = i_stream_create_fd(conn->in_fd, (size_t)-1);
+	conn->in_output = o_stream_create_fd(conn->in_fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->in_output, TRUE);
 	conn->in_io = io_add(conn->in_fd, IO_READ,
 			     director_connection_in_input, conn);
 
 	conn->out_fd = out_fd;
-	conn->out_input = i_stream_create_fd(conn->out_fd, (size_t)-1, FALSE);
-	conn->out_output = o_stream_create_fd(conn->out_fd, (size_t)-1, FALSE);
+	conn->out_input = i_stream_create_fd(conn->out_fd, (size_t)-1);
+	conn->out_output = o_stream_create_fd(conn->out_fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->out_output, TRUE);
 	conn->out_io = io_add(conn->out_fd, IO_READ,
 			      director_connection_out_input, conn);
@@ -367,17 +365,14 @@ static void director_connection_destroy(struct director_connection **_conn)
 
 	DLLIST_REMOVE(&director_connections, conn);
 
-	if (conn->to_delay != NULL)
-		timeout_remove(&conn->to_delay);
+	timeout_remove(&conn->to_delay);
 
-	if (conn->in_io != NULL)
-		io_remove(&conn->in_io);
+	io_remove(&conn->in_io);
 	i_stream_unref(&conn->in_input);
 	o_stream_unref(&conn->in_output);
 	net_disconnect(conn->in_fd);
 
-	if (conn->out_io != NULL)
-		io_remove(&conn->out_io);
+	io_remove(&conn->out_io);
 	i_stream_unref(&conn->out_input);
 	o_stream_unref(&conn->out_output);
 	net_disconnect(conn->out_fd);
@@ -435,9 +430,9 @@ static void admin_random_action(struct admin_connection *conn)
 		return;
 
 	hosts = array_get(&hosts_array, &count);
-	i = rand() % count;
+	i = i_rand_limit(count);
 
-	hosts[i]->vhost_count = (rand() % 20) * 10;
+	hosts[i]->vhost_count = i_rand_limit(20) * 10;
 
 	admin_send(conn, t_strdup_printf("HOST-SET\t%s\t%u\n",
 		net_ip2addr(&hosts[i]->ip), hosts[i]->vhost_count));
@@ -460,7 +455,7 @@ static struct admin_connection *admin_connect(const char *path)
 					    admin_random_action, conn);
 
 	net_set_nonblock(conn->fd, FALSE);
-	conn->input = i_stream_create_fd(conn->fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(conn->fd, (size_t)-1);
 	admin_send(conn, DIRECTOR_ADMIN_HANDSHAKE);
 
 	line = i_stream_read_next_line(conn->input);
@@ -479,8 +474,7 @@ static void admin_disconnect(struct admin_connection **_conn)
 	struct admin_connection *conn = *_conn;
 
 	*_conn = NULL;
-	if (conn->to_random != NULL)
-		timeout_remove(&conn->to_random);
+	timeout_remove(&conn->to_random);
 	i_stream_destroy(&conn->input);
 	io_remove(&conn->io);
 	net_disconnect(conn->fd);
@@ -525,7 +519,7 @@ director_connection_disconnect_timeout(void *context ATTR_UNUSED)
 		count++;
 
 	if (count != 0) {
-		i = 0; count = rand() % count;
+		i = 0; count = i_rand() % count;
 		for (conn = director_connections; i < count; conn = conn->next) {
 			i_assert(conn != NULL);
 			i++;
@@ -546,7 +540,7 @@ static void main_init(const char *admin_path)
 	admin_read_hosts(admin);
 
 	to_disconnect =
-		timeout_add(1000*(5 + rand()%DIRECTOR_DISCONNECT_TIMEOUT_SECS),
+		timeout_add(1000 * i_rand_minmax(5, 5 + DIRECTOR_DISCONNECT_TIMEOUT_SECS - 1),
 			    director_connection_disconnect_timeout, (void *)NULL);
 }
 
@@ -587,9 +581,11 @@ static void main_deinit(void)
 
 int main(int argc, char *argv[])
 {
+	const enum master_service_flags service_flags =
+		MASTER_SERVICE_FLAG_DONT_SEND_STATS;
 	const char *admin_path;
 
-	master_service = master_service_init("director-test", 0,
+	master_service = master_service_init("director-test", service_flags,
 					     &argc, &argv, "");
 	if (master_getopt(master_service) > 0)
 		return FATAL_DEFAULT;

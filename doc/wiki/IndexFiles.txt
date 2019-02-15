@@ -162,7 +162,8 @@ Settings
 --------
 
 Since v2.2.34+ you can configure some of the hardcoded optimization-related
-settings:
+settings. It's not recommended to change these settings without fully
+understanding the consequences.
 
  * 'mail_cache_unaccessed_field_drop': Drop fields that haven't been accessed
    for n seconds.
@@ -188,4 +189,4 @@ settings:
    log2_stale_secs. Don't be too eager, because older files are useful for
    QRESYNC and dsync.
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

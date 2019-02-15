@@ -2,7 +2,7 @@
 
 #include "lib.h"
 #include "array.h"
-#include "abspath.h"
+#include "path-util.h"
 #include "ioloop.h"
 #include "file-create-locked.h"
 #include "mkdir-parents.h"
@@ -162,6 +162,9 @@ int mailbox_list_create(const char *driver, struct mail_namespace *ns,
 		list->set.index_pvt_dir = set->index_pvt_dir == NULL ||
 			strcmp(set->index_pvt_dir, set->root_dir) == 0 ? NULL :
 			p_strdup(list->pool, set->index_pvt_dir);
+		list->set.index_cache_dir = set->index_cache_dir == NULL ||
+			strcmp(set->index_cache_dir, set->root_dir) == 0 ? NULL :
+			p_strdup(list->pool, set->index_cache_dir);
 		list->set.control_dir = set->control_dir == NULL ||
 			strcmp(set->control_dir, set->root_dir) == 0 ? NULL :
 			p_strdup(list->pool, set->control_dir);
@@ -206,18 +209,17 @@ int mailbox_list_create(const char *driver, struct mail_namespace *ns,
 		}
 	}
 
-	if (ns->mail_set->mail_debug) {
-		i_debug("%s: root=%s, index=%s, indexpvt=%s, control=%s, inbox=%s, alt=%s",
-			list->name,
-			list->set.root_dir == NULL ? "" : list->set.root_dir,
-			list->set.index_dir == NULL ? "" : list->set.index_dir,
-			list->set.index_pvt_dir == NULL ? "" : list->set.index_pvt_dir,
-			list->set.control_dir == NULL ?
-			"" : list->set.control_dir,
-			list->set.inbox_path == NULL ?
-			"" : list->set.inbox_path,
-			list->set.alt_dir == NULL ? "" : list->set.alt_dir);
-	}
+	e_debug(ns->user->event,
+		"%s: root=%s, index=%s, indexpvt=%s, control=%s, inbox=%s, alt=%s",
+		list->name,
+		list->set.root_dir == NULL ? "" : list->set.root_dir,
+		list->set.index_dir == NULL ? "" : list->set.index_dir,
+		list->set.index_pvt_dir == NULL ? "" : list->set.index_pvt_dir,
+		list->set.control_dir == NULL ?
+		"" : list->set.control_dir,
+		list->set.inbox_path == NULL ?
+		"" : list->set.inbox_path,
+		list->set.alt_dir == NULL ? "" : list->set.alt_dir);
 	if ((flags & MAILBOX_LIST_FLAG_SECONDARY) == 0)
 		mail_namespace_finish_list_init(ns, list);
 
@@ -304,7 +306,7 @@ mailbox_list_settings_parse_full(struct mail_user *user, const char *data,
 		*error_r = t_strconcat(error, "mail root dir in: ", data, NULL);
 		return -1;
 	}
-	if (strncmp(set_r->root_dir, "INBOX=", 6) == 0) {
+	if (str_begins(set_r->root_dir, "INBOX=")) {
 		/* probably mbox user trying to avoid root_dir */
 		*error_r = t_strconcat("Mail root directory not given: ",
 				       data, NULL);
@@ -333,6 +335,8 @@ mailbox_list_settings_parse_full(struct mail_user *user, const char *data,
 			dest = &set_r->index_dir;
 		else if (strcmp(key, "INDEXPVT") == 0)
 			dest = &set_r->index_pvt_dir;
+		else if (strcmp(key, "INDEXCACHE") == 0)
+			dest = &set_r->index_cache_dir;
 		else if (strcmp(key, "CONTROL") == 0)
 			dest = &set_r->control_dir;
 		else if (strcmp(key, "ALT") == 0)
@@ -444,7 +448,7 @@ const char *mailbox_list_get_unexpanded_path(struct mailbox_list *list,
 	if (mailbox_list_settings_parse_full(user, p + 1, FALSE,
 					     &set, &error) < 0)
 		return "";
-	if (mailbox_list_set_get_root_path(&set, type, &path) <= 0)
+	if (!mailbox_list_set_get_root_path(&set, type, &path))
 		return "";
 	return path;
 }
@@ -461,7 +465,7 @@ static bool need_escape_dirstart(const char *vname, const char *maildir_name)
 	}
 	if (*maildir_name != '\0') {
 		len = strlen(maildir_name);
-		if (strncmp(maildir_name, vname, len) == 0 &&
+		if (str_begins(vname, maildir_name) &&
 		    (vname[len] == '\0' || vname[len] == '/'))
 			return TRUE; /* e.g. dbox-Mails */
 	}
@@ -475,11 +479,11 @@ mailbox_list_escape_name_params(const char *vname, const char *ns_prefix,
 {
 	size_t ns_prefix_len = strlen(ns_prefix);
 	string_t *escaped_name = t_str_new(64);
-	char dirstart = TRUE;
+	bool dirstart = TRUE;
 
 	/* no escaping of namespace prefix */
-	if (strncmp(ns_prefix, vname, ns_prefix_len) == 0) {
-		str_append_n(escaped_name, vname, ns_prefix_len);
+	if (str_begins(vname, ns_prefix)) {
+		str_append_data(escaped_name, vname, ns_prefix_len);
 		vname += ns_prefix_len;
 	}
 
@@ -653,8 +657,8 @@ mailbox_list_unescape_name_params(const char *src, const char *ns_prefix,
 	string_t *dest = t_str_new(strlen(src));
 	unsigned int num;
 
-	if (strncmp(src, ns_prefix, ns_prefix_len) == 0) {
-		str_append_n(dest, src, ns_prefix_len);
+	if (str_begins(src, ns_prefix)) {
+		str_append_data(dest, src, ns_prefix_len);
 		src += ns_prefix_len;
 	}
 
@@ -781,7 +785,7 @@ const char *mailbox_list_default_get_vname(struct mailbox_list *list,
 	if (list_sep != ns_sep || prefix_len > 0) {
 		/* @UNSAFE */
 		name_len = strlen(vname);
-		ret = t_malloc(MALLOC_ADD(prefix_len, name_len) + 1);
+		ret = t_malloc_no0(MALLOC_ADD(prefix_len, name_len) + 1);
 		memcpy(ret, list->ns->prefix, prefix_len);
 		for (i = 0; i < name_len; i++) {
 			ret[i + prefix_len] =
@@ -874,11 +878,9 @@ mailbox_list_get_storage_driver(struct mailbox_list *list, const char *driver,
 		}
 	}
 
-	data = strchr(list->ns->set->location, ':');
+	data = i_strchr_to_next(list->ns->set->location, ':');
 	if (data == NULL)
 		data = "";
-	else
-		data++;
 	if (mail_storage_create_full(list->ns, driver, data, 0,
 				     storage_r, &error) < 0) {
 		mailbox_list_set_critical(list,
@@ -934,8 +936,9 @@ mailbox_list_get_permissions_stat(struct mailbox_list *list, const char *path,
 		} else if (!ENOTFOUND(errno)) {
 			mailbox_list_set_critical(list, "stat(%s) failed: %m",
 						  path);
-		} else if (list->mail_set->mail_debug) {
-			i_debug("Namespace %s: %s doesn't exist yet, "
+		} else {
+			e_debug(list->ns->user->event,
+				"Namespace %s: %s doesn't exist yet, "
 				"using default permissions",
 				list->ns->prefix, path);
 		}
@@ -1052,8 +1055,9 @@ mailbox_list_get_permissions_internal(struct mailbox_list *list,
 					 list->pool);
 	}
 
-	if (list->mail_set->mail_debug && name == NULL) {
-		i_debug("Namespace %s: Using permissions from %s: "
+	if (name == NULL) {
+		e_debug(list->ns->user->event,
+			"Namespace %s: Using permissions from %s: "
 			"mode=0%o gid=%s", list->ns->prefix,
 			path != NULL ? path : "",
 			(int)permissions_r->dir_create_mode,
@@ -1237,7 +1241,7 @@ int mailbox_list_try_mkdir_root(struct mailbox_list *list, const char *path,
 
 	if (!mailbox_list_get_root_path(list, type, &root_dir))
 		i_unreached();
-	i_assert(strncmp(root_dir, path, strlen(root_dir)) == 0);
+	i_assert(str_begins(path, root_dir));
 	if (strcmp(root_dir, path) != 0 && stat(root_dir, &st) == 0) {
 		/* creating a subdirectory under an already existing root dir.
 		   use the root's permissions */
@@ -1436,7 +1440,7 @@ bool mailbox_list_set_get_root_path(const struct mailbox_list_settings *set,
 		break;
 	case MAILBOX_LIST_PATH_TYPE_ALT_MAILBOX:
 		if (*set->mailbox_dir_name == '\0')
-			path = set->root_dir;
+			path = set->alt_dir;
 		else if (set->alt_dir != NULL) {
 			path = t_strconcat(set->alt_dir, "/",
 					   set->mailbox_dir_name, NULL);
@@ -1461,6 +1465,13 @@ bool mailbox_list_set_get_root_path(const struct mailbox_list_settings *set,
 			break;
 		}
 		/* fall through - default to index directory */
+	case MAILBOX_LIST_PATH_TYPE_INDEX_CACHE:
+		if (set->index_cache_dir != NULL &&
+		    type == MAILBOX_LIST_PATH_TYPE_INDEX_CACHE) {
+			path = set->index_cache_dir;
+			break;
+		}
+		/* fall through */
 	case MAILBOX_LIST_PATH_TYPE_INDEX:
 		if (set->index_dir != NULL) {
 			if (set->index_dir[0] == '\0') {
@@ -1600,7 +1611,7 @@ int mailbox_list_mailbox(struct mailbox_list *list, const char *name,
 	}
 
 	len = strlen(rootdir);
-	if (strncmp(path, rootdir, len) == 0 && path[len] == '/') {
+	if (str_begins(path, rootdir) && path[len] == '/') {
 		/* looking up a regular mailbox under mail root dir */
 	} else if ((list->ns->flags & NAMESPACE_FLAG_INBOX_USER) != 0 &&
 		   strcasecmp(name, "INBOX") == 0) {
@@ -1653,27 +1664,21 @@ static bool mailbox_list_init_changelog(struct mailbox_list *list)
 
 int mailbox_list_mkdir_missing_index_root(struct mailbox_list *list)
 {
-	const char *root_dir, *index_dir;
-	int ret;
+	const char *index_dir;
 
 	if (list->index_root_dir_created)
 		return 1;
 
-	/* if index root dir hasn't been created yet, do it now */
-	ret = mailbox_list_get_root_path(list, MAILBOX_LIST_PATH_TYPE_INDEX,
-					 &index_dir);
-	if (ret <= 0)
-		return ret;
-	ret = mailbox_list_get_root_path(list, MAILBOX_LIST_PATH_TYPE_MAILBOX,
-					 &root_dir);
-	if (ret <= 0)
-		return ret;
+	/* If index root dir hasn't been created yet, do it now.
+	   Do this here even if the index directory is the same as mail root
+	   directory, because it may not have been created elsewhere either. */
+	if (!mailbox_list_get_root_path(list, MAILBOX_LIST_PATH_TYPE_INDEX,
+					&index_dir))
+		return 0;
 
-	if (strcmp(root_dir, index_dir) != 0) {
-		if (mailbox_list_mkdir_root(list, index_dir,
-					    MAILBOX_LIST_PATH_TYPE_INDEX) < 0)
-			return -1;
-	}
+	if (mailbox_list_mkdir_root(list, index_dir,
+				    MAILBOX_LIST_PATH_TYPE_INDEX) < 0)
+		return -1;
 	list->index_root_dir_created = TRUE;
 	return 1;
 }
@@ -1819,7 +1824,7 @@ int mailbox_list_dirent_is_alias_symlink(struct mailbox_list *list,
 		return 1;
 
 	T_BEGIN {
-		const char *path, *linkpath;
+		const char *path, *linkpath, *error;
 
 		path = t_strconcat(dir_path, "/", d->d_name, NULL);
 		if (lstat(path, &st) < 0) {
@@ -1828,8 +1833,8 @@ int mailbox_list_dirent_is_alias_symlink(struct mailbox_list *list,
 			ret = -1;
 		} else if (!S_ISLNK(st.st_mode)) {
 			ret = 0;
-		} else if (t_readlink(path, &linkpath) < 0) {
-			i_error("readlink(%s) failed: %m", path);
+		} else if (t_readlink(path, &linkpath, &error) < 0) {
+			i_error("t_readlink(%s) failed: %s", path, error);
 			ret = -1;
 		} else {
 			/* it's an alias only if it points to the same
@@ -1880,7 +1885,7 @@ bool mailbox_list_try_get_absolute_path(struct mailbox_list *list,
 	   same directory as one of our regular mailboxes. */
 	root_dir = mailbox_list_get_root_forced(list, MAILBOX_LIST_PATH_TYPE_MAILBOX);
 	len = strlen(root_dir);
-	if (strncmp(root_dir, *name, len) == 0 && (*name)[len] == '/') {
+	if (str_begins(*name, root_dir) && (*name)[len] == '/') {
 		mailbox_name = *name + len + 1;
 		if (mailbox_list_get_path(list, mailbox_name,
 					  MAILBOX_LIST_PATH_TYPE_MAILBOX,

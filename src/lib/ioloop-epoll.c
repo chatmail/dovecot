@@ -2,7 +2,6 @@
 
 #include "lib.h"
 #include "array.h"
-#include "fd-close-on-exec.h"
 #include "ioloop-private.h"
 #include "ioloop-iolist.h"
 
@@ -91,7 +90,7 @@ void io_loop_handle_add(struct io_file *io)
 	int op;
 	bool first;
 
-	list = array_idx_modifiable(&ctx->fd_index, io->fd);
+	list = array_idx_get_space(&ctx->fd_index, io->fd);
 	if (*list == NULL)
 		*list = i_new(struct io_list, 1);
 
@@ -155,7 +154,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 	if (last) {
 		/* since we're not freeing memory in any case, just increase
 		   deleted counter so next handle_add() can just decrease it
-		   insteading of appending to the events array */
+		   instead of appending to the events array */
 		ctx->deleted_count++;
 	}
 	i_free(io);
@@ -176,7 +175,7 @@ void io_loop_handler_run_internal(struct ioloop *ioloop)
 	i_assert(ctx != NULL);
 
         /* get the time left for next timeout task */
-	msecs = io_loop_get_wait_time(ioloop, &tv);
+	msecs = io_loop_run_get_wait_time(ioloop, &tv);
 
 	events = array_get_modifiable(&ctx->events, &events_count);
 	if (ioloop->io_files != NULL && events_count > ctx->deleted_count) {
@@ -186,8 +185,7 @@ void io_loop_handler_run_internal(struct ioloop *ioloop)
 	} else {
 		/* no I/Os, but we should have some timeouts.
 		   just wait for them. */
-		if (msecs < 0)
-			i_panic("BUG: No IOs or timeouts set. Not waiting for infinity.");
+		i_assert(msecs >= 0);
 		usleep(msecs*1000);
 		ret = 0;
 	}

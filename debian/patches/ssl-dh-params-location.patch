@@ -1,0 +1,16 @@
+Author: Apollon Oikonomopoulos <apoikos@debian.org>
+Description: Set DH params location
+ This is mandatory for SSL support in 2.3
+Last-Update: 2018-03-24
+Forwarded: no (Debian-specific)
+--- a/doc/example-config/conf.d/10-ssl.conf
++++ b/doc/example-config/conf.d/10-ssl.conf
+@@ -47,7 +47,7 @@
+ # Generate new params with `openssl dhparam -out /etc/dovecot/dh.pem 4096`
+ # Or migrate from old ssl-parameters.dat file with the command dovecot
+ # gives on startup when ssl_dh is unset.
+-#ssl_dh = </etc/dovecot/dh.pem
++ssl_dh = </usr/share/dovecot/dh.pem
+ 
+ # Minimum SSL protocol version to use. Potentially recognized values are SSLv3,
+ # TLSv1, TLSv1.1, and TLSv1.2, depending on the OpenSSL version used.

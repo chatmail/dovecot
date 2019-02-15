@@ -114,8 +114,7 @@ add_binary_part(struct binary_ctx *ctx, const struct message_part *part,
 	message_parse_header_deinit(&parser);
 
 	if (ctx->input->stream_errno != 0) {
-		errno = ctx->input->stream_errno;
-		mail_storage_set_critical(ctx->mail->box->storage,
+		mail_set_critical(ctx->mail,
 			"read(%s) failed: %s", i_stream_get_name(ctx->input),
 			i_stream_get_error(ctx->input));
 		return -1;
@@ -241,7 +240,7 @@ static void
 binary_parts_update(struct binary_ctx *ctx, const struct message_part *part,
 		    struct message_binary_part **msg_bin_parts)
 {
-	struct index_mail *mail = (struct index_mail *)ctx->mail;
+	struct index_mail *mail = INDEX_MAIL(ctx->mail);
 	struct binary_block *blocks;
 	struct message_binary_part bin_part;
 	unsigned int i, count;
@@ -280,10 +279,10 @@ binary_parts_update(struct binary_ctx *ctx, const struct message_part *part,
 
 static void binary_parts_cache(struct binary_ctx *ctx)
 {
-	struct index_mail *mail = (struct index_mail *)ctx->mail;
+	struct index_mail *mail = INDEX_MAIL(ctx->mail);
 	buffer_t *buf;
 
-	buf = buffer_create_dynamic(pool_datastack_create(), 128);
+	buf = t_buffer_create(128);
 	message_binary_part_serialize(mail->data.bin_parts, buf);
 	index_mail_cache_add(mail, MAIL_CACHE_BINARY_PARTS,
 			     buf->data, buf->used);
@@ -320,7 +319,7 @@ blocks_count_lines(struct binary_ctx *ctx, struct istream *full_input)
 	block_idx = 0;
 
 	/* count the number of lines each block contains */
-	while ((ret = i_stream_read_data(full_input, &data, &size, 0)) > 0) {
+	while ((ret = i_stream_read_more(full_input, &data, &size)) > 0) {
 		i_assert(cur_block_offset <= cur_block->input->v_offset);
 		if (cur_block->input->eof) {
 			/* this is the last input for this block. the input
@@ -343,7 +342,7 @@ blocks_count_lines(struct binary_ctx *ctx, struct istream *full_input)
 		if (cur_block->input->eof) {
 			/* go to the next block */
 			if (++block_idx == block_count) {
-				i_assert(i_stream_is_eof(full_input));
+				i_assert(i_stream_read_eof(full_input));
 				ret = -1;
 				break;
 			}
@@ -365,7 +364,7 @@ index_mail_read_binary_to_cache(struct mail *_mail,
 				bool include_hdr, const char *reason,
 				bool *binary_r, bool *converted_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct mail_binary_cache *cache = &_mail->box->storage->binary_cache;
 	struct binary_ctx ctx;
 	struct istream *is;
@@ -400,10 +399,9 @@ index_mail_read_binary_to_cache(struct mail *_mail,
 					       MAIL_ERROR_INVALIDDATA,
 					       "Invalid data in MIME part");
 		} else {
-			mail_storage_set_critical(_mail->box->storage,
-				"read(%s) failed: %s",
-				i_stream_get_name(is),
-				i_stream_get_error(is));
+			mail_set_critical(_mail, "read(%s) failed: %s",
+					  i_stream_get_name(is),
+					  i_stream_get_error(is));
 		}
 		i_stream_unref(&is);
 		binary_streams_free(&ctx);
@@ -448,7 +446,7 @@ static bool get_cached_binary_parts(struct index_mail *mail)
 	if (mail->data.bin_parts != NULL)
 		return TRUE;
 
-	part_buf = buffer_create_dynamic(pool_datastack_create(), 128);
+	part_buf = t_buffer_create(128);
 	ret = index_mail_cache_lookup_field(mail, part_buf, field_idx);
 	if (ret <= 0)
 		return FALSE;
@@ -483,7 +481,7 @@ index_mail_get_binary_size(struct mail *_mail,
 			   const struct message_part *part, bool include_hdr,
 			   uoff_t *size_r, unsigned int *lines_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct message_part *all_parts, *msg_part;
 	const struct message_binary_part *bin_part, *root_bin_part;
 	uoff_t size, end_offset;
@@ -515,7 +513,7 @@ index_mail_get_binary_size(struct mail *_mail,
 		msg_part = msg_part_find(all_parts, bin_part->physical_pos);
 		if (msg_part == NULL) {
 			/* either binary.parts or mime.parts is broken */
-			mail_set_cache_corrupted_reason(_mail, MAIL_FETCH_MESSAGE_PARTS, t_strdup_printf(
+			mail_set_cache_corrupted(_mail, MAIL_FETCH_MESSAGE_PARTS, t_strdup_printf(
 				"BINARY part at offset %"PRIuUOFF_T" not found from MIME parts",
 				bin_part->physical_pos));
 			return -1;
@@ -550,7 +548,7 @@ int index_mail_get_binary_stream(struct mail *_mail,
 				 unsigned int *lines_r, bool *binary_r,
 				 struct istream **stream_r)
 {
-	struct index_mail *mail = (struct index_mail *)_mail;
+	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct mail_binary_cache *cache = &_mail->box->storage->binary_cache;
 	struct istream *input;
 	bool binary, converted;

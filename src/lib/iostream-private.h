@@ -14,6 +14,7 @@ struct iostream_private {
 	int refcount;
 	char *name;
 	char *error;
+	struct ioloop *ioloop;
 
 	void (*close)(struct iostream_private *streami, bool close_parent);
 	void (*destroy)(struct iostream_private *stream);
@@ -25,7 +26,8 @@ struct iostream_private {
 
 void io_stream_init(struct iostream_private *stream);
 void io_stream_ref(struct iostream_private *stream);
-void io_stream_unref(struct iostream_private *stream);
+bool io_stream_unref(struct iostream_private *stream);
+void io_stream_free(struct iostream_private *stream);
 void io_stream_close(struct iostream_private *stream, bool close_parent);
 void io_stream_set_max_buffer_size(struct iostream_private *stream,
 				   size_t max_size);
@@ -41,5 +43,9 @@ void io_stream_set_error(struct iostream_private *stream,
 			 const char *fmt, ...) ATTR_FORMAT(2, 3);
 void io_stream_set_verror(struct iostream_private *stream,
 			  const char *fmt, va_list args) ATTR_FORMAT(2, 0);
+
+void io_stream_switch_ioloop_to(struct iostream_private *stream,
+				struct ioloop *ioloop);
+struct ioloop *io_stream_get_ioloop(struct iostream_private *stream);
 
 #endif

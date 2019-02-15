@@ -83,7 +83,7 @@ static bool client_exec_script(struct master_service_connection *conn)
 	pid_t pid;
 
 	net_set_nonblock(conn->fd, FALSE);
-	input = buffer_create_dynamic(pool_datastack_create(), IO_BLOCK_SIZE);
+	input = t_buffer_create(IO_BLOCK_SIZE);
 
 	/* Input contains:
 
@@ -156,14 +156,14 @@ static bool client_exec_script(struct master_service_connection *conn)
 	if (*args != NULL) {
 		const char *p;
 
-		if (strncmp(*args, "alarm=", 6) == 0) {
+		if (str_begins(*args, "alarm=")) {
 			unsigned int seconds;
 			if (str_to_uint(*args + 6, &seconds) < 0)
 				i_fatal("invalid alarm option");
 			alarm(seconds);
 			args++;
 		}
-		while (strncmp(*args, "env_", 4) == 0) {
+		while (str_begins(*args, "env_")) {
 			const char *envname, *env;
 
 			env = t_str_tabunescape(*args+4);
@@ -239,12 +239,15 @@ static void client_connected(struct master_service_connection *conn)
 
 int main(int argc, char *argv[])
 {
+	const enum master_service_flags service_flags =
+		MASTER_SERVICE_FLAG_DONT_SEND_STATS;
 	ARRAY_TYPE(const_string) aenvs;
 	const char *binary;
 	const char *const *envs;
 	int c, i;
 
-	master_service = master_service_init("script", 0, &argc, &argv, "+e:");
+	master_service = master_service_init("script", service_flags,
+					     &argc, &argv, "+e:");
 
 	t_array_init(&aenvs, 16);
 	while ((c = master_getopt(master_service)) > 0) {
@@ -269,7 +272,7 @@ int main(int argc, char *argv[])
 	master_service_init_log(master_service, "script: ");
 	if (argv[0] == NULL)
 		i_fatal("Missing script path");
-	restrict_access_by_env(NULL, FALSE);
+	restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 	restrict_access_allow_coredumps(TRUE);
 
 	master_service_init_finish(master_service);

@@ -12,7 +12,7 @@ struct imap_metadata_transaction {
 	enum mail_error error;
 	char *error_string;
 
-	unsigned int server:1;
+	bool server:1;
 };
 
 bool imap_metadata_verify_entry_name(const char *name, const char **error_r)
@@ -84,13 +84,11 @@ imap_metadata_entry2key(struct imap_metadata_transaction *imtrans,
 	/* names are case-insensitive so we'll always lowercase them */
 	entry = t_str_lcase(entry);
 
-	if (strncmp(entry, IMAP_METADATA_PRIVATE_PREFIX,
-		    strlen(IMAP_METADATA_PRIVATE_PREFIX)) == 0) {
+	if (str_begins(entry, IMAP_METADATA_PRIVATE_PREFIX)) {
 		*key_r = entry + strlen(IMAP_METADATA_PRIVATE_PREFIX);
 		*type_r = MAIL_ATTRIBUTE_TYPE_PRIVATE;
 	} else {
-		i_assert(strncmp(entry, IMAP_METADATA_SHARED_PREFIX,
-				 strlen(IMAP_METADATA_SHARED_PREFIX)) == 0);
+		i_assert(str_begins(entry, IMAP_METADATA_SHARED_PREFIX));
 		*key_r = entry + strlen(IMAP_METADATA_SHARED_PREFIX);
 		*type_r = MAIL_ATTRIBUTE_TYPE_SHARED;
 	}
@@ -100,8 +98,7 @@ imap_metadata_entry2key(struct imap_metadata_transaction *imtrans,
 		i_assert((*key_r)[0] == '/');
 		*key_r += 1;
 	}
-	if (strncmp(*key_r, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT,
-		    strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT)) == 0) {
+	if (str_begins(*key_r, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT)) {
 		/* Dovecot's internal attribute (mailbox or server).
 		   don't allow accessing this. */
 		return FALSE;
@@ -121,7 +118,8 @@ imap_metadata_get_mailbox_transaction(struct imap_metadata_transaction *imtrans)
 
 	if (imtrans->box == NULL || mailbox_open(imtrans->box) < 0)
 		return -1;
-	imtrans->trans = mailbox_transaction_begin(imtrans->box, MAILBOX_TRANSACTION_FLAG_EXTERNAL);
+	imtrans->trans = mailbox_transaction_begin(imtrans->box,
+			MAILBOX_TRANSACTION_FLAG_EXTERNAL, __func__);
 	return 0;
 }
 
@@ -162,9 +160,7 @@ int imap_metadata_get(struct imap_metadata_transaction *imtrans,
 	i_zero(value_r);
 	if (!imap_metadata_entry2key(imtrans, entry, &type, &key))
 		return 0;
-	if (imap_metadata_get_mailbox_transaction(imtrans) < 0)
-		return -1;
-	return mailbox_attribute_get(imtrans->trans, type, key, value_r);
+	return mailbox_attribute_get(imtrans->box, type, key, value_r);
 }
 
 int imap_metadata_get_stream(struct imap_metadata_transaction *imtrans,
@@ -176,9 +172,7 @@ int imap_metadata_get_stream(struct imap_metadata_transaction *imtrans,
 	i_zero(value_r);
 	if (!imap_metadata_entry2key(imtrans, entry, &type, &key))
 		return 0;
-	if (imap_metadata_get_mailbox_transaction(imtrans) < 0)
-		return -1;
-	return mailbox_attribute_get_stream(imtrans->trans, type, key, value_r);
+	return mailbox_attribute_get_stream(imtrans->box, type, key, value_r);
 }
 
 struct imap_metadata_iter {

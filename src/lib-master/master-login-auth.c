@@ -11,6 +11,7 @@
 #include "hash.h"
 #include "str.h"
 #include "strescape.h"
+#include "time-util.h"
 #include "master-interface.h"
 #include "master-service.h"
 #include "master-auth.h"
@@ -23,7 +24,7 @@ struct master_login_auth_request {
 	struct master_login_auth_request *prev, *next;
 
 	unsigned int id;
-	time_t create_stamp;
+	struct timeval create_stamp;
 
 	pid_t auth_pid;
 	unsigned int auth_id;
@@ -33,13 +34,15 @@ struct master_login_auth_request {
 	master_login_auth_request_callback_t *callback;
 	void *context;
 
-	unsigned int aborted:1;
+	bool aborted:1;
 };
 
 struct master_login_auth {
 	pool_t pool;
 	const char *auth_socket_path;
 	int refcount;
+
+	struct timeval connect_time, handshake_time;
 
 	int fd;
 	struct io *io;
@@ -54,9 +57,9 @@ struct master_login_auth {
 
 	pid_t auth_server_pid;
 
-	unsigned int request_auth_token:1;
-	unsigned int version_received:1;
-	unsigned int spid_received:1;
+	bool request_auth_token:1;
+	bool version_received:1;
+	bool spid_received:1;
 };
 
 static void master_login_auth_set_timeout(struct master_login_auth *auth);
@@ -76,18 +79,36 @@ master_login_auth_init(const char *auth_socket_path, bool request_auth_token)
 	auth->refcount = 1;
 	auth->fd = -1;
 	hash_table_create_direct(&auth->requests, pool, 0);
-	auth->id_counter = (rand() % 32767) * 131072U;
+	auth->id_counter = i_rand_limit(32767) * 131072U;
 	return auth;
 }
 
+static void request_failure(struct master_login_auth *auth,
+			    struct master_login_auth_request *request,
+			    const char *log_reason, const char *client_reason)
+{
+	string_t *str = t_str_new(128);
+
+	str_printfa(str, "auth connected %u msecs ago",
+		    timeval_diff_msecs(&ioloop_timeval, &auth->connect_time));
+	if (auth->handshake_time.tv_sec != 0) {
+		str_printfa(str, ", handshake %u msecs ago",
+			    timeval_diff_msecs(&ioloop_timeval, &auth->handshake_time));
+	}
+	str_printfa(str, ", request took %u msecs, client-pid=%u client-id=%u",
+		    timeval_diff_msecs(&ioloop_timeval, &request->create_stamp),
+		    request->client_pid, request->auth_id);
+
+	i_error("%s (%s)", log_reason, str_c(str));
+	request->callback(NULL, client_reason, request->context);
+}
+
 static void
-request_internal_failure(struct master_login_auth_request *request,
+request_internal_failure(struct master_login_auth *auth,
+			 struct master_login_auth_request *request,
 			 const char *reason)
 {
-	i_error("%s (client-pid=%u client-id=%u)",
-		reason, request->client_pid, request->auth_id);
-	request->callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
-			  request->context);
+	request_failure(auth, request, reason, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE);
 }
 
 void master_login_auth_disconnect(struct master_login_auth *auth)
@@ -99,26 +120,24 @@ void master_login_auth_disconnect(struct master_login_auth *auth)
 		DLLIST2_REMOVE(&auth->request_head,
 			       &auth->request_tail, request);
 
-		request_internal_failure(request,
+		request_internal_failure(auth, request,
 			"Disconnected from auth server, aborting");
 		i_free(request);
 	}
 	hash_table_clear(auth->requests, FALSE);
 
-	if (auth->to != NULL)
-		timeout_remove(&auth->to);
-	if (auth->io != NULL)
-		io_remove(&auth->io);
+	timeout_remove(&auth->to);
+	io_remove(&auth->io);
 	if (auth->fd != -1) {
-		if (auth->input != NULL)
-			i_stream_destroy(&auth->input);
-		if (auth->output != NULL)
-			o_stream_destroy(&auth->output);
+		i_stream_destroy(&auth->input);
+		o_stream_destroy(&auth->output);
 
 		net_disconnect(auth->fd);
 		auth->fd = -1;
 	}
 	auth->version_received = FALSE;
+	i_zero(&auth->connect_time);
+	i_zero(&auth->handshake_time);
 }
 
 static void master_login_auth_unref(struct master_login_auth **_auth)
@@ -149,7 +168,7 @@ static unsigned int auth_get_next_timeout_secs(struct master_login_auth *auth)
 {
 	time_t expires;
 
-	expires = auth->request_head->create_stamp +
+	expires = auth->request_head->create_stamp.tv_sec +
 		MASTER_AUTH_LOOKUP_TIMEOUT_SECS;
 	return expires <= ioloop_time ? 0 : expires - ioloop_time;
 }
@@ -168,8 +187,8 @@ static void master_login_auth_timeout(struct master_login_auth *auth)
 
 		reason = t_strdup_printf(
 			"Auth server request timed out after %u secs",
-			(unsigned int)(ioloop_time - request->create_stamp));
-		request_internal_failure(request, reason);
+			(unsigned int)(ioloop_time - request->create_stamp.tv_sec));
+		request_internal_failure(auth, request, reason);
 		i_free(request);
 	}
 	timeout_remove(&auth->to);
@@ -265,7 +284,7 @@ master_login_auth_input_notfound(struct master_login_auth *auth,
 		const char *reason = t_strdup_printf(
 			"Authenticated user not found from userdb, "
 			"auth lookup id=%u", id);
-		request_internal_failure(request, reason);
+		request_internal_failure(auth, request, reason);
 		i_free(request);
 	}
 	return TRUE;
@@ -285,20 +304,19 @@ master_login_auth_input_fail(struct master_login_auth *auth,
 		return FALSE;
 	}
 	for (i = 1; args[i] != NULL; i++) {
-		if (strncmp(args[i], "reason=", 7) == 0)
+		if (str_begins(args[i], "reason="))
 			error = args[i] + 7;
 	}
 
 	request = master_login_auth_lookup_request(auth, id);
 	if (request != NULL) {
 		if (error == NULL) {
-			request_internal_failure(request,
+			request_internal_failure(auth, request,
 						 "Internal auth failure");
 		} else {
-			i_error("Internal auth failure: %s "
-				"(client-pid=%u client-id=%u)",
-				error, request->client_pid, request->auth_id);
-			request->callback(NULL, error, request->context);
+			const char *log_reason = t_strdup_printf(
+				"Internal auth failure: %s", error);
+			request_failure(auth, request, log_reason, error);
 		}
 		i_free(request);
 	}
@@ -333,7 +351,7 @@ static void master_login_auth_input(struct master_login_auth *auth)
 			return;
 
 		/* make sure the major version matches */
-		if (strncmp(line, "VERSION\t", 8) != 0 ||
+		if (!str_begins(line, "VERSION\t") ||
 		    !str_uint_equals(t_strcut(line + 8, '\t'),
 				     AUTH_MASTER_PROTOCOL_MAJOR_VERSION)) {
 			i_error("Authentication server not compatible with "
@@ -342,13 +360,14 @@ static void master_login_auth_input(struct master_login_auth *auth)
 			return;
 		}
 		auth->version_received = TRUE;
+		auth->handshake_time = ioloop_timeval;
 	}
 	if (!auth->spid_received) {
 		line = i_stream_next_line(auth->input);
 		if (line == NULL)
 			return;
 
-		if (strncmp(line, "SPID\t", 5) != 0 ||
+		if (!str_begins(line, "SPID\t") ||
 		    str_to_pid(line + 5, &auth->auth_server_pid) < 0) {
 			i_error("Authentication server didn't "
 				"send valid SPID as expected: %s", line);
@@ -361,11 +380,11 @@ static void master_login_auth_input(struct master_login_auth *auth)
 
 	auth->refcount++;
 	while ((line = i_stream_next_line(auth->input)) != NULL) {
-		if (strncmp(line, "USER\t", 5) == 0)
+		if (str_begins(line, "USER\t"))
 			ret = master_login_auth_input_user(auth, line + 5);
-		else if (strncmp(line, "NOTFOUND\t", 9) == 0)
+		else if (str_begins(line, "NOTFOUND\t"))
 			ret = master_login_auth_input_notfound(auth, line + 9);
-		else if (strncmp(line, "FAIL\t", 5) == 0)
+		else if (str_begins(line, "FAIL\t"))
 			ret = master_login_auth_input_fail(auth, line + 5);
 		else
 			ret = TRUE;
@@ -391,9 +410,11 @@ master_login_auth_connect(struct master_login_auth *auth)
 			auth->auth_socket_path);
 		return -1;
 	}
+	io_loop_time_refresh();
+	auth->connect_time = ioloop_timeval;
 	auth->fd = fd;
-	auth->input = i_stream_create_fd(fd, AUTH_MAX_INBUF_SIZE, FALSE);
-	auth->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	auth->input = i_stream_create_fd(fd, AUTH_MAX_INBUF_SIZE);
+	auth->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(auth->output, TRUE);
 	auth->io = io_add(fd, IO_READ, master_login_auth_input, auth);
 	return 0;
@@ -476,8 +497,9 @@ void master_login_auth_request(struct master_login_auth *auth,
 	if (id == 0)
 		id++;
 
+	io_loop_time_refresh();
 	login_req = i_new(struct master_login_auth_request, 1);
-	login_req->create_stamp = ioloop_time;
+	login_req->create_stamp = ioloop_timeval;
 	login_req->id = id;
 	login_req->auth_pid = req->auth_pid;
 	login_req->client_pid = req->client_pid;

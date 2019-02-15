@@ -22,9 +22,10 @@ struct auth_server_connection {
 	/* id => request */
 	HASH_TABLE(void *, struct auth_client_request *) requests;
 
-	unsigned int version_received:1;
-	unsigned int handshake_received:1;
-	unsigned int has_plain_mech:1;
+	bool version_received:1;
+	bool handshake_received:1;
+	bool has_plain_mech:1;
+	bool connected:1;
 };
 
 struct auth_server_connection *
@@ -35,6 +36,7 @@ int auth_server_connection_connect(struct auth_server_connection *conn);
 void auth_server_connection_disconnect(struct auth_server_connection *conn,
 				       const char *reason);
 
+/* Queues a new request. Must not be called if connection is not connected. */
 unsigned int
 auth_server_connection_add_request(struct auth_server_connection *conn,
 				   struct auth_client_request *request);

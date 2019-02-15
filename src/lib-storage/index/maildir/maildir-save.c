@@ -17,6 +17,7 @@
 #include "maildir-filename.h"
 #include "maildir-filename-flags.h"
 #include "maildir-sync.h"
+#include "mailbox-recent-flags.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -34,9 +35,8 @@ struct maildir_filename {
 	uoff_t size, vsize;
 	enum mail_flags flags;
 	unsigned int pop3_order;
-	unsigned int preserve_filename:1;
-	unsigned int keywords_count;
-	/* unsigned int keywords[]; */
+	bool preserve_filename:1;
+	ARRAY_TYPE(keyword_indexes) keywords;
 };
 
 struct maildir_save_context {
@@ -54,20 +54,19 @@ struct maildir_save_context {
 	struct maildir_filename *files, **files_tail, *file_last;
 	unsigned int files_count;
 
-	buffer_t keywords_buffer;
-	ARRAY_TYPE(keyword_indexes) keywords_array;
-
 	struct istream *input;
 	int fd;
 	uint32_t first_seq, seq, last_nonrecent_uid;
 
-	unsigned int have_keywords:1;
-	unsigned int have_preserved_filenames:1;
-	unsigned int locked:1;
-	unsigned int failed:1;
-	unsigned int last_save_finished:1;
-	unsigned int locked_uidlist_refresh:1;
+	bool have_keywords:1;
+	bool have_preserved_filenames:1;
+	bool locked:1;
+	bool failed:1;
+	bool last_save_finished:1;
+	bool locked_uidlist_refresh:1;
 };
+
+#define MAILDIR_SAVECTX(s)	container_of(s, struct maildir_save_context, ctx)
 
 static int maildir_file_move(struct maildir_save_context *ctx,
 			     struct maildir_filename *mf, const char *destname,
@@ -106,8 +105,9 @@ static int maildir_file_move(struct maildir_save_context *ctx,
 				       MAIL_ERRSTR_NO_QUOTA);
 		return -1;
 	} else {
-		mail_storage_set_critical(storage, "rename(%s, %s) failed: %m",
-					  tmp_path, new_path);
+		mail_set_critical(ctx->ctx.dest_mail,
+				  "rename(%s, %s) failed: %m",
+				  tmp_path, new_path);
 		return -1;
 	}
 }
@@ -115,7 +115,7 @@ static int maildir_file_move(struct maildir_save_context *ctx,
 static struct mail_save_context *
 maildir_save_transaction_init(struct mailbox_transaction_context *t)
 {
-	struct maildir_mailbox *mbox = (struct maildir_mailbox *)t->box;
+	struct maildir_mailbox *mbox = MAILDIR_MAILBOX(t->box);
 	struct maildir_save_context *ctx;
 	const char *path;
 	pool_t pool;
@@ -134,9 +134,6 @@ maildir_save_transaction_init(struct mailbox_transaction_context *t)
 	ctx->newdir = p_strconcat(pool, path, "/new", NULL);
 	ctx->curdir = p_strconcat(pool, path, "/cur", NULL);
 
-	buffer_create_from_const_data(&ctx->keywords_buffer, "", 0);
-	array_create_from_buffer(&ctx->keywords_array, &ctx->keywords_buffer,
-				 sizeof(unsigned int));
 	ctx->last_save_finished = TRUE;
 	return &ctx->ctx;
 }
@@ -145,11 +142,10 @@ struct maildir_filename *
 maildir_save_add(struct mail_save_context *_ctx, const char *tmp_fname,
 		 struct mail *src_mail)
 {
-	struct maildir_save_context *ctx = (struct maildir_save_context *)_ctx;
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
 	struct mail_save_data *mdata = &_ctx->data;
 	struct maildir_filename *mf;
 	struct istream *input;
-	unsigned int keyword_count;
 
 	i_assert(*tmp_fname != '\0');
 
@@ -164,10 +160,7 @@ maildir_save_add(struct mail_save_context *_ctx, const char *tmp_fname,
 	/* now, we want to be able to rollback the whole append session,
 	   so we'll just store the name of this temp file and move it later
 	   into new/ or cur/. */
-	/* @UNSAFE */
-	keyword_count = mdata->keywords == NULL ? 0 : mdata->keywords->count;
-	mf = p_malloc(ctx->pool, MALLOC_ADD(sizeof(*mf),
-		MALLOC_MULTIPLY(sizeof(unsigned int), keyword_count)));
+	mf = p_new(ctx->pool, struct maildir_filename, 1);
 	mf->tmp_name = mf->dest_basename = p_strdup(ctx->pool, tmp_fname);
 	mf->flags = mdata->flags;
 	mf->size = (uoff_t)-1;
@@ -179,13 +172,6 @@ maildir_save_add(struct mail_save_context *_ctx, const char *tmp_fname,
 	ctx->files_tail = &mf->next;
 	ctx->files_count++;
 
-	if (mdata->keywords != NULL) {
-		/* @UNSAFE */
-		mf->keywords_count = keyword_count;
-		memcpy(mf + 1, mdata->keywords->idx,
-		       sizeof(unsigned int) * keyword_count);
-		ctx->have_keywords = TRUE;
-	}
 	if (mdata->pop3_uidl != NULL)
 		mf->pop3_uidl = p_strdup(ctx->pool, mdata->pop3_uidl);
 	mf->pop3_order = mdata->pop3_order;
@@ -229,7 +215,7 @@ void maildir_save_set_dest_basename(struct mail_save_context *_ctx,
 				    struct maildir_filename *mf,
 				    const char *basename)
 {
-	struct maildir_save_context *ctx = (struct maildir_save_context *)_ctx;
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
 
 	mf->preserve_filename = TRUE;
 	mf->dest_basename = p_strdup(ctx->pool, basename);
@@ -261,7 +247,7 @@ maildir_get_dest_filename(struct maildir_save_context *ctx,
 					   mf->vsize);
 	}
 
-	if (mf->keywords_count == 0) {
+	if (!array_is_created(&mf->keywords) || array_count(&mf->keywords) == 0) {
 		if ((mf->flags & MAIL_FLAGS_MASK) == MAIL_RECENT) {
 			*fname_r = basename;
 			return TRUE;
@@ -272,13 +258,12 @@ maildir_get_dest_filename(struct maildir_save_context *ctx,
 		return FALSE;
 	}
 
-	i_assert(ctx->keywords_sync_ctx != NULL || mf->keywords_count == 0);
-	buffer_create_from_const_data(&ctx->keywords_buffer, mf + 1,
-				      mf->keywords_count * sizeof(unsigned int));
+	i_assert(ctx->keywords_sync_ctx != NULL ||
+		 !array_is_created(&mf->keywords) || array_count(&mf->keywords) == 0);
 	*fname_r = maildir_filename_flags_kw_set(ctx->keywords_sync_ctx,
 						 basename,
 						 mf->flags & MAIL_FLAGS_MASK,
-						 &ctx->keywords_array);
+						 &mf->keywords);
 	return FALSE;
 }
 
@@ -302,8 +287,7 @@ static const char *maildir_mf_get_path(struct maildir_save_context *ctx,
 static struct maildir_filename *
 maildir_save_get_mf(struct mailbox_transaction_context *t, uint32_t seq)
 {
-	struct maildir_save_context *save_ctx =
-		(struct maildir_save_context *)t->save_ctx;
+	struct maildir_save_context *save_ctx = MAILDIR_SAVECTX(t->save_ctx);
 	struct maildir_filename *mf;
 
 	i_assert(seq >= save_ctx->first_seq);
@@ -330,8 +314,7 @@ int maildir_save_file_get_size(struct mailbox_transaction_context *t,
 const char *maildir_save_file_get_path(struct mailbox_transaction_context *t,
 				       uint32_t seq)
 {
-	struct maildir_save_context *save_ctx =
-		(struct maildir_save_context *)t->save_ctx;
+	struct maildir_save_context *save_ctx = MAILDIR_SAVECTX(t->save_ctx);
 	struct maildir_filename *mf = maildir_save_get_mf(t, seq);
 
 	return maildir_mf_get_path(save_ctx, mf);
@@ -374,19 +357,19 @@ static int maildir_create_tmp(struct maildir_mailbox *mbox, const char *dir,
 			mail_storage_set_error(box->storage,
 				MAIL_ERROR_NOQUOTA, MAIL_ERRSTR_NO_QUOTA);
 		} else {
-			mail_storage_set_critical(box->storage,
+			mailbox_set_critical(box,
 				"open(%s) failed: %m", str_c(path));
 		}
 	} else if (perm->file_create_gid != (gid_t)-1) {
 		if (fchown(fd, (uid_t)-1, perm->file_create_gid) < 0) {
 			if (errno == EPERM) {
-				mail_storage_set_critical(box->storage, "%s",
+				mailbox_set_critical(box, "%s",
 					eperm_error_get_chgrp("fchown",
 						str_c(path),
 						perm->file_create_gid,
 						perm->file_create_gid_origin));
 			} else {
-				mail_storage_set_critical(box->storage,
+				mailbox_set_critical(box,
 					"fchown(%s) failed: %m", str_c(path));
 			}
 		}
@@ -407,7 +390,7 @@ maildir_save_alloc(struct mailbox_transaction_context *t)
 
 int maildir_save_begin(struct mail_save_context *_ctx, struct istream *input)
 {
-	struct maildir_save_context *ctx = (struct maildir_save_context *)_ctx;
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
 	struct maildir_filename *mf;
 
 	/* new mail, new failure state */
@@ -435,6 +418,8 @@ int maildir_save_begin(struct mail_save_context *_ctx, struct istream *input)
 
 	if (!ctx->failed) {
 		_ctx->data.output = o_stream_create_fd_file(ctx->fd, 0, FALSE);
+		o_stream_set_name(_ctx->data.output, t_strdup_printf(
+			"%s/%s", ctx->tmpdir, ctx->file_last->tmp_name));
 		o_stream_cork(_ctx->data.output);
 		ctx->last_save_finished = FALSE;
 	}
@@ -443,37 +428,22 @@ int maildir_save_begin(struct mail_save_context *_ctx, struct istream *input)
 
 int maildir_save_continue(struct mail_save_context *_ctx)
 {
-	struct maildir_save_context *ctx = (struct maildir_save_context *)_ctx;
-	struct mail_storage *storage = &ctx->mbox->storage->storage;
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
 
 	if (ctx->failed)
 		return -1;
 
-	do {
-		if (o_stream_send_istream(_ctx->data.output, ctx->input) < 0) {
-			if (!mail_storage_set_error_from_errno(storage)) {
-				mail_storage_set_critical(storage,
-					"o_stream_send_istream(%s/%s) "
-					"failed: %m",
-					ctx->tmpdir, ctx->file_last->tmp_name);
-			}
-			ctx->failed = TRUE;
-			return -1;
-		}
-		if (ctx->cur_dest_mail != NULL)
-			index_mail_cache_parse_continue(ctx->cur_dest_mail);
-
-		/* both tee input readers may consume data from our primary
-		   input stream. we'll have to make sure we don't return with
-		   one of the streams still having data in them. */
-	} while (i_stream_read(ctx->input) > 0);
+	if (index_storage_save_continue(_ctx, ctx->input,
+					ctx->cur_dest_mail) < 0) {
+		ctx->failed = TRUE;
+		return -1;
+	}
 	return 0;
 }
 
 static int maildir_save_finish_received_date(struct maildir_save_context *ctx,
 					     const char *path)
 {
-	struct mail_storage *storage = &ctx->mbox->storage->storage;
 	struct utimbuf buf;
 	struct stat st;
 
@@ -483,16 +453,16 @@ static int maildir_save_finish_received_date(struct maildir_save_context *ctx,
 		buf.modtime = ctx->ctx.data.received_date;
 
 		if (utime(path, &buf) < 0) {
-			mail_storage_set_critical(storage,
-						  "utime(%s) failed: %m", path);
+			mail_set_critical(ctx->ctx.dest_mail,
+					  "utime(%s) failed: %m", path);
 			return -1;
 		}
 	} else if (ctx->fd != -1) {
 		if (fstat(ctx->fd, &st) == 0)
 			ctx->ctx.data.received_date = st.st_mtime;
 		else {
-			mail_storage_set_critical(storage,
-						  "fstat(%s) failed: %m", path);
+			mail_set_critical(ctx->ctx.dest_mail,
+					  "fstat(%s) failed: %m", path);
 			return -1;
 		}
 	} else {
@@ -500,8 +470,8 @@ static int maildir_save_finish_received_date(struct maildir_save_context *ctx,
 		if (stat(path, &st) == 0)
 			ctx->ctx.data.received_date = st.st_mtime;
 		else {
-			mail_storage_set_critical(storage,
-						  "stat(%s) failed: %m", path);
+			mail_set_critical(ctx->ctx.dest_mail,
+					  "stat(%s) failed: %m", path);
 			return -1;
 		}
 	}
@@ -526,7 +496,7 @@ static void maildir_save_remove_last_filename(struct maildir_save_context *ctx)
 
 static int maildir_save_finish_real(struct mail_save_context *_ctx)
 {
-	struct maildir_save_context *ctx = (struct maildir_save_context *)_ctx;
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
 	struct mail_storage *storage = &ctx->mbox->storage->storage;
 	const char *path, *output_errstr;
 	off_t real_size;
@@ -540,9 +510,9 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 	}
 
 	path = t_strconcat(ctx->tmpdir, "/", ctx->file_last->tmp_name, NULL);
-	if (!ctx->failed && o_stream_nfinish(_ctx->data.output) < 0) {
+	if (!ctx->failed && o_stream_finish(_ctx->data.output) < 0) {
 		if (!mail_storage_set_error_from_errno(storage)) {
-			mail_storage_set_critical(storage,
+			mail_set_critical(_ctx->dest_mail,
 				"write(%s) failed: %s", path,
 				o_stream_get_error(_ctx->data.output));
 		}
@@ -551,7 +521,7 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 
 	if (_ctx->data.save_date != (time_t)-1) {
 		/* we can't change ctime, but we can add the date to cache */
-		struct index_mail *mail = (struct index_mail *)_ctx->dest_mail;
+		struct index_mail *mail = INDEX_MAIL(_ctx->dest_mail);
 		uint32_t t = _ctx->data.save_date;
 
 		index_mail_cache_add(mail, MAIL_CACHE_SAVE_DATE, &t, sizeof(t));
@@ -574,15 +544,29 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 				  &ctx->file_last->vsize) < 0)
 		ctx->file_last->vsize = (uoff_t)-1;
 
-	output_errno = _ctx->data.output->last_failed_errno;
+	output_errno = _ctx->data.output->stream_errno;
 	output_errstr = t_strdup(o_stream_get_error(_ctx->data.output));
 	o_stream_destroy(&_ctx->data.output);
+
+	ARRAY_TYPE(keyword_indexes) keyword_idx;
+	t_array_init(&keyword_idx, 8);
+	mail_index_lookup_keywords(ctx->ctx.transaction->view, ctx->seq,
+				   &keyword_idx);
+
+	if (array_count(&keyword_idx) > 0) {
+		/* copy keywords */
+		p_array_init(&ctx->file_last->keywords, ctx->pool,
+			     array_count(&keyword_idx));
+		array_copy(&ctx->file_last->keywords.arr, 0, &keyword_idx.arr, 0,
+			   array_count(&keyword_idx));
+		ctx->have_keywords = TRUE;
+	}
 
 	if (storage->set->parsed_fsync_mode != FSYNC_MODE_NEVER &&
 	    !ctx->failed) {
 		if (fsync(ctx->fd) < 0) {
 			if (!mail_storage_set_error_from_errno(storage)) {
-				mail_storage_set_critical(storage,
+				mail_set_critical(_ctx->dest_mail,
 						  "fsync(%s) failed: %m", path);
 			}
 			ctx->failed = TRUE;
@@ -590,8 +574,7 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 	}
 	real_size = lseek(ctx->fd, 0, SEEK_END);
 	if (real_size == (off_t)-1) {
-		mail_storage_set_critical(storage,
-					  "lseek(%s) failed: %m", path);
+		mail_set_critical(_ctx->dest_mail, "lseek(%s) failed: %m", path);
 	} else if (real_size != (off_t)ctx->file_last->size &&
 		   (!maildir_filename_get_size(ctx->file_last->dest_basename,
 					       MAILDIR_EXTRA_FILE_SIZE, &size) ||
@@ -608,8 +591,8 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 	}
 	if (close(ctx->fd) < 0) {
 		if (!mail_storage_set_error_from_errno(storage)) {
-			mail_storage_set_critical(storage,
-						  "close(%s) failed: %m", path);
+			mail_set_critical(_ctx->dest_mail,
+					  "close(%s) failed: %m", path);
 		}
 		ctx->failed = TRUE;
 	}
@@ -623,7 +606,7 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 			mail_storage_set_error(storage,
 				MAIL_ERROR_NOQUOTA, MAIL_ERRSTR_NO_QUOTA);
 		} else if (output_errno != 0) {
-			mail_storage_set_critical(storage,
+			mail_set_critical(_ctx->dest_mail,
 				"write(%s) failed: %s", path, output_errstr);
 		}
 
@@ -648,7 +631,7 @@ int maildir_save_finish(struct mail_save_context *ctx)
 
 void maildir_save_cancel(struct mail_save_context *_ctx)
 {
-	struct maildir_save_context *ctx = (struct maildir_save_context *)_ctx;
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
 
 	ctx->failed = TRUE;
 	(void)maildir_save_finish(_ctx);
@@ -675,14 +658,14 @@ static int maildir_transaction_fsync_dirs(struct maildir_save_context *ctx,
 
 	if (new_changed) {
 		if (fdatasync_path(ctx->newdir) < 0) {
-			mail_storage_set_critical(storage,
+			mail_set_critical(ctx->ctx.dest_mail,
 				"fdatasync_path(%s) failed: %m", ctx->newdir);
 			return -1;
 		}
 	}
 	if (cur_changed) {
 		if (fdatasync_path(ctx->curdir) < 0) {
-			mail_storage_set_critical(storage,
+			mail_set_critical(ctx->ctx.dest_mail,
 				"fdatasync_path(%s) failed: %m", ctx->curdir);
 			return -1;
 		}
@@ -965,7 +948,7 @@ static void maildir_save_sync_uidlist(struct maildir_save_context *ctx)
 
 int maildir_transaction_save_commit_pre(struct mail_save_context *_ctx)
 {
-	struct maildir_save_context *ctx = (struct maildir_save_context *)_ctx;
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
 	struct mailbox_transaction_context *_t = _ctx->transaction;
 	enum maildir_uidlist_sync_flags sync_flags;
 	int ret;
@@ -1062,7 +1045,7 @@ int maildir_transaction_save_commit_pre(struct mail_save_context *_ctx)
 void maildir_transaction_save_commit_post(struct mail_save_context *_ctx,
 					  struct mail_index_transaction_commit_result *result ATTR_UNUSED)
 {
-	struct maildir_save_context *ctx = (struct maildir_save_context *)_ctx;
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
 
 	_ctx->transaction = NULL; /* transaction is already freed */
 
@@ -1073,7 +1056,7 @@ void maildir_transaction_save_commit_post(struct mail_save_context *_ctx,
 
 void maildir_transaction_save_rollback(struct mail_save_context *_ctx)
 {
-	struct maildir_save_context *ctx = (struct maildir_save_context *)_ctx;
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
 
 	i_assert(_ctx->data.output == NULL);
 

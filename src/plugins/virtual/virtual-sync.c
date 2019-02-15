@@ -8,6 +8,7 @@
 #include "mail-index-modseq.h"
 #include "mail-search-build.h"
 #include "mailbox-search-result-private.h"
+#include "mailbox-recent-flags.h"
 #include "index-sync-private.h"
 #include "index-search-result.h"
 #include "virtual-storage.h"
@@ -44,9 +45,9 @@ struct virtual_sync_context {
 	enum mailbox_sync_flags flags;
 	uint32_t uid_validity;
 
-	unsigned int ext_header_changed:1;
-	unsigned int expunge_removed:1;
-	unsigned int index_broken:1;
+	bool ext_header_changed:1;
+	bool expunge_removed:1;
+	bool index_broken:1;
 };
 
 static void virtual_sync_backend_box_deleted(struct virtual_sync_context *ctx,
@@ -112,7 +113,7 @@ virtual_backend_box_sync_mail_set(struct virtual_backend_box *bbox)
 	struct mailbox_transaction_context *trans;
 
 	if (bbox->sync_mail == NULL) {
-		trans = mailbox_transaction_begin(bbox->box, 0);
+		trans = mailbox_transaction_begin(bbox->box, 0, __func__);
 		bbox->sync_mail = mail_alloc(trans, 0, NULL);
 	}
 }
@@ -246,7 +247,7 @@ int virtual_mailbox_ext_header_read(struct virtual_mailbox *mbox,
 				bbox->sync_highest_modseq =
 				mailboxes[i].highest_modseq;
 			bbox->sync_next_uid = mailboxes[i].next_uid;
-			bbox->sync_mailbox_idx = i;
+			bbox->sync_mailbox_idx1 = i+1;
 		}
 		ext_name_offset += mailboxes[i].name_len;
 		prev_mailbox_id = mailboxes[i].id;
@@ -298,14 +299,14 @@ static void virtual_sync_ext_header_rewrite(struct virtual_sync_context *ctx)
 	ext_hdr.highest_mailbox_id = ctx->mbox->highest_mailbox_id;
 	ext_hdr.search_args_crc32 = ctx->mbox->search_args_crc32;
 
-	buf = buffer_create_dynamic(pool_datastack_create(), name_pos + 256);
+	buf = t_buffer_create(name_pos + 256);
 	buffer_append(buf, &ext_hdr, sizeof(ext_hdr));
 
 	for (i = 0; i < count; i++) {
 		i_assert(i == 0 ||
 			 bboxes[i]->mailbox_id > bboxes[i-1]->mailbox_id);
 
-		bboxes[i]->sync_mailbox_idx = i;
+		bboxes[i]->sync_mailbox_idx1 = i+1;
 		mailbox.id = bboxes[i]->mailbox_id;
 		mailbox.name_len = strlen(bboxes[i]->name);
 		mailbox.uid_validity = bboxes[i]->sync_uid_validity;
@@ -499,7 +500,7 @@ static int virtual_sync_backend_box_init(struct virtual_backend_box *bbox)
 	enum mailbox_search_result_flags result_flags;
 	int ret;
 
-	trans = mailbox_transaction_begin(bbox->box, 0);
+	trans = mailbox_transaction_begin(bbox->box, 0, __func__);
 
 	if (!bbox->search_args_initialized) {
 		mail_search_args_init(bbox->search_args, bbox->box, FALSE, NULL);
@@ -1148,8 +1149,9 @@ static void virtual_sync_backend_ext_header(struct virtual_sync_context *ctx,
 	mailbox.highest_modseq = bbox->ondisk_highest_modseq;
 	mailbox.next_uid = bbox->sync_next_uid;
 
+	i_assert(bbox->sync_mailbox_idx1 > 0);
 	mailbox_offset = sizeof(struct virtual_mail_index_header) +
-		bbox->sync_mailbox_idx * sizeof(mailbox);
+		(bbox->sync_mailbox_idx1-1) * sizeof(mailbox);
 	mail_index_update_header_ext(ctx->trans, ctx->mbox->virtual_ext_id,
 				     mailbox_offset + uidval_pos,
 				     CONST_PTR_OFFSET(&mailbox, uidval_pos),

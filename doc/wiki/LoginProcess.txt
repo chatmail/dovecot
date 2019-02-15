@@ -1,11 +1,12 @@
 Login processes
 ===============
 
-The main purpose of login processes is to handle the IMAP and POP3 connections
-before the user has logged in. The login processes don't need to be able to do
-anything else than let the user log in, so they can run in highly restricted
-environment. By default they are run as a non-privileged "dovenull" user
-chrooted into a non-writable directory containing only authentication UNIX
+The main purpose of login processes is to handle the IMAP, POP3,
+<Submission.txt> (v2.3), and <ManageSieve> [Pigeonhole.ManageSieve.txt]
+connections before the user has logged in. The login processes don't need to be
+able to do anything else than let the user log in, so they can run in highly
+restricted environment. By default they are run as a non-privileged "dovenull"
+user chrooted into a non-writable directory containing only authentication UNIX
 sockets.
 
 Login processes also handle proxying the SSL and TLS connections even after the
@@ -120,4 +121,4 @@ service tcpwrap {
 Remember to configure your rules! The format is described in hosts.allow(5) and
 hosts.deny(5). Files used are usually /etc/hosts.allow and /etc/hosts.deny.
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

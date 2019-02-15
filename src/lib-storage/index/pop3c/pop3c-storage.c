@@ -33,7 +33,7 @@ pop3c_storage_create(struct mail_storage *_storage,
 		     struct mail_namespace *ns,
 		     const char **error_r)
 {
-	struct pop3c_storage *storage = (struct pop3c_storage *)_storage;
+	struct pop3c_storage *storage = POP3C_STORAGE(_storage);
 
 	storage->set = mail_namespace_get_driver_settings(ns, _storage);
 	if (storage->set->pop3c_host[0] == '\0') {
@@ -87,18 +87,15 @@ pop3c_client_create_from_set(struct mail_storage *storage,
 }
 
 static void
-pop3c_storage_get_list_settings(const struct mail_namespace *ns,
+pop3c_storage_get_list_settings(const struct mail_namespace *ns ATTR_UNUSED,
 				struct mailbox_list_settings *set)
 {
 	set->layout = MAILBOX_LIST_NAME_FS;
 	if (set->root_dir != NULL && *set->root_dir != '\0' &&
 	    set->index_dir == NULL) {
-		/* we don't really care about root_dir, but we
-		   just need to get index_dir autocreated.
-		   it happens when index_dir differs from root_dir. */
+	       /* we don't really care about root_dir, but we
+		  just need to get index_dir autocreated. */
 		set->index_dir = set->root_dir;
-		set->root_dir = p_strconcat(ns->user->pool,
-					    set->root_dir, "/.", NULL);
 	}
 }
 
@@ -115,8 +112,9 @@ pop3c_mailbox_alloc(struct mail_storage *storage, struct mailbox_list *list,
 	mbox->box.pool = pool;
 	mbox->box.storage = storage;
 	mbox->box.list = list;
+	mbox->box.list->props |= MAILBOX_LIST_PROP_AUTOCREATE_DIRS;
 	mbox->box.mail_vfuncs = &pop3c_mail_vfuncs;
-	mbox->storage = (struct pop3c_storage *)storage;
+	mbox->storage = POP3C_STORAGE(storage);
 
 	index_storage_mailbox_alloc(&mbox->box, vname, flags, MAIL_INDEX_PREFIX);
 	return &mbox->box;
@@ -143,7 +141,7 @@ static void pop3c_login_callback(enum pop3c_command_state state,
 		mbox->logged_in = TRUE;
 		break;
 	case POP3C_COMMAND_STATE_ERR:
-		if (strncmp(reply, "[IN-USE] ", 9) == 0) {
+		if (str_begins(reply, "[IN-USE] ")) {
 			mail_storage_set_error(mbox->box.storage,
 					       MAIL_ERROR_INUSE, reply + 9);
 		} else {
@@ -153,7 +151,7 @@ static void pop3c_login_callback(enum pop3c_command_state state,
 		}
 		break;
 	case POP3C_COMMAND_STATE_DISCONNECTED:
-		mail_storage_set_critical(mbox->box.storage,
+		mailbox_set_critical(&mbox->box,
 			"pop3c: Disconnected from remote server");
 		break;
 	}
@@ -161,7 +159,7 @@ static void pop3c_login_callback(enum pop3c_command_state state,
 
 static int pop3c_mailbox_open(struct mailbox *box)
 {
-	struct pop3c_mailbox *mbox = (struct pop3c_mailbox *)box;
+	struct pop3c_mailbox *mbox = POP3C_MAILBOX(box);
 
 	if (strcmp(box->name, "INBOX") != 0) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
@@ -181,10 +179,9 @@ static int pop3c_mailbox_open(struct mailbox *box)
 
 static void pop3c_mailbox_close(struct mailbox *box)
 {
-	struct pop3c_mailbox *mbox = (struct pop3c_mailbox *)box;
+	struct pop3c_mailbox *mbox = POP3C_MAILBOX(box);
 
-	if (mbox->uidl_pool != NULL)
-		pool_unref(&mbox->uidl_pool);
+	pool_unref(&mbox->uidl_pool);
 	i_free_and_null(mbox->msg_uids);
 	i_free_and_null(mbox->msg_sizes);
 	pop3c_client_deinit(&mbox->client);
@@ -218,7 +215,7 @@ static int pop3c_mailbox_get_status(struct mailbox *box,
 				    enum mailbox_status_items items,
 				    struct mailbox_status *status_r)
 {
-	struct pop3c_mailbox *mbox = (struct pop3c_mailbox *)box;
+	struct pop3c_mailbox *mbox = POP3C_MAILBOX(box);
 
 	if (index_storage_get_status(box, items, status_r) < 0)
 		return -1;
@@ -288,7 +285,7 @@ pop3c_save_cancel(struct mail_save_context *ctx)
 
 static bool pop3c_storage_is_inconsistent(struct mailbox *box)
 {
-	struct pop3c_mailbox *mbox = (struct pop3c_mailbox *)box;
+	struct pop3c_mailbox *mbox = POP3C_MAILBOX(box);
 
 	return index_storage_is_inconsistent(box) ||
 		!pop3c_client_is_connected(mbox->client);

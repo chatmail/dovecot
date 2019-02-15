@@ -21,9 +21,9 @@ struct imap_fetch_body_data {
 	const char *section; /* NOTE: always uppercased */
 	struct imap_msgpart *msgpart;
 
-	unsigned int partial:1;
-	unsigned int binary:1;
-	unsigned int binary_size:1;
+	bool partial:1;
+	bool binary:1;
+	bool binary_size:1;
 };
 
 static void fetch_read_error(struct imap_fetch_context *ctx,
@@ -37,12 +37,11 @@ static void fetch_read_error(struct imap_fetch_context *ctx,
 			return;
 		}
 	}
-	mail_storage_set_critical(state->cur_mail->box->storage,
-		"read(%s) failed: %s (FETCH %s for mailbox %s UID %u)",
+	mail_set_critical(state->cur_mail,
+		"read(%s) failed: %s (FETCH %s)",
 		i_stream_get_name(state->cur_input),
 		i_stream_get_error(state->cur_input),
-		state->cur_human_name,
-		mailbox_get_vname(state->cur_mail->box), state->cur_mail->uid);
+		state->cur_human_name);
 	*disconnect_reason_r = "FETCH read() failed";
 }
 
@@ -92,46 +91,46 @@ static int fetch_stream_continue(struct imap_fetch_context *ctx)
 {
 	struct imap_fetch_state *state = &ctx->state;
 	const char *disconnect_reason;
-	off_t ret;
+	uoff_t orig_input_offset = state->cur_input->v_offset;
+	enum ostream_send_istream_result res;
 
 	o_stream_set_max_buffer_size(ctx->client->output, 0);
-	ret = o_stream_send_istream(ctx->client->output, state->cur_input);
+	res = o_stream_send_istream(ctx->client->output, state->cur_input);
 	o_stream_set_max_buffer_size(ctx->client->output, (size_t)-1);
 
-	if (ret > 0) {
-		state->cur_offset += ret;
-		if (ctx->state.cur_stats_sizep != NULL)
-			*ctx->state.cur_stats_sizep += ret;
+	if (ctx->state.cur_stats_sizep != NULL) {
+		*ctx->state.cur_stats_sizep +=
+			state->cur_input->v_offset - orig_input_offset;
 	}
 
-	if (state->cur_offset != state->cur_size) {
-		/* unfinished */
-		if (state->cur_input->stream_errno != 0) {
-			fetch_read_error(ctx, &disconnect_reason);
-			client_disconnect(ctx->client, disconnect_reason);
-			return -1;
-		}
-		if (!i_stream_have_bytes_left(state->cur_input)) {
+	switch (res) {
+	case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
+		if (state->cur_input->v_offset != state->cur_size) {
 			/* Input stream gave less data than expected */
-			mail_set_cache_corrupted_reason(state->cur_mail,
+			mail_set_cache_corrupted(state->cur_mail,
 				state->cur_size_field, t_strdup_printf(
 				"read(%s): FETCH %s got too little data: "
 				"%"PRIuUOFF_T" vs %"PRIuUOFF_T,
 				i_stream_get_name(state->cur_input),
 				state->cur_human_name,
-				state->cur_offset, state->cur_size));
+				state->cur_input->v_offset, state->cur_size));
 			client_disconnect(ctx->client, "FETCH failed");
 			return -1;
 		}
-		if (ret < 0) {
-			/* client probably disconnected */
-			return -1;
-		}
-
-		o_stream_set_flush_pending(ctx->client->output, TRUE);
+		return 1;
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
+		i_unreached();
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
 		return 0;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
+		fetch_read_error(ctx, &disconnect_reason);
+		client_disconnect(ctx->client, disconnect_reason);
+		return -1;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+		/* client disconnected */
+		return -1;
 	}
-	return 1;
+	i_unreached();
 }
 
 static const char *
@@ -184,6 +183,7 @@ static int fetch_body_msgpart(struct imap_fetch_context *ctx, struct mail *mail,
 
 	if (imap_msgpart_open(mail, body->msgpart, &result) < 0)
 		return -1;
+	i_assert(result.input->v_offset == 0);
 	ctx->state.cur_input = result.input;
 	ctx->state.cur_size = result.size;
 	ctx->state.cur_size_field = result.size_field;
@@ -315,12 +315,12 @@ bool imap_fetch_body_section_init(struct imap_fetch_init_context *ctx)
 	unsigned int list_count;
 	const char *str, *p, *error;
 
-	i_assert(strncmp(ctx->name, "BODY", 4) == 0);
+	i_assert(str_begins(ctx->name, "BODY"));
 	p = ctx->name + 4;
 
 	body = p_new(ctx->pool, struct imap_fetch_body_data, 1);
 
-	if (strncmp(p, ".PEEK", 5) == 0)
+	if (str_begins(p, ".PEEK"))
 		p += 5;
 	else
 		ctx->fetch_ctx->flags_update_seen = TRUE;
@@ -380,17 +380,17 @@ bool imap_fetch_binary_init(struct imap_fetch_init_context *ctx)
 	unsigned int list_count;
 	const char *str, *p, *error;
 
-	i_assert(strncmp(ctx->name, "BINARY", 6) == 0);
+	i_assert(str_begins(ctx->name, "BINARY"));
 	p = ctx->name + 6;
 
 	body = p_new(ctx->pool, struct imap_fetch_body_data, 1);
 	body->binary = TRUE;
 
-	if (strncmp(p, ".SIZE", 5) == 0) {
+	if (str_begins(p, ".SIZE")) {
 		/* fetch decoded size of the section */
 		p += 5;
 		body->binary_size = TRUE;
-	} else if (strncmp(p, ".PEEK", 5) == 0) {
+	} else if (str_begins(p, ".PEEK")) {
 		p += 5;
 	} else {
 		ctx->fetch_ctx->flags_update_seen = TRUE;
@@ -475,6 +475,7 @@ fetch_and_free_msgpart(struct imap_fetch_context *ctx,
 	imap_msgpart_free(_msgpart);
 	if (ret < 0)
 		return -1;
+	i_assert(result.input->v_offset == 0);
 	ctx->state.cur_input = result.input;
 	ctx->state.cur_size = result.size;
 	ctx->state.cur_size_field = result.size_field;

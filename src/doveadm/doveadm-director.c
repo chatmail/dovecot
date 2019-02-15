@@ -243,6 +243,19 @@ static void cmd_director_status(struct doveadm_cmd_context *cctx)
 	director_disconnect(ctx);
 }
 
+static bool user_hash_expand(const char *username, unsigned int *hash_r)
+{
+	const char *error;
+
+	if (!mail_user_hash(username, doveadm_settings->director_username_hash,
+			    hash_r, &error)) {
+		i_error("Failed to expand director_username_hash=%s: %s",
+			doveadm_settings->director_username_hash, error);
+		return FALSE;
+	}
+	return TRUE;
+}
+
 static void
 user_list_add(const char *username, pool_t pool,
 	      HASH_TABLE_TYPE(user_list) users)
@@ -250,14 +263,16 @@ user_list_add(const char *username, pool_t pool,
 	struct user_list *user, *old_user;
 	unsigned int user_hash;
 
+	if (!user_hash_expand(username, &user_hash))
+		return;
+
 	user = p_new(pool, struct user_list, 1);
 	user->name = p_strdup(pool, username);
-	user_hash = mail_user_hash(username, doveadm_settings->director_username_hash);
 
 	old_user = hash_table_lookup(users, POINTER_CAST(user_hash));
 	if (old_user != NULL)
 		user->next = old_user;
-	hash_table_insert(users, POINTER_CAST(user_hash), user);
+	hash_table_update(users, POINTER_CAST(user_hash), user);
 }
 
 static void ATTR_NULL(1)
@@ -349,10 +364,11 @@ static void cmd_director_map(struct doveadm_cmd_context *cctx)
 
 	if (ctx->user_map) {
 		/* user -> hash mapping */
-		user_hash = mail_user_hash(ctx->host, doveadm_settings->director_username_hash);
-		doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
-		doveadm_print_header("hash", "hash", DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
-		doveadm_print(t_strdup_printf("%u", user_hash));
+		if (user_hash_expand(ctx->host, &user_hash)) {
+			doveadm_print_init(DOVEADM_PRINT_TYPE_TABLE);
+			doveadm_print_header("hash", "hash", DOVEADM_PRINT_HEADER_FLAG_HIDE_TITLE);
+			doveadm_print(t_strdup_printf("%u", user_hash));
+		}
 		director_disconnect(ctx);
 		return;
 	}
@@ -494,12 +510,12 @@ cmd_director_add_or_update(struct doveadm_cmd_context *cctx, bool update)
 		if (line == NULL)
 			director_disconnected(ctx);
 		else if (strcmp(line, "OK") != 0) {
-			i_error("%s: %s\n", net_ip2addr(&ips[i]),
+			i_error("%s: %s", net_ip2addr(&ips[i]),
 				strcmp(line, "NOTFOUND") == 0 ?
 				"doesn't exist" : line);
 			doveadm_exit_code = EX_TEMPFAIL;
 		} else if (doveadm_verbose) {
-			i_info("%s: OK\n", net_ip2addr(&ips[i]));
+			i_info("%s: OK", net_ip2addr(&ips[i]));
 		}
 	}
 	director_disconnect(ctx);
@@ -542,17 +558,17 @@ cmd_director_ipcmd(const char *cmd_name, const char *success_result,
 	for (i = 0; i < ips_count; i++) {
 		line = i_stream_read_next_line(ctx->input);
 		if (line != NULL && strcmp(line, "NOTFOUND") == 0) {
-			i_error("%s: doesn't exist\n",
+			i_error("%s: doesn't exist",
 				net_ip2addr(&ips[i]));
 			if (doveadm_exit_code == 0)
 				doveadm_exit_code = DOVEADM_EX_NOTFOUND;
 		} else if (line == NULL) {
 			director_disconnected(ctx);
 		} else if (strcmp(line, "OK") != 0) {
-			i_error("%s: %s\n", net_ip2addr(&ips[i]), line);
+			i_error("%s: %s", net_ip2addr(&ips[i]), line);
 			doveadm_exit_code = EX_TEMPFAIL;
 		} else if (doveadm_verbose) {
-			i_info("%s: %s\n", net_ip2addr(&ips[i]), success_result);
+			i_info("%s: %s", net_ip2addr(&ips[i]), success_result);
 		}
 	}
 	director_disconnect(ctx);
@@ -586,9 +602,8 @@ static void cmd_director_move(struct doveadm_cmd_context *cctx)
 		return;
 	}
 
-	user_hash = mail_user_hash(ctx->user, doveadm_settings->director_username_hash);
-
-	if (director_get_host(ctx->host, &ips, &ips_count) != 0) {
+	if (!user_hash_expand(ctx->user, &user_hash) ||
+	    director_get_host(ctx->host, &ips, &ips_count) != 0) {
 		director_disconnect(ctx);
 		return;
 	}
@@ -600,7 +615,7 @@ static void cmd_director_move(struct doveadm_cmd_context *cctx)
 		director_disconnected(ctx);
 	} else if (strcmp(line, "OK") == 0) {
 		if (doveadm_verbose)
-			i_info("User hash %u moved to %s\n", user_hash, ip_str);
+			i_info("User hash %u moved to %s", user_hash, ip_str);
 	} else if (strcmp(line, "NOTFOUND") == 0) {
 		i_error("Host '%s' doesn't exist", ip_str);
 		doveadm_exit_code = DOVEADM_EX_NOTFOUND;
@@ -821,7 +836,7 @@ static void cmd_director_ring_add(struct doveadm_cmd_context *cctx)
 	ctx = cmd_director_init(cctx);
 	if (ctx->ip == NULL ||
 	    net_addr2ip(ctx->ip, &ip) < 0 ||
-	    (ctx->port && net_str2port(ctx->port, &port) < 0)) {
+	    (ctx->port != 0 && net_str2port(ctx->port, &port) < 0)) {
 		director_cmd_help(cctx->cmd);
 		return;
 	}

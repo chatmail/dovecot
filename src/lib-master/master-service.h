@@ -32,7 +32,24 @@ enum master_service_flags {
 	   listeners (i.e. the service does STARTTLS). */
 	MASTER_SERVICE_FLAG_USE_SSL_SETTINGS	= 0x200,
 	/* Don't initialize SSL context automatically. */
-	MASTER_SERVICE_FLAG_NO_SSL_INIT		= 0x400
+	MASTER_SERVICE_FLAG_NO_SSL_INIT		= 0x400,
+	/* Don't create a data stack frame between master_service_init() and
+	   master_service_init_finish(). By default this is done to make sure
+	   initialization doesn't unnecessarily use up memory in data stack. */
+	MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME = 0x800,
+	/* Don't connect at startup to the stats process. */
+	MASTER_SERVICE_FLAG_DONT_SEND_STATS	= 0x1000
+};
+
+struct master_service_connection_proxy {
+        /* only set if ssl is TRUE */
+        const char *hostname;
+        const char *cert_common_name;
+        const unsigned char *alpn;
+        unsigned int alpn_size;
+
+	bool ssl:1;
+	bool ssl_client_cert:1;
 };
 
 struct master_service_connection {
@@ -52,16 +69,22 @@ struct master_service_connection {
 	struct ip_addr real_remote_ip, real_local_ip;
 	in_port_t real_remote_port, real_local_port;
 
+	/* filled if connection is proxied */
+	struct master_service_connection_proxy proxy;
+
+	/* This is a connection proxied wit HAproxy (or similar) */
+	bool proxied:1;
+
 	/* This is a FIFO fd. Only a single "connection" is ever received from
 	   a FIFO after the first writer sends something to it. */
-	unsigned int fifo:1;
+	bool fifo:1;
 	/* Perform immediate SSL handshake for this connection. Currently this
 	   needs to be performed explicitly by each service. */
-	unsigned int ssl:1;
+	bool ssl:1;
 
 	/* Internal: master_service_client_connection_accept() has been
 	   called for this connection. */
-	unsigned int accepted:1;
+	bool accepted:1;
 };
 
 typedef void
@@ -104,6 +127,12 @@ void master_service_env_clean(void);
    functions. The following calls change the log prefix. */
 void master_service_init_log(struct master_service *service,
 			     const char *prefix);
+/* Initialize stats client (if it's not already initialized). This is called
+   automatically if MASTER_SERVICE_FLAG_SEND_STATS is enabled. If
+   silent_notfound_errors is set, connect() errors aren't logged if they're
+   happening because the stats service isn't running. */
+void master_service_init_stats_client(struct master_service *service,
+				      bool silent_notfound_errors);
 
 /* If set, die immediately when connection to master is lost.
    Normally all existing clients are handled first. */
@@ -199,5 +228,8 @@ bool version_string_verify(const char *line, const char *service_name,
 bool version_string_verify_full(const char *line, const char *service_name,
 				unsigned major_version,
 				unsigned int *minor_version_r);
+
+/* Returns TRUE if ssl module has been loaded */
+bool master_service_is_ssl_module_loaded(struct master_service *service);
 
 #endif

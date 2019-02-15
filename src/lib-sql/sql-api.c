@@ -4,6 +4,7 @@
 #include "array.h"
 #include "ioloop.h"
 #include "str.h"
+#include "time-util.h"
 #include "sql-api-private.h"
 
 #include <time.h>
@@ -11,6 +12,10 @@
 struct default_sql_prepared_statement {
 	struct sql_prepared_statement prep_stmt;
 	char *query_template;
+};
+
+struct event_category event_category_sql = {
+	.name = "sql",
 };
 
 struct sql_db_module_register sql_db_module_register = { 0 };
@@ -64,21 +69,47 @@ void sql_driver_unregister(const struct sql_db *driver)
 
 struct sql_db *sql_init(const char *db_driver, const char *connect_string)
 {
+	const char *error;
+	struct sql_db *db;
+	struct sql_settings set = {
+		.driver = db_driver,
+		.connect_string = connect_string,
+	};
+
+	if (sql_init_full(&set, &db, &error) < 0)
+		i_fatal("%s", error);
+	return db;
+}
+
+int sql_init_full(const struct sql_settings *set, struct sql_db **db_r,
+		  const char **error_r)
+{
 	const struct sql_db *driver;
 	struct sql_db *db;
+	int ret = 0;
 
-	i_assert(connect_string != NULL);
+	i_assert(set->connect_string != NULL);
 
-	driver = sql_driver_lookup(db_driver);
-	if (driver == NULL)
-		i_fatal("Unknown database driver '%s'", db_driver);
+	driver = sql_driver_lookup(set->driver);
+	if (driver == NULL) {
+		*error_r = t_strdup_printf("Unknown database driver '%s'", set->driver);
+		return -1;
+	}
 
-	if ((driver->flags & SQL_DB_FLAG_POOLED) == 0)
-		db = driver->v.init(connect_string);
-	else
-		db = driver_sqlpool_init(connect_string, driver);
+	if ((driver->flags & SQL_DB_FLAG_POOLED) == 0) {
+		if (driver->v.init_full == NULL) {
+			db = driver->v.init(set->connect_string);
+		} else
+			ret = driver->v.init_full(set, &db, error_r);
+	} else
+		ret = driver_sqlpool_init_full(set, driver, &db, error_r);
+
+	if (ret < 0)
+		return -1;
+
 	i_array_init(&db->module_contexts, 5);
-	return db;
+	*db_r = db;
+	return 0;
 }
 
 void sql_deinit(struct sql_db **_db)
@@ -87,8 +118,7 @@ void sql_deinit(struct sql_db **_db)
 
 	*_db = NULL;
 
-	if (db->to_reconnect != NULL)
-		timeout_remove(&db->to_reconnect);
+	timeout_remove(&db->to_reconnect);
 	db->v.deinit(db);
 }
 
@@ -121,8 +151,7 @@ int sql_connect(struct sql_db *db)
 
 void sql_disconnect(struct sql_db *db)
 {
-	if (db->to_reconnect != NULL)
-		timeout_remove(&db->to_reconnect);
+	timeout_remove(&db->to_reconnect);
 	db->v.disconnect(db);
 }
 
@@ -342,8 +371,7 @@ void sql_statement_bind_binary(struct sql_statement *stmt,
 void sql_statement_bind_int64(struct sql_statement *stmt,
 			      unsigned int column_idx, int64_t value)
 {
-	const char *value_str = p_strdup_printf(stmt->pool, "%lld",
-						(long long)value);
+	const char *value_str = p_strdup_printf(stmt->pool, "%"PRId64, value);
 	array_idx_set(&stmt->args, column_idx, &value_str);
 
 	if (stmt->db->v.statement_bind_int64 != NULL)
@@ -602,20 +630,6 @@ struct sql_transaction_context *sql_transaction_begin(struct sql_db *db)
 	return db->v.transaction_begin(db);
 }
 
-struct sql_commit1_wrap_ctx {
-	sql_commit_callback_t *callback;
-	void *context;
-};
-
-static void sql_commit1_wrap(const struct sql_commit_result *result,
-			     void *context)
-{
-	struct sql_commit1_wrap_ctx *ctx = context;
-
-	ctx->callback(result->error, ctx->context);
-	i_free(ctx);
-}
-
 #undef sql_transaction_commit
 void sql_transaction_commit(struct sql_transaction_context **_ctx,
 			    sql_commit_callback_t *callback, void *context)
@@ -623,49 +637,7 @@ void sql_transaction_commit(struct sql_transaction_context **_ctx,
 	struct sql_transaction_context *ctx = *_ctx;
 
 	*_ctx = NULL;
-	if (ctx->db->v.transaction_commit != NULL)
-		ctx->db->v.transaction_commit(ctx, callback, context);
-	else {
-		struct sql_commit1_wrap_ctx *wrap;
-
-		wrap = i_new(struct sql_commit1_wrap_ctx, 1);
-		wrap->callback = callback;
-		wrap->context = context;
-		ctx->db->v.transaction_commit2(ctx, sql_commit1_wrap, wrap);
-	}
-}
-
-struct sql_commit2_wrap_ctx {
-	sql_commit2_callback_t *callback;
-	void *context;
-};
-
-static void sql_commit2_wrap(const char *error, void *context)
-{
-	struct sql_commit2_wrap_ctx *ctx = context;
-	struct sql_commit_result result = { .error = error };
-
-	ctx->callback(&result, ctx->context);
-	i_free(ctx);
-}
-
-#undef sql_transaction_commit2
-void sql_transaction_commit2(struct sql_transaction_context **_ctx,
-			     sql_commit2_callback_t *callback, void *context)
-{
-	struct sql_transaction_context *ctx = *_ctx;
-
-	*_ctx = NULL;
-	if (ctx->db->v.transaction_commit2 != NULL)
-		ctx->db->v.transaction_commit2(ctx, callback, context);
-	else {
-		struct sql_commit2_wrap_ctx *wrap;
-
-		wrap = i_new(struct sql_commit2_wrap_ctx, 1);
-		wrap->callback = callback;
-		wrap->context = context;
-		ctx->db->v.transaction_commit(ctx, sql_commit2_wrap, wrap);
-	}
+	ctx->db->v.transaction_commit(ctx, callback, context);
 }
 
 int sql_transaction_commit_s(struct sql_transaction_context **_ctx,
@@ -750,6 +722,51 @@ void sql_transaction_add_query(struct sql_transaction_context *ctx, pool_t pool,
 	else
 		ctx->tail->next = tquery;
 	ctx->tail = tquery;
+}
+
+void sql_connection_log_finished(struct sql_db *db)
+{
+	struct event_passthrough *e = event_create_passthrough(db->event)->
+		set_name(SQL_CONNECTION_FINISHED);
+	e_debug(e->event(),
+		"Connection finished (queries=%"PRIu64", slow queries=%"PRIu64")",
+		db->succeeded_queries + db->failed_queries,
+		db->slow_queries);
+}
+
+struct event_passthrough *
+sql_query_finished_event(struct sql_db *db, struct event *event, const char *query,
+			 bool success, int *duration_r)
+{
+	int diff;
+	struct timeval tv;
+	event_get_create_time(event, &tv);
+	struct event_passthrough *e = event_create_passthrough(event)->
+			set_name(SQL_QUERY_FINISHED)->
+			add_str("query_first_word", t_strcut(query, ' '));
+	diff = timeval_diff_msecs(&ioloop_timeval, &tv);
+
+	if (!success) {
+		db->failed_queries++;
+	} else {
+		db->succeeded_queries++;
+	}
+
+	if (diff >= SQL_SLOW_QUERY_MSEC) {
+		e->add_str("slow_query", "y");
+		db->slow_queries++;
+	}
+
+	if (duration_r != NULL)
+		*duration_r = diff;
+
+	return e;
+}
+
+struct event_passthrough *sql_transaction_finished_event(struct sql_transaction_context *ctx)
+{
+	return event_create_passthrough(ctx->event)->
+		set_name(SQL_TRANSACTION_FINISHED);
 }
 
 struct sql_result sql_not_connected_result = {

@@ -8,7 +8,6 @@
 #include "istream-decrypt.h"
 #include "doveadm-dump.h"
 #include "hex-binary.h"
-#include "buffer.h"
 #include "str.h"
 #include <stdio.h>
 #include <sys/types.h>

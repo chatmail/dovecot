@@ -120,8 +120,7 @@ static int auth_server_input_done(struct auth_server_connection *conn)
 		return -1;
 	}
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 
 	conn->handshake_received = TRUE;
 	if (conn->client->connect_notify_callback != NULL) {
@@ -263,7 +262,7 @@ static void auth_server_connection_input(struct auth_server_connection *conn)
 			return;
 
 		/* make sure the major version matches */
-		if (strncmp(line, "VERSION\t", 8) != 0 ||
+		if (!str_begins(line, "VERSION\t") ||
 		    !str_uint_equals(t_strcut(line + 8, '\t'),
 				     AUTH_CLIENT_PROTOCOL_MAJOR_VERSION)) {
 			i_error("Authentication server not compatible with "
@@ -349,6 +348,9 @@ auth_server_connection_remove_requests(struct auth_server_connection *conn,
 void auth_server_connection_disconnect(struct auth_server_connection *conn,
 				       const char *reason)
 {
+	if (!conn->connected)
+		return;
+	conn->connected = FALSE;
 	conn->handshake_received = FALSE;
 	conn->version_received = FALSE;
 	conn->has_plain_mech = FALSE;
@@ -357,10 +359,8 @@ void auth_server_connection_disconnect(struct auth_server_connection *conn,
 	conn->cookie = NULL;
 	array_clear(&conn->available_auth_mechs);
 
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	timeout_remove(&conn->to);
+	io_remove(&conn->io);
 	if (conn->fd != -1) {
 		i_stream_destroy(&conn->input);
 		o_stream_destroy(&conn->output);
@@ -423,11 +423,11 @@ int auth_server_connection_connect(struct auth_server_connection *conn)
 	const char *handshake;
 	int fd;
 
+	i_assert(!conn->connected);
 	i_assert(conn->fd == -1);
 
 	conn->last_connect = ioloop_time;
-	if (conn->to != NULL)
-		timeout_remove(&conn->to);
+	timeout_remove(&conn->to);
 
 	/* max. 1 second wait here. */
 	fd = net_connect_unix_with_retries(conn->client->auth_socket_path,
@@ -445,9 +445,9 @@ int auth_server_connection_connect(struct auth_server_connection *conn)
 	}
 	conn->fd = fd;
 	conn->io = io_add(fd, IO_READ, auth_server_connection_input, conn);
-	conn->input = i_stream_create_fd(fd, AUTH_SERVER_CONN_MAX_LINE_LENGTH,
-					 FALSE);
-	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(fd, AUTH_SERVER_CONN_MAX_LINE_LENGTH);
+	conn->output = o_stream_create_fd(fd, (size_t)-1);
+	conn->connected = TRUE;
 
 	handshake = t_strdup_printf("VERSION\t%u\t%u\nCPID\t%u\n",
 				    AUTH_CLIENT_PROTOCOL_MAJOR_VERSION,
@@ -471,6 +471,8 @@ auth_server_connection_add_request(struct auth_server_connection *conn,
 				   struct auth_client_request *request)
 {
 	unsigned int id;
+
+	i_assert(conn->handshake_received);
 
 	id = ++conn->client->request_id_counter;
 	if (id == 0) {

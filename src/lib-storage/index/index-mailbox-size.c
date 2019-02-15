@@ -33,7 +33,7 @@
    need to lock vsize updates before sync.
 */
 
-#define VSIZE_LOCK_SUFFIX ".vsize.lock"
+#define VSIZE_LOCK_SUFFIX "dovecot-vsize.lock"
 #define VSIZE_UPDATE_MAX_LOCK_SECS 10
 
 #define INDEXER_SOCKET_NAME "indexer"
@@ -46,6 +46,7 @@ struct mailbox_vsize_update {
 
 	struct file_lock *lock;
 	bool lock_failed;
+	bool skip_write;
 	bool rebuild;
 	bool written;
 	bool finish_in_background;
@@ -71,7 +72,7 @@ static void vsize_header_refresh(struct mailbox_vsize_update *update)
 		memcpy(&update->vsize_hdr, data, sizeof(update->vsize_hdr));
 	else {
 		if (size != 0) {
-			mail_storage_set_critical(update->box->storage,
+			mailbox_set_critical(update->box,
 				"vsize-hdr has invalid size: %"PRIuSIZE_T,
 				size);
 		}
@@ -94,7 +95,7 @@ index_mailbox_vsize_check_rebuild(struct mailbox_vsize_update *update)
 
 	if (update->vsize_hdr.message_count != seq2) {
 		if (update->vsize_hdr.message_count < seq2) {
-			mail_storage_set_critical(update->box->storage,
+			mailbox_set_critical(update->box,
 				"vsize-hdr has invalid message-count (%u < %u)",
 				update->vsize_hdr.message_count, seq2);
 		} else {
@@ -139,7 +140,7 @@ static bool vsize_update_lock_full(struct mailbox_vsize_update *update,
 		/* don't log lock timeouts, because we're somewhat expecting
 		   them. Especially when lock_secs is 0. */
 		if (ret < 0)
-			mail_storage_set_critical(box->storage, "%s", error);
+			mailbox_set_critical(box, "%s", error);
 		update->lock_failed = TRUE;
 		return FALSE;
 	}
@@ -197,7 +198,7 @@ static void index_mailbox_vsize_notify_indexer(struct mailbox *box)
 			   "/"INDEXER_SOCKET_NAME, NULL);
 	fd = net_connect_unix(path);
 	if (fd == -1) {
-		mail_storage_set_critical(box->storage,
+		mailbox_set_critical(box,
 			"Can't start vsize building on background: "
 			"net_connect_unix(%s) failed: %m", path);
 		return;
@@ -210,7 +211,7 @@ static void index_mailbox_vsize_notify_indexer(struct mailbox *box)
 	str_append_c(str, '\n');
 
 	if (write_full(fd, str_data(str), str_len(str)) < 0) {
-		mail_storage_set_critical(box->storage,
+		mailbox_set_critical(box,
 			"Can't start vsize building on background: "
 			"write(%s) failed: %m", path);
 	}
@@ -223,10 +224,9 @@ void index_mailbox_vsize_update_deinit(struct mailbox_vsize_update **_update)
 
 	*_update = NULL;
 
-	if (update->lock != NULL || update->rebuild)
+	if ((update->lock != NULL || update->rebuild) && !update->skip_write)
 		index_mailbox_vsize_update_write(update);
-	if (update->lock != NULL)
-		file_lock_free(&update->lock);
+	file_lock_free(&update->lock);
 	if (update->finish_in_background)
 		index_mailbox_vsize_notify_indexer(update->box);
 
@@ -242,14 +242,14 @@ void index_mailbox_vsize_hdr_expunge(struct mailbox_vsize_update *update,
 	if (uid > update->vsize_hdr.highest_uid)
 		return;
 	if (update->vsize_hdr.message_count == 0) {
-		mail_storage_set_critical(update->box->storage,
+		mailbox_set_critical(update->box,
 			"vsize-hdr's message_count shrank below 0");
 		i_zero(&update->vsize_hdr);
 		return;
 	}
 	update->vsize_hdr.message_count--;
 	if (update->vsize_hdr.vsize < vsize) {
-		mail_storage_set_critical(update->box->storage,
+		mailbox_set_critical(update->box,
 			"vsize-hdr's vsize shrank below 0");
 		i_zero(&update->vsize_hdr);
 		return;
@@ -294,8 +294,7 @@ index_mailbox_vsize_hdr_add_missing(struct mailbox_vsize_update *update,
 	}
 	mail_search_build_add_seqset(search_args, seq1, seq2);
 
-	trans = mailbox_transaction_begin(update->box, 0);
-	mailbox_transaction_set_reason(trans, "vsize update");
+	trans = mailbox_transaction_begin(update->box, 0, "vsize update");
 	search_ctx = mailbox_search_init(trans, search_args, NULL,
 					 MAIL_FETCH_VIRTUAL_SIZE, NULL);
 	if (!require_result)
@@ -407,8 +406,7 @@ int index_mailbox_get_physical_size(struct mailbox *box,
 	if (mailbox_sync(box, MAILBOX_SYNC_FLAG_FULL_READ) < 0)
 		return -1;
 
-	trans = mailbox_transaction_begin(box, 0);
-	mailbox_transaction_set_reason(trans, "mailbox physical size");
+	trans = mailbox_transaction_begin(box, 0, "mailbox physical size");
 
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);
@@ -448,6 +446,10 @@ void index_mailbox_vsize_update_appends(struct mailbox *box)
 	struct mailbox_status status;
 
 	update = index_mailbox_vsize_update_init(box);
+	if (update->rebuild) {
+		/* The vsize header doesn't exist. Don't create it. */
+		update->skip_write = TRUE;
+	}
 
 	/* update here only if we don't need to rebuild the whole vsize. */
 	index_mailbox_vsize_check_rebuild(update);

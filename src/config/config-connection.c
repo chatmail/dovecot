@@ -28,8 +28,8 @@ struct config_connection {
 	struct ostream *output;
 	struct io *io;
 
-	unsigned int version_received:1;
-	unsigned int handshaked:1;
+	bool version_received:1;
+	bool handshaked:1;
 };
 
 static struct config_connection *config_connections = NULL;
@@ -78,22 +78,22 @@ static int config_connection_request(struct config_connection *conn,
 	t_array_init(&modules, 4);
 	i_zero(&filter);
 	for (; *args != NULL; args++) {
-		if (strncmp(*args, "service=", 8) == 0)
+		if (str_begins(*args, "service="))
 			filter.service = *args + 8;
-		else if (strncmp(*args, "module=", 7) == 0) {
+		else if (str_begins(*args, "module=")) {
 			module = *args + 7;
 			if (strcmp(module, "master") == 0)
 				is_master = TRUE;
 			array_append(&modules, &module, 1);
-		} else if (strncmp(*args, "lname=", 6) == 0)
+		} else if (str_begins(*args, "lname="))
 			filter.local_name = *args + 6;
-		else if (strncmp(*args, "lip=", 4) == 0) {
+		else if (str_begins(*args, "lip=")) {
 			if (net_addr2ip(*args + 4, &filter.local_net) == 0) {
 				filter.local_bits =
 					IPADDR_IS_V4(&filter.local_net) ?
 					32 : 128;
 			}
-		} else if (strncmp(*args, "rip=", 4) == 0) {
+		} else if (str_begins(*args, "rip=")) {
 			if (net_addr2ip(*args + 4, &filter.remote_net) == 0) {
 				filter.remote_bits =
 					IPADDR_IS_V4(&filter.remote_net) ?
@@ -159,10 +159,10 @@ static int config_filters_request(struct config_connection *conn)
 		o_stream_nsend_str(conn->output, "FILTER");
 		if (filter->service != NULL)
 			o_stream_nsend_str(conn->output, t_strdup_printf("\tservice=%s",
-					   filter->service));
+					   str_tabescape(filter->service)));
 		if (filter->local_name != NULL)
 			o_stream_nsend_str(conn->output, t_strdup_printf("\tlocal-name=%s",
-					   filter->local_name));
+					   str_tabescape(filter->local_name)));
 		if (filter->local_bits > 0)
 			o_stream_nsend_str(conn->output, t_strdup_printf("\tlocal-net=%s/%u",
 					   net_ip2addr(&filter->local_net),
@@ -229,8 +229,8 @@ struct config_connection *config_connection_create(int fd)
 
 	conn = i_new(struct config_connection, 1);
 	conn->fd = fd;
-	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE, FALSE);
-	conn->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE);
+	conn->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	conn->io = io_add(fd, IO_READ, config_connection_input, conn);
 	DLLIST_PREPEND(&config_connections, conn);

@@ -98,7 +98,7 @@ static int http_header_parse_name(struct http_header_parser *parser)
 	while (parser->cur < parser->end && http_char_is_token(*parser->cur))
 		parser->cur++;
 
-	str_append_n(parser->name, first, parser->cur-first);
+	str_append_data(parser->name, first, parser->cur-first);
 
 	if (parser->cur == parser->end)
 		return 0;
@@ -299,8 +299,7 @@ int http_header_parse_next_field(struct http_header_parser *parser,
 
 	*error_r = NULL;
 
-	while ((ret=i_stream_read_data
-		(parser->input, &parser->begin, &size, 0)) > 0) {
+	while ((ret=i_stream_read_more(parser->input, &parser->begin, &size)) > 0) {
 
 		/* check header size limits */
 		if (parser->size >= max_size) {
@@ -357,10 +356,12 @@ int http_header_parse_next_field(struct http_header_parser *parser,
 
 	i_assert(ret != -2);
 	if (ret < 0) {
-		if (i_stream_is_eof(parser->input))
+		i_assert(parser->input->eof);
+		if (parser->input->stream_errno == 0)
 			*error_r = "Premature end of input";
 		else
-			*error_r = "Stream error";
+			*error_r = t_strdup_printf("Stream error: %s",
+				i_stream_get_error(parser->input));
 	}
 	return ret;
 }

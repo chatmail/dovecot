@@ -11,7 +11,7 @@
 #include "mail-storage.h"
 #include "mail-storage-settings.h"
 #include "mail-storage-service.h"
-#include "message-address.h"
+#include "smtp-address.h"
 #include "quota-private.h"
 #include "quota-plugin.h"
 #include "quota-status-settings.h"
@@ -24,7 +24,7 @@ enum quota_protocol {
 struct quota_client {
 	struct connection conn;
 
-	char *recipient;
+	struct smtp_address *recipient;
 	uoff_t size;
 };
 
@@ -69,7 +69,10 @@ quota_check(struct mail_user *user, uoff_t mail_size, const char **error_r)
 	mailbox_set_reason(box, "quota status");
 
 	ctx = quota_transaction_begin(box);
-	ret = quota_test_alloc(ctx, I_MAX(1, mail_size));
+	const char *internal_error;
+	ret = quota_test_alloc(ctx, I_MAX(1, mail_size), &internal_error);
+	if (ret == QUOTA_ALLOC_RESULT_TEMPFAIL)
+		i_error("quota check failed: %s", internal_error);
 	*error_r = quota_alloc_result_errstr(ret, ctx);
 	quota_transaction_rollback(&ctx);
 
@@ -84,6 +87,7 @@ static void client_handle_request(struct quota_client *client)
 	struct mail_user *user;
 	const char *value = NULL, *error;
 	const char *detail ATTR_UNUSED;
+	char delim ATTR_UNUSED;
 	int ret;
 
 	if (client->recipient == NULL) {
@@ -92,9 +96,9 @@ static void client_handle_request(struct quota_client *client)
 	}
 
 	i_zero(&input);
-	message_detail_address_parse(quota_status_settings->recipient_delimiter,
-				     client->recipient, &input.username,
-				     &detail);
+	smtp_address_detail_parse_temp(quota_status_settings->recipient_delimiter,
+				       client->recipient, &input.username, &delim,
+				       &detail);
 	ret = mail_storage_service_lookup_next(storage_service, &input,
 					       &service_user, &user, &error);
 	restrict_access_allow_coredumps(TRUE);
@@ -124,13 +128,18 @@ static void client_handle_request(struct quota_client *client)
 				value = t_strdup_printf("554 5.2.2 %s", error);
 			break;
 		case QUOTA_ALLOC_RESULT_TEMPFAIL:
+		case QUOTA_ALLOC_RESULT_BACKGROUND_CALC:
 			ret = -1;
 			break;
 		}
 		value = t_strdup(value); /* user's pool is being freed */
 		mail_user_unref(&user);
 		mail_storage_service_user_unref(&service_user);
+	} else {
+		i_error("Failed to lookup user %s: %s", input.username, error);
+		error = "Temporary internal error";
 	}
+
 	if (ret < 0) {
 		/* temporary failure */
 		o_stream_send_str(client->conn.output, t_strdup_printf(
@@ -144,6 +153,7 @@ static void client_handle_request(struct quota_client *client)
 static int client_input_line(struct connection *conn, const char *line)
 {
 	struct quota_client *client = (struct quota_client *)conn;
+	const char *error;
 
 	if (*line == '\0') {
 		o_stream_cork(conn->output);
@@ -153,9 +163,17 @@ static int client_input_line(struct connection *conn, const char *line)
 		return 1;
 	}
 	if (client->recipient == NULL &&
-	    strncmp(line, "recipient=", 10) == 0)
-		client->recipient = i_strdup(line + 10);
-	else if (strncmp(line, "size=", 5) == 0) {
+	    str_begins(line, "recipient=")) {
+		if (smtp_address_parse_path(default_pool, line + 10,
+			SMTP_ADDRESS_PARSE_FLAG_ALLOW_LOCALPART |
+			SMTP_ADDRESS_PARSE_FLAG_BRACKETS_OPTIONAL,
+			&client->recipient, &error) < 0) {
+			i_error("quota-status: "
+				"Client sent invalid recipient address: %s",
+				error);
+			return 0;
+		}
+	} else if (str_begins(line, "size=")) {
 		if (str_to_uoff(line+5, &client->size) < 0)
 			client->size = 0;
 	}
@@ -186,7 +204,7 @@ static const struct connection_vfuncs client_vfuncs = {
 
 static void main_preinit(void)
 {
-	restrict_access_by_env(NULL, FALSE);
+	restrict_access_by_env(RESTRICT_ACCESS_FLAG_ALLOW_ROOT, NULL);
 	restrict_access_allow_coredumps(TRUE);
 }
 
@@ -206,6 +224,7 @@ static void main_init(void)
 
 	clients = connection_list_init(&client_set, &client_vfuncs);
 	storage_service = mail_storage_service_init(master_service, set_roots,
+		MAIL_STORAGE_SERVICE_FLAG_ALLOW_ROOT |
 		MAIL_STORAGE_SERVICE_FLAG_USERDB_LOOKUP |
 		MAIL_STORAGE_SERVICE_FLAG_TEMP_PRIV_DROP |
 		MAIL_STORAGE_SERVICE_FLAG_ENABLE_CORE_DUMPS |

@@ -272,22 +272,29 @@ int dsync_brain_sync_mailbox_open(struct dsync_brain *brain,
 		brain->failed = TRUE;
 		return -1;
 	}
+
+	mailbox_get_open_status(brain->box, STATUS_UIDNEXT |
+				STATUS_HIGHESTMODSEQ |
+				STATUS_HIGHESTPVTMODSEQ, &status);
 	if (ret == 0) {
 		if (pvt_too_old) {
 			desync_reason = t_strdup_printf(
-				"Private modseq %llu no longer in transaction log",
-				(unsigned long long)last_common_pvt_modseq);
+				"Private modseq %"PRIu64" no longer in transaction log "
+				"(highest=%"PRIu64", last_common_uid=%u, nextuid=%u)",
+				last_common_pvt_modseq,
+				status.highest_pvt_modseq, last_common_uid,
+				status.uidnext);
 		} else {
 			desync_reason = t_strdup_printf(
-				"Modseq %llu no longer in transaction log",
-				(unsigned long long)last_common_modseq);
+				"Modseq %"PRIu64" no longer in transaction log "
+				"(highest=%"PRIu64", last_common_uid=%u, nextuid=%u)",
+				last_common_modseq,
+				status.highest_modseq, last_common_uid,
+				status.uidnext);
 		}
 	}
 
 	if (last_common_uid != 0) {
-		mailbox_get_open_status(brain->box, STATUS_UIDNEXT |
-					STATUS_HIGHESTMODSEQ |
-					STATUS_HIGHESTPVTMODSEQ, &status);
 		/* if last_common_* is higher than our current ones it means
 		   that the incremental sync state is stale and we need to do
 		   a full resync */
@@ -296,14 +303,12 @@ int dsync_brain_sync_mailbox_open(struct dsync_brain *brain,
 				status.uidnext, last_common_uid);
 			ret = 0;
 		} else if (status.highest_modseq < last_common_modseq) {
-			desync_reason = t_strdup_printf("highest_modseq %llu < %llu",
-				(unsigned long long)status.highest_modseq,
-				(unsigned long long)last_common_modseq);
+			desync_reason = t_strdup_printf("highest_modseq %"PRIu64" < %"PRIu64,
+				status.highest_modseq, last_common_modseq);
 			ret = 0;
 		} else if (status.highest_pvt_modseq < last_common_pvt_modseq) {
-			desync_reason = t_strdup_printf("highest_pvt_modseq %llu < %llu",
-				(unsigned long long)status.highest_pvt_modseq,
-				(unsigned long long)last_common_pvt_modseq);
+			desync_reason = t_strdup_printf("highest_pvt_modseq %"PRIu64" < %"PRIu64,
+				status.highest_pvt_modseq, last_common_pvt_modseq);
 			ret = 0;
 		}
 	}
@@ -510,13 +515,13 @@ dsync_brain_try_next_mailbox(struct dsync_brain *brain, struct mailbox **box_r,
 		if (!dsync_brain_has_mailbox_state_changed(brain, &dsync_box)) {
 			if (brain->debug) {
 				i_debug("brain %c: Skipping mailbox %s with unchanged state "
-					"uidvalidity=%u uidnext=%u highestmodseq=%llu highestpvtmodseq=%llu messages=%u",
+					"uidvalidity=%u uidnext=%u highestmodseq=%"PRIu64" highestpvtmodseq=%"PRIu64" messages=%u",
 					brain->master_brain ? 'M' : 'S',
 					guid_128_to_string(dsync_box.mailbox_guid),
 					dsync_box.uid_validity,
 					dsync_box.uid_next,
-					(unsigned long long)dsync_box.highest_modseq,
-					(unsigned long long)dsync_box.highest_pvt_modseq,
+					dsync_box.highest_modseq,
+					dsync_box.highest_pvt_modseq,
 					dsync_box.messages_count);
 			}
 			mailbox_free(&box);
@@ -716,6 +721,7 @@ bool dsync_brain_mailbox_update_pre(struct dsync_brain *brain,
 			   sending mailbox changes, but not for all mails. */
 			dsync_mailbox_state_remove(brain, local_box->mailbox_guid);
 			*reason_r = "UIDVALIDITY changed during a stateful sync, need to restart";
+			brain->failed = TRUE;
 			ret = FALSE;
 		}
 	}

@@ -3,7 +3,6 @@
 #include "common.h"
 #include "array.h"
 #include "ioloop.h"
-#include "fd-close-on-exec.h"
 #include "hash.h"
 #include "str.h"
 #include "safe-mkstemp.h"
@@ -68,8 +67,7 @@ static void service_status_more(struct service_process *process,
 		process->available_count - status->available_count;
 	process->idle_start = 0;
 
-	if (process->to_idle != NULL)
-		timeout_remove(&process->to_idle);
+	timeout_remove(&process->to_idle);
 
 	if (status->available_count != 0)
 		return;
@@ -109,7 +107,7 @@ static void service_status_less(struct service_process *process,
 			   signal to all of them at once */
 			process->to_idle =
 				timeout_add((service->idle_kill * 1000) +
-					    (rand() % 100)*10,
+					    i_rand_limit(100) * 10,
 					    service_process_kill_idle,
 					    process);
 		}
@@ -146,10 +144,8 @@ service_status_input_one(struct service *service,
 	}
 	process->last_status_update = ioloop_time;
 
-	if (process->to_status != NULL) {
-		/* first status notification */
-		timeout_remove(&process->to_status);
-	}
+	/* first status notification */
+	timeout_remove(&process->to_status);
 
 	if (process->available_count == status->available_count)
 		return;
@@ -195,7 +191,7 @@ static void service_status_input(struct service *service)
 
 static void service_monitor_throttle(struct service *service)
 {
-	if (service->to_throttle != NULL)
+	if (service->to_throttle != NULL || service->list->destroying)
 		return;
 
 	i_assert(service->throttle_secs > 0);
@@ -375,8 +371,7 @@ static void service_monitor_listen_start_force(struct service *service)
 
 	service->listening = TRUE;
 	service->listen_pending = FALSE;
-	if (service->to_drop != NULL)
-		timeout_remove(&service->to_drop);
+	timeout_remove(&service->to_drop);
 
 	array_foreach(&service->listeners, listeners) {
 		struct service_listener *l = *listeners;
@@ -403,13 +398,11 @@ void service_monitor_listen_stop(struct service *service)
 	array_foreach(&service->listeners, listeners) {
 		struct service_listener *l = *listeners;
 
-		if (l->io != NULL)
-			io_remove(&l->io);
+		io_remove(&l->io);
 	}
 	service->listening = FALSE;
 	service->listen_pending = FALSE;
-	if (service->to_drop != NULL)
-		timeout_remove(&service->to_drop);
+	timeout_remove(&service->to_drop);
 }
 
 static int service_login_create_notify_fd(struct service *service)
@@ -448,6 +441,7 @@ static int service_login_create_notify_fd(struct service *service)
 
 void services_monitor_start(struct service_list *service_list)
 {
+	ARRAY(struct service *) listener_services;
 	struct service *const *services;
 
 	if (services_log_init(service_list) < 0)
@@ -461,6 +455,7 @@ void services_monitor_start(struct service_list *service_list)
 			       master_client_connected, service_list);
 	}
 
+	t_array_init(&listener_services, array_count(&service_list->services));
 	array_foreach(&service_list->services, services) {
 		struct service *service = *services;
 
@@ -493,9 +488,13 @@ void services_monitor_start(struct service_list *service_list)
 				io_add(service->status_fd[0], IO_READ,
 				       service_status_input, service);
 		}
-		service_monitor_start_extra_avail(service);
 		service_monitor_listen_start(service);
+		array_append(&listener_services, &service, 1);
 	}
+
+	/* create processes only after adding all listeners */
+	array_foreach(&listener_services, services)
+		service_monitor_start_extra_avail(*services);
 
 	if (service_list->log->status_fd[0] != -1) {
 		if (service_process_create(service_list->log) != NULL)
@@ -526,8 +525,7 @@ void service_monitor_stop(struct service *service)
 {
 	int i;
 
-	if (service->io_status != NULL)
-		io_remove(&service->io_status);
+	io_remove(&service->io_status);
 
 	if (service->status_fd[0] != -1 &&
 	    service->type != SERVICE_TYPE_ANVIL) {
@@ -547,14 +545,11 @@ void service_monitor_stop(struct service *service)
 		}
 		service->login_notify_fd = -1;
 	}
-	if (service->to_login_notify != NULL)
-		timeout_remove(&service->to_login_notify);
+	timeout_remove(&service->to_login_notify);
 	service_monitor_listen_stop(service);
 
-	if (service->to_throttle != NULL)
-		timeout_remove(&service->to_throttle);
-	if (service->to_prefork != NULL)
-		timeout_remove(&service->to_prefork);
+	timeout_remove(&service->to_throttle);
+	timeout_remove(&service->to_prefork);
 }
 
 void service_monitor_stop_close(struct service *service)
@@ -566,8 +561,7 @@ void service_monitor_stop_close(struct service *service)
 	array_foreach(&service->listeners, listeners) {
 		struct service_listener *l = *listeners;
 
-		if (l->fd != -1)
-			i_close_fd(&l->fd);
+		i_close_fd(&l->fd);
 	}
 }
 
@@ -643,7 +637,7 @@ static void services_monitor_wait_and_kill(struct service_list *service_list)
 	if (service_list_processes_close_listeners(service_list)) {
 		/* SIGQUITs were sent. wait a little bit to make sure they're
 		   also processed before quitting. */
-		usleep(100000);
+		usleep(1000000);
 	}
 }
 
@@ -657,10 +651,8 @@ void services_monitor_stop(struct service_list *service_list, bool wait)
 	if (wait)
 		services_monitor_wait_and_kill(service_list);
 
-	if (service_list->io_master != NULL)
-		io_remove(&service_list->io_master);
-	if (service_list->master_fd != -1)
-		i_close_fd(&service_list->master_fd);
+	io_remove(&service_list->io_master);
+	i_close_fd(&service_list->master_fd);
 
 	array_foreach(&service_list->services, services)
 		service_monitor_stop(*services);

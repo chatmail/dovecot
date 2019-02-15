@@ -37,7 +37,6 @@ nodist_man1_MANS = \
 	doveadm-kick.1 \
 	doveadm-log.1 \
 	doveadm-mailbox.1 \
-	doveadm-mount.1 \
 	doveadm-mailbox-cryptokey.1 \
 	doveadm-move.1 \
 	doveadm-penalty.1 \
@@ -45,7 +44,9 @@ nodist_man1_MANS = \
 	doveadm-purge.1 \
 	doveadm-pw.1 \
 	doveadm-quota.1 \
+	doveadm-rebuild.1 \
 	doveadm-replicator.1 \
+	doveadm-save.1 \
 	doveadm-search.1 \
 	doveadm-stats.1 \
 	doveadm-sync.1 \
@@ -87,7 +88,6 @@ EXTRA_DIST = \
 	doveadm-kick.1.in \
 	doveadm-log.1.in \
 	doveadm-mailbox.1.in \
-	doveadm-mount.1.in \
 	doveadm-mailbox-cryptokey.1.in \
 	doveadm-move.1.in \
 	doveadm-penalty.1.in \
@@ -95,7 +95,9 @@ EXTRA_DIST = \
 	doveadm-purge.1.in \
 	doveadm-pw.1.in \
 	doveadm-quota.1.in \
+	doveadm-rebuild.1.in \
 	doveadm-replicator.1.in \
+	doveadm-save.1.in \
 	doveadm-search.1.in \
 	doveadm-stats.1.in \
 	doveadm-sync.1.in \

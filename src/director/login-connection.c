@@ -12,6 +12,7 @@
 #include "director.h"
 #include "director-request.h"
 #include "mail-host.h"
+#include "auth-client-interface.h"
 #include "auth-connection.h"
 #include "login-connection.h"
 
@@ -33,8 +34,8 @@ struct login_connection {
 	struct auth_connection *auth;
 	struct director *dir;
 
-	unsigned int handshaked:1;
-	unsigned int destroyed:1;
+	bool handshaked:1;
+	bool destroyed:1;
 };
 
 struct login_host_request {
@@ -142,9 +143,9 @@ login_host_callback(const struct mail_host *host, const char *hostname,
 	unsigned int secs;
 
 	if (host == NULL) {
-		if (strncmp(request->line, "OK\t", 3) == 0)
+		if (str_begins(request->line, "OK\t"))
 			line_params = request->line + 3;
-		else if (strncmp(request->line, "PASS\t", 5) == 0)
+		else if (str_begins(request->line, "PASS\t"))
 			line_params = request->line + 5;
 		else
 			i_panic("BUG: Unexpected line: %s", request->line);
@@ -152,7 +153,7 @@ login_host_callback(const struct mail_host *host, const char *hostname,
 		i_error("director: User %s host lookup failed: %s",
 			request->username, errormsg);
 		line = t_strconcat("FAIL\t", t_strcut(line_params, '\t'),
-				   "\ttemp", NULL);
+				   "\tcode="AUTH_CLIENT_FAIL_CODE_TEMPFAIL, NULL);
 	} else if (request->director_proxy_maybe &&
 		   login_host_request_is_self(request, &host->ip)) {
 		line = request->line;
@@ -195,10 +196,10 @@ static void auth_input_line(const char *line, void *context)
 		return;
 	}
 	if (conn->type != LOGIN_CONNECTION_TYPE_USERDB &&
-	    strncmp(line, "OK\t", 3) == 0)
+	    str_begins(line, "OK\t"))
 		line_params = line + 3;
 	else if (conn->type == LOGIN_CONNECTION_TYPE_USERDB &&
-		 strncmp(line, "PASS\t", 5) == 0)
+		 str_begins(line, "PASS\t"))
 		line_params = line + 5;
 	else {
 		login_connection_send_line(conn, line);
@@ -215,28 +216,28 @@ static void auth_input_line(const char *line, void *context)
 
 	i_zero(&temp_request);
 	for (; *args != NULL; args++) {
-		if (strncmp(*args, "proxy", 5) == 0 &&
+		if (str_begins(*args, "proxy") &&
 		    ((*args)[5] == '=' || (*args)[5] == '\0'))
 			proxy = TRUE;
-		else if (strncmp(*args, "host=", 5) == 0)
+		else if (str_begins(*args, "host="))
 			host = TRUE;
-		else if (strncmp(*args, "lip=", 4) == 0) {
+		else if (str_begins(*args, "lip=")) {
 			if (net_addr2ip((*args) + 4, &temp_request.local_ip) < 0)
 				i_error("auth sent invalid lip field: %s", (*args) + 6);
-		} else if (strncmp(*args, "lport=", 6) == 0) {
+		} else if (str_begins(*args, "lport=")) {
 			if (net_str2port((*args) + 6, &temp_request.local_port) < 0)
 				i_error("auth sent invalid lport field: %s", (*args) + 6);
-		} else if (strncmp(*args, "port=", 5) == 0) {
+		} else if (str_begins(*args, "port=")) {
 			if (net_str2port((*args) + 5, &temp_request.dest_port) < 0)
 				i_error("auth sent invalid port field: %s", (*args) + 6);
-		} else if (strncmp(*args, "destuser=", 9) == 0)
+		} else if (str_begins(*args, "destuser="))
 			username = *args + 9;
-		else if (strncmp(*args, "director_tag=", 13) == 0)
+		else if (str_begins(*args, "director_tag="))
 			tag = *args + 13;
-		else if (strncmp(*args, "director_proxy_maybe", 20) == 0 &&
+		else if (str_begins(*args, "director_proxy_maybe") &&
 			 ((*args)[20] == '=' || (*args)[20] == '\0'))
 			temp_request.director_proxy_maybe = TRUE;
-		else if (strncmp(*args, "user=", 5) == 0) {
+		else if (str_begins(*args, "user=")) {
 			if (username == NULL)
 				username = *args + 5;
 		}
@@ -275,7 +276,7 @@ login_connection_init(struct director *dir, int fd,
 	conn->refcount = 1;
 	conn->fd = fd;
 	conn->dir = dir;
-	conn->output = o_stream_create_fd(conn->fd, (size_t)-1, FALSE);
+	conn->output = o_stream_create_fd(conn->fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	if (type != LOGIN_CONNECTION_TYPE_AUTHREPLY) {
 		i_assert(auth != NULL);
@@ -285,7 +286,7 @@ login_connection_init(struct director *dir, int fd,
 		auth_connection_set_callback(conn->auth, auth_input_line, conn);
 	} else {
 		i_assert(auth == NULL);
-		conn->input = i_stream_create_fd(conn->fd, IO_BLOCK_SIZE, FALSE);
+		conn->input = i_stream_create_fd(conn->fd, IO_BLOCK_SIZE);
 		conn->io = io_add(conn->fd, IO_READ,
 				  login_connection_authreply_input, conn);
 		o_stream_nsend_str(conn->output, t_strdup_printf(
@@ -311,8 +312,7 @@ void login_connection_deinit(struct login_connection **_conn)
 
 	DLLIST_REMOVE(&login_connections, conn);
 	io_remove(&conn->io);
-	if (conn->input != NULL)
-		i_stream_destroy(&conn->input);
+	i_stream_destroy(&conn->input);
 	o_stream_destroy(&conn->output);
 	if (close(conn->fd) < 0)
 		i_error("close(login connection) failed: %m");

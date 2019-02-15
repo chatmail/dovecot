@@ -51,10 +51,12 @@ struct mbox_save_context {
 	struct mbox_md5_context *mbox_md5_ctx;
 	char *x_delivery_id_header;
 
-	unsigned int synced:1;
-	unsigned int failed:1;
-	unsigned int finished:1;
+	bool synced:1;
+	bool failed:1;
+	bool finished:1;
 };
+
+#define MBOX_SAVECTX(s)		container_of(s, struct mbox_save_context, ctx)
 
 static void write_error(struct mbox_save_context *ctx)
 {
@@ -194,8 +196,8 @@ static int mbox_write_content_length(struct mbox_save_context *ctx)
 
 static void mbox_save_init_sync(struct mailbox_transaction_context *t)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)t->box;
-	struct mbox_save_context *ctx = (struct mbox_save_context *)t->save_ctx;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(t->box);
+	struct mbox_save_context *ctx = MBOX_SAVECTX(t->save_ctx);
 	const struct mail_index_header *hdr;
 	struct mail_index_view *view;
 
@@ -261,7 +263,7 @@ mbox_save_append_keyword_headers(struct mbox_save_context *ctx,
 	}
 
 	memset(space, ' ', sizeof(space));
-	str_append_n(ctx->headers, space, sizeof(space));
+	str_append_data(ctx->headers, space, sizeof(space));
 	ctx->space_end_idx = str_len(ctx->headers);
 	str_append_c(ctx->headers, '\n');
 }
@@ -326,7 +328,7 @@ save_header_callback(struct header_filter_istream *input ATTR_UNUSED,
 		     bool *matched, struct mbox_save_context *ctx)
 {
 	if (hdr != NULL) {
-		if (strncmp(hdr->name, "From ", 5) == 0) {
+		if (str_begins(hdr->name, "From ")) {
 			/* we can't allow From_-lines in headers. there's no
 			   legitimate reason for allowing them in any case,
 			   so just drop them. */
@@ -346,13 +348,13 @@ static void mbox_save_x_delivery_id(struct mbox_save_context *ctx)
 	string_t *str;
 	void *randbuf;
 
-	buf = buffer_create_dynamic(pool_datastack_create(), 256);
+	buf = t_buffer_create(256);
 	buffer_append(buf, &ioloop_time, sizeof(ioloop_time));
 	buffer_append(buf, &ioloop_timeval.tv_usec,
 		      sizeof(ioloop_timeval.tv_usec));
 
 	randbuf = buffer_append_space_unsafe(buf, MBOX_DELIVERY_ID_RAND_BYTES);
-	random_fill_weak(randbuf, MBOX_DELIVERY_ID_RAND_BYTES);
+	random_fill(randbuf, MBOX_DELIVERY_ID_RAND_BYTES);
 
 	md5_get_digest(buf->data, buf->used, md5_result);
 
@@ -414,7 +416,7 @@ mbox_save_get_input_stream(struct mbox_save_context *ctx, struct istream *input)
 struct mail_save_context *
 mbox_save_alloc(struct mailbox_transaction_context *t)
 {
-	struct mbox_mailbox *mbox = (struct mbox_mailbox *)t->box;
+	struct mbox_mailbox *mbox = MBOX_MAILBOX(t->box);
 	struct mbox_save_context *ctx;
 
 	i_assert((t->flags & MAILBOX_TRANSACTION_FLAG_EXTERNAL) != 0);
@@ -434,10 +436,9 @@ mbox_save_alloc(struct mailbox_transaction_context *t)
 
 int mbox_save_begin(struct mail_save_context *_ctx, struct istream *input)
 {
-	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+	struct mbox_save_context *ctx = MBOX_SAVECTX(_ctx);
 	struct mail_save_data *mdata = &_ctx->data;
-	struct mbox_transaction_context *t =
-		(struct mbox_transaction_context *)_ctx->transaction;
+	struct mbox_transaction_context *t = MBOX_TRANSCTX(_ctx->transaction);
 	enum mail_flags save_flags;
 	uint64_t offset;
 
@@ -562,7 +563,7 @@ static int mbox_save_finish_headers(struct mbox_save_context *ctx)
 
 int mbox_save_continue(struct mail_save_context *_ctx)
 {
-	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+	struct mbox_save_context *ctx = MBOX_SAVECTX(_ctx);
 	const unsigned char *data;
 	size_t i, size;
 	ssize_t ret;
@@ -617,7 +618,7 @@ int mbox_save_continue(struct mail_save_context *_ctx)
 
 	i_assert(ctx->last_char == '\n');
 
-	if (ctx->mbox_md5_ctx) {
+	if (ctx->mbox_md5_ctx != NULL) {
 		unsigned char hdr_md5_sum[16];
 
 		if (ctx->x_delivery_id_header != NULL) {
@@ -651,14 +652,14 @@ int mbox_save_continue(struct mail_save_context *_ctx)
 
 int mbox_save_finish(struct mail_save_context *_ctx)
 {
-	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+	struct mbox_save_context *ctx = MBOX_SAVECTX(_ctx);
 
 	if (!ctx->failed && ctx->eoh_offset == (uoff_t)-1)
 		(void)mbox_save_finish_headers(ctx);
 
 	if (ctx->output != NULL) {
 		/* make sure everything is written */
-		if (o_stream_nfinish(ctx->output) < 0)
+		if (o_stream_flush(ctx->output) < 0)
 			write_error(ctx);
 	}
 
@@ -680,7 +681,8 @@ int mbox_save_finish(struct mail_save_context *_ctx)
 
 	if (ctx->failed && ctx->mail_offset != (uoff_t)-1) {
 		/* saving this mail failed - truncate back to beginning of it */
-		(void)o_stream_nfinish(ctx->output);
+		i_assert(ctx->output != NULL);
+		(void)o_stream_flush(ctx->output);
 		if (ftruncate(ctx->mbox->mbox_fd, (off_t)ctx->mail_offset) < 0)
 			mbox_set_syscall_error(ctx->mbox, "ftruncate()");
 		(void)o_stream_seek(ctx->output, ctx->mail_offset);
@@ -696,7 +698,7 @@ int mbox_save_finish(struct mail_save_context *_ctx)
 
 void mbox_save_cancel(struct mail_save_context *_ctx)
 {
-	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+	struct mbox_save_context *ctx = MBOX_SAVECTX(_ctx);
 
 	ctx->failed = TRUE;
 	(void)mbox_save_finish(_ctx);
@@ -704,8 +706,7 @@ void mbox_save_cancel(struct mail_save_context *_ctx)
 
 static void mbox_transaction_save_deinit(struct mbox_save_context *ctx)
 {
-	if (ctx->output != NULL)
-		o_stream_destroy(&ctx->output);
+	o_stream_destroy(&ctx->output);
 	str_free(&ctx->headers);
 }
 
@@ -727,7 +728,7 @@ static void mbox_save_truncate(struct mbox_save_context *ctx)
 
 int mbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 {
-	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+	struct mbox_save_context *ctx = MBOX_SAVECTX(_ctx);
 	struct mailbox_transaction_context *_t = _ctx->transaction;
 	struct mbox_mailbox *mbox = ctx->mbox;
 	struct stat st;
@@ -775,7 +776,7 @@ int mbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 
 	if (ctx->output != NULL) {
 		/* flush the final LF */
-		if (o_stream_nfinish(ctx->output) < 0)
+		if (o_stream_flush(ctx->output) < 0)
 			write_error(ctx);
 	}
 	if (mbox->mbox_fd != -1 && !mbox->mbox_writeonly &&
@@ -796,7 +797,7 @@ int mbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 void mbox_transaction_save_commit_post(struct mail_save_context *_ctx,
 				       struct mail_index_transaction_commit_result *result ATTR_UNUSED)
 {
-	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+	struct mbox_save_context *ctx = MBOX_SAVECTX(_ctx);
 
 	i_assert(ctx->mbox->mbox_lock_type == F_WRLCK);
 
@@ -811,7 +812,7 @@ void mbox_transaction_save_commit_post(struct mail_save_context *_ctx,
 
 void mbox_transaction_save_rollback(struct mail_save_context *_ctx)
 {
-	struct mbox_save_context *ctx = (struct mbox_save_context *)_ctx;
+	struct mbox_save_context *ctx = MBOX_SAVECTX(_ctx);
 
 	if (!ctx->finished)
 		mbox_save_cancel(&ctx->ctx);

@@ -13,23 +13,22 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#define DEFAULT_SCHEME "CRAM-MD5"
+#define DEFAULT_SCHEME "CRYPT"
 
 static struct module *modules = NULL;
 
 static void cmd_pw(int argc, char *argv[])
 {
 	const char *hash = NULL;
-	const char *user = NULL;
 	const char *scheme = NULL;
 	const char *plaintext = NULL;
 	const char *test_hash = NULL;
 	bool list_schemes = FALSE, reverse_verify = FALSE;
-	unsigned int rounds = 0;
 	int c;
 	struct module_dir_load_settings mod_set;
+	struct password_generate_params gen_params;
+	i_zero(&gen_params);
 
-	random_init();
 	password_schemes_init();
 
 	i_zero(&mod_set);
@@ -50,7 +49,7 @@ static void cmd_pw(int argc, char *argv[])
 			plaintext = optarg;
 			break;
 		case 'r':
-			if (str_to_uint(optarg, &rounds) < 0)
+			if (str_to_uint(optarg, &gen_params.rounds) < 0)
 				i_fatal("Invalid number of rounds: %s", optarg);
 			break;
 		case 's':
@@ -61,7 +60,7 @@ static void cmd_pw(int argc, char *argv[])
 			reverse_verify = TRUE;
 			break;
 		case 'u':
-			user = optarg;
+			gen_params.user = optarg;
 			break;
 		case 'V':
 			reverse_verify = TRUE;
@@ -73,10 +72,12 @@ static void cmd_pw(int argc, char *argv[])
 	}
 
 	if (list_schemes) {
+		ARRAY_TYPE(password_scheme_p) arr;
 		const struct password_scheme *const *schemes;
 		unsigned int i, count;
-
-		schemes = array_get(&password_schemes, &count);
+		t_array_init(&arr, 30);
+		password_schemes_get(&arr);
+		schemes = array_get(&arr, &count);
 		for (i = 0; i < count; i++)
 			printf("%s ", schemes[i]->name);
 		printf("\n");
@@ -87,8 +88,6 @@ static void cmd_pw(int argc, char *argv[])
 		help(&doveadm_cmd_pw);
 
 	scheme = scheme == NULL ? DEFAULT_SCHEME : t_str_ucase(scheme);
-	if (rounds > 0)
-		password_set_encryption_rounds(rounds);
 
 	if (test_hash != NULL && plaintext == NULL)
 		plaintext = t_askpass("Enter password to verify: ");
@@ -106,7 +105,7 @@ static void cmd_pw(int argc, char *argv[])
 		}
 	}
 
-	if (!password_generate_encoded(plaintext, user, scheme, &hash))
+	if (!password_generate_encoded(plaintext, &gen_params, scheme, &hash))
 		i_fatal("Unknown scheme: %s", scheme);
 	if (reverse_verify) {
 		const unsigned char *raw_password;
@@ -124,7 +123,7 @@ static void cmd_pw(int argc, char *argv[])
 				    &error) <= 0)
 			i_fatal("reverse decode check failed: %s", error);
 
-		if (password_verify(plaintext, user, scheme,
+		if (password_verify(plaintext, &gen_params, scheme,
 				    raw_password, size, &error) <= 0) {
 			i_fatal("reverse password verification check failed: %s",
 				error);
@@ -137,7 +136,6 @@ static void cmd_pw(int argc, char *argv[])
 
 	module_dir_unload(&modules);
 	password_schemes_deinit();
-	random_deinit();
 }
 
 struct doveadm_cmd doveadm_cmd_pw = {

@@ -1,4 +1,4 @@
-noinst_LTLIBRARIES = libsql.la
+noinst_LTLIBRARIES = libsql.la libdriver_test.la
 
 SQL_DRIVER_PLUGINS =
 
@@ -55,6 +55,8 @@ libsql_la_SOURCES = \
 	$(dist_sources) \
 	$(driver_sources) \
 	driver-sqlpool.c
+libsql_la_LIBADD = $(SQL_LIBS)
+
 nodist_libsql_la_SOURCES = sql-drivers-register.c
 
 deplibs = \
@@ -80,19 +82,19 @@ libdriver_cassandra_la_LDFLAGS = -module -avoid-version
 libdriver_cassandra_la_LIBADD = $(CASSANDRA_LIBS)
 libdriver_cassandra_la_CPPFLAGS = $(AM_CPPFLAGS) $(CASSANDRA_CFLAGS)
 libdriver_cassandra_la_SOURCES = driver-cassandra.c
-
-sql_libs =
 else
-sql_libs = \
-	$(MYSQL_LIBS) \
-	$(PGSQL_LIBS) \
-	$(SQLITE_LIBS) \
-	$(CASSANDRA_LIBS)
 endif
+
+libdriver_test_la_LDFLAGS = -avoid-version
+libdriver_test_la_CPPFLAGS = $(AM_CPPFLAGS) \
+	-I$(top_srcdir)/src/lib-test
+libdriver_test_la_SOURCES = driver-test.c
+
+noinst_HEADERS = driver-test.h
 
 pkglib_LTLIBRARIES = libdovecot-sql.la
 libdovecot_sql_la_SOURCES = 
-libdovecot_sql_la_LIBADD = libsql.la $(deplibs) $(sql_libs)
+libdovecot_sql_la_LIBADD = libsql.la $(deplibs)
 libdovecot_sql_la_DEPENDENCIES = libsql.la
 libdovecot_sql_la_LDFLAGS = -export-dynamic
 

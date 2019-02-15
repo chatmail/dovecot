@@ -4,6 +4,7 @@
 #include "array.h"
 #include "mail-cache.h"
 #include "mail-index-modseq.h"
+#include "mailbox-recent-flags.h"
 #include "index-storage.h"
 
 static void
@@ -233,7 +234,7 @@ static void get_metadata_precache_fields(struct mailbox *box,
 	for (i = 0; i < count; i++) {
 		const char *name = fields[i].name;
 
-		if (strncmp(name, "hdr.", 4) == 0 ||
+		if (str_begins(name, "hdr.") ||
 		    strcmp(name, "date.sent") == 0 ||
 		    strcmp(name, "imap.envelope") == 0)
 			cache |= MAIL_FETCH_STREAM_HEADER;
@@ -259,8 +260,9 @@ static void get_metadata_precache_fields(struct mailbox *box,
 			cache |= MAIL_FETCH_GUID;
 		else if (strcmp(name, "flags") == 0) {
 			/* just ignore for now at least.. */
-		} else if (box->storage->set->mail_debug)
-			i_debug("Ignoring unknown cache field: %s", name);
+		} else
+			e_debug(box->event,
+				"Ignoring unknown cache field: %s", name);
 	}
 	metadata_r->precache_fields = cache;
 }
@@ -281,7 +283,7 @@ index_mailbox_get_first_save_date(struct mailbox *box,
 		return 0;
 	}
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 	mail = mail_alloc(t, 0, NULL);
 	for (seq = 1; seq <= hdr->messages_count; seq++) {
 		mail_set_seq(mail, seq);

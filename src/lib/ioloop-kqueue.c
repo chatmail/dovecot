@@ -9,7 +9,6 @@
 #ifdef IOLOOP_KQUEUE
 
 #include "array.h"
-#include "fd-close-on-exec.h"
 #include "ioloop-private.h"
 
 #include <unistd.h>
@@ -100,7 +99,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 
 	/* since we're not freeing memory in any case, just increase
 	   deleted counter so next handle_add() can just decrease it
-	   insteading of appending to the events array */
+	   instead of appending to the events array */
 	ctx->deleted_count++;
 
 	i_assert(io->refcount > 0);
@@ -120,7 +119,7 @@ void io_loop_handler_run_internal(struct ioloop *ioloop)
 	int ret, i, msecs;
 
 	/* get the time left for next timeout task */
-	msecs = io_loop_get_wait_time(ioloop, &tv);
+	msecs = io_loop_run_get_wait_time(ioloop, &tv);
 	ts.tv_sec = tv.tv_sec;
 	ts.tv_nsec = tv.tv_usec * 1000;
 
@@ -135,8 +134,7 @@ void io_loop_handler_run_internal(struct ioloop *ioloop)
 				(unsigned int)ts.tv_nsec);
 		}
 	} else {
-		if (msecs < 0)
-			i_panic("BUG: No IOs or timeouts set. Not waiting for infinity.");
+		i_assert(msecs >= 0);
 		usleep(msecs * 1000);
 		ret = 0;
 	}

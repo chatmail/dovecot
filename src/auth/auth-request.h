@@ -6,8 +6,8 @@
 #include "mech.h"
 #include "userdb.h"
 #include "passdb.h"
-#include "password-scheme.h"
 #include "auth-request-var-expand.h"
+#include "password-scheme.h"
 
 #define AUTH_REQUEST_USER_KEY_IGNORE " "
 
@@ -23,10 +23,18 @@ enum auth_request_state {
 	AUTH_REQUEST_STATE_MAX
 };
 
+enum auth_request_secured {
+	AUTH_REQUEST_SECURED_NONE,
+	AUTH_REQUEST_SECURED,
+	AUTH_REQUEST_SECURED_TLS,
+};
+
 struct auth_request {
 	int refcount;
 
 	pool_t pool;
+
+	struct event *event;
         enum auth_request_state state;
         /* user contains the user who is being authenticated.
            When master user is logging in as someone else, it gets more
@@ -99,60 +107,61 @@ struct auth_request {
 
 	/* this is a lookup on auth socket (not login socket).
 	   skip any proxying stuff if enabled. */
-	unsigned int auth_only:1;
+	bool auth_only:1;
 	/* we're doing a userdb lookup now (we may have done passdb lookup
 	   earlier) */
-	unsigned int userdb_lookup:1;
+	bool userdb_lookup:1;
 	/* DIGEST-MD5 kludge */
-	unsigned int domain_is_realm:1;
+	bool domain_is_realm:1;
 	/* auth_debug is enabled for this request */
-	unsigned int debug:1;
+	bool debug:1;
+
+	enum auth_request_secured secured;
 
 	/* flags received from auth client: */
-	unsigned int secured:1;
-	unsigned int final_resp_ok:1;
-	unsigned int no_penalty:1;
-	unsigned int valid_client_cert:1;
-	unsigned int cert_username:1;
-	unsigned int request_auth_token:1;
+	bool final_resp_ok:1;
+	bool no_penalty:1;
+	bool valid_client_cert:1;
+	bool cert_username:1;
+	bool request_auth_token:1;
 
 	/* success/failure states: */
-	unsigned int successful:1;
-	unsigned int failed:1; /* overrides any other success */
-	unsigned int internal_failure:1;
-	unsigned int passdbs_seen_user_unknown:1;
-	unsigned int passdbs_seen_internal_failure:1;
-	unsigned int userdbs_seen_internal_failure:1;
+	bool successful:1;
+	bool failed:1; /* overrides any other success */
+	bool internal_failure:1;
+	bool passdbs_seen_user_unknown:1;
+	bool passdbs_seen_internal_failure:1;
+	bool userdbs_seen_internal_failure:1;
 
 	/* current state: */
-	unsigned int accept_cont_input:1;
-	unsigned int skip_password_check:1;
-	unsigned int prefer_plain_credentials:1;
-	unsigned int in_delayed_failure_queue:1;
-	unsigned int removed_from_handler:1;
-	unsigned int snapshot_have_userdb_prefetch_set:1;
+	bool accept_cont_input:1;
+	bool skip_password_check:1;
+	bool prefer_plain_credentials:1;
+	bool in_delayed_failure_queue:1;
+	bool removed_from_handler:1;
+	bool snapshot_have_userdb_prefetch_set:1;
 	/* username was changed by this passdb/userdb lookup. Used by
 	   auth-workers to determine whether to send back a changed username. */
-	unsigned int user_changed_by_lookup:1;
+	bool user_changed_by_lookup:1;
 	/* each passdb lookup can update the current success-status using the
 	   result_* rules. the authentication succeeds only if this is TRUE
 	   at the end. mechanisms that don't require passdb, but do a passdb
 	   lookup anyway (e.g. GSSAPI) need to set this to TRUE by default. */
-	unsigned int passdb_success:1;
+	bool passdb_success:1;
 	/* userdb equivalent of passdb_success */
-	unsigned int userdb_success:1;
+	bool userdb_success:1;
 	/* the last userdb lookup failed either due to "tempfail" extra field
 	   or because one of the returned uid/gid fields couldn't be translated
 	   to a number */
-	unsigned int userdb_lookup_tempfailed:1;
+	bool userdb_lookup_tempfailed:1;
 	/* userdb_* fields have been set by the passdb lookup, userdb prefetch
 	   will work. */
-	unsigned int userdb_prefetch_set:1;
+	bool userdb_prefetch_set:1;
 	/* userdb lookup's results are from cache */
-	unsigned int userdb_result_from_cache:1;
-	unsigned int stats_sent:1;
-	unsigned int policy_refusal:1;
-	unsigned int policy_processed:1;
+	bool userdb_result_from_cache:1;
+	bool stats_sent:1;
+	bool policy_refusal:1;
+	bool policy_processed:1;
 
 	/* ... mechanism specific data ... */
 };
@@ -166,7 +175,7 @@ extern const char auth_default_subsystems[2];
 #define AUTH_SUBSYS_MECH &auth_default_subsystems[1]
 
 struct auth_request *
-auth_request_new(const struct mech_module *mech);
+auth_request_new(const struct mech_module *mech, struct event *parent_event);
 struct auth_request *auth_request_new_dummy(void);
 void auth_request_init(struct auth_request *request);
 struct auth *auth_request_get_auth(struct auth_request *request);
@@ -239,6 +248,11 @@ int auth_request_password_verify(struct auth_request *request,
 				 const char *plain_password,
 				 const char *crypted_password,
 				 const char *scheme, const char *subsystem);
+int auth_request_password_verify_log(struct auth_request *request,
+				 const char *plain_password,
+				 const char *crypted_password,
+				 const char *scheme, const char *subsystem,
+				 bool log_password_mismatch);
 
 void auth_request_log_debug(struct auth_request *auth_request,
 			    const char *subsystem,
@@ -255,6 +269,9 @@ void auth_request_log_error(struct auth_request *auth_request,
 void auth_request_log_unknown_user(struct auth_request *auth_request,
 				   const char *subsystem);
 
+void auth_request_log_login_failure(struct auth_request *request,
+				    const char *subsystem,
+				    const char *message);
 void
 auth_request_verify_plain_callback_finish(enum passdb_result result,
                                           struct auth_request *request);

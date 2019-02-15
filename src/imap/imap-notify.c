@@ -210,7 +210,7 @@ bool imap_notify_match_mailbox(struct imap_notify_namespace *notify_ns,
 				   implementing "personal" */
 				return TRUE;
 			}
-			if (strncmp(*namep, vname, name_len) == 0 &&
+			if (str_begins(vname, *namep) &&
 			    (vname[name_len] == '\0' ||
 			     vname[name_len] == ns_sep))
 				return TRUE;
@@ -397,6 +397,7 @@ static void imap_notify_callback(struct mailbox *box, struct client *client)
 	cmd = client_command_alloc(client);
 	cmd->tag = "*";
 	cmd->name = "NOTIFY-CALLBACK";
+	client_command_init_finished(cmd);
 
 	if (!client->notify_ctx->selected_immediate_expunges)
 		sync_flags |= MAILBOX_SYNC_FLAG_NO_EXPUNGES;
@@ -459,8 +460,7 @@ void imap_client_notify_command_allocated(struct client *client)
 		mailbox_notify_changes_stop(client->mailbox);
 		ctx->watching_mailbox = FALSE;
 	}
-	if (ctx->to_watch != NULL)
-		timeout_remove(&ctx->to_watch);
+	timeout_remove(&ctx->to_watch);
 }
 
 int imap_notify_begin(struct imap_notify_context *ctx)
@@ -501,8 +501,7 @@ void imap_notify_deinit(struct imap_notify_context **_ctx)
 		if (notify_ns->notify != NULL)
 			mailbox_list_notify_deinit(&notify_ns->notify);
 	}
-	if (ctx->to_watch != NULL)
-		timeout_remove(&ctx->to_watch);
+	timeout_remove(&ctx->to_watch);
 	if (ctx->fetch_ctx != NULL)
 		imap_fetch_free(&ctx->fetch_ctx);
 	pool_unref(&ctx->pool);

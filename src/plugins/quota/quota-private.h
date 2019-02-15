@@ -23,13 +23,14 @@ struct quota_settings {
 
 	ARRAY(struct quota_root_settings *) root_sets;
 	enum quota_alloc_result (*test_alloc)(
-		struct quota_transaction_context *ctx, uoff_t size);
+		struct quota_transaction_context *ctx, uoff_t size,
+		const char **error_r);
 
 	uoff_t max_mail_size;
 	const char *quota_exceeded_msg;
-	unsigned int debug:1;
-	unsigned int initialized:1;
-	unsigned int vsizes:1;
+	bool debug:1;
+	bool initialized:1;
+	bool vsizes:1;
 };
 
 struct quota_rule {
@@ -40,13 +41,13 @@ struct quota_rule {
 	int bytes_percent, count_percent;
 
 	/* Don't include this mailbox in quota */
-	unsigned int ignore:1;
+	bool ignore:1;
 };
 
 struct quota_warning_rule {
 	struct quota_rule rule;
 	const char *command;
-	unsigned int reverse:1;
+	bool reverse:1;
 };
 
 struct quota_backend_vfuncs {
@@ -58,18 +59,24 @@ struct quota_backend_vfuncs {
 	bool (*parse_rule)(struct quota_root_settings *root_set,
 			   struct quota_rule *rule,
 			   const char *str, const char **error_r);
-	int (*init_limits)(struct quota_root *root);
+	int (*init_limits)(struct quota_root *root, const char **error_r);
 
 	/* called once for each namespace */
 	void (*namespace_added)(struct quota *quota,
 				struct mail_namespace *ns);
 
 	const char *const *(*get_resources)(struct quota_root *root);
-	int (*get_resource)(struct quota_root *root,
-			    const char *name, uint64_t *value_r);
+	/* Backends return success as QUOTA_GET_RESULT_LIMITED, and returning
+	   QUOTA_GET_RESULT_UNLIMITED is prohibited by quota_get_resource(),
+	   which is the only caller of this vfunc. */
+	enum quota_get_result (*get_resource)(struct quota_root *root,
+					      const char *name,
+					      uint64_t *value_r,
+					      const char **error_r);
 
 	int (*update)(struct quota_root *root, 
-		      struct quota_transaction_context *ctx);
+		      struct quota_transaction_context *ctx,
+		      const char **error_r);
 	bool (*match_box)(struct quota_root *root, struct mailbox *box);
 	void (*flush)(struct quota_root *root);
 };
@@ -101,9 +108,9 @@ struct quota_root_settings {
 	struct quota_rule grace_rule;
 
 	/* Limits in default_rule override backend's quota limits */
-	unsigned int force_default_rule:1;
+	bool force_default_rule:1;
 	/* TRUE if any of the warning_rules have reverse==TRUE */
-	unsigned int have_reverse_warnings:1;
+	bool have_reverse_warnings:1;
 };
 
 struct quota_root {
@@ -132,20 +139,20 @@ struct quota_root {
 	ARRAY(void) quota_module_contexts;
 
 	/* don't enforce quota when saving */
-	unsigned int no_enforcing:1;
+	bool no_enforcing:1;
 	/* quota is automatically updated. update() should be called but the
 	   bytes won't be changed. count is still changed, because it's cheap
 	   to do and it's internally used to figure out whether there have
 	   been some changes and that quota_warnings should be checked. */
-	unsigned int auto_updating:1;
+	bool auto_updating:1;
 	/* If user has unlimited quota, disable quota tracking */
-	unsigned int disable_unlimited_tracking:1;
+	bool disable_unlimited_tracking:1;
 	/* Set while quota is being recalculated to avoid recursion. */
-	unsigned int recounting:1;
+	bool recounting:1;
 	/* Quota root is hidden (to e.g. IMAP GETQUOTAROOT) */
-	unsigned int hidden:1;
+	bool hidden:1;
 	/* Did we already check quota_over_flag correctness? */
-	unsigned int quota_over_flag_checked:1;
+	bool quota_over_flag_checked:1;
 };
 
 struct quota_transaction_context {
@@ -171,13 +178,13 @@ struct quota_transaction_context {
 	struct mail *tmp_mail;
 	enum quota_recalculate recalculate;
 
-	unsigned int limits_set:1;
-	unsigned int failed:1;
-	unsigned int sync_transaction:1;
+	bool limits_set:1;
+	bool failed:1;
+	bool sync_transaction:1;
 	/* TRUE if all roots have auto_updating=TRUE */
-	unsigned int auto_updating:1;
+	bool auto_updating:1;
 	/* Quota doesn't need to be updated within this transaction. */
-	unsigned int no_quota_updates:1;
+	bool no_quota_updates:1;
 };
 
 /* Register storage to all user's quota roots. */
@@ -198,7 +205,8 @@ void quota_root_recalculate_relative_rules(struct quota_root_settings *root_set,
 					   int64_t count_limit);
 /* Returns 1 if values were returned successfully, 0 if we're recursing into
    the same function, -1 if error. */
-int quota_count(struct quota_root *root, uint64_t *bytes_r, uint64_t *count_r);
+int quota_count(struct quota_root *root, uint64_t *bytes_r, uint64_t *count_r,
+		enum quota_get_result *error_result_r, const char **error_r);
 
 int quota_root_parse_grace(struct quota_root_settings *root_set,
 			   const char *value, const char **error_r);
@@ -207,9 +215,13 @@ bool quota_warning_match(const struct quota_warning_rule *w,
 			 uint64_t count_before, uint64_t count_current,
 			 const char **reason_r);
 bool quota_transaction_is_over(struct quota_transaction_context *ctx, uoff_t size);
-int quota_transaction_set_limits(struct quota_transaction_context *ctx);
+int quota_transaction_set_limits(struct quota_transaction_context *ctx,
+				 enum quota_get_result *error_result_r,
+				 const char **error_r);
 
 void quota_backend_register(const struct quota_backend *backend);
 void quota_backend_unregister(const struct quota_backend *backend);
+
+#define QUOTA_UNKNOWN_RESOURCE_ERROR_STRING "Unknown quota resource"
 
 #endif

@@ -60,9 +60,10 @@ struct server_connection {
 
 	enum server_reply_state state;
 
-	unsigned int authenticate_sent:1;
-	unsigned int authenticated:1;
-	unsigned int streaming:1;
+	bool version_received:1;
+	bool authenticate_sent:1;
+	bool authenticated:1;
+	bool streaming:1;
 };
 
 static struct server_connection *printing_conn = NULL;
@@ -116,31 +117,45 @@ static void print_connection_released(void)
 
 static int server_connection_send_cmd_input_more(struct server_connection *conn)
 {
-	off_t ret;
+	enum ostream_send_istream_result res;
+	int ret = -1;
 
 	/* ostream-dot writes only up to max buffer size, so keep it non-zero */
 	o_stream_set_max_buffer_size(conn->cmd_output, IO_BLOCK_SIZE);
-	ret = o_stream_send_istream(conn->cmd_output, conn->cmd_input);
+	res = o_stream_send_istream(conn->cmd_output, conn->cmd_input);
 	o_stream_set_max_buffer_size(conn->cmd_output, (size_t)-1);
 
-	if (ret >= 0 && i_stream_have_bytes_left(conn->cmd_input)) {
-		o_stream_set_flush_pending(conn->cmd_output, TRUE);
+	switch (res) {
+	case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
+		break;
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
+		return 1;
+	case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
 		return 0;
-	}
-	if (conn->cmd_input->stream_errno != 0) {
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
 		i_error("read(%s) failed: %s",
 			i_stream_get_name(conn->cmd_input),
 			i_stream_get_error(conn->cmd_input));
-	} else if (conn->cmd_output->stream_errno != 0 ||
-		   o_stream_flush(conn->cmd_output) < 0) {
+		break;
+	case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
 		i_error("write(%s) failed: %s",
 			o_stream_get_name(conn->cmd_output),
 			o_stream_get_error(conn->cmd_output));
+		break;
+	}
+	if (res == OSTREAM_SEND_ISTREAM_RESULT_FINISHED) {
+		if ((ret = o_stream_finish(conn->cmd_output)) == 0)
+			return 0;
+		else if (ret < 0) {
+			i_error("write(%s) failed: %s",
+				o_stream_get_name(conn->cmd_output),
+				o_stream_get_error(conn->cmd_output));
+		}
 	}
 
 	i_stream_destroy(&conn->cmd_input);
 	o_stream_destroy(&conn->cmd_output);
-	return ret < 0 ? -1 : 1;
+	return ret;
 }
 
 static void server_connection_send_cmd_input(struct server_connection *conn)
@@ -156,11 +171,9 @@ static int server_connection_output(struct server_connection *conn)
 {
 	int ret;
 
-	o_stream_cork(conn->output);
 	ret = o_stream_flush(conn->output);
 	if (ret > 0 && conn->cmd_input != NULL && conn->delayed_cmd == NULL)
 		ret = server_connection_send_cmd_input_more(conn);
-	o_stream_uncork(conn->output);
 	if (ret < 0)
 		server_connection_destroy(&conn);
 	return ret;
@@ -280,6 +293,7 @@ server_connection_authenticate(struct server_connection *conn)
 	str_append_c(cmd, '\n');
 
 	o_stream_nsend(conn->output, cmd->data, cmd->used);
+	conn->authenticate_sent = TRUE;
 	return 0;
 }
 
@@ -330,61 +344,59 @@ static void server_connection_input(struct server_connection *conn)
 {
 	const char *line;
 
-	if (conn->to_input != NULL)
-		timeout_remove(&conn->to_input);
-
-	if (!conn->authenticated) {
-		while((line = i_stream_read_next_line(conn->input)) != NULL) {
-			if (strncmp(line, "VERSION\t", 8) == 0) {
-				if (!version_string_verify_full(line, "doveadm-client",
-								DOVEADM_SERVER_PROTOCOL_VERSION_MAJOR,
-								&conn->minor)) {
-					i_error("doveadm server not compatible with this client"
-						"(mixed old and new binaries?)");
-					server_connection_destroy(&conn);
-					return;
-				}
-				continue;
-			}
-			if (strcmp(line, "+") == 0) {
-				if (conn->minor > 0)
-					server_connection_start_multiplex(conn);
-				server_connection_authenticated(conn);
-				break;
-			} else if (strcmp(line, "-") == 0) {
-				if (!conn->authenticate_sent &&
-				    server_connection_authenticate(conn) < 0) {
-					server_connection_destroy(&conn);
-					return;
-				} else if (conn->authenticate_sent) {
-					i_error("doveadm authentication failed (%s)",
-						line+1);
-					server_connection_destroy(&conn);
-					return;
-				}
-			} else {
-				i_error("doveadm server sent invalid handshake: %s",
-					line);
-				server_connection_destroy(&conn);
-				return;
-			}
-			conn->authenticate_sent = TRUE;
-		}
-
-		if (line == NULL) {
-			if (conn->input->eof || conn->input->stream_errno != 0) {
-				server_log_disconnect_error(conn);
-				server_connection_destroy(&conn);
-			}
-		}
-		return;
-	}
+	timeout_remove(&conn->to_input);
 
 	if (i_stream_read(conn->input) < 0) {
 		/* disconnected */
 		server_log_disconnect_error(conn);
 		server_connection_destroy(&conn);
 		return;
+	}
+
+	while (!conn->authenticated) {
+		if ((line = i_stream_next_line(conn->input)) == NULL) {
+			if (conn->input->eof) {
+				/* we'll also get here if the line is too long */
+				server_log_disconnect_error(conn);
+				server_connection_destroy(&conn);
+			}
+			return;
+		}
+		/* Allow VERSION before or after the "+" or "-" line,
+		   because v2.2.33 sent the version after and newer
+		   versions send before. */
+		if (!conn->version_received &&
+		    str_begins(line, "VERSION\t")) {
+			if (!version_string_verify_full(line, "doveadm-client",
+							DOVEADM_SERVER_PROTOCOL_VERSION_MAJOR,
+							&conn->minor)) {
+				i_error("doveadm server not compatible with this client"
+					"(mixed old and new binaries?)");
+				server_connection_destroy(&conn);
+				return;
+			}
+			conn->version_received = TRUE;
+		} else if (strcmp(line, "+") == 0) {
+			if (conn->minor > 0)
+				server_connection_start_multiplex(conn);
+			server_connection_authenticated(conn);
+		} else if (strcmp(line, "-") == 0) {
+			if (conn->authenticate_sent) {
+				i_error("doveadm authentication failed (%s)",
+					line+1);
+				server_connection_destroy(&conn);
+				return;
+			}
+			if (server_connection_authenticate(conn) < 0) {
+				server_connection_destroy(&conn);
+				return;
+			}
+		} else {
+			i_error("doveadm server sent invalid handshake: %s",
+				line);
+			server_connection_destroy(&conn);
+			return;
+		}
 	}
 
 	while (server_connection_input_one(conn)) ;
@@ -479,14 +491,10 @@ static int server_connection_read_settings(struct server_connection *conn)
 static int server_connection_ssl_handshaked(const char **error_r, void *context)
 {
 	struct server_connection *conn = context;
-	const char *host, *p;
 
-	host = conn->server->name;
-	p = strrchr(host, ':');
-	if (p != NULL)
-		host = t_strdup_until(host, p);
-
-	if (ssl_iostream_check_cert_validity(conn->ssl_iostream, host, error_r) < 0)
+	if (ssl_iostream_check_cert_validity(conn->ssl_iostream,
+					     conn->server->hostname,
+					     error_r) < 0)
 		return -1;
 	if (doveadm_debug)
 		i_debug("%s: SSL handshake successful", conn->server->name);
@@ -502,12 +510,10 @@ static int server_connection_init_ssl(struct server_connection *conn)
 		return 0;
 
 	i_zero(&ssl_set);
-	ssl_set.verify_remote_cert = TRUE;
-	ssl_set.require_valid_cert = TRUE;
 	ssl_set.verbose_invalid_cert = TRUE;
 
 	if (io_stream_create_ssl_client(conn->server->ssl_ctx,
-					conn->server->name, &ssl_set,
+					conn->server->hostname, &ssl_set,
 					&conn->input, &conn->output,
 					&conn->ssl_iostream, &error) < 0) {
 		i_error("Couldn't initialize SSL client: %s", error);
@@ -537,9 +543,10 @@ int server_connection_create(struct doveadm_server *server,
 	conn->fd = doveadm_connect_with_default_port(server->name,
 						     doveadm_settings->doveadm_port);
 	net_set_nonblock(conn->fd, TRUE);
-	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE, FALSE);
-	conn->output = o_stream_create_fd(conn->fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE);
+	conn->output = o_stream_create_fd(conn->fd, (size_t)-1);
 	o_stream_set_flush_callback(conn->output, server_connection_output, conn);
+	o_stream_set_no_error_handling(conn->output, TRUE);
 
 	i_stream_set_name(conn->input, server->name);
 	o_stream_set_name(conn->output, server->name);
@@ -553,7 +560,6 @@ int server_connection_create(struct doveadm_server *server,
 	}
 	conn->io = io_add_istream(conn->input, server_connection_input, conn);
 
-	o_stream_set_no_error_handling(conn->output, TRUE);
 	conn->state = SERVER_REPLY_STATE_DONE;
 	o_stream_nsend_str(conn->output, DOVEADM_SERVER_PROTOCOL_VERSION_LINE"\n");
 
@@ -591,33 +597,20 @@ void server_connection_destroy(struct server_connection **_conn)
 	if (printing_conn == conn)
 		print_connection_released();
 
-	if (conn->to_input != NULL)
-		timeout_remove(&conn->to_input);
-	if (conn->input != NULL)
-		i_stream_destroy(&conn->input);
-	if (conn->output != NULL)
-		o_stream_destroy(&conn->output);
-	if (conn->cmd_input != NULL)
-		i_stream_destroy(&conn->cmd_input);
+	timeout_remove(&conn->to_input);
+	i_stream_destroy(&conn->input);
+	o_stream_destroy(&conn->output);
+	i_stream_destroy(&conn->cmd_input);
 	/* close cmd_output after its parent, so the "." isn't sent */
-	if (conn->cmd_output != NULL)
-		o_stream_destroy(&conn->cmd_output);
-	if (conn->ssl_iostream != NULL)
-		ssl_iostream_unref(&conn->ssl_iostream);
-        if (conn->io_log != NULL)
-                io_remove(&conn->io_log);
-        /* make sure all logs got consumed */
-        if (conn->log_input != NULL) {
-                server_connection_print_log(conn);
-                i_stream_unref(&conn->log_input);
-	}
-	if (conn->io != NULL)
-		io_remove(&conn->io);
-	if (conn->fd != -1) {
-		if (close(conn->fd) < 0)
-			i_error("close(server) failed: %m");
-	}
-
+	o_stream_destroy(&conn->cmd_output);
+	ssl_iostream_destroy(&conn->ssl_iostream);
+	io_remove(&conn->io_log);
+	/* make sure all logs got consumed */
+	if (conn->log_input != NULL)
+		server_connection_print_log(conn);
+	i_stream_unref(&conn->log_input);
+	io_remove(&conn->io);
+	i_close_fd(&conn->fd);
 	pool_unref(&conn->pool);
 }
 
@@ -666,7 +659,6 @@ void server_connection_extract(struct server_connection *conn,
 	conn->input = NULL;
 	conn->output = NULL;
 	conn->ssl_iostream = NULL;
-	if (conn->io != NULL)
-		io_remove(&conn->io);
+	io_remove(&conn->io);
 	conn->fd = -1;
 }

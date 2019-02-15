@@ -131,7 +131,7 @@
  *
  *	priv/<GUID>/vendor/vendor.dovecot/pvt/server/foo
  *
- * would be refered to as:
+ * would be referred to as:
  *
  *	vendor/vendor.dovecot/pvt/server/foo
  *
@@ -173,10 +173,8 @@ struct mailbox_transaction_context;
 /* User can get/set all non-pvt/ attributes and also pvt/server/
    (but not pvt/server/pvt/) attributes. */
 #define MAILBOX_ATTRIBUTE_KEY_IS_USER_ACCESSIBLE(key) \
-	(strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT, \
-		 strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT)) != 0 || \
-	 (strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER, \
-		 strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER)) == 0 && \
+	(!str_begins(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT) || \
+	 (str_begins(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER) && \
 	  strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT, \
 		 strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT)) != 0))
 
@@ -244,9 +242,9 @@ struct mailbox_attribute_internal {
 	enum mail_attribute_internal_flags flags;
 
 	/* Get the value of this internal attribute */
-	int (*get)(struct mailbox_transaction_context *t, const char *key,
+	int (*get)(struct mailbox *box, const char *key,
 		   struct mail_attribute_value *value_r);
-	/* Set the value of this internal attribute */ 
+	/* Set the value of this internal attribute */
 	int (*set)(struct mailbox_transaction_context *t, const char *key,
 		   const struct mail_attribute_value *value);
 };
@@ -277,12 +275,12 @@ int mailbox_attribute_unset(struct mailbox_transaction_context *t,
 			    enum mail_attribute_type type, const char *key);
 /* Returns value for mailbox attribute key. Returns 1 if value was returned,
    0 if value wasn't found (set to NULL), -1 if error */
-int mailbox_attribute_get(struct mailbox_transaction_context *t,
+int mailbox_attribute_get(struct mailbox *box,
 			  enum mail_attribute_type type, const char *key,
 			  struct mail_attribute_value *value_r);
 /* Same as mailbox_attribute_get(), but the returned value may be either an
    input stream or a string. */
-int mailbox_attribute_get_stream(struct mailbox_transaction_context *t,
+int mailbox_attribute_get_stream(struct mailbox *box,
 				 enum mail_attribute_type type, const char *key,
 				 struct mail_attribute_value *value_r);
 

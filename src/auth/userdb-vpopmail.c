@@ -69,7 +69,9 @@ userdb_vpopmail_get_quota(const char *template, const char *vpop_str,
 	tab[0].value = format_maildirquota(vpop_str);
 
 	quota = t_str_new(128);
-	var_expand(quota, template, tab);
+	if (var_expand(quota, template, tab, error_r) < 0)
+		return -1;
+
 	*quota_r = str_c(quota);
 	return 0;
 }
@@ -160,10 +162,10 @@ vpopmail_preinit(pool_t pool, const char *args)
 	module->module.blocking = TRUE;
 
 	for (tmp = t_strsplit(args, " "); *tmp != NULL; tmp++) {
-		if (strncmp(*tmp, "cache_key=", 10) == 0)
+		if (str_begins(*tmp, "cache_key="))
 			module->module.default_cache_key =
 				p_strdup(pool, *tmp + 10);
-		else if (strncmp(*tmp, "quota_template=", 15) == 0) {
+		else if (str_begins(*tmp, "quota_template=")) {
 			p = strchr(*tmp + 15, '=');
 			if (p == NULL) {
 				i_fatal("vpopmail userdb: "

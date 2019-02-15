@@ -60,7 +60,7 @@ static bool fs_op_find(const char *str, enum fs_op *op_r)
 	return FALSE;
 }
 
-static bool
+static int
 fs_randomfail_add_probability(struct randomfail_fs *fs,
 			      const char *key, const char *value,
 			      const char **error_r)
@@ -199,8 +199,7 @@ static void fs_randomfail_deinit(struct fs *_fs)
 {
 	struct randomfail_fs *fs = (struct randomfail_fs *)_fs;
 
-	if (_fs->parent != NULL)
-		fs_deinit(&_fs->parent);
+	fs_deinit(&_fs->parent);
 	i_free(fs);
 }
 
@@ -209,17 +208,20 @@ static enum fs_properties fs_randomfail_get_properties(struct fs *_fs)
 	return fs_get_properties(_fs->parent);
 }
 
-static struct fs_file *
-fs_randomfail_file_init(struct fs *_fs, const char *path,
+static struct fs_file *fs_randomfail_file_alloc(void)
+{
+	struct randomfail_fs_file *file = i_new(struct randomfail_fs_file, 1);
+	return &file->file;
+}
+
+static void
+fs_randomfail_file_init(struct fs_file *_file, const char *path,
 			enum fs_open_mode mode, enum fs_open_flags flags)
 {
-	struct randomfail_fs_file *file;
+	struct randomfail_fs_file *file = (struct randomfail_fs_file *)_file;
 
-	file = i_new(struct randomfail_fs_file, 1);
-	file->file.fs = _fs;
 	file->file.path = i_strdup(path);
-	file->file.parent = fs_file_init(_fs->parent, path, mode | flags);
-	return &file->file;
+	file->file.parent = fs_file_init_parent(_file, path, mode | flags);
 }
 
 static void fs_randomfail_file_deinit(struct fs_file *_file)
@@ -237,7 +239,8 @@ static bool fs_random_fail(struct fs *_fs, int divider, enum fs_op op)
 
 	if (fs->op_probability[op] == 0)
 		return FALSE;
-	if ((unsigned int)(rand() % (100*divider)) <= fs->op_probability[op]) {
+	if ((unsigned int)i_rand_limit(100 * divider) <= fs->op_probability[op]) {
+		errno = EIO;
 		fs_set_error(_fs, RANDOMFAIL_ERROR);
 		return TRUE;
 	}
@@ -274,8 +277,7 @@ fs_random_fail_range(struct fs *_fs, enum fs_op op, uoff_t *offset_r)
 
 	if (!fs_random_fail(_fs, 1, op))
 		return FALSE;
-	*offset_r = fs->range_start[op] +
-		rand() % (fs->range_end[op] - fs->range_start[op] + 1);
+	*offset_r = i_rand_minmax(fs->range_start[op], fs->range_end[op]);
 	return TRUE;
 }
 
@@ -321,7 +323,7 @@ fs_randomfail_read_stream(struct fs_file *_file, size_t max_buffer_size)
 	input = fs_read_stream(_file->parent, max_buffer_size);
 	if (!fs_random_fail_range(_file->fs, FS_OP_READ, &offset))
 		return input;
-	input2 = i_stream_create_failure_at(input, offset, RANDOMFAIL_ERROR);
+	input2 = i_stream_create_failure_at(input, offset, EIO, RANDOMFAIL_ERROR);
 	i_stream_unref(&input);
 	return input2;
 }
@@ -457,20 +459,22 @@ static int fs_randomfail_delete(struct fs_file *_file)
 	return fs_file_random_fail_end(file, ret, FS_OP_DELETE);
 }
 
-static struct fs_iter *
-fs_randomfail_iter_init(struct fs *_fs, const char *path,
-		      enum fs_iter_flags flags)
+static struct fs_iter *fs_randomfail_iter_alloc(void)
 {
-	struct randomfail_fs_iter *iter;
+	struct randomfail_fs_iter *iter = i_new(struct randomfail_fs_iter, 1);
+	return &iter->iter;
+}
+
+static void
+fs_randomfail_iter_init(struct fs_iter *_iter, const char *path,
+			enum fs_iter_flags flags)
+{
+	struct randomfail_fs_iter *iter = (struct randomfail_fs_iter *)_iter;
 	uoff_t pos;
 
-	iter = i_new(struct randomfail_fs_iter, 1);
-	iter->iter.fs = _fs;
-	iter->iter.flags = flags;
-	iter->super = fs_iter_init(_fs->parent, path, flags);
-	if (fs_random_fail_range(_fs, FS_OP_ITER, &pos))
+	iter->super = fs_iter_init_parent(_iter, path, flags);
+	if (fs_random_fail_range(_iter->fs, FS_OP_ITER, &pos))
 		iter->fail_pos = pos + 1;
-	return &iter->iter;
 }
 
 static const char *fs_randomfail_iter_next(struct fs_iter *_iter)
@@ -514,6 +518,7 @@ const struct fs fs_class_randomfail = {
 		fs_randomfail_init,
 		fs_randomfail_deinit,
 		fs_randomfail_get_properties,
+		fs_randomfail_file_alloc,
 		fs_randomfail_file_init,
 		fs_randomfail_file_deinit,
 		fs_wrapper_file_close,
@@ -535,6 +540,7 @@ const struct fs fs_class_randomfail = {
 		fs_randomfail_copy,
 		fs_randomfail_rename,
 		fs_randomfail_delete,
+		fs_randomfail_iter_alloc,
 		fs_randomfail_iter_init,
 		fs_randomfail_iter_next,
 		fs_randomfail_iter_deinit,

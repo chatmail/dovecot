@@ -36,7 +36,7 @@ struct worker_connection {
 	struct aqueue *request_queue;
 
 	unsigned int process_limit;
-	unsigned int version_received:1;
+	bool version_received:1;
 };
 
 struct worker_connection *
@@ -196,8 +196,8 @@ int worker_connection_connect(struct worker_connection *conn)
 		return -1;
 	}
 	conn->io = io_add(conn->fd, IO_READ, worker_connection_input, conn);
-	conn->input = i_stream_create_fd(conn->fd, (size_t)-1, FALSE);
-	conn->output = o_stream_create_fd(conn->fd, (size_t)-1, FALSE);
+	conn->input = i_stream_create_fd(conn->fd, (size_t)-1);
+	conn->output = o_stream_create_fd(conn->fd, (size_t)-1);
 	o_stream_set_no_error_handling(conn->output, TRUE);
 	o_stream_nsend_str(conn->output, INDEXER_MASTER_HANDSHAKE);
 	return 0;

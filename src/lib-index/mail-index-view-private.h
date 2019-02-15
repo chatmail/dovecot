@@ -51,6 +51,9 @@ struct mail_index_view {
 	struct mail_index *index;
         struct mail_transaction_log_view *log_view;
 
+	const char *source_filename;
+	unsigned int source_linenum;
+
 	uint32_t indexid;
 	unsigned int inconsistency_id;
 	uint64_t highest_modseq;
@@ -73,11 +76,11 @@ struct mail_index_view {
 	struct mail_index_transaction *transactions_list;
 	int transactions;
 
-	unsigned int inconsistent:1;
+	bool inconsistent:1;
 	/* this view was created by mail_index_sync_begin() */
-	unsigned int index_sync_view:1;
+	bool index_sync_view:1;
 	/* this view is being synced */
-	unsigned int syncing:1;
+	bool syncing:1;
 };
 
 struct mail_index_view *

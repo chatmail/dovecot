@@ -16,7 +16,7 @@
 #define HEADER_LOG_LEN 80
 
 #define MAIL_LOG_USER_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_log_user_module)
+	MODULE_CONTEXT_REQUIRE(obj, mail_log_user_module)
 
 enum mail_log_field {
 	MAIL_LOG_FIELD_UID	= 0x01,
@@ -168,7 +168,7 @@ static void mail_log_mail_user_created(struct mail_user *user)
 		mail_log_parse_events(str);
 
 	muser->cached_only =
-		mail_user_plugin_getenv(user, "mail_log_cached_only") != NULL;
+		mail_user_plugin_getenv_bool(user, "mail_log_cached_only");
 }
 
 static void mail_log_append_mailbox_name(string_t *str, struct mail *mail)
@@ -186,7 +186,7 @@ mail_log_append_mail_header(string_t *str, struct mail *mail,
 {
 	const char *value;
 
-	if (mail_get_first_header(mail, header, &value) <= 0)
+	if (mail_get_first_header_utf8(mail, header, &value) <= 0)
 		value = "";
 	str_printfa(str, "%s=%s", name, str_sanitize(value, HEADER_LOG_LEN));
 }
@@ -231,8 +231,7 @@ mail_log_update_wanted_fields(struct mail *mail, enum mail_log_field fields)
 		wanted_fields |= MAIL_FETCH_VIRTUAL_SIZE;
 
 	mail_add_temp_wanted_fields(mail, wanted_fields, wanted_headers);
-	if (wanted_headers != NULL)
-		mailbox_header_lookup_unref(&wanted_headers);
+	mailbox_header_lookup_unref(&wanted_headers);
 }
 
 static void

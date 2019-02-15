@@ -57,14 +57,14 @@ fts_backend_squat_init(struct fts_backend *_backend, const char **error_r)
 		return 0;
 
 	for (tmp = t_strsplit_spaces(env, " "); *tmp != NULL; tmp++) {
-		if (strncmp(*tmp, "partial=", 8) == 0) {
+		if (str_begins(*tmp, "partial=")) {
 			if (str_to_uint(*tmp + 8, &len) < 0 || len == 0) {
 				*error_r = t_strdup_printf(
 					"Invalid partial length: %s", *tmp + 8);
 				return -1;
 			}
 			backend->partial_len = len;
-		} else if (strncmp(*tmp, "full=", 5) == 0) {
+		} else if (str_begins(*tmp, "full=")) {
 			if (str_to_uint(*tmp + 5, &len) < 0 || len == 0) {
 				*error_r = t_strdup_printf(
 					"Invalid full length: %s", *tmp + 5);
@@ -182,7 +182,7 @@ static int get_all_msg_uids(struct mailbox *box, ARRAY_TYPE(seq_range) *uids)
 	struct mail *mail;
 	int ret;
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);
@@ -331,7 +331,7 @@ fts_backend_squat_update_build_more(struct fts_backend_update_context *_ctx,
 		(struct squat_fts_backend_update_context *)_ctx;
 
 	if (ctx->squat_type == SQUAT_INDEX_TYPE_HEADER) {
-		str_append_n(ctx->hdr, data, size);
+		str_append_data(ctx->hdr, data, size);
 		return 0;
 	}
 	return squat_trie_build_more(ctx->build_ctx, ctx->uid, ctx->squat_type,

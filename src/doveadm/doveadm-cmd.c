@@ -5,8 +5,8 @@
 #include "istream.h"
 #include "str.h"
 #include "net.h"
-#include "doveadm-cmd.h"
 #include "doveadm.h"
+#include "doveadm-cmd.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -25,7 +25,8 @@ static struct doveadm_cmd_ver2 *doveadm_commands_ver2[] = {
 	&doveadm_cmd_stop_ver2,
 	&doveadm_cmd_reload_ver2,
 	&doveadm_cmd_stats_dump_ver2,
-	&doveadm_cmd_stats_reset_ver2,
+	&doveadm_cmd_oldstats_dump_ver2,
+	&doveadm_cmd_oldstats_reset_ver2,
 	&doveadm_cmd_penalty_ver2,
 	&doveadm_cmd_kick_ver2,
 	&doveadm_cmd_who_ver2
@@ -148,11 +149,11 @@ doveadm_cmd_find_multi_word(const char *cmdname, int *_argc,
 	size_t len;
 
 	if (argc < 2)
-		return NULL;
+		return FALSE;
 
 	len = strlen(argv[1]);
-	if (strncmp(cmdname, argv[1], len) != 0)
-		return NULL;
+	if (!str_begins(cmdname, argv[1]))
+		return FALSE;
 
 	argc--; argv++;
 	if (cmdname[len] == ' ') {
@@ -212,7 +213,6 @@ void doveadm_cmds_init(void)
 
 	doveadm_register_director_commands();
 	doveadm_register_instance_commands();
-	doveadm_register_mount_commands();
 	doveadm_register_proxy_commands();
 	doveadm_register_log_commands();
 	doveadm_register_replicator_commands();
@@ -234,7 +234,7 @@ doveadm_cmd_param_get(const struct doveadm_cmd_context *cctx,
 	i_assert(cctx->argv != NULL);
 	for(int i = 0; i < cctx->argc; i++) {
 		if (strcmp(cctx->argv[i].name, name) == 0 && cctx->argv[i].value_set)
-			return &(cctx->argv[i]);
+			return &cctx->argv[i];
 	}
 	return NULL;
 }
@@ -328,7 +328,7 @@ void doveadm_cmd_params_clean(ARRAY_TYPE(doveadm_cmd_param_arr_t) *pargv)
 	array_foreach_modifiable(pargv, param) {
 		if (param->type == CMD_PARAM_ISTREAM &&
 		    param->value.v_istream != NULL)
-			i_stream_destroy(&(param->value.v_istream));
+			i_stream_destroy(&param->value.v_istream);
 	}
 	array_clear(pargv);
 }
@@ -361,6 +361,9 @@ doveadm_cmd_params_to_argv(const char *name, int pargc, const struct doveadm_cmd
 
 	for(i=0;i<pargc;i++) {
 		const char *optarg = NULL;
+		ARRAY_TYPE(const_string) *target = argv;
+		if ((params[i].flags & CMD_PARAM_FLAG_POSITIONAL) != 0)
+			target = &pargv;
 		/* istreams are special */
 		i_assert(params[i].type != CMD_PARAM_ISTREAM);
 		if (params[i].value_set) {
@@ -375,22 +378,19 @@ doveadm_cmd_params_to_argv(const char *name, int pargc, const struct doveadm_cmd
 			}
 			/* CMD_PARAM_BOOL is implicitly handled above */
 			if (params[i].type == CMD_PARAM_STR) {
-				array_append(argv, &params[i].value.v_string,1);
+				array_append(target, &params[i].value.v_string,1);
 			} else if (params[i].type == CMD_PARAM_INT64) {
 				const char *tmp = t_strdup_printf("%lld",
 					(long long)params[i].value.v_int64);
-				array_append(argv, &tmp, 1);
+				array_append(target, &tmp, 1);
 			} else if (params[i].type == CMD_PARAM_IP) {
 				const char *tmp = net_ip2addr(&params[i].value.v_ip);
-				array_append(argv, &tmp, 1);
+				array_append(target, &tmp, 1);
 			} else if (params[i].type == CMD_PARAM_ARRAY) {
 				array_foreach(&params[i].value.v_array, cptr) {
 					if (array_add_opt)
 						array_append(argv, &optarg, 1);
-					if ((params[i].flags & CMD_PARAM_FLAG_POSITIONAL) == 0)
-						array_append(argv, cptr, 1);
-					else
-						array_append(&pargv, cptr, 1);
+					array_append(target, cptr, 1);
 				}
 			}
 		}
@@ -472,7 +472,7 @@ static void doveadm_fill_param(struct doveadm_cmd_param *param,
 	case CMD_PARAM_ISTREAM: {
 		struct istream *is;
 		if (strcmp(value,"-") == 0) {
-			is = i_stream_create_fd(STDIN_FILENO, IO_BLOCK_SIZE, FALSE);
+			is = i_stream_create_fd(STDIN_FILENO, IO_BLOCK_SIZE);
 		} else {
 			is = i_stream_create_file(value, IO_BLOCK_SIZE);
 		}
@@ -517,7 +517,7 @@ int doveadm_cmd_run_ver2(int argc, const char *const argv[],
 
 	for(pargc=0;cctx->cmd->parameters[pargc].name != NULL;pargc++) {
 		param = array_append_space(&pargv);
-		memcpy(param, &(cctx->cmd->parameters[pargc]), sizeof(struct doveadm_cmd_param));
+		memcpy(param, &cctx->cmd->parameters[pargc], sizeof(struct doveadm_cmd_param));
 		param->value_set = FALSE;
 	}
 	i_assert(pargc == array_count(&opts)-1); /* opts is NULL-terminated */
@@ -559,7 +559,8 @@ int doveadm_cmd_run_ver2(int argc, const char *const argv[],
 			}
 		}
 		if (!found) {
-			i_error("Extraneous arguments found");
+			i_error("Extraneous arguments found: %s",
+				t_strarray_join(argv+optind, " "));
 			doveadm_cmd_params_clean(&pargv);
 			return -1;
 		}

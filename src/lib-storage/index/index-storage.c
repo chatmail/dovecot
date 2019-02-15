@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "array.h"
 #include "istream.h"
+#include "ostream.h"
 #include "ioloop.h"
 #include "str.h"
 #include "mkdir-parents.h"
@@ -160,7 +161,8 @@ index_mailbox_alloc_index(struct mailbox *box, struct mail_index **index_r)
 	    mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX,
 				&index_dir) <= 0)
 		index_dir = NULL;
-	*index_r = mail_index_alloc_cache_get(mailbox_path, index_dir,
+	*index_r = mail_index_alloc_cache_get(box->storage->event,
+					      mailbox_path, index_dir,
 					      box->index_prefix);
 	return 0;
 }
@@ -217,8 +219,7 @@ int index_storage_mailbox_exists_full(struct mailbox *box, const char *subdir,
 		return 0;
 	}
 	if (!ENOTFOUND(errno) && errno != EACCES) {
-		mail_storage_set_critical(box->storage,
-					  "stat(%s) failed: %m", path);
+		mailbox_set_critical(box, "stat(%s) failed: %m", path);
 		return -1;
 	}
 
@@ -234,14 +235,22 @@ int index_storage_mailbox_exists_full(struct mailbox *box, const char *subdir,
 
 int index_storage_mailbox_alloc_index(struct mailbox *box)
 {
+	const char *cache_dir;
+
 	if (box->index != NULL)
 		return 0;
 
 	if (mailbox_create_missing_dir(box, MAILBOX_LIST_PATH_TYPE_INDEX) < 0)
 		return -1;
-
 	if (index_mailbox_alloc_index(box, &box->index) < 0)
 		return -1;
+
+	if (mailbox_get_path_to(box, MAILBOX_LIST_PATH_TYPE_INDEX_CACHE,
+				&cache_dir) > 0) {
+		if (mailbox_create_missing_dir(box, MAILBOX_LIST_PATH_TYPE_INDEX_CACHE) < 0)
+			return -1;
+		mail_index_set_cache_dir(box->index, cache_dir);
+	}
 	mail_index_set_fsync_mode(box->index,
 				  box->storage->set->parsed_fsync_mode, 0);
 	mail_index_set_lock_method(box->index,
@@ -309,7 +318,7 @@ int index_storage_mailbox_open(struct mailbox *box, bool move_to_memory)
 	}
 	if ((index_flags & MAIL_INDEX_OPEN_FLAG_NEVER_IN_MEMORY) != 0) {
 		if (mail_index_is_in_memory(box->index)) {
-			mail_storage_set_critical(box->storage,
+			mailbox_set_critical(box,
 				"Couldn't create index file");
 			mail_index_close(box->index);
 			return -1;
@@ -320,6 +329,12 @@ int index_storage_mailbox_open(struct mailbox *box, bool move_to_memory)
 		if (mail_index_is_deleted(box->index)) {
 			mailbox_set_deleted(box);
 			mail_index_close(box->index);
+			return -1;
+		}
+	}
+	if ((box->flags & MAILBOX_FLAG_FSCK) != 0) {
+		if (mail_index_fsck(box->index) < 0) {
+			mailbox_set_index_error(box);
 			return -1;
 		}
 	}
@@ -370,6 +385,11 @@ void index_storage_mailbox_alloc(struct mailbox *box, const char *vname,
 			     mailbox_list_get_storage_name(box->list, vname));
 	box->flags = flags;
 	box->index_prefix = p_strdup(box->pool, index_prefix);
+	box->event = event_create(box->storage->event);
+	event_add_category(box->event, &event_category_mailbox);
+	event_add_str(box->event, "name", box->vname);
+	event_set_append_log_prefix(box->event,
+		t_strdup_printf("Mailbox %s: ", box->vname));
 
 	p_array_init(&box->search_results, box->pool, 16);
 	array_create(&box->module_contexts,
@@ -381,7 +401,7 @@ void index_storage_mailbox_alloc(struct mailbox *box, const char *vname,
 		mail_storage_settings_to_index_flags(box->storage->set);
 	if ((box->flags & MAILBOX_FLAG_SAVEONLY) != 0)
 		ibox->index_flags |= MAIL_INDEX_OPEN_FLAG_SAVEONLY;
-	if (box->storage->user->mail_debug)
+	if (event_want_debug(box->event))
 		ibox->index_flags |= MAIL_INDEX_OPEN_FLAG_DEBUG;
 	ibox->next_lock_notify = time(NULL) + LOCK_NOTIFY_INTERVAL;
 	MODULE_CONTEXT_SET(box, index_storage_module, ibox);
@@ -408,8 +428,7 @@ void index_storage_mailbox_close(struct mailbox *box)
 	struct index_mailbox_context *ibox = INDEX_STORAGE_CONTEXT(box);
 
 	mailbox_watch_remove_all(box);
-	if (box->input != NULL)
-		i_stream_unref(&box->input);
+	i_stream_unref(&box->input);
 
 	if (box->view_pvt != NULL)
 		mail_index_view_close(&box->view_pvt);
@@ -438,6 +457,7 @@ static void index_storage_mailbox_unref_indexes(struct mailbox *box)
 void index_storage_mailbox_free(struct mailbox *box)
 {
 	index_storage_mailbox_unref_indexes(box);
+	event_unref(&box->event);
 }
 
 static void
@@ -464,7 +484,7 @@ index_storage_mailbox_update_cache(struct mailbox *box,
 		}
 		if (j != old_count) {
 			field = old_fields[j];
-		} else if (strncmp(updates[i].name, "hdr.", 4) == 0) {
+		} else if (str_begins(updates[i].name, "hdr.")) {
 			/* new header */
 			i_zero(&field);
 			field.name = updates[i].name;
@@ -701,8 +721,7 @@ mailbox_delete_all_attributes(struct mailbox_transaction_context *t,
 	iter = mailbox_attribute_iter_init(t->box, type, "");
 	while ((key = mailbox_attribute_iter_next(iter)) != NULL) {
 		if (inbox &&
-		    strncmp(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER,
-			    strlen(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER)) == 0)
+		    str_begins(key, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER))
 			continue;
 
 		if (mailbox_attribute_unset(t, type, key) < 0) {
@@ -726,7 +745,7 @@ static int mailbox_expunge_all_data(struct mailbox *box)
 
 	(void)mailbox_sync(box, MAILBOX_SYNC_FLAG_FULL_READ);
 
-	t = mailbox_transaction_begin(box, 0);
+	t = mailbox_transaction_begin(box, 0, __func__);
 
 	search_args = mail_search_build_init();
 	mail_search_build_add_all(search_args);
@@ -970,7 +989,7 @@ mail_copy_cache_field(struct mail_save_context *ctx, struct mail *src_mail,
 			   cached data from buffer, we'll do this optimization
 			   to make quota plugin's work faster */
 			struct index_mail *imail =
-				(struct index_mail *)ctx->dest_mail;
+				INDEX_MAIL(ctx->dest_mail);
 			uoff_t size;
 
 			i_assert(buf->used == sizeof(size));
@@ -994,7 +1013,7 @@ static void
 index_copy_vsize_extension(struct mail_save_context *ctx,
 			   struct mail *src_mail, uint32_t dest_seq)
 {
-	struct index_mail *src_imail = (struct index_mail *)src_mail;
+	struct index_mail *src_imail = INDEX_MAIL(src_mail);
 	unsigned int idx;
 	bool expunged ATTR_UNUSED;
 
@@ -1027,13 +1046,13 @@ void index_copy_cache_fields(struct mail_save_context *ctx,
 			i_unreached();
 		/* the only reason we're doing the destination lookup is to
 		   make sure that the cache file is opened and the cache
-		   decisinos are up to date */
+		   decisions are up to date */
 		if (mailbox_get_metadata(ctx->transaction->box,
 					 MAILBOX_METADATA_CACHE_FIELDS,
 					 &dest_metadata) < 0)
 			i_unreached();
 
-		buf = buffer_create_dynamic(pool_datastack_create(), 1024);
+		buf = t_buffer_create(1024);
 		array_foreach(src_metadata.cache_fields, field) {
 			mail_copy_cache_field(ctx, src_mail, dest_seq,
 					      field->name, buf);
@@ -1065,7 +1084,7 @@ int index_storage_set_subscribed(struct mailbox *box, bool set)
 		   subscription name */
 		subs_name = t_strconcat(list->ns->prefix, box->name, NULL);
 		/* drop the common prefix (typically there isn't one) */
-		i_assert(strncmp(ns->prefix, subs_name, strlen(ns->prefix)) == 0);
+		i_assert(str_begins(subs_name, ns->prefix));
 		subs_name += strlen(ns->prefix);
 
 		list = ns->list;
@@ -1088,7 +1107,7 @@ int index_storage_set_subscribed(struct mailbox *box, bool set)
 void index_storage_destroy(struct mail_storage *storage)
 {
 	if (storage->_shared_attr_dict != NULL) {
-		(void)dict_wait(storage->_shared_attr_dict);
+		dict_wait(storage->_shared_attr_dict);
 		dict_deinit(&storage->_shared_attr_dict);
 	}
 }
@@ -1162,9 +1181,51 @@ int index_storage_expunged_sync_begin(struct mailbox *box,
 	return 1;
 }
 
+int index_storage_save_continue(struct mail_save_context *ctx,
+				struct istream *input,
+				struct mail *cache_dest_mail)
+{
+	struct mail_storage *storage = ctx->transaction->box->storage;
+
+	do {
+		switch (o_stream_send_istream(ctx->data.output, input)) {
+		case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
+			break;
+		case OSTREAM_SEND_ISTREAM_RESULT_WAIT_INPUT:
+			break;
+		case OSTREAM_SEND_ISTREAM_RESULT_WAIT_OUTPUT:
+			i_unreached();
+		case OSTREAM_SEND_ISTREAM_RESULT_ERROR_INPUT:
+			/* handle below */
+			break;
+		case OSTREAM_SEND_ISTREAM_RESULT_ERROR_OUTPUT:
+			if (!mail_storage_set_error_from_errno(storage)) {
+				mail_set_critical(ctx->dest_mail,
+					"save: write(%s) failed: %s",
+					o_stream_get_name(ctx->data.output),
+					o_stream_get_error(ctx->data.output));
+			}
+			return -1;
+		}
+		if (cache_dest_mail != NULL)
+			index_mail_cache_parse_continue(cache_dest_mail);
+
+		/* both tee input readers may consume data from our primary
+		   input stream. we'll have to make sure we don't return with
+		   one of the streams still having data in them. */
+	} while (i_stream_read(input) > 0);
+
+	if (input->stream_errno != 0) {
+		mail_set_critical(ctx->dest_mail, "save: read(%s) failed: %s",
+			i_stream_get_name(input), i_stream_get_error(input));
+		return -1;
+	}
+	return 0;
+}
+
 void index_storage_save_abort_last(struct mail_save_context *ctx, uint32_t seq)
 {
-	struct index_mail *imail = (struct index_mail *)ctx->dest_mail;
+	struct index_mail *imail = INDEX_MAIL(ctx->dest_mail);
 
 	/* Close the mail before it's expunged. This allows it to be
 	   reset cleanly. */
@@ -1201,8 +1262,7 @@ int index_mailbox_fix_inconsistent_existence(struct mailbox *box,
 	} else if (errno == ENOENT) {
 		/* race condition - mailbox was just deleted */
 	} else {
-		mail_storage_set_critical(box->storage,
-			"stat(%s) failed: %m", index_path);
+		mailbox_set_critical(box, "stat(%s) failed: %m", index_path);
 		return -1;
 	}
 	mailbox_set_deleted(box);

@@ -26,7 +26,7 @@ fts_solr_plugin_init_settings(struct mail_user *user,
 		str = "";
 
 	for (tmp = t_strsplit_spaces(str, " "); *tmp != NULL; tmp++) {
-		if (strncmp(*tmp, "url=", 4) == 0) {
+		if (str_begins(*tmp, "url=")) {
 			set->url = p_strdup(user->pool, *tmp + 4);
 		} else if (strcmp(*tmp, "debug") == 0) {
 			set->debug = TRUE;
@@ -34,7 +34,7 @@ fts_solr_plugin_init_settings(struct mail_user *user,
 			set->use_libfts = TRUE;
 		} else if (strcmp(*tmp, "break-imap-search") == 0) {
 			/* for backwards compatibility */
-		} else if (strcmp(*tmp, "default_ns=") == 0) {
+		} else if (str_begins(*tmp, "default_ns=")) {
 			set->default_ns_prefix =
 				p_strdup(user->pool, *tmp + 11);
 		} else {
@@ -51,7 +51,7 @@ fts_solr_plugin_init_settings(struct mail_user *user,
 
 static void fts_solr_mail_user_deinit(struct mail_user *user)
 {
-	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT(user);
+	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT_REQUIRE(user);
 
 	if (fuser->set.use_libfts)
 		fts_mail_user_deinit(user);

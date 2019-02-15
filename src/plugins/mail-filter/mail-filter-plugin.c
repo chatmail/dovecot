@@ -17,11 +17,11 @@
 #define MAIL_MAX_MEMORY_BUFFER (1024*128)
 
 #define MAIL_FILTER_MAIL_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_filter_mail_module)
+	MODULE_CONTEXT_REQUIRE(obj, mail_filter_mail_module)
 #define MAIL_FILTER_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_filter_storage_module)
+	MODULE_CONTEXT_REQUIRE(obj, mail_filter_storage_module)
 #define MAIL_FILTER_USER_CONTEXT(obj) \
-	MODULE_CONTEXT(obj, mail_filter_user_module)
+	MODULE_CONTEXT_REQUIRE(obj, mail_filter_user_module)
 
 struct mail_filter_user {
 	union mail_user_module_context module_ctx;
@@ -167,10 +167,8 @@ mail_filter_parse_setting(struct mail_user *user, const char *name,
 		*socket_path_r = p_strdup_printf(user->pool, "%s/%s",
 			user->set->base_dir, *socket_path_r);
 	}
-	if (user->mail_debug) {
-		i_debug("mail_filter: Filtering %s via socket %s",
-			name, *socket_path_r);
-	}
+	e_debug(user->event, "mail_filter: Filtering %s via socket %s",
+		name, *socket_path_r);
 }
 
 static void mail_filter_mail_user_created(struct mail_user *user)
@@ -186,9 +184,9 @@ static void mail_filter_mail_user_created(struct mail_user *user)
 				  &muser->socket_path, &muser->args);
 	mail_filter_parse_setting(user, "mail_filter_out",
 				  &muser->out_socket_path, &muser->out_args);
-	if (user->mail_debug && muser->socket_path == NULL &&
+	if (muser->socket_path == NULL &&
 	    muser->out_socket_path == NULL) {
-		i_debug("mail_filter and mail_filter_out settings missing, "
+		e_debug(user->event, "mail_filter and mail_filter_out settings missing, "
 			"ignoring mail_filter plugin");
 	}
 

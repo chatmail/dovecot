@@ -27,7 +27,7 @@ ENCRYPT(RECIPIENT-KEY, DATA):
  4. Calculate P = R * RECIPIENT-KEY
  5. From P = (x,y) choose x as S
  6. Generate random salt
- 7. Use PBKDF2(SHA256, S, salt, 2000) to produce iv+key
+ 7. Use PBKDF2(SHA256, S, salt, 2000) to produce iv+key, and hmac seed or aad
  8. Encrypt data
  9. OUTPUT R, salt and encrypted data.
 
@@ -38,8 +38,8 @@ DECRYPT(PRIVATE-KEY, R, SALT, DATA):
 
  1. Ensure R is not point at infinity
  2. Calculate P = R * PRIVATE-KEY
- 3. From P = (x,y) pick x as S
- 4. Use PBKDF2(SHA256, S, salt, 2000) to produce iv+key
+ 3. From P = (x,y) choose x as S
+ 4. Use PBKDF2(SHA256, S, salt, 2000) to produce iv+key, and hmac seed or aad
  5. Decrypt data
  6. OUTPUT decrypted data
 
@@ -110,4 +110,4 @@ ekh - (eof-maclen) payload data
 There is a small script for decrypting these files, see
 [attachment:decrypt.rb].
 
-(This file was created from the wiki on 2018-02-28 04:42)
+(This file was created from the wiki on 2019-02-05 04:42)

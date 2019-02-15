@@ -5,6 +5,11 @@
 #include "settings-parser.h"
 #include "config-parser-private.h"
 #include "old-set-parser.h"
+#include "istream.h"
+#include "base64.h"
+
+static bool seen_ssl_parameters_dat;
+static const char *ssl_dh_parameters;
 
 #define config_apply_line (void)config_apply_line
 
@@ -45,7 +50,7 @@ obsolete(struct config_parser_context *ctx, const char *str, ...)
 
 	if (!seen_obsoletes) {
 		i_warning("NOTE: You can get a new clean config file with: "
-			  "doveconf -n > dovecot-new.conf");
+			  "doveconf -Pn > dovecot-new.conf");
 		seen_obsoletes = TRUE;
 	}
 
@@ -61,6 +66,138 @@ static void set_rename(struct config_parser_context *ctx,
 {
 	obsolete(ctx, "%s has been renamed to %s", old_key, key);
 	config_parser_apply_line(ctx, CONFIG_LINE_TYPE_KEYVALUE, key, value);
+}
+
+bool old_settings_ssl_dh_load(const char **value, const char **error_r)
+{
+
+	if (ssl_dh_parameters != NULL) *value = ssl_dh_parameters;
+
+	const char *fn = t_strconcat(PKG_STATEDIR, "/ssl-parameters.dat", NULL);
+	buffer_t *data = t_buffer_create(300);
+	string_t *b64_data = t_str_new(500);
+	size_t siz;
+	unsigned short keysize;
+	unsigned int off=0;
+
+	/* try read it */
+	struct istream *is = i_stream_create_file(fn, IO_BLOCK_SIZE);
+
+	if (is->stream_errno == ENOENT) {
+		/* this is given because the ssl-parameters.dat file is no more there
+		 and we don't want to to make go searching for the file
+		 this code is only ever reached if ssl_dh_parameters is empty anyways
+		 */
+		/* check moved to correct place from here */
+		*value = NULL;
+		return TRUE;
+	} else if (is->stream_errno != 0) {
+		*error_r = t_strdup(i_stream_get_error(is));
+		return FALSE;
+	}
+
+	/* then try to read the rest of the data */
+	while(i_stream_read(is) > 0) {
+		const unsigned char *buf = i_stream_get_data(is, &siz);
+		if (siz < 88) break;
+		memcpy(&keysize, buf, 2);
+		if (keysize == 512) {
+			memcpy(&off, buf+4, 4);
+			off += 16; // skip headers
+		} else {
+			off = 8; // skip header
+		}
+		if (off > siz) break;
+		buffer_append(data, buf+off, siz);
+		break;
+	}
+
+	const void *tmp = buffer_get_data(data, &siz);
+
+	if (siz > 4) {
+		str_append(b64_data, "-----BEGIN DH PARAMETERS-----\n");
+		base64_encode(tmp, siz-4, b64_data);
+		/* need to wrap the string nicely */
+		for(size_t i = 29+65; i < str_len(b64_data); i+=64) /* start at header + first 64 */
+		{
+			str_insert(b64_data, i++, "\n");
+		}
+		str_append_c(b64_data,'\n');
+		str_append(b64_data, "-----END DH PARAMETERS-----");
+		ssl_dh_parameters = i_strdup(str_c(b64_data));
+		*value = ssl_dh_parameters;
+
+		if (!seen_ssl_parameters_dat) {
+			i_warning("please set ssl_dh=<%s", SYSCONFDIR"/dh.pem");
+			i_warning("You can generate it with: dd if=%s bs=1 skip=%u | openssl dhparam -inform der > %s", fn, off, SYSCONFDIR"/dh.pem");
+			seen_ssl_parameters_dat = TRUE;
+		}
+	} else if (is->stream_errno == ENOENT) {
+		/* check for empty ssl_dh elsewhere */
+		*value = NULL;
+		return TRUE;
+	} else {
+		*error_r = "ssl enabled, but ssl_dh not set";
+		return FALSE;
+	}
+	i_stream_unref(&is);
+
+	return TRUE;
+}
+
+/* FIXME: Remove ssl_protocols_to_min_protocol() in v2.4 */
+static int ssl_protocols_to_min_protocol(const char *ssl_protocols,
+					 const char **min_protocol_r,
+					 const char **error_r)
+{
+	static const char *protocol_versions[] = {
+		"SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2",
+	};
+	/* Array where -1 = disable, 0 = not found, 1 = enable */
+	int protos[N_ELEMENTS(protocol_versions)];
+	memset(protos, 0, sizeof(protos));
+	bool explicit_enable = FALSE;
+
+	const char *const *tmp = t_strsplit_spaces(ssl_protocols, ", ");
+	for (; *tmp != NULL; tmp++) {
+		const char *p = *tmp;
+		bool enable = TRUE;
+		if (p[0] == '!') {
+			enable = FALSE;
+			++p;
+		}
+		for (unsigned i = 0; i < N_ELEMENTS(protocol_versions); i++) {
+			if (strcmp(p, protocol_versions[i]) == 0) {
+				if (enable) {
+					protos[i] = 1;
+					explicit_enable = TRUE;
+				} else {
+					protos[i] = -1;
+				}
+				goto found;
+			}
+		}
+		*error_r = t_strdup_printf("Unrecognized protocol '%s'", p);
+		return -1;
+
+		found:;
+	}
+
+	unsigned min = N_ELEMENTS(protocol_versions);
+	for (unsigned i = 0; i < N_ELEMENTS(protocol_versions); i++) {
+		if (explicit_enable) {
+			if (protos[i] > 0)
+				min = I_MIN(min, i);
+		} else if (protos[i] == 0)
+			min = I_MIN(min, i);
+	}
+	if (min == N_ELEMENTS(protocol_versions)) {
+		*error_r = "All protocols disabled";
+		return -1;
+	}
+
+	*min_protocol_r = protocol_versions[min];
+	return 0;
 }
 
 static bool
@@ -142,10 +279,22 @@ old_settings_handle_root(struct config_parser_context *ctx,
 		set_rename(ctx, key, "ssl", value);
 		return TRUE;
 	}
-	if (strcmp(key, "ssl_parameters_regenerate") == 0 &&
-	    str_is_numeric(value, '\0') && strcmp(value, "0") != 0) {
-		obsolete(ctx, "%s should have 'hours' suffix", key);
-		config_apply_line(ctx, "", t_strconcat(key, "=", value, "h", NULL), NULL);
+	if (strcmp(key, "ssl_parameters_regenerate") == 0 ||
+	    strcmp(key, "ssl_dh_parameters_length") == 0) {
+		obsolete(ctx, "%s is no longer needed", key);
+		return TRUE;
+	}
+	if (strcmp(key, "ssl_protocols") == 0) {
+		obsolete(ctx, "%s has been replaced by ssl_min_protocol", key);
+		const char *min_protocol, *error;
+		if (ssl_protocols_to_min_protocol(value,  &min_protocol, &error) < 0) {
+			i_error("Could not find a minimum ssl_min_protocol "
+				"setting from ssl_protocols = %s: %s",
+				value, error);
+			return TRUE;
+		}
+		config_parser_apply_line(ctx, CONFIG_LINE_TYPE_KEYVALUE,
+					 "ssl_min_protocol", min_protocol);
 		return TRUE;
 	}
 	if (strcmp(key, "sieve") == 0 ||
@@ -194,13 +343,14 @@ old_settings_handle_root(struct config_parser_context *ctx,
 	if (strcmp(key, "login_dir") == 0 ||
 	    strcmp(key, "dbox_rotate_min_size") == 0 ||
 	    strcmp(key, "dbox_rotate_days") == 0 ||
+	    strcmp(key, "director_consistent_hashing") == 0 ||
 	    strcmp(key, "mail_log_max_lines_per_sec") == 0 ||
 	    strcmp(key, "maildir_copy_preserve_filename") == 0) {
 		obsolete(ctx, "%s has been removed", key);
 		return TRUE;
 	}
 	if (ctx->old->auth_section == 1) {
-		if (strncmp(key, "auth_", 5) != 0)
+		if (!str_begins(key, "auth_"))
 			key = t_strconcat("auth_", key, NULL);
 		config_parser_apply_line(ctx, CONFIG_LINE_TYPE_KEYVALUE,
 					 key, value);
@@ -411,7 +561,7 @@ old_settings_handle_proto(struct config_parser_context *ctx,
 	}
 
 	if (ctx->old->auth_section == 1) {
-		if (strncmp(key, "auth_", 5) != 0)
+		if (!str_begins(key, "auth_"))
 			key = t_strconcat("auth_", key, NULL);
 	}
 
@@ -510,21 +660,6 @@ static bool old_auth_section(struct config_parser_context *ctx,
 	return FALSE;
 }
 
-static bool old_namespace(struct config_parser_context *ctx,
-			  const char *value)
-{
-	if (strcmp(value, "private") != 0 &&
-	    strcmp(value, "shared") != 0 &&
-	    strcmp(value, "public") != 0)
-		return FALSE;
-
-	obsolete(ctx, "namespace %s {} has been replaced by namespace { type=%s }", value, value);
-	config_parser_apply_line(ctx, CONFIG_LINE_TYPE_SECTION_BEGIN, "namespace", "");
-	config_parser_apply_line(ctx, CONFIG_LINE_TYPE_KEYVALUE,
-				 "type", value);
-	return TRUE;
-}
-
 static void socket_apply(struct config_parser_context *ctx)
 {
 	const struct socket_set *set = &ctx->old->socket_set;
@@ -538,7 +673,7 @@ static void socket_apply(struct config_parser_context *ctx)
 	}
 	path = set->path;
 	len = strlen(ctx->old->base_dir);
-	if (strncmp(path, ctx->old->base_dir, len) == 0 &&
+	if (str_begins(path, ctx->old->base_dir) &&
 	    path[len] == '/')
 		path += len + 1;
 
@@ -587,7 +722,6 @@ bool old_settings_handle(struct config_parser_context *ctx,
 	case CONFIG_LINE_TYPE_KEYVARIABLE:
 		break;
 	case CONFIG_LINE_TYPE_KEYVALUE:
-	case CONFIG_LINE_TYPE_KEYVALUE_QUOTED:
 		if (ctx->pathlen == 0) {
 			struct config_section_stack *old_section =
 				ctx->cur_section;
@@ -608,9 +742,7 @@ bool old_settings_handle(struct config_parser_context *ctx,
 			obsolete(ctx, "add auth_ prefix to all settings inside auth {} and remove the auth {} section completely");
 			ctx->old->auth_section = 1;
 			return TRUE;
-		} else if (ctx->pathlen == 0 && strcmp(key, "namespace") == 0)
-			return old_namespace(ctx, value);
-		else if (ctx->pathlen == 0 && strcmp(key, "protocol") == 0 &&
+		} else if (ctx->pathlen == 0 && strcmp(key, "protocol") == 0 &&
 			 strcmp(value, "managesieve") == 0) {
 			obsolete(ctx, "protocol managesieve {} has been replaced by protocol sieve { }");
 			config_parser_apply_line(ctx, CONFIG_LINE_TYPE_SECTION_BEGIN,

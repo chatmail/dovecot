@@ -35,6 +35,15 @@ enum sql_db_state {
 	((db)->state == SQL_DB_STATE_IDLE)
 #define SQL_ERRSTR_NOT_CONNECTED "Not connected to database"
 
+/* What is considered slow query */
+#define SQL_SLOW_QUERY_MSEC 1000
+
+#define SQL_QUERY_FINISHED "sql_query_finished"
+#define SQL_CONNECTION_FINISHED "sql_connection_finished"
+#define SQL_TRANSACTION_FINISHED "sql_transaction_finished"
+
+#define SQL_QUERY_FINISHED_FMT "Finished query '%s' in %u msecs"
+
 struct sql_db_module_register {
 	unsigned int id;
 };
@@ -44,6 +53,8 @@ union sql_db_module_context {
 };
 
 extern struct sql_db_module_register sql_db_module_register;
+
+extern struct event_category event_category_sql;
 
 struct sql_transaction_query {
 	struct sql_transaction_query *next;
@@ -55,6 +66,8 @@ struct sql_transaction_query {
 
 struct sql_db_vfuncs {
 	struct sql_db *(*init)(const char *connect_string);
+	int (*init_full)(const struct sql_settings *set, struct sql_db **db_r,
+			 const char **error);
 	void (*deinit)(struct sql_db *db);
 
 	int (*connect)(struct sql_db *db);
@@ -78,9 +91,6 @@ struct sql_db_vfuncs {
 		       unsigned int *affected_rows);
 	const char *(*escape_blob)(struct sql_db *db,
 				   const unsigned char *data, size_t size);
-	void (*transaction_commit2)(struct sql_transaction_context *ctx,
-				    sql_commit2_callback_t *callback,
-				    void *context);
 
 	struct sql_prepared_statement *
 		(*prepared_statement_init)(struct sql_db *db,
@@ -122,6 +132,8 @@ struct sql_db {
 				      void *context);
 	void *state_change_context;
 
+	struct event *event;
+
 	enum sql_db_state state;
 	/* last time we started connecting to this server
 	   (which may or may not have succeeded) */
@@ -130,7 +142,12 @@ struct sql_db {
 	unsigned int connect_failure_count;
 	struct timeout *to_reconnect;
 
-	unsigned int no_reconnect:1;
+	uint64_t succeeded_queries;
+	uint64_t failed_queries;
+	/* includes both succeeded and failed */
+	uint64_t slow_queries;
+
+	bool no_reconnect:1;
 };
 
 struct sql_result_vfuncs {
@@ -184,16 +201,18 @@ struct sql_result {
 	unsigned int map_size;
 	struct sql_field_map *map;
 	void *fetch_dest;
+	struct event *event;
 	size_t fetch_dest_size;
 	enum sql_result_error_type error_type;
 
-	unsigned int failed:1;
-	unsigned int failed_try_retry:1;
-	unsigned int callback:1;
+	bool failed:1;
+	bool failed_try_retry:1;
+	bool callback:1;
 };
 
 struct sql_transaction_context {
 	struct sql_db *db;
+	struct event *event;
 
 	/* commit() must use this query list if head is non-NULL. */
 	struct sql_transaction_query *head, *tail;
@@ -206,6 +225,8 @@ extern struct sql_result sql_not_connected_result;
 
 struct sql_db *
 driver_sqlpool_init(const char *connect_string, const struct sql_db *driver);
+int driver_sqlpool_init_full(const struct sql_settings *set, const struct sql_db *driver,
+			     struct sql_db **db_r, const char **error_r);
 
 void sql_db_set_state(struct sql_db *db, enum sql_db_state state);
 
@@ -213,4 +234,9 @@ void sql_transaction_add_query(struct sql_transaction_context *ctx, pool_t pool,
 			       const char *query, unsigned int *affected_rows);
 const char *sql_statement_get_query(struct sql_statement *stmt);
 
+void sql_connection_log_finished(struct sql_db *db);
+struct event_passthrough *
+sql_query_finished_event(struct sql_db *db, struct event *event, const char *query,
+			 bool success, int *duration_r);
+struct event_passthrough *sql_transaction_finished_event(struct sql_transaction_context *ctx);
 #endif

@@ -34,9 +34,9 @@ struct auth_worker_client {
 	struct timeout *to_idle;
 	time_t cmd_start;
 
-	unsigned int version_received:1;
-	unsigned int dbhash_received:1;
-	unsigned int error_sent:1;
+	bool version_received:1;
+	bool dbhash_received:1;
+	bool error_sent:1;
 };
 
 struct auth_worker_list_context {
@@ -71,8 +71,7 @@ auth_worker_client_check_throttle(struct auth_worker_client *client)
 	    OUTBUF_THROTTLE_SIZE) {
 		/* stop reading new requests until client has read the pending
 		   replies. */
-		if (client->io != NULL)
-			io_remove(&client->io);
+		io_remove(&client->io);
 	}
 }
 
@@ -91,7 +90,7 @@ bool auth_worker_auth_request_new(struct auth_worker_client *client, unsigned in
 	for (; *args != NULL; args++) {
 		value = strchr(*args, '=');
 		if (value == NULL)
-			(void)auth_request_import(auth_request, *args, NULL);
+			(void)auth_request_import(auth_request, *args, "");
 		else {
 			key = t_strdup_until(*args, value++);
 			(void)auth_request_import(auth_request, key, value);
@@ -124,10 +123,10 @@ static void auth_worker_send_reply(struct auth_worker_client *client,
 	if (worker_restart_request)
 		o_stream_nsend_str(client->output, "RESTART\n");
 	o_stream_nsend(client->output, str_data(str), str_len(str));
-	if (o_stream_nfinish(client->output) < 0 && request != NULL &&
+	if (o_stream_flush(client->output) < 0 && request != NULL &&
 	    cmd_duration > AUTH_WORKER_WARN_DISCONNECTED_LONG_CMD_SECS) {
-		p = strchr(str_c(str), '\t');
-		p = p == NULL ? "BUG" : t_strcut(p+1, '\t');
+		p = i_strchr_to_next(str_c(str), '\t');
+		p = p == NULL ? "BUG" : t_strcut(p, '\t');
 
 		i_warning("Auth master disconnected us while handling "
 			  "request for %s for %ld secs (result=%s)",
@@ -649,8 +648,7 @@ auth_worker_handle_list(struct auth_worker_client *client,
 	ctx->auth_request->userdb = userdb;
 
 	io_remove(&ctx->client->io);
-	if (ctx->client->to_idle != NULL)
-		timeout_remove(&ctx->client->to_idle);
+	timeout_remove(&ctx->client->to_idle);
 
 	o_stream_set_flush_callback(ctx->client->output,
 				    auth_worker_list_output, ctx);
@@ -810,9 +808,8 @@ auth_worker_client_create(struct auth *auth, int fd)
 
 	client->auth = auth;
 	client->fd = fd;
-	client->input = i_stream_create_fd(fd, AUTH_WORKER_MAX_LINE_LENGTH,
-					   FALSE);
-	client->output = o_stream_create_fd(fd, (size_t)-1, FALSE);
+	client->input = i_stream_create_fd(fd, AUTH_WORKER_MAX_LINE_LENGTH);
+	client->output = o_stream_create_fd(fd, (size_t)-1);
 	o_stream_set_no_error_handling(client->output, TRUE);
 	o_stream_set_flush_callback(client->output, auth_worker_output, client);
 	client->io = io_add(fd, IO_READ, auth_worker_input, client);
@@ -836,10 +833,8 @@ void auth_worker_client_destroy(struct auth_worker_client **_client)
 	i_stream_close(client->input);
 	o_stream_close(client->output);
 
-	if (client->to_idle != NULL)
-		timeout_remove(&client->to_idle);
-	if (client->io != NULL)
-		io_remove(&client->io);
+	timeout_remove(&client->to_idle);
+	io_remove(&client->io);
 
 	net_disconnect(client->fd);
 	client->fd = -1;

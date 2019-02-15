@@ -46,7 +46,7 @@ struct file_dict_iterate_context {
 	struct file_dict_iterate_path *paths;
 
 	enum dict_iterate_flags flags;
-	unsigned int failed:1;
+	const char *error;
 };
 
 static struct dotlock_settings file_dict_dotlock_settings = {
@@ -96,10 +96,7 @@ static void file_dict_deinit(struct dict *_dict)
 {
 	struct file_dict *dict = (struct file_dict *)_dict;
 
-	if (dict->fd != -1) {
-		if (close(dict->fd) < 0)
-			i_error("close(%s) failed: %m", dict->path);
-	}
+	i_close_fd_path(&dict->fd, dict->path);
 	hash_table_destroy(&dict->hash);
 	pool_unref(&dict->hash_pool);
 	i_free(dict->path);
@@ -142,17 +139,14 @@ static bool file_dict_need_refresh(struct file_dict *dict)
 	return FALSE;
 }
 
-static int file_dict_open_latest(struct file_dict *dict)
+static int file_dict_open_latest(struct file_dict *dict, const char **error_r)
 {
 	int open_type;
 
 	if (!file_dict_need_refresh(dict))
 		return 0;
 
-	if (dict->fd != -1) {
-		if (close(dict->fd) < 0)
-			i_error("close(%s) failed: %m", dict->path);
-	}
+	i_close_fd_path(&dict->fd, dict->path);
 
 	open_type = dict->lock_method == FILE_LOCK_METHOD_DOTLOCK ?
 		O_RDONLY : O_RDWR;
@@ -161,21 +155,21 @@ static int file_dict_open_latest(struct file_dict *dict)
 		if (errno == ENOENT)
 			return 0;
 		if (errno == EACCES)
-			i_error("%s", eacces_error_get("open", dict->path));
+			*error_r = eacces_error_get("open", dict->path);
 		else
-			i_error("open(%s) failed: %m", dict->path);
+			*error_r = t_strdup_printf("open(%s) failed: %m", dict->path);
 		return -1;
 	}
 	dict->refreshed = FALSE;
 	return 1;
 }
 
-static int file_dict_refresh(struct file_dict *dict)
+static int file_dict_refresh(struct file_dict *dict, const char **error_r)
 {
 	struct istream *input;
 	char *key, *value;
 
-	if (file_dict_open_latest(dict) < 0)
+	if (file_dict_open_latest(dict, error_r) < 0)
 		return -1;
 	if (dict->refreshed || dict->dict.iter_count > 0)
 		return 0;
@@ -184,7 +178,7 @@ static int file_dict_refresh(struct file_dict *dict)
 	p_clear(dict->hash_pool);
 
 	if (dict->fd != -1) {
-		input = i_stream_create_fd(dict->fd, (size_t)-1, FALSE);
+		input = i_stream_create_fd(dict->fd, (size_t)-1);
 
 		while ((key = i_stream_read_next_line(input)) != NULL) {
 			/* strdup() before the second read */
@@ -194,7 +188,7 @@ static int file_dict_refresh(struct file_dict *dict)
 				break;
 
 			value = str_tabunescape(p_strdup(dict->hash_pool, value));
-			hash_table_insert(dict->hash, key, value);
+			hash_table_update(dict->hash, key, value);
 		}
 		i_stream_destroy(&input);
 	}
@@ -202,12 +196,12 @@ static int file_dict_refresh(struct file_dict *dict)
 	return 0;
 }
 
-static int file_dict_lookup(struct dict *_dict, pool_t pool,
-			    const char *key, const char **value_r)
+static int file_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
+			    const char **value_r, const char **error_r)
 {
 	struct file_dict *dict = (struct file_dict *)_dict;
 
-	if (file_dict_refresh(dict) < 0)
+	if (file_dict_refresh(dict, error_r) < 0)
 		return -1;
 
 	*value_r = p_strdup(pool, hash_table_lookup(dict->hash, key));
@@ -221,6 +215,7 @@ file_dict_iterate_init(struct dict *_dict, const char *const *paths,
         struct file_dict_iterate_context *ctx;
 	struct file_dict *dict = (struct file_dict *)_dict;
 	unsigned int i, path_count;
+	const char *error;
 	pool_t pool;
 
 	pool = pool_alloconly_create("file dict iterate", 256);
@@ -236,8 +231,8 @@ file_dict_iterate_init(struct dict *_dict, const char *const *paths,
 	}
 	ctx->flags = flags;
 
-	if (file_dict_refresh(dict) < 0)
-		ctx->failed = TRUE;
+	if (file_dict_refresh(dict, &error) < 0)
+		ctx->error = p_strdup(pool, error);
 
 	ctx->iter = hash_table_iterate_init(dict->hash);
 	return &ctx->ctx;
@@ -288,12 +283,14 @@ static bool file_dict_iterate(struct dict_iterate_context *_ctx,
 	return FALSE;
 }
 
-static int file_dict_iterate_deinit(struct dict_iterate_context *_ctx)
+static int file_dict_iterate_deinit(struct dict_iterate_context *_ctx,
+				    const char **error_r)
 {
 	struct file_dict_iterate_context *ctx =
 		(struct file_dict_iterate_context *)_ctx;
-	int ret = ctx->failed ? -1 : 0;
+	int ret = ctx->error != NULL ? -1 : 0;
 
+	*error_r = t_strdup(ctx->error);
 	hash_table_iterate_deinit(&ctx->iter);
 	pool_unref(&ctx->pool);
 	return ret;
@@ -357,18 +354,6 @@ static void file_dict_apply_changes(struct dict_transaction_memory_context *ctx,
 			if (value == NULL) {
 				value = p_strdup(dict->hash_pool,
 						 change->value.str);
-			}
-			hash_table_update(dict->hash, key, value);
-			break;
-		case DICT_CHANGE_TYPE_APPEND:
-			if (key == NULL)
-				key = p_strdup(dict->hash_pool, change->key);
-			if (old_value == NULL) {
-				value = p_strdup(dict->hash_pool,
-						 change->value.str);
-			} else {
-				value = p_strconcat(dict->hash_pool, old_value,
-						    change->value.str, NULL);
 			}
 			hash_table_update(dict->hash, key, value);
 			break;
@@ -444,7 +429,7 @@ fd_copy_parent_dir_permissions(const char *src_path, int dest_fd,
 	return fd_copy_stat_permissions(&src_st, dest_fd, dest_path);
 }
 
-static int file_dict_mkdir(struct file_dict *dict)
+static int file_dict_mkdir(struct file_dict *dict, const char **error_r)
 {
 	const char *path, *p, *root;
 	struct stat st;
@@ -457,9 +442,9 @@ static int file_dict_mkdir(struct file_dict *dict)
 
 	if (stat_first_parent(path, &root, &st) < 0) {
 		if (errno == EACCES)
-			i_error("%s", eacces_error_get("stat", root));
+			*error_r = eacces_error_get("stat", root);
 		else
-			i_error("stat(%s) failed: %m", root);
+			*error_r = t_strdup_printf("stat(%s) failed: %m", root);
 		return -1;
 	}
 	if ((st.st_mode & S_ISGID) != 0) {
@@ -469,58 +454,65 @@ static int file_dict_mkdir(struct file_dict *dict)
 
 	if (mkdir_parents(path, mode) < 0 && errno != EEXIST) {
 		if (errno == EACCES)
-			i_error("%s", eacces_error_get("mkdir_parents", path));
+			*error_r = eacces_error_get("mkdir_parents", path);
 		else
-			i_error("mkdir_parents(%s) failed: %m", path);
+			*error_r = t_strdup_printf("mkdir_parents(%s) failed: %m", path);
 		return -1;
 	}
 	return 0;
 }
 
 static int
-file_dict_lock(struct file_dict *dict, struct file_lock **lock_r)
+file_dict_lock(struct file_dict *dict, struct file_lock **lock_r,
+	       const char **error_r)
 {
 	int ret;
 
-	if (file_dict_open_latest(dict) < 0)
+	if (file_dict_open_latest(dict, error_r) < 0)
 		return -1;
 
 	if (dict->fd == -1) {
 		/* quota file doesn't exist yet, we need to create it */
 		dict->fd = open(dict->path, O_CREAT | O_RDWR, 0600);
 		if (dict->fd == -1 && errno == ENOENT) {
-			if (file_dict_mkdir(dict) < 0)
+			if (file_dict_mkdir(dict, error_r) < 0)
 				return -1;
 			dict->fd = open(dict->path, O_CREAT | O_RDWR, 0600);
 		}
 		if (dict->fd == -1) {
 			if (errno == EACCES)
-				i_error("%s", eacces_error_get("creat", dict->path));
-			else
-				i_error("creat(%s) failed: %m", dict->path);
+				*error_r = eacces_error_get("creat", dict->path);
+			else {
+				*error_r = t_strdup_printf(
+					"creat(%s) failed: %m", dict->path);
+			}
 			return -1;
 		}
 		(void)fd_copy_parent_dir_permissions(dict->path, dict->fd,
 						     dict->path);
 	}
 
+	*lock_r = NULL;
 	do {
+		file_lock_free(lock_r);
 		if (file_wait_lock(dict->fd, dict->path, F_WRLCK,
 				   dict->lock_method,
 				   file_dict_dotlock_settings.timeout,
 				   lock_r) <= 0) {
-			i_error("file_wait_lock(%s) failed: %m", dict->path);
+			*error_r = t_strdup_printf(
+				"file_wait_lock(%s) failed: %m", dict->path);
 			return -1;
 		}
 		/* check again if we need to reopen the file because it was
 		   just replaced */
-	} while ((ret = file_dict_open_latest(dict)) > 0);
+	} while ((ret = file_dict_open_latest(dict, error_r)) > 0);
 
 	return ret < 0 ? -1 : 0;
 }
 
-static int file_dict_write_changes(struct dict_transaction_memory_context *ctx,
-				   bool *atomic_inc_not_found_r)
+static int
+file_dict_write_changes(struct dict_transaction_memory_context *ctx,
+			bool *atomic_inc_not_found_r, const char **error_r)
 {
 	struct file_dict *dict = (struct file_dict *)ctx->ctx.dict;
 	struct dotlock *dotlock = NULL;
@@ -537,13 +529,13 @@ static int file_dict_write_changes(struct dict_transaction_memory_context *ctx,
 	switch (dict->lock_method) {
 	case FILE_LOCK_METHOD_FCNTL:
 	case FILE_LOCK_METHOD_FLOCK:
-		if (file_dict_lock(dict, &lock) < 0)
+		if (file_dict_lock(dict, &lock, error_r) < 0)
 			return -1;
 		temp_path = t_strdup_printf("%s.tmp", dict->path);
 		fd = creat(temp_path, 0600);
 		if (fd == -1) {
-			i_error("file dict commit: creat(%s) failed: %m",
-				temp_path);
+			*error_r = t_strdup_printf(
+				"dict-file: creat(%s) failed: %m", temp_path);
 			file_unlock(&lock);
 			return -1;
 		}
@@ -552,13 +544,14 @@ static int file_dict_write_changes(struct dict_transaction_memory_context *ctx,
 		fd = file_dotlock_open(&file_dict_dotlock_settings, dict->path, 0,
 				       &dotlock);
 		if (fd == -1 && errno == ENOENT) {
-			if (file_dict_mkdir(dict) < 0)
+			if (file_dict_mkdir(dict, error_r) < 0)
 				return -1;
 			fd = file_dotlock_open(&file_dict_dotlock_settings,
 					       dict->path, 0, &dotlock);
 		}
 		if (fd == -1) {
-			i_error("file dict commit: file_dotlock_open(%s) failed: %m",
+			*error_r = t_strdup_printf(
+				"dict-file: file_dotlock_open(%s) failed: %m",
 				dict->path);
 			return -1;
 		}
@@ -567,7 +560,7 @@ static int file_dict_write_changes(struct dict_transaction_memory_context *ctx,
 	}
 
 	/* refresh once more now that we're locked */
-	if (file_dict_refresh(dict) < 0) {
+	if (file_dict_refresh(dict, error_r) < 0) {
 		if (dotlock != NULL)
 			file_dotlock_delete(&dotlock);
 		else {
@@ -585,7 +578,7 @@ static int file_dict_write_changes(struct dict_transaction_memory_context *ctx,
 	}
 	file_dict_apply_changes(ctx, atomic_inc_not_found_r);
 
-	output = o_stream_create_fd(fd, 0, FALSE);
+	output = o_stream_create_fd(fd, 0);
 	o_stream_cork(output);
 	iter = hash_table_iterate_init(dict->hash);
 	str = t_str_new(256);
@@ -599,10 +592,16 @@ static int file_dict_write_changes(struct dict_transaction_memory_context *ctx,
 	}
 	hash_table_iterate_deinit(&iter);
 
-	if (o_stream_nfinish(output) < 0) {
-		i_error("write(%s) failed: %m", temp_path);
+	if (o_stream_finish(output) <= 0) {
+		*error_r = t_strdup_printf("write(%s) failed: %s", temp_path,
+					   o_stream_get_error(output));
 		o_stream_destroy(&output);
-		i_close_fd(&fd);
+		if (dotlock != NULL)
+			file_dotlock_delete(&dotlock);
+		else {
+			i_close_fd(&fd);
+			file_unlock(&lock);
+		}
 		return -1;
 	}
 	o_stream_destroy(&output);
@@ -610,27 +609,29 @@ static int file_dict_write_changes(struct dict_transaction_memory_context *ctx,
 	if (dotlock != NULL) {
 		if (file_dotlock_replace(&dotlock,
 				DOTLOCK_REPLACE_FLAG_DONT_CLOSE_FD) < 0) {
+			*error_r = t_strdup_printf("file_dotlock_replace() failed: %m");
 			i_close_fd(&fd);
 			return -1;
 		}
 	} else {
 		if (rename(temp_path, dict->path) < 0) {
-			i_error("rename(%s, %s) failed: %m",
-				temp_path, dict->path);
+			*error_r = t_strdup_printf("rename(%s, %s) failed: %m",
+						   temp_path, dict->path);
 			file_unlock(&lock);
 			i_close_fd(&fd);
 			return -1;
 		}
+		/* dict->fd is locked, not the new fd. We're closing dict->fd
+		   so we can just free the lock struct. */
 		file_lock_free(&lock);
 	}
 
-	if (dict->fd != -1)
-		i_close_fd(&dict->fd);
+	i_close_fd(&dict->fd);
 	dict->fd = fd;
 	return 0;
 }
 
-static int
+static void
 file_dict_transaction_commit(struct dict_transaction_context *_ctx,
 			     bool async ATTR_UNUSED,
 			     dict_transaction_commit_callback_t *callback,
@@ -638,20 +639,19 @@ file_dict_transaction_commit(struct dict_transaction_context *_ctx,
 {
 	struct dict_transaction_memory_context *ctx =
 		(struct dict_transaction_memory_context *)_ctx;
+	struct dict_commit_result result;
 	bool atomic_inc_not_found;
-	int ret;
 
-	if (file_dict_write_changes(ctx, &atomic_inc_not_found) < 0)
-		ret = -1;
+	i_zero(&result);
+	if (file_dict_write_changes(ctx, &atomic_inc_not_found, &result.error) < 0)
+		result.ret = DICT_COMMIT_RET_FAILED;
 	else if (atomic_inc_not_found)
-		ret = 0;
+		result.ret = DICT_COMMIT_RET_NOTFOUND;
 	else
-		ret = 1;
+		result.ret = DICT_COMMIT_RET_OK;
 	pool_unref(&ctx->pool);
 
-	if (callback != NULL)
-		callback(ret, context);
-	return ret;
+	callback(&result, context);
 }
 
 struct dict dict_driver_file = {
@@ -668,7 +668,6 @@ struct dict dict_driver_file = {
 		.transaction_rollback = dict_transaction_memory_rollback,
 		.set = dict_transaction_memory_set,
 		.unset = dict_transaction_memory_unset,
-		.append = dict_transaction_memory_append,
 		.atomic_inc = dict_transaction_memory_atomic_inc,
 	}
 };
