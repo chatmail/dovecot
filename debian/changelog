@@ -1,3 +1,16 @@
+dovecot (1:2.3.4.1-2) unstable; urgency=medium
+
+  [ Laurent Bigonville ]
+  * [ac99918] Fix double-free crash in mysql driver
+    Fix double closing of the connection in the mysql driver, this should
+    fix the crash in the dovecot auth process, taken from upstream.
+    (Closes: #918339)
+
+  [ Apollon Oikonomopoulos ]
+  * [8a30446] Bump Standards-Version to 4.3.0; no changes needed
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 14 Mar 2019 11:02:39 +0200
+
 dovecot (1:2.3.4.1-1) unstable; urgency=high
 
   * [bebf0b4] New upstream version 2.3.4.1
