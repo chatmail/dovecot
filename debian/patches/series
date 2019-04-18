@@ -10,3 +10,4 @@ ssl-dh-params-location.patch
 lib-master-test-event-stats-Use-PRIu64-format.patch
 avoid-double-closing-mysql.patch
 CVE-2019-7524
+CVE-2019-10691
