@@ -1,3 +1,13 @@
+dovecot (1:2.3.4.1-5) unstable; urgency=medium
+
+  * [bd00402] Fix CVE-2019-11494 and CVE-2019-11499 (Closes: #928235)
+     - submission-login: fix null pointer dereference when client
+       disconnects during authentication (CVE-2019-11494)
+     - submission-login: fix assert-crash when receiving an invalid
+       authentication message over TLS (CVE-2019-11499)
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Mon, 29 Apr 2019 23:35:05 +0300
+
 dovecot (1:2.3.4.1-4) unstable; urgency=high
 
   * [d04d4ba] Fix assert-crash in JSON encoder (CVE-2019-10691)
