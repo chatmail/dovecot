@@ -1,3 +1,16 @@
+dovecot (1:2.3.4.1-5+deb10u1) buster-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Fix CVE-2019-11500
+    - lib-imap: Don't accept strings with NULs
+    - lib-imap: Make sure str_unescape() won't be writing past allocated
+      memory
+    - lib-managesieve: Don't accept strings with NULs
+    - lib-managesieve: Make sure str_unescape() won't be writing past
+      allocated memory
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Sun, 25 Aug 2019 10:54:21 +0200
+
 dovecot (1:2.3.4.1-5) unstable; urgency=medium
 
   * [bd00402] Fix CVE-2019-11494 and CVE-2019-11499 (Closes: #928235)
