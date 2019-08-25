@@ -1,0 +1,33 @@
+From 4a299840cdb51f61f8d1ebc0210b19c40dfbc1cc Mon Sep 17 00:00:00 2001
+From: Timo Sirainen <timo.sirainen@open-xchange.com>
+Date: Fri, 17 May 2019 10:39:25 +0300
+Subject: [PATCH 2/2] lib-managesieve: Make sure str_unescape() won't be
+ writing past allocated memory
+
+The previous commit should already prevent this, but this makes sure it
+can't become broken in the future either. It makes the performance a tiny
+bit worse, but that's not practically noticeable.
+---
+ src/lib-managesieve/managesieve-parser.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/pigeonhole/src/lib-managesieve/managesieve-parser.c b/pigeonhole/src/lib-managesieve/managesieve-parser.c
+index f5f9d323..dc7d1fa9 100644
+--- a/pigeonhole/src/lib-managesieve/managesieve-parser.c
++++ b/pigeonhole/src/lib-managesieve/managesieve-parser.c
+@@ -169,10 +169,8 @@ static void managesieve_parser_save_arg(struct managesieve_parser *parser,
+ 
+ 			/* remove the escapes */
+ 			if (parser->str_first_escape >= 0 &&
+-				  (parser->flags & MANAGESIEVE_PARSE_FLAG_NO_UNESCAPE) == 0) {
+-				/* -1 because we skipped the '"' prefix */
+-				str_unescape(str + parser->str_first_escape-1);
+-			}
++				  (parser->flags & MANAGESIEVE_PARSE_FLAG_NO_UNESCAPE) == 0)
++				(void)str_unescape(str);
+ 
+ 			arg->_data.str = str;
+ 			arg->str_len = strlen(str);
+-- 
+2.11.0
+
