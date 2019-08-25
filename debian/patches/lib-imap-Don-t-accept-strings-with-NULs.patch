@@ -1,0 +1,36 @@
+From 58ffd3e8a02e54fc98b6be78e02b0511ee9263eb Mon Sep 17 00:00:00 2001
+From: Timo Sirainen <timo.sirainen@open-xchange.com>
+Date: Fri, 10 May 2019 19:24:51 +0300
+Subject: [PATCH 1/2] lib-imap: Don't accept strings with NULs
+
+IMAP doesn't allow NULs except in binary literals. We'll still allow them
+in regular literals as well, but just not in strings.
+
+This fixes a bug with unescaping a string with NULs: str_unescape() could
+have been called for memory that points outside the allocated string,
+causing heap corruption. This could cause crashes or theoretically even
+result in remote code execution exploit.
+
+Found by Nick Roessler and Rafi Rubin
+[Salvatore Bonaccorso: Backported to 2.2.27: Rename back error field to
+parser->error, which was an upstream change around 2.3.0.rc1 with
+468440fab1a1 ("lib-imap: imap-parser: Renamed error field to
+error_msg.")]
+---
+ src/lib-imap/imap-parser.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+--- a/src/lib-imap/imap-parser.c
++++ b/src/lib-imap/imap-parser.c
+@@ -348,6 +348,11 @@ static int imap_parser_read_string(struc
+ 			break;
+ 		}
+ 
++		if (data[i] == '\0') {
++			parser->error = "NULs not allowed in strings";
++			return FALSE;
++		}
++
+ 		if (data[i] == '\\') {
+ 			if (i+1 == data_size) {
+ 				/* known data ends with '\' - leave it to
