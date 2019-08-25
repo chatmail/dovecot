@@ -1,3 +1,16 @@
+dovecot (1:2.2.27-3+deb9u5) stretch-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Fix CVE-2019-11500
+    - lib-imap: Don't accept strings with NULs
+    - lib-imap: Make sure str_unescape() won't be writing past allocated
+      memory
+    - lib-managesieve: Don't accept strings with NULs
+    - lib-managesieve: Make sure str_unescape() won't be writing past
+      allocated memory
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Sun, 25 Aug 2019 15:29:44 +0200
+
 dovecot (1:2.2.27-3+deb9u4) stretch-security; urgency=high
 
   * [d402493] Fix two buffer overflows when reading oversized FTS headers
