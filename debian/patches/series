@@ -18,3 +18,4 @@ CVE-2019-3814
 CVE-2019-7524
 lib-imap-Don-t-accept-strings-with-NULs.patch
 lib-imap-Make-sure-str_unescape-won-t-be-writing-pas.patch
+lib-managesieve-Don-t-accept-strings-with-NULs.patch

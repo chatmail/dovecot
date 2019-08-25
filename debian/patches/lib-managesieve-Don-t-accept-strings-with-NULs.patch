@@ -1,0 +1,36 @@
+From 7ce9990a5e6ba59e89b7fe1c07f574279aed922c Mon Sep 17 00:00:00 2001
+From: Timo Sirainen <timo.sirainen@open-xchange.com>
+Date: Fri, 10 May 2019 19:43:55 +0300
+Subject: [PATCH 1/2] lib-managesieve: Don't accept strings with NULs
+
+ManageSieve doesn't allow NULs in strings.
+
+This fixes a bug with unescaping a string with NULs: str_unescape() could
+have been called for memory that points outside the allocated string,
+causing heap corruption. This could cause crashes or theoretically even
+result in remote code execution exploit.
+
+Found by Nick Roessler and Rafi Rubin
+---
+ src/lib-managesieve/managesieve-parser.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/pigeonhole/src/lib-managesieve/managesieve-parser.c b/pigeonhole/src/lib-managesieve/managesieve-parser.c
+index d3eb2101..f5f9d323 100644
+--- a/pigeonhole/src/lib-managesieve/managesieve-parser.c
++++ b/pigeonhole/src/lib-managesieve/managesieve-parser.c
+@@ -258,6 +258,11 @@ managesieve_parser_read_string(struct managesieve_parser *parser,
+ 			break;
+ 		}
+ 
++		if (data[i] == '\0') {
++			parser->error = "NULs not allowed in strings";
++			return FALSE;
++		}
++
+ 		if (data[i] == '\\') {
+ 			if (i+1 == data_size) {
+ 				/* known data ends with '\' - leave it to
+-- 
+2.11.0
+
