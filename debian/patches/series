@@ -13,3 +13,4 @@ CVE-2019-7524
 CVE-2019-10691
 CVE-2019-11494
 CVE-2019-11499
+lib-imap-Don-t-accept-strings-with-NULs.patch
