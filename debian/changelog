@@ -1,3 +1,9 @@
+dovecot (1:2.3.4.1-5+deb10u1~bpo9+1) stretch-backports; urgency=medium
+
+  * Rebuild for stretch-backports.
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Wed, 28 Aug 2019 23:48:11 +0300
+
 dovecot (1:2.3.4.1-5+deb10u1) buster-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
