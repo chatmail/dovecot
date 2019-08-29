@@ -1,3 +1,23 @@
+dovecot (1:2.3.7.2-1) unstable; urgency=medium
+
+  * [dcaf24e] New upstream version 2.3.7.2
+    - Fixes CVE-2019-11500 for dovecot-core
+  * [111beef] Update pigeonhole to 0.5.7.2
+    - Fixes CVE-2019-11500 for pigeonhole/managesieve
+  * [a422c4c] Bump Standards-Version to 4.4.0; no changes needed
+  * [56e37ed] Bump dh compat to 12; no changes needed.
+    - Drop d/compat in favor debhelper-compat B-D.
+  * [476edbd] Refresh dovecot_name.patch and ssl-cert-location.patch
+  * [9dc7904] Drop patches included in 2.3.7.2.
+     - CVE-2019-10691
+     - CVE-2019-11494
+     - CVE-2019-11499
+     - CVE-2019-7524
+     - avoid-double-closing-mysql.patch
+     - lib-master-test-event-stats-Use-PRIu64-format.patch
+
+ -- Apollon Oikonomopoulos <apoikos@debian.org>  Thu, 29 Aug 2019 11:55:51 +0300
+
 dovecot (1:2.3.4.1-5) unstable; urgency=medium
 
   * [bd00402] Fix CVE-2019-11494 and CVE-2019-11499 (Closes: #928235)
