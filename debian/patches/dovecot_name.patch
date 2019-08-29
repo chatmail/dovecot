@@ -14,7 +14,7 @@ Last-Update: 2018-07-04
 
 --- a/configure.ac
 +++ b/configure.ac
-@@ -302,7 +302,12 @@
+@@ -295,7 +295,12 @@
  # SIZE_MAX is missing without this
  CXXFLAGS="$CXXFLAGS -D__STDC_LIMIT_MACROS"
  
@@ -30,15 +30,15 @@ Last-Update: 2018-07-04
  
 --- a/src/lmtp/lmtp-settings.c
 +++ b/src/lmtp/lmtp-settings.c
-@@ -82,7 +82,7 @@
+@@ -85,7 +85,7 @@
  	.lmtp_rawlog_dir = "",
  	.lmtp_proxy_rawlog_dir = "",
  
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
- 	.login_trusted_networks = ""
- };
+ 	.login_trusted_networks = "",
  
+ 	.mail_plugins = "",
 --- a/src/login-common/login-settings.c
 +++ b/src/login-common/login-settings.c
 @@ -48,7 +48,7 @@
@@ -52,7 +52,7 @@ Last-Update: 2018-07-04
  	.login_access_sockets = "",
 --- a/src/lib-smtp/smtp-server.c
 +++ b/src/lib-smtp/smtp-server.c
-@@ -37,7 +37,7 @@
+@@ -47,7 +47,7 @@
  	if (set->login_greeting != NULL && *set->login_greeting != '\0')
  		server->set.login_greeting = p_strdup(pool, set->login_greeting);
  	else
@@ -63,7 +63,7 @@ Last-Update: 2018-07-04
  	} else  {
 --- a/src/submission/submission-settings.c
 +++ b/src/submission/submission-settings.c
-@@ -99,7 +99,7 @@
+@@ -101,7 +101,7 @@
  
  	.hostname = "",
  

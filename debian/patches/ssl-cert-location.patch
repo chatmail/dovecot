@@ -38,7 +38,7 @@ Bug: #608719
 +ssl_client_ca_dir = /etc/ssl/certs
  #ssl_client_ca_file =
  
- # Request client to send a certificate. If you also want to require it, set
+ # Require valid cert when connecting to a remote server
 --- a/doc/mkcert.sh
 +++ b/doc/mkcert.sh
 @@ -8,19 +8,19 @@
