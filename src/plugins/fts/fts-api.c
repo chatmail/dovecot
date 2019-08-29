@@ -16,7 +16,7 @@ void fts_backend_register(const struct fts_backend *backend)
 {
 	if (!array_is_created(&backends))
 		i_array_init(&backends, 4);
-	array_append(&backends, &backend, 1);
+	array_push_back(&backends, &backend);
 }
 
 void fts_backend_unregister(const char *name)
@@ -267,7 +267,7 @@ fts_merge_maybies(ARRAY_TYPE(seq_range) *dest_maybe,
 	/* create unwanted sequences list from both sources */
 	t_array_init(&src_unwanted, 128);
 	new_range.seq1 = 0; new_range.seq2 = (uint32_t)-1;
-	array_append(&src_unwanted, &new_range, 1);
+	array_push_back(&src_unwanted, &new_range);
 	seq_range_array_remove_seq_range(&src_unwanted, src_maybe);
 	seq_range_array_remove_seq_range(&src_unwanted, src_definite);
 
@@ -425,7 +425,7 @@ bool fts_index_get_header(struct mailbox *box, struct fts_index_header *hdr_r)
 		i_zero(hdr_r);
 		ret = FALSE;
 	} else {
-		memcpy(hdr_r, data, data_size);
+		memcpy(hdr_r, data, sizeof(*hdr_r));
 		ret = TRUE;
 	}
 	mail_index_view_close(&view);

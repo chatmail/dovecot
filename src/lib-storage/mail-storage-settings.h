@@ -63,9 +63,16 @@ struct mail_storage_settings {
 	const char *hostname;
 	const char *recipient_delimiter;
 
-	const char *ssl_client_ca_dir;
 	const char *ssl_client_ca_file;
+	const char *ssl_client_ca_dir;
+	const char *ssl_client_cert;
+	const char *ssl_client_key;
+	const char *ssl_cipher_list;
+	const char *ssl_curve_list;
+	const char *ssl_min_protocol;
 	const char *ssl_crypto_device;
+	bool ssl_client_require_valid_cert;
+	bool verbose_ssl;
 	const char *mail_attachment_detection_options;
 
 	enum file_lock_method parsed_lock_method;
@@ -150,6 +157,8 @@ extern const struct setting_parser_info mail_storage_setting_parser_info;
 extern const struct mail_namespace_settings mail_namespace_default_settings;
 extern const struct mailbox_settings mailbox_default_settings;
 
+struct ssl_iostream_settings;
+
 const void *
 mail_user_set_get_driver_settings(const struct setting_parser_info *info,
 				  const struct mail_user_settings *set,
@@ -170,5 +179,8 @@ bool mail_user_set_get_postmaster_address(const struct mail_user_settings *set,
 bool mail_user_set_get_postmaster_smtp(const struct mail_user_settings *set,
 				       const struct smtp_address **address_r,
 				       const char **error_r);
+
+void mail_storage_settings_init_ssl_client_settings(const struct mail_storage_settings *mail_set,
+						    struct ssl_iostream_settings *ssl_set_r);
 
 #endif

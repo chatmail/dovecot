@@ -56,7 +56,7 @@ exec_child(struct master_service_connection *conn,
 
 	for (; *args != NULL; args++) {
 		const char *arg = t_str_tabunescape(*args);
-		array_append(&exec_args, &arg, 1);
+		array_push_back(&exec_args, &arg);
 	}
 	array_append_zero(&exec_args);
 
@@ -66,7 +66,7 @@ exec_child(struct master_service_connection *conn,
 			env_put(*envs);
         }
 
-	args = array_idx(&exec_args, 0);
+	args = array_front(&exec_args);
 	execvp_const(args[0], args);
 }
 
@@ -173,7 +173,7 @@ static bool client_exec_script(struct master_service_connection *conn)
 			envname = t_strdup_until(*args+4, p);
 
 			if (str_array_find(accepted_envs, envname))
-				array_append(&envs, &env, 1);
+				array_push_back(&envs, &env);
 			args++;
 		}
 		if (strcmp(*args, "noreply") == 0) {
@@ -187,7 +187,7 @@ static bool client_exec_script(struct master_service_connection *conn)
 
 	if (noreply) {
 		/* no need to fork and check exit status */
-		exec_child(conn, args, array_idx(&envs, 0));
+		exec_child(conn, args, array_front(&envs));
 		i_unreached();
 	}
 
@@ -198,7 +198,7 @@ static bool client_exec_script(struct master_service_connection *conn)
 
 	if (pid == 0) {
 		/* child */
-		exec_child(conn, args, array_idx(&envs, 0));
+		exec_child(conn, args, array_front(&envs));
 		i_unreached();
 	}
 
@@ -255,7 +255,7 @@ int main(int argc, char *argv[])
 		case 'e':
 			envs = t_strsplit_spaces(optarg,", \t");
 			while (*envs != NULL) {
-				array_append(&aenvs, envs, 1);
+				array_push_back(&aenvs, envs);
 				envs++;
 			}
 			break;
@@ -267,7 +267,7 @@ int main(int argc, char *argv[])
 	argv += optind;
 
 	array_append_zero(&aenvs);
-	accepted_envs = p_strarray_dup(default_pool, array_idx(&aenvs, 0));
+	accepted_envs = p_strarray_dup(default_pool, array_front(&aenvs));
 
 	master_service_init_log(master_service, "script: ");
 	if (argv[0] == NULL)
@@ -284,11 +284,11 @@ int main(int argc, char *argv[])
 		binary = t_strconcat(PKG_LIBEXECDIR"/", argv[0], NULL);
 
 	i_array_init(&exec_args, argc + 16);
-	array_append(&exec_args, &binary, 1);
+	array_push_back(&exec_args, &binary);
 	for (i = 1; i < argc; i++) {
 		const char *arg = argv[i];
 
-		array_append(&exec_args, &arg, 1);
+		array_push_back(&exec_args, &arg);
 	}
 
 	master_service_run(master_service, client_connected);

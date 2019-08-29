@@ -80,7 +80,7 @@ void mailbox_list_register(const struct mailbox_list *list)
 			list->name);
 	}
 
-	array_append(&mailbox_list_drivers, &list, 1);
+	array_push_back(&mailbox_list_drivers, &list);
 }
 
 void mailbox_list_unregister(const struct mailbox_list *list)
@@ -188,6 +188,7 @@ int mailbox_list_create(const char *driver, struct mail_namespace *ns,
 		set->index_control_use_maildir_name;
 	list->set.iter_from_index_dir = set->iter_from_index_dir;
 	list->set.no_noselect = set->no_noselect;
+	list->set.no_fs_validation = set->no_fs_validation;
 
 	if (*set->mailbox_dir_name == '\0')
 		list->set.mailbox_dir_name = "";
@@ -371,6 +372,9 @@ mailbox_list_settings_parse_full(struct mail_user *user, const char *data,
 			continue;
 		} else if (strcmp(key, "NO-NOSELECT") == 0) {
 			set_r->no_noselect = TRUE;
+			continue;
+		} else if (strcmp(key, "NO-FS-VALIDATION") == 0) {
+			set_r->no_fs_validation = TRUE;
 			continue;
 		} else {
 			*error_r = t_strdup_printf("Unknown setting: %s", key);
@@ -1288,8 +1292,18 @@ mailbox_list_is_valid_fs_name(struct mailbox_list *list, const char *name,
 
 	*error_r = NULL;
 
-	if (list->mail_set->mail_full_filesystem_access)
+	if (list->mail_set->mail_full_filesystem_access ||
+	    list->set.no_fs_validation)
 		return TRUE;
+
+	/* either the list backend uses '/' as the hierarchy separator or
+	   it doesn't use filesystem at all (PROP_NO_ROOT) */
+	if ((list->props & MAILBOX_LIST_PROP_NO_ROOT) == 0 &&
+	    mailbox_list_get_hierarchy_sep(list) != '/' &&
+	    strchr(name, '/') != NULL) {
+		*error_r = "Name must not have '/' characters";
+		return FALSE;
+	}
 
 	/* make sure it's not absolute path */
 	if (*name == '/') {
@@ -1307,11 +1321,10 @@ mailbox_list_is_valid_fs_name(struct mailbox_list *list, const char *name,
 
 	   some mailbox formats have reserved directory names, such as
 	   Maildir's cur/new/tmp. if any of those would conflict with the
-	   mailbox directory name, it's not valid. maildir++ is kludged here as
-	   a special case because all of its mailbox dirs begin with "." */
+	   mailbox directory name, it's not valid. */
 	allow_internal_dirs = list->v.is_internal_name == NULL ||
 		*list->set.maildir_name != '\0' ||
-		strcmp(list->name, MAILBOX_LIST_NAME_MAILDIRPLUSPLUS) == 0;
+		(list->props & MAILBOX_LIST_PROP_NO_INTERNAL_NAMES) != 0;
 	T_BEGIN {
 		const char *const *names;
 
@@ -1363,15 +1376,6 @@ bool mailbox_list_is_valid_name(struct mailbox_list *list,
 			return TRUE;
 		}
 		*error_r = "Name is empty";
-		return FALSE;
-	}
-
-	/* either the list backend uses '/' as the hierarchy separator or
-	   it doesn't use filesystem at all (PROP_NO_ROOT) */
-	if ((list->props & MAILBOX_LIST_PROP_NO_ROOT) == 0 &&
-	    mailbox_list_get_hierarchy_sep(list) != '/' &&
-	    strchr(name, '/') != NULL) {
-		*error_r = "Name must not have '/' characters";
 		return FALSE;
 	}
 

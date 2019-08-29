@@ -67,13 +67,13 @@ static int dns_client_input_args(struct connection *client, const char *const *a
 			o_stream_nsend_str(client->output, "0\t");
 			for (i = 0; i < ips_count; i++) {
 				const char *ip = net_ip2addr(&ips[i]);
-				array_append(&tmp, &ip, 1);
+				array_push_back(&tmp, &ip);
 			}
 			array_append_zero(&tmp);
 			e_debug(e->event(), "Resolve success: %s",
-				t_strarray_join(array_idx(&tmp, 0), ", "));
+				t_strarray_join(array_front(&tmp), ", "));
 			o_stream_nsend_str(client->output,
-					   t_strarray_join(array_idx(&tmp, 0), "\t"));
+					   t_strarray_join(array_front(&tmp), "\t"));
 			o_stream_nsend_str(client->output, "\n");
 		}
 	} else if (strcmp(args[0], "NAME") == 0) {

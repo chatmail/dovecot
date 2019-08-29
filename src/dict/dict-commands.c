@@ -51,8 +51,8 @@ static void dict_connection_cmd_free(struct dict_connection_cmd *cmd)
 	}
 	i_free(cmd->reply);
 
-	if (dict_connection_unref(cmd->conn))
-		dict_connection_continue_input(cmd->conn);
+	if (dict_connection_unref(cmd->conn) && !cmd->conn->destroyed)
+		connection_input_resume(&cmd->conn->conn);
 	i_free(cmd);
 }
 
@@ -76,11 +76,11 @@ static void dict_connection_cmds_flush(struct dict_connection *conn)
 {
 	struct dict_connection_cmd *cmd, *const *first_cmdp;
 
-	i_assert(conn->minor_version < DICT_CLIENT_PROTOCOL_UNORDERED_MIN_VERSION);
+	i_assert(conn->conn.minor_version < DICT_CLIENT_PROTOCOL_UNORDERED_MIN_VERSION);
 
 	dict_connection_ref(conn);
 	while (array_count(&conn->cmds) > 0) {
-		first_cmdp = array_idx(&conn->cmds, 0);
+		first_cmdp = array_front(&conn->cmds);
 		cmd = *first_cmdp;
 
 		i_assert(cmd->async_reply_id == 0);
@@ -94,7 +94,7 @@ static void dict_connection_cmds_flush(struct dict_connection *conn)
 			break;
 		}
 
-		o_stream_nsend_str(conn->output, cmd->reply);
+		o_stream_nsend_str(conn->conn.output, cmd->reply);
 		dict_connection_cmd_remove(cmd);
 	}
 	dict_connection_unref_safe(conn);
@@ -105,14 +105,14 @@ static void dict_connection_cmd_try_flush(struct dict_connection_cmd **_cmd)
 	struct dict_connection_cmd *cmd = *_cmd;
 
 	*_cmd = NULL;
-	if (cmd->conn->minor_version < DICT_CLIENT_PROTOCOL_UNORDERED_MIN_VERSION) {
+	if (cmd->conn->conn.minor_version < DICT_CLIENT_PROTOCOL_UNORDERED_MIN_VERSION) {
 		dict_connection_cmds_flush(cmd->conn);
 		return;
 	}
 	i_assert(cmd->async_reply_id != 0);
 	i_assert(cmd->reply != NULL);
 
-	o_stream_nsend_str(cmd->conn->output, t_strdup_printf("%c%u\t%s",
+	o_stream_nsend_str(cmd->conn->conn.output, t_strdup_printf("%c%u\t%s",
 		DICT_PROTOCOL_REPLY_ASYNC_REPLY,
 		cmd->async_reply_id, cmd->reply));
 	dict_connection_cmd_remove(cmd);
@@ -120,14 +120,14 @@ static void dict_connection_cmd_try_flush(struct dict_connection_cmd **_cmd)
 
 static void dict_connection_cmd_async(struct dict_connection_cmd *cmd)
 {
-	if (cmd->conn->minor_version < DICT_CLIENT_PROTOCOL_UNORDERED_MIN_VERSION)
+	if (cmd->conn->conn.minor_version < DICT_CLIENT_PROTOCOL_UNORDERED_MIN_VERSION)
 		return;
 
 	i_assert(cmd->async_reply_id == 0);
 	cmd->async_reply_id = ++cmd->conn->async_id_counter;
 	if (cmd->async_reply_id == 0)
 		cmd->async_reply_id = ++cmd->conn->async_id_counter;
-	o_stream_nsend_str(cmd->conn->output, t_strdup_printf("%c%u\n",
+	o_stream_nsend_str(cmd->conn->conn.output, t_strdup_printf("%c%u\n",
 		DICT_PROTOCOL_REPLY_ASYNC_ID, cmd->async_reply_id));
 }
 
@@ -153,7 +153,7 @@ dict_cmd_reply_handle_stats(struct dict_connection_cmd *cmd,
 	io_loop_time_refresh();
 	cmd_stats_update(cmd, stats);
 
-	if (cmd->conn->minor_version < DICT_CLIENT_PROTOCOL_TIMINGS_MIN_VERSION)
+	if (cmd->conn->conn.minor_version < DICT_CLIENT_PROTOCOL_TIMINGS_MIN_VERSION)
 		return;
 	str_printfa(str, "\t%ld\t%u\t%ld\t%u",
 		    (long)cmd->start_timeval.tv_sec,
@@ -170,7 +170,7 @@ cmd_lookup_write_reply(struct dict_connection_cmd *cmd,
 
 	i_assert(values[0] != NULL);
 
-	if (cmd->conn->minor_version < DICT_CLIENT_PROTOCOL_VERSION_MIN_MULTI_OK ||
+	if (cmd->conn->conn.minor_version < DICT_CLIENT_PROTOCOL_VERSION_MIN_MULTI_OK ||
 	    values[1] == NULL) {
 		str_append_c(str, DICT_PROTOCOL_REPLY_OK);
 		str_append_tabescaped(str, values[0]);
@@ -219,12 +219,12 @@ static int cmd_lookup(struct dict_connection_cmd *cmd, const char *line)
 
 static bool dict_connection_flush_if_full(struct dict_connection *conn)
 {
-	if (o_stream_get_buffer_used_size(conn->output) >
+	if (o_stream_get_buffer_used_size(conn->conn.output) >
 	    DICT_OUTPUT_OPTIMAL_SIZE) {
-		if (o_stream_flush(conn->output) <= 0) {
+		if (o_stream_flush(conn->conn.output) <= 0) {
 			/* continue later when there's more space
 			   in output buffer */
-			o_stream_set_flush_pending(conn->output, TRUE);
+			o_stream_set_flush_pending(conn->conn.output, TRUE);
 			return FALSE;
 		}
 		/* flushed everything, continue */
@@ -253,7 +253,7 @@ static int cmd_iterate_flush(struct dict_connection_cmd *cmd)
 		if ((cmd->iter_flags & DICT_ITERATE_FLAG_NO_VALUE) == 0)
 			str_append_tabescaped(str, value);
 		str_append_c(str, '\n');
-		o_stream_nsend(cmd->conn->output, str_data(str), str_len(str));
+		o_stream_nsend(cmd->conn->conn.output, str_data(str), str_len(str));
 
 		if (!dict_connection_flush_if_full(cmd->conn))
 			return 0;
@@ -281,9 +281,7 @@ static void cmd_iterate_callback(void *context)
 	struct dict_connection *conn = cmd->conn;
 
 	dict_connection_ref(conn);
-	o_stream_cork(conn->output);
 	dict_connection_cmd_output_more(cmd);
-	o_stream_uncork(conn->output);
 	dict_connection_unref_safe(conn);
 }
 
@@ -613,7 +611,7 @@ int dict_command_input(struct dict_connection *conn, const char *line)
 	cmd->conn = conn;
 	cmd->cmd = cmd_func;
 	cmd->start_timeval = ioloop_timeval;
-	array_append(&conn->cmds, &cmd, 1);
+	array_push_back(&conn->cmds, &cmd);
 	dict_connection_ref(conn);
 	if ((ret = cmd_func->func(cmd, line + 1)) <= 0) {
 		dict_connection_cmd_remove(cmd);
@@ -639,7 +637,7 @@ static bool dict_connection_cmds_try_output_more(struct dict_connection *conn)
 			/* cmd should be freed now, restart output */
 			return TRUE;
 		}
-		if (conn->minor_version < DICT_CLIENT_PROTOCOL_TIMINGS_MIN_VERSION)
+		if (conn->conn.minor_version < DICT_CLIENT_PROTOCOL_TIMINGS_MIN_VERSION)
 			break;
 		/* try to flush the rest */
 	}
@@ -658,8 +656,8 @@ static void dict_connection_cmd_output_more(struct dict_connection_cmd *cmd)
 {
 	struct dict_connection_cmd *const *first_cmdp;
 
-	if (cmd->conn->minor_version < DICT_CLIENT_PROTOCOL_TIMINGS_MIN_VERSION) {
-		first_cmdp = array_idx(&cmd->conn->cmds, 0);
+	if (cmd->conn->conn.minor_version < DICT_CLIENT_PROTOCOL_TIMINGS_MIN_VERSION) {
+		first_cmdp = array_front(&cmd->conn->cmds);
 		if (*first_cmdp != cmd)
 			return;
 	}

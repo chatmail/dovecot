@@ -77,6 +77,8 @@ struct event_passthrough {
 	struct event *(*event)(void);
 };
 
+typedef const char *event_log_prefix_callback_t(void *context);
+
 /* Returns TRUE if the event has all the categories that the "other" event has (and maybe more). */
 bool event_has_all_categories(struct event *event, const struct event *other);
 /* Returns TRUE if the event has all the fields that the "other" event has (and maybe more).
@@ -85,10 +87,26 @@ bool event_has_all_fields(struct event *event, const struct event *other);
 
 /* Returns the source event duplicated into a new event. */
 struct event *event_dup(const struct event *source);
-/* Copy all categories and fields from source to dest.
-   Only the fields and categories in source event itself are copied.
-   Parent events' fields and categories aren't copied. */
-void event_copy_categories_fields(struct event *dest, struct event *source);
+/* Returns a flattened version of the source event.
+   Both categories and fields will be flattened.
+   A new reference to the source event is returned if no flattening was
+   needed. */
+struct event *event_flatten(struct event *src);
+/* Returns a minimized version of the source event.
+   Remove parents with no fields or categories, attempt to flatten fields
+   and categories to avoid sending one-off parent events.  (There is a more
+   detailed description in a comment above the function implementation.)
+   A new reference to the source event is returned if no simplification
+   occured. */
+struct event *event_minimize(struct event *src);
+/* Copy all categories from source to dest.
+   Only the categories in source event itself are copied.
+   Parent events' categories aren't copied. */
+void event_copy_categories(struct event *to, struct event *from);
+/* Copy all fields from source to dest.
+   Only the fields in source event itself are copied.
+   Parent events' fields aren't copied. */
+void event_copy_fields(struct event *to, struct event *from);
 
 /* Create a new empty event under the parent event, or NULL for root event. */
 struct event *event_create(struct event *parent, const char *source_filename,
@@ -144,12 +162,28 @@ struct event *event_get_global(void);
 /* Set the appended log prefix string for this event. All the parent events'
    log prefixes will be concatenated together when logging. The log type
    text (e.g. "Info: ") will be inserted before appended log prefixes (but
-   after replaced log prefix). */
+   after replaced log prefix).
+
+   Clears log_prefix callback.
+ */
 struct event *
 event_set_append_log_prefix(struct event *event, const char *prefix);
 /* Replace the full log prefix string for this event. The parent events' log
-   prefixes won't be used. */
+   prefixes won't be used.
+
+   Clears log_prefix callback.
+*/
 struct event *event_replace_log_prefix(struct event *event, const char *prefix);
+
+
+/* Sets event prefix callback, sets log_prefix empty */
+struct event *event_set_log_prefix_callback(struct event *event,
+					    bool replace,
+					    event_log_prefix_callback_t *callback,
+					    void *context);
+#define event_set_log_prefix_callback(event, replace, callback, context) \
+	event_set_log_prefix_callback(event, replace, (event_log_prefix_callback_t*)callback, \
+		context - CALLBACK_TYPECHECK(callback, const char *(*)(typeof(context))))
 
 /* Set the event's name. The name is specific to a single sending of an event,
    and it'll be automatically cleared once the event is sent. This should
@@ -167,6 +201,9 @@ event_set_source(struct event *event, const char *filename,
    it allow quickly finding which of the otherwise identical syscalls in the
    code generated the error. */
 struct event *event_set_always_log_source(struct event *event);
+/* Set minimum log level for the event */
+struct event *event_set_min_log_level(struct event *event, enum log_type level);
+enum log_type event_get_min_log_level(const struct event *event);
 
 /* Add NULL-terminated list of categories to the event. The categories pointer
    doesn't need to stay valid afterwards, but the event_category structs

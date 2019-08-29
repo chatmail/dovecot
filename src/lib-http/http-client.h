@@ -125,9 +125,10 @@ struct http_client_settings {
 	size_t socket_send_buffer_size;
 	size_t socket_recv_buffer_size;
 
-	/* Event to use for the http client. For specific requests this can be
-	   overridden with http_client_request_set_event(). */
-	struct event *event;
+	/* Event to use as parent for the http client event. For specific
+	   requests this can be overridden with http_client_request_set_event().
+	 */
+	struct event *event_parent;
 
 	/* enable logging debug messages */
 	bool debug;
@@ -222,19 +223,19 @@ http_client_request(struct http_client *client,
 		    const char *method, const char *host, const char *target,
 		    http_client_request_callback_t *callback, void *context);
 #define http_client_request(client, method, host, target, callback, context) \
-	http_client_request(client, method, host, target + \
+	http_client_request(client, method, host, target - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
 
-/* create net HTTP request using provided URL. This implicitly sets
+/* create new HTTP request using provided URL. This implicitly sets
    port, ssl, and username:password if provided. */
 struct http_client_request *
 http_client_request_url(struct http_client *client,
 		    const char *method, const struct http_url *target_url,
 		    http_client_request_callback_t *callback, void *context);
 #define http_client_request_url(client, method, target_url, callback, context) \
-	http_client_request_url(client, method, target_url + \
+	http_client_request_url(client, method, target_url - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
@@ -243,7 +244,7 @@ http_client_request_url_str(struct http_client *client,
 		    const char *method, const char *url_str,
 		    http_client_request_callback_t *callback, void *context);
 #define http_client_request_url_str(client, method, url_str, callback, context) \
-	http_client_request_url_str(client, method, url_str + \
+	http_client_request_url_str(client, method, url_str - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
@@ -259,7 +260,7 @@ http_client_request_connect(struct http_client *client,
 		    http_client_request_callback_t *callback,
 		    void *context);
 #define http_client_request_connect(client, host, port, callback, context) \
-	http_client_request_connect(client, host, port + \
+	http_client_request_connect(client, host, port - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
@@ -272,7 +273,7 @@ http_client_request_connect_ip(struct http_client *client,
 		    http_client_request_callback_t *callback,
 		    void *context);
 #define http_client_request_connect_ip(client, ip, port, callback, context) \
-	http_client_request_connect_ip(client, ip, port + \
+	http_client_request_connect_ip(client, ip, port - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
@@ -382,6 +383,10 @@ http_client_request_get_target(const struct http_client_request *req)
 enum http_request_state
 http_client_request_get_state(const struct http_client_request *req)
 	ATTR_PURE;
+/* return origin_url */
+const struct http_url *
+http_client_request_get_origin_url(const struct http_client_request *req)
+	ATTR_PURE;
 
 /* get statistics for the request */
 void http_client_request_get_stats(struct http_client_request *req,
@@ -406,7 +411,7 @@ void http_client_request_set_destroy_callback(struct http_client_request *req,
 					      void (*callback)(void *),
 					      void *context);
 #define http_client_request_set_destroy_callback(req, callback, context) \
-        http_client_request_set_destroy_callback(req, (void(*)(void*))callback, context + \
+        http_client_request_set_destroy_callback(req, (void(*)(void*))callback, context - \
                 CALLBACK_TYPECHECK(callback, void (*)(typeof(context))))
 
 /* submits request and blocks until the provided payload is sent. Multiple

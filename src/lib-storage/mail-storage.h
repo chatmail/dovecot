@@ -78,8 +78,6 @@ enum mailbox_flags {
 enum mailbox_feature {
 	/* Enable tracking modsequences */
 	MAILBOX_FEATURE_CONDSTORE	= 0x01,
-	/* Enable tracking expunge modsequences */
-	MAILBOX_FEATURE_QRESYNC		= 0x02
 };
 
 enum mailbox_existence {
@@ -652,7 +650,7 @@ void mailbox_notify_changes(struct mailbox *box,
 	ATTR_NULL(3);
 #define mailbox_notify_changes(box, callback, context) \
 	  mailbox_notify_changes(box, (mailbox_notify_callback_t *)callback, \
-		(void *)((char *)context + CALLBACK_TYPECHECK(callback, \
+		(void *)((char *)context - CALLBACK_TYPECHECK(callback, \
 			void (*)(struct mailbox *, typeof(context)))))
 void mailbox_notify_changes_stop(struct mailbox *box);
 
@@ -704,6 +702,10 @@ struct mailbox_header_lookup_ctx *
 mailbox_header_lookup_init(struct mailbox *box, const char *const headers[]);
 void mailbox_header_lookup_ref(struct mailbox_header_lookup_ctx *ctx);
 void mailbox_header_lookup_unref(struct mailbox_header_lookup_ctx **ctx);
+/* Merge two header lookups. */
+struct mailbox_header_lookup_ctx *
+mailbox_header_lookup_merge(const struct mailbox_header_lookup_ctx *hdr1,
+			    const struct mailbox_header_lookup_ctx *hdr2);
 
 /* Initialize new search request. If sort_program is non-NULL, the messages are
    returned in the requested order, otherwise from first to last. */
@@ -844,7 +846,10 @@ void mail_set_seq(struct mail *mail, uint32_t seq);
 bool mail_set_uid(struct mail *mail, uint32_t uid);
 
 /* Add wanted fields/headers on top of existing ones. These will be forgotten
-   after the next mail_set_seq/uid(). */
+   after the next mail_set_seq/uid() that closes the existing mail. Note that
+   it's valid to call this function while there is no mail assigned
+   (mail->seq==0), i.e. this is called before any mail_set_seq/uid() or after
+   mail.close(). */
 void mail_add_temp_wanted_fields(struct mail *mail,
 				 enum mail_fetch_field fields,
 				 struct mailbox_header_lookup_ctx *headers)
@@ -894,7 +899,8 @@ int mail_get_first_header(struct mail *mail, const char *field,
 int mail_get_first_header_utf8(struct mail *mail, const char *field,
 			       const char **value_r);
 /* Return a NULL-terminated list of values for each found field.
-   Returns 1 if headers were found, 0 if not (value_r==NULL) or -1 if error. */
+   Returns 1 if headers were found, 0 if not (value_r[0]==NULL) or
+   -1 if error. */
 int mail_get_headers(struct mail *mail, const char *field,
 		     const char *const **value_r);
 /* Like mail_get_headers(), but decode MIME encoded words to UTF-8.

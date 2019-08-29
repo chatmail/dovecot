@@ -6,6 +6,9 @@ various protocols when forwarding connection.It requires that the sender is
 listed under 'trusted_networks'. For IMAP, it uses the 'ID' command, for other
 protocols,'XCLIENT' is used.
 
+This feature is supported since v1.2, except for x-forward which was added in
+v2.2.29.
+
 IMAP protocol
 -------------
 
@@ -59,4 +62,4 @@ See http://www.postfix.org/XCLIENT_README.html
  * 'PROTO' - Forwarded protocol, can be one of SMTP, ESTMP, LMTP.
  * 'FORWARD' - Base64 encoded key=value parameter to be stored.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

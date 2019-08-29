@@ -272,7 +272,7 @@ test_bad_greeting_input(struct server_connection *conn)
 static void
 test_bad_greeting_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"554 No SMTP service here.\r\n");
 }
 
@@ -332,7 +332,7 @@ test_denied_helo_input(struct server_connection *conn)
 			server_connection_deinit(&conn);
 		return;
 	}
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"550 Command rejected for testing reasons\r\n");
 	server_connection_deinit(&conn);
 }
@@ -340,7 +340,7 @@ test_denied_helo_input(struct server_connection *conn)
 static void
 test_denied_helo_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -406,7 +406,7 @@ test_disconnect_helo_input(struct server_connection *conn)
 static void
 test_disconnect_helo_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -487,7 +487,7 @@ test_denied_mail_input(struct server_connection *conn)
 
 		switch (ctx->state) {
 		case DENIED_MAIL_STATE_EHLO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250-testserver\r\n"
 				"250-PIPELINING\r\n"
 				"250-ENHANCEDSTATUSCODES\r\n"
@@ -496,7 +496,7 @@ test_denied_mail_input(struct server_connection *conn)
 			ctx->state = DENIED_MAIL_STATE_MAIL_FROM;
 			return;
 		case DENIED_MAIL_STATE_MAIL_FROM:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"453 4.3.2 Incapable of accepting messages at this time.\r\n");
 			server_connection_deinit(&conn);
 			return;
@@ -508,7 +508,7 @@ test_denied_mail_input(struct server_connection *conn)
 static void
 test_denied_mail_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -590,7 +590,7 @@ test_denied_rcpt_input(struct server_connection *conn)
 
 		switch (ctx->state) {
 		case DENIED_RCPT_STATE_EHLO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250-testserver\r\n"
 				"250-PIPELINING\r\n"
 				"250-ENHANCEDSTATUSCODES\r\n"
@@ -599,12 +599,12 @@ test_denied_rcpt_input(struct server_connection *conn)
 			ctx->state = DENIED_RCPT_STATE_MAIL_FROM;
 			return;
 		case DENIED_RCPT_STATE_MAIL_FROM:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.0 Ok\r\n");
 			ctx->state = DENIED_RCPT_STATE_RCPT_TO;
 			continue;
 		case DENIED_RCPT_STATE_RCPT_TO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"550 5.4.3 Directory server failure\r\n");
 			server_connection_deinit(&conn);
 			return;
@@ -616,7 +616,7 @@ test_denied_rcpt_input(struct server_connection *conn)
 static void
 test_denied_rcpt_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -699,7 +699,7 @@ test_denied_second_rcpt_input(struct server_connection *conn)
 
 		switch (ctx->state) {
 		case DENIED_SECOND_RCPT_STATE_EHLO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250-testserver\r\n"
 				"250-PIPELINING\r\n"
 				"250-ENHANCEDSTATUSCODES\r\n"
@@ -708,17 +708,17 @@ test_denied_second_rcpt_input(struct server_connection *conn)
 			ctx->state = DENIED_SECOND_RCPT_STATE_MAIL_FROM;
 			return;
 		case DENIED_SECOND_RCPT_STATE_MAIL_FROM:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.0 Ok\r\n");
 			ctx->state = DENIED_SECOND_RCPT_STATE_RCPT_TO;
 			continue;
 		case DENIED_SECOND_RCPT_STATE_RCPT_TO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.5 Ok\r\n");
 			ctx->state = DENIED_SECOND_RCPT_STATE_RCPT_TO2;
 			continue;
 		case DENIED_SECOND_RCPT_STATE_RCPT_TO2:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"550 5.4.3 Directory server failure\r\n");
 			server_connection_deinit(&conn);
 			return;
@@ -730,7 +730,7 @@ test_denied_second_rcpt_input(struct server_connection *conn)
 static void
 test_denied_second_rcpt_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -747,6 +747,7 @@ static bool
 test_client_denied_second_rcpt(const struct smtp_submit_settings *submit_set)
 {
 	struct smtp_submit *smtp_submit;
+	struct smtp_submit_input smtp_input;
 	struct smtp_submit_settings smtp_submit_set;
 	struct ostream *output;
 	const char *error = NULL;
@@ -757,7 +758,8 @@ test_client_denied_second_rcpt(const struct smtp_submit_settings *submit_set)
 		t_strdup_printf("127.0.0.1:%u", bind_ports[0]);
 	smtp_submit_set.submission_timeout = 1000;
 
-	smtp_submit = smtp_submit_init_simple(&smtp_submit_set, NULL,
+	i_zero(&smtp_input);
+	smtp_submit = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
 		SMTP_ADDRESS_LITERAL("sender", "example.com"));
 
 	smtp_submit_add_rcpt(smtp_submit,
@@ -765,7 +767,7 @@ test_client_denied_second_rcpt(const struct smtp_submit_settings *submit_set)
 	smtp_submit_add_rcpt(smtp_submit,
 		SMTP_ADDRESS_LITERAL("rcpt2", "example.com"));
 	output = smtp_submit_send(smtp_submit);
-	o_stream_send_str(output, test_message1);
+	o_stream_nsend_str(output, test_message1);
 
 	ret = smtp_submit_run(smtp_submit, &error);
 	test_out_reason("run (ret == 0)", ret == 0, error);
@@ -831,7 +833,7 @@ test_denied_data_input(struct server_connection *conn)
 
 		switch (ctx->state) {
 		case DENIED_DATA_STATE_EHLO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250-testserver\r\n"
 				"250-PIPELINING\r\n"
 				"250-ENHANCEDSTATUSCODES\r\n"
@@ -840,17 +842,17 @@ test_denied_data_input(struct server_connection *conn)
 			ctx->state = DENIED_DATA_STATE_MAIL_FROM;
 			return;
 		case DENIED_DATA_STATE_MAIL_FROM:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.0 Ok\r\n");
 			ctx->state = DENIED_DATA_STATE_RCPT_TO;
 			continue;
 		case DENIED_DATA_STATE_RCPT_TO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.5 Ok\r\n");
 			ctx->state = DENIED_DATA_STATE_DATA;
 			continue;
 		case DENIED_DATA_STATE_DATA:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"500 5.0.0 Unacceptabe recipients\r\n");
 			server_connection_deinit(&conn);
 			return;
@@ -862,7 +864,7 @@ test_denied_data_input(struct server_connection *conn)
 static void
 test_denied_data_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -946,7 +948,7 @@ test_data_failure_input(struct server_connection *conn)
 
 		switch (ctx->state) {
 		case DATA_FAILURE_STATE_EHLO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250-testserver\r\n"
 				"250-PIPELINING\r\n"
 				"250-ENHANCEDSTATUSCODES\r\n"
@@ -955,23 +957,23 @@ test_data_failure_input(struct server_connection *conn)
 			ctx->state = DATA_FAILURE_STATE_MAIL_FROM;
 			return;
 		case DATA_FAILURE_STATE_MAIL_FROM:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.0 Ok\r\n");
 			ctx->state = DATA_FAILURE_STATE_RCPT_TO;
 			continue;
 		case DATA_FAILURE_STATE_RCPT_TO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.5 Ok\r\n");
 			ctx->state = DATA_FAILURE_STATE_DATA;
 			continue;
 		case DATA_FAILURE_STATE_DATA:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"354 End data with <CR><LF>.<CR><LF>\r\n");
 			ctx->state = DATA_FAILURE_STATE_FINISH;
 			continue;
 		case DATA_FAILURE_STATE_FINISH:
 			if (strcmp(line, ".") == 0) {
-				o_stream_send_str(conn->conn.output,
+				o_stream_nsend_str(conn->conn.output,
 					"552 5.2.3 Message length exceeds administrative limit\r\n");
 				server_connection_deinit(&conn);
 				return;
@@ -985,7 +987,7 @@ test_data_failure_input(struct server_connection *conn)
 static void
 test_data_failure_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -1069,7 +1071,7 @@ test_data_disconnect_input(struct server_connection *conn)
 
 		switch (ctx->state) {
 		case DATA_DISCONNECT_STATE_EHLO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250-testserver\r\n"
 				"250-PIPELINING\r\n"
 				"250-ENHANCEDSTATUSCODES\r\n"
@@ -1078,17 +1080,17 @@ test_data_disconnect_input(struct server_connection *conn)
 			ctx->state = DATA_DISCONNECT_STATE_MAIL_FROM;
 			return;
 		case DATA_DISCONNECT_STATE_MAIL_FROM:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.0 Ok\r\n");
 			ctx->state = DATA_DISCONNECT_STATE_RCPT_TO;
 			continue;
 		case DATA_DISCONNECT_STATE_RCPT_TO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.5 Ok\r\n");
 			ctx->state = DATA_DISCONNECT_STATE_DATA;
 			continue;
 		case DATA_DISCONNECT_STATE_DATA:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"354 End data with <CR><LF>.<CR><LF>\r\n");
 			ctx->state = DATA_DISCONNECT_STATE_FINISH;
 			continue;
@@ -1103,7 +1105,7 @@ test_data_disconnect_input(struct server_connection *conn)
 static void
 test_data_disconnect_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -1187,7 +1189,7 @@ test_data_timout_input(struct server_connection *conn)
 
 		switch (ctx->state) {
 		case DATA_TIMEOUT_STATE_EHLO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250-testserver\r\n"
 				"250-PIPELINING\r\n"
 				"250-ENHANCEDSTATUSCODES\r\n"
@@ -1196,17 +1198,17 @@ test_data_timout_input(struct server_connection *conn)
 			ctx->state = DATA_TIMEOUT_STATE_MAIL_FROM;
 			return;
 		case DATA_TIMEOUT_STATE_MAIL_FROM:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.0 Ok\r\n");
 			ctx->state = DATA_TIMEOUT_STATE_RCPT_TO;
 			continue;
 		case DATA_TIMEOUT_STATE_RCPT_TO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.5 Ok\r\n");
 			ctx->state = DATA_TIMEOUT_STATE_DATA;
 			continue;
 		case DATA_TIMEOUT_STATE_DATA:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"354 End data with <CR><LF>.<CR><LF>\r\n");
 			ctx->state = DATA_TIMEOUT_STATE_FINISH;
 			continue;
@@ -1222,7 +1224,7 @@ test_data_timout_input(struct server_connection *conn)
 static void
 test_data_timout_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -1345,7 +1347,7 @@ test_successful_delivery_input(struct server_connection *conn)
 				return;
 			}
 
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.0.0 Ok: queued as 73BDE342129\r\n");
 			ctx->state = SUCCESSFUL_DELIVERY_STATE_MAIL_FROM;
 			continue;
@@ -1360,7 +1362,7 @@ test_successful_delivery_input(struct server_connection *conn)
 
 		switch (ctx->state) {
 		case SUCCESSFUL_DELIVERY_STATE_EHLO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250-testserver\r\n"
 				"250-PIPELINING\r\n"
 				"250-ENHANCEDSTATUSCODES\r\n"
@@ -1369,17 +1371,17 @@ test_successful_delivery_input(struct server_connection *conn)
 			ctx->state = SUCCESSFUL_DELIVERY_STATE_MAIL_FROM;
 			return;
 		case SUCCESSFUL_DELIVERY_STATE_MAIL_FROM:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.0 Ok\r\n");
 			ctx->state = SUCCESSFUL_DELIVERY_STATE_RCPT_TO;
 			continue;
 		case SUCCESSFUL_DELIVERY_STATE_RCPT_TO:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"250 2.1.5 Ok\r\n");
 			ctx->state = SUCCESSFUL_DELIVERY_STATE_DATA;
 			continue;
 		case SUCCESSFUL_DELIVERY_STATE_DATA:
-			o_stream_send_str(conn->conn.output,
+			o_stream_nsend_str(conn->conn.output,
 				"354 End data with <CR><LF>.<CR><LF>\r\n");
 			ctx->state = SUCCESSFUL_DELIVERY_STATE_FINISH;
 			continue;
@@ -1393,7 +1395,7 @@ test_successful_delivery_input(struct server_connection *conn)
 static void
 test_successful_delivery_init(struct server_connection *conn)
 {
-	o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 }
 
@@ -1453,6 +1455,7 @@ test_client_parallel_delivery_callback(const struct smtp_submit_result *result,
 static bool
 test_client_parallel_delivery(const struct smtp_submit_settings *submit_set)
 {
+	struct smtp_submit_input smtp_input;
 	struct smtp_submit_settings smtp_submit_set;
 	struct _parallel_delivery_client *ctx;
 	struct smtp_submit *smtp_submit1, *smtp_submit2;
@@ -1468,29 +1471,31 @@ test_client_parallel_delivery(const struct smtp_submit_settings *submit_set)
 	smtp_submit_set.submission_timeout = 5;
 
 	/* submit 1 */
+	i_zero(&smtp_input);
 	smtp_submit_set.submission_host =
 		t_strdup_printf("127.0.0.1:%u",  bind_ports[0]);
-	smtp_submit1 = smtp_submit_init_simple(&smtp_submit_set, NULL,
+	smtp_submit1 = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
 		SMTP_ADDRESS_LITERAL("sender", "example.com"));
 
 	smtp_submit_add_rcpt(smtp_submit1,
 		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
 	output = smtp_submit_send(smtp_submit1);
-	o_stream_send_str(output, test_message1);
+	o_stream_nsend_str(output, test_message1);
 
 	smtp_submit_run_async(smtp_submit1,
 		test_client_parallel_delivery_callback, ctx);
 
 	/* submit 2 */
+	i_zero(&smtp_input);
 	smtp_submit_set.submission_host =
 		t_strdup_printf("127.0.0.1:%u",  bind_ports[1]);
-	smtp_submit2 = smtp_submit_init_simple(&smtp_submit_set, NULL,
+	smtp_submit2 = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
 		SMTP_ADDRESS_LITERAL("sender", "example.com"));
 
 	smtp_submit_add_rcpt(smtp_submit2,
 		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
 	output = smtp_submit_send(smtp_submit2);
-	o_stream_send_str(output, test_message2);
+	o_stream_nsend_str(output, test_message2);
 
 	smtp_submit_run_async(smtp_submit2,
 		test_client_parallel_delivery_callback, ctx);
@@ -1547,6 +1552,7 @@ static bool
 test_client_failed_sendmail(const struct smtp_submit_settings *submit_set)
 {
 	struct smtp_submit_settings smtp_submit_set;
+	struct smtp_submit_input smtp_input;
 	struct smtp_submit *smtp_submit;
 	struct ostream *output;
 	const char *sendmail_path, *error = NULL;
@@ -1558,13 +1564,14 @@ test_client_failed_sendmail(const struct smtp_submit_settings *submit_set)
 	smtp_submit_set.sendmail_path = sendmail_path;
 	smtp_submit_set.submission_timeout = 5;
 
-	smtp_submit = smtp_submit_init_simple(&smtp_submit_set, NULL,
+	i_zero(&smtp_input);
+	smtp_submit = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
 		SMTP_ADDRESS_LITERAL("sender", "example.com"));
 
 	smtp_submit_add_rcpt(smtp_submit,
 		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
 	output = smtp_submit_send(smtp_submit);
-	o_stream_send_str(output, test_message1);
+	o_stream_nsend_str(output, test_message1);
 
 	ret = smtp_submit_run(smtp_submit, &error);
 	test_out_reason("run (ret < 0)", ret < 0, error);
@@ -1598,6 +1605,7 @@ static void test_failed_sendmail(void)
 static bool
 test_client_successful_sendmail(const struct smtp_submit_settings *submit_set)
 {
+	struct smtp_submit_input smtp_input;
 	struct smtp_submit_settings smtp_submit_set;
 	struct smtp_submit *smtp_submit;
 	struct ostream *output;
@@ -1613,13 +1621,14 @@ test_client_successful_sendmail(const struct smtp_submit_settings *submit_set)
 	smtp_submit_set.sendmail_path = sendmail_path;
 	smtp_submit_set.submission_timeout = 5;
 
-	smtp_submit = smtp_submit_init_simple(&smtp_submit_set, NULL,
+	i_zero(&smtp_input);
+	smtp_submit = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
 		SMTP_ADDRESS_LITERAL("sender", "example.com"));
 
 	smtp_submit_add_rcpt(smtp_submit,
 		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
 	output = smtp_submit_send(smtp_submit);
-	o_stream_send_str(output, test_message1);
+	o_stream_nsend_str(output, test_message1);
 
 	ret = smtp_submit_run(smtp_submit, &error);
 	test_out_reason("run (ret > 0)", ret > 0, error);
@@ -1671,6 +1680,7 @@ test_client_parallel_sendmail_callback(const struct smtp_submit_result *result,
 static bool
 test_client_parallel_sendmail(const struct smtp_submit_settings *submit_set)
 {
+	struct smtp_submit_input smtp_input;
 	struct smtp_submit_settings smtp_submit_set;
 	struct _parallel_sendmail_client *ctx;
 	struct smtp_submit *smtp_submit1, *smtp_submit2;
@@ -1696,27 +1706,29 @@ test_client_parallel_sendmail(const struct smtp_submit_settings *submit_set)
 	smtp_submit_set.submission_timeout = 5;
 
 	/* submit 1 */
+	i_zero(&smtp_input);
 	smtp_submit_set.sendmail_path = sendmail_path1;
-	smtp_submit1 = smtp_submit_init_simple(&smtp_submit_set, NULL,
+	smtp_submit1 = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
 		SMTP_ADDRESS_LITERAL("sender", "example.com"));
 
 	smtp_submit_add_rcpt(smtp_submit1,
 		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
 	output = smtp_submit_send(smtp_submit1);
-	o_stream_send_str(output, test_message1);
+	o_stream_nsend_str(output, test_message1);
 
 	smtp_submit_run_async(smtp_submit1,
 		test_client_parallel_sendmail_callback, ctx);
 
 	/* submit 2 */
+	i_zero(&smtp_input);
 	smtp_submit_set.sendmail_path = sendmail_path2;
-	smtp_submit2 = smtp_submit_init_simple(&smtp_submit_set, NULL,
+	smtp_submit2 = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
 		SMTP_ADDRESS_LITERAL("sender", "example.com"));
 
 	smtp_submit_add_rcpt(smtp_submit2,
 		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
 	output = smtp_submit_send(smtp_submit2);
-	o_stream_send_str(output, test_message2);
+	o_stream_nsend_str(output, test_message2);
 
 	smtp_submit_run_async(smtp_submit2,
 		test_client_parallel_sendmail_callback, ctx);
@@ -1799,6 +1811,7 @@ test_client_smtp_send_simple(const struct smtp_submit_settings *smtp_set,
 	const char *message, const char *host,
 	const char **error_r)
 {
+	struct smtp_submit_input smtp_input;
 	struct smtp_submit_settings smtp_submit_set;
 	struct smtp_submit *smtp_submit;
 	struct ostream *output;
@@ -1808,13 +1821,14 @@ test_client_smtp_send_simple(const struct smtp_submit_settings *smtp_set,
 	smtp_submit_set = *smtp_set;
 	smtp_submit_set.submission_host = host,
 
-	smtp_submit = smtp_submit_init_simple(&smtp_submit_set, NULL,
+	i_zero(&smtp_input);
+	smtp_submit = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
 		SMTP_ADDRESS_LITERAL("sender", "example.com"));
 
 	smtp_submit_add_rcpt(smtp_submit,
 		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
 	output = smtp_submit_send(smtp_submit);
-	o_stream_send_str(output, message);
+	o_stream_nsend_str(output, message);
 
 	ret = smtp_submit_run(smtp_submit, error_r);
 
@@ -2147,6 +2161,7 @@ int main(int argc, char *argv[])
 		MASTER_SERVICE_FLAG_STANDALONE |
 		MASTER_SERVICE_FLAG_DONT_SEND_STATS;
 	int c;
+	int ret;
 
 	atexit(test_atexit);
 	(void)signal(SIGCHLD, SIG_IGN);
@@ -2176,7 +2191,9 @@ int main(int argc, char *argv[])
 	bind_ip.family = AF_INET;
 	bind_ip.u.ip4.s_addr = htonl(INADDR_LOOPBACK);
 
-	test_run(test_functions);
+	ret = test_run(test_functions);
 
 	master_service_deinit(&master_service);
+
+	return ret;
 }

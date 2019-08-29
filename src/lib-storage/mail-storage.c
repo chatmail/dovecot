@@ -98,7 +98,7 @@ void mail_storage_class_register(struct mail_storage *storage_class)
 	i_assert(mail_storage_find_class(storage_class->name) == NULL);
 
 	/* append it after the list, so the autodetection order is correct */
-	array_append(&mail_storage_classes, &storage_class, 1);
+	array_push_back(&mail_storage_classes, &storage_class);
 }
 
 void mail_storage_class_unregister(struct mail_storage *storage_class)
@@ -423,11 +423,14 @@ int mail_storage_create_full(struct mail_namespace *ns, const char *driver,
 	storage->set = ns->mail_set;
 	storage->flags = flags;
 	storage->event = event_create(ns->user->event);
+	if (storage_class->event_category != NULL)
+		event_add_category(storage->event, storage_class->event_category);
 	p_array_init(&storage->module_contexts, storage->pool, 5);
 
 	if (storage->v.create != NULL &&
 	    storage->v.create(storage, ns, error_r) < 0) {
 		*error_r = t_strdup_printf("%s: %s", storage->name, *error_r);
+		event_unref(&storage->event);
 		pool_unref(&storage->pool);
 		return -1;
 	}
@@ -1003,14 +1006,21 @@ static int mailbox_autocreate_and_reopen(struct mailbox *box)
 }
 
 static bool
-mailbox_name_verify_separators(const char *vname, char sep,
-			       const char **error_r)
+mailbox_name_verify_extra_separators(const char *vname, char sep,
+				     const char **error_r)
 {
 	unsigned int i;
 	bool prev_sep = FALSE;
 
-	/* Make sure the vname is correct: non-empty, doesn't begin or end
-	   with separator and no adjacent separators */
+	/* Make sure the vname doesn't have extra separators:
+
+	   1) Must not have adjacent separators. If we allow these, these could
+	   end up pointing to existing mailboxes due to kernel ignoring
+	   duplicate '/' in paths. However, this might cause us to handle some
+	   of our own checks wrong, such as skipping ACLs.
+
+	   2) Must not end with separator. Similar reasoning as above.
+	*/
 	for (i = 0; vname[i] != '\0'; i++) {
 		if (vname[i] == sep) {
 			if (prev_sep) {
@@ -1029,7 +1039,43 @@ mailbox_name_verify_separators(const char *vname, char sep,
 	return TRUE;
 }
 
-static int mailbox_verify_name(struct mailbox *box)
+static bool
+mailbox_verify_name_prefix(struct mail_namespace *ns, const char **vnamep,
+			   const char **error_r)
+{
+	const char *vname = *vnamep;
+
+	if (ns->prefix_len == 0)
+		return TRUE;
+
+	/* vname is either "namespace/box" or "namespace" */
+	if (strncmp(vname, ns->prefix, ns->prefix_len-1) != 0 ||
+	    (vname[ns->prefix_len-1] != '\0' &&
+	     vname[ns->prefix_len-1] != ns->prefix[ns->prefix_len-1])) {
+		/* User input shouldn't normally be able to get us in
+		   here. The main reason this isn't an assert is to
+		   allow any input at all to mailbox_verify_*_name()
+		   without crashing. */
+		*error_r = t_strdup_printf("Missing namespace prefix '%s'",
+					   ns->prefix);
+		return FALSE;
+	}
+	vname += ns->prefix_len - 1;
+	if (vname[0] != '\0') {
+		i_assert(vname[0] == ns->prefix[ns->prefix_len-1]);
+		vname++;
+
+		if (vname[0] == '\0') {
+			/* "namespace/" isn't a valid mailbox name. */
+			*error_r = "Ends with hierarchy separator";
+			return FALSE;
+		}
+	}
+	*vnamep = vname;
+	return TRUE;
+}
+
+int mailbox_verify_name(struct mailbox *box)
 {
 	struct mail_namespace *ns = box->list->ns;
 	const char *error, *vname = box->vname;
@@ -1040,45 +1086,34 @@ static int mailbox_verify_name(struct mailbox *box)
 		return 0;
 	}
 
+	/* Verify the namespace prefix here. Change vname to skip the prefix
+	   for the following checks. */
+	if (!mailbox_verify_name_prefix(box->list->ns, &vname, &error)) {
+		mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
+			t_strdup_printf("Invalid mailbox name '%s': %s",
+					str_sanitize(vname, 80), error));
+		return -1;
+	}
+
 	list_sep = mailbox_list_get_hierarchy_sep(box->list);
 	ns_sep = mail_namespace_get_sep(ns);
 
-	if (ns->prefix_len > 0) {
-		/* vname is either "namespace/box" or "namespace" */
-		if (strncmp(vname, ns->prefix, ns->prefix_len-1) != 0 ||
-		    (vname[ns->prefix_len-1] != '\0' &&
-		     vname[ns->prefix_len-1] != ns->prefix[ns->prefix_len-1])) {
-			/* User input shouldn't normally be able to get us in
-			   here. The main reason this isn't an assert is to
-			   allow any input at all to mailbox_verify_*_name()
-			   without crashing. */
-			mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
-				t_strdup_printf("Invalid mailbox name '%s': "
-					"Missing namespace prefix '%s'",
-					str_sanitize(vname, 80), ns->prefix));
-			return -1;
-		}
-		vname += ns->prefix_len - 1;
-		if (vname[0] != '\0') {
-			i_assert(vname[0] == ns->prefix[ns->prefix_len-1]);
-			vname++;
-
-			if (vname[0] == '\0') {
-				/* "namespace/" isn't a valid mailbox name. */
-				mail_storage_set_error(box->storage,
-						       MAIL_ERROR_PARAMS,
-						       "Invalid mailbox name");
-				return -1;
-			}
-		}
-	}
-
+	/* If namespace { separator } differs from the mailbox_list separator,
+	   the list separator can't actually be used in the mailbox name
+	   unless it's escaped with escape_char. For example if namespace
+	   separator is '/' and LAYOUT=Maildir++ has '.' as the separator,
+	   there's no way to use '.' in the mailbox name (without escaping)
+	   because it would end up becoming a hierarchy separator. */
 	if (ns_sep != list_sep && box->list->set.escape_char == '\0' &&
 	    strchr(vname, list_sep) != NULL) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS, t_strdup_printf(
 			"Character not allowed in mailbox name: '%c'", list_sep));
 		return -1;
 	}
+	/* vname must not begin with the hierarchy separator normally.
+	   For example we don't want to allow accessing /etc/passwd. However,
+	   if mail_full_filesystem_access=yes, we do actually want to allow
+	   that. */
 	if (vname[0] == ns_sep &&
 	    !box->storage->set->mail_full_filesystem_access) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
@@ -1086,7 +1121,7 @@ static int mailbox_verify_name(struct mailbox *box)
 		return -1;
 	}
 
-	if (!mailbox_name_verify_separators(vname, ns_sep, &error) ||
+	if (!mailbox_name_verify_extra_separators(vname, ns_sep, &error) ||
 	    !mailbox_list_is_valid_name(box->list, box->name, &error)) {
 		mail_storage_set_error(box->storage, MAIL_ERROR_PARAMS,
 			t_strdup_printf("Invalid mailbox name: %s", error));

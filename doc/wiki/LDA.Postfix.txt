@@ -27,8 +27,37 @@ Then run 'postfix reload'.
  * This command doesn't do a <userdb> [UserDatabase.txt] lookup. If you want
    that (e.g. for per-user quota lookups) you need to add '-d "$USER"'
    parameter.
- * Be sure that /var/mail or wherever you deliver mail is writable by the
-   dovecot-lda process, which does not run as root.
+ * Postfix runs 'mailbox_command' with both the uid and gid of the destination
+   user. This may not allow 'dovecot-lda' to write a lock file in '/var/mail'.
+   When this directory is writable by a privileged group (say 'main', see the
+   option 'mail_privileged_group'), we can use the setgid permission bit on the
+   'dovecot-lda' executable:
+
+   ---%<----------------------------------------------------------------------
+      # chgrp mail /usr/lib/dovecot/dovecot-lda
+      # chmod 2755 /usr/lib/dovecot/dovecot-lda
+   ---%<----------------------------------------------------------------------
+
+   Alas these permission will disappear if you update dovecot. A more robust
+   way to do so is to compile a relay program '/etc/postfix/dovecot-lda-relay'
+   that has the setgid permission and execs the real 'dovecot-lda'.
+
+   ---%<----------------------------------------------------------------------
+      # cd /etc/postfix
+      # cat >dovecot-lda-relay.c <<EOF
+        #include <unistd.h>
+        char *pgm = "/usr/lib/dovecot/dovecot-lda";  /* wherever dovecot-lda is
+   located */
+        int main{int argc, char**argv) { argv[0]=pgm; execv(pgm,argv); return
+   10; }
+      EOF
+      # gcc -o dovecot-lda-relay dovecot-lda-relay.c
+      # chown root:mail dovecot-lda-relay
+      # chmod 2755 dovecot-lda-relay
+   ---%<----------------------------------------------------------------------
+
+   Then, simply invoke '/etc/postfix/dovecot-lda-relay' instead of
+   'dovecot-lda' in 'mailbox_command'.
  * Postfix's 'mailbox_size_limit' setting applies to all files that are written
    via dovecot-lda. The default is 50 MB, so dovecot-lda can't write *any*
    files larger than that, including mbox files or log files. This shows up
@@ -223,4 +252,4 @@ If the recipient address exists (status=deliverable) Postfix accepts the mail.
 *Info:* you can not use "reject_unverified_recipient" with "pipe" so this
 doesn't work with the Dovecot LDA "deliver".
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

@@ -9,6 +9,7 @@
 #include "fts-user.h"
 #include "fts-solr-plugin.h"
 
+#define DEFAULT_SOLR_BATCH_SIZE 1000
 
 const char *fts_solr_plugin_version = DOVECOT_ABI_VERSION;
 struct http_client *solr_http_client = NULL;
@@ -25,6 +26,9 @@ fts_solr_plugin_init_settings(struct mail_user *user,
 	if (str == NULL)
 		str = "";
 
+	set->batch_size = DEFAULT_SOLR_BATCH_SIZE;
+	set->soft_commit = TRUE;
+
 	for (tmp = t_strsplit_spaces(str, " "); *tmp != NULL; tmp++) {
 		if (str_begins(*tmp, "url=")) {
 			set->url = p_strdup(user->pool, *tmp + 4);
@@ -32,11 +36,26 @@ fts_solr_plugin_init_settings(struct mail_user *user,
 			set->debug = TRUE;
 		} else if (strcmp(*tmp, "use_libfts") == 0) {
 			set->use_libfts = TRUE;
-		} else if (strcmp(*tmp, "break-imap-search") == 0) {
-			/* for backwards compatibility */
 		} else if (str_begins(*tmp, "default_ns=")) {
 			set->default_ns_prefix =
 				p_strdup(user->pool, *tmp + 11);
+		} else if (str_begins(*tmp, "rawlog_dir=")) {
+			set->rawlog_dir = p_strdup(user->pool, *tmp + 11);
+		} else if (str_begins(*tmp, "batch_size=")) {
+			if (str_to_uint(*tmp+11, &set->batch_size) < 0 ||
+			    set->batch_size == 0) {
+				i_error("fts_solr: batch_size must be a positive integer");
+					return -1;
+			}
+		} else if (str_begins(*tmp, "soft_commit=")) {
+			if (strcmp(*tmp + 12, "yes") == 0) {
+				set->soft_commit = TRUE;
+			} else if (strcmp(*tmp + 12, "no") == 0) {
+				set->soft_commit = FALSE;
+			} else {
+				i_error("fts_solr: Invalid setting for soft_commit: %s", *tmp+12);
+				return -1;
+			}
 		} else {
 			i_error("fts_solr: Invalid setting: %s", *tmp);
 			return -1;

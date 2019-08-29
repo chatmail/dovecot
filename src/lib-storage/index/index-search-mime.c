@@ -513,9 +513,8 @@ static int seach_arg_mime_parts_match(struct search_mimepart_context *mpctx,
 			while (part->next == NULL) {
 				if (part->parent == NULL)
 					break;
-				array_delete(&mpctx->stack, array_count(&mpctx->stack)-1, 1);
-				level = array_idx_modifiable
-					(&mpctx->stack, array_count(&mpctx->stack)-1);
+				array_pop_back(&mpctx->stack);
+				level = array_back_modifiable(&mpctx->stack);
 				part = part->parent;
 			}
 			level->index++;

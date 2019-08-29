@@ -60,7 +60,8 @@ struct dlua_push_notification_txn_context {
 #define DLUA_DEFAULT_EVENTS (\
 	PUSH_NOTIFICATION_MESSAGE_HDR_FROM | PUSH_NOTIFICATION_MESSAGE_HDR_TO | \
 	PUSH_NOTIFICATION_MESSAGE_HDR_SUBJECT | PUSH_NOTIFICATION_MESSAGE_HDR_DATE | \
-	PUSH_NOTIFICATION_MESSAGE_BODY_SNIPPET)
+	PUSH_NOTIFICATION_MESSAGE_BODY_SNIPPET | PUSH_NOTIFICATION_MESSAGE_FLAGS | \
+	PUSH_NOTIFICATION_MESSAGE_KEYWORDS)
 
 static const char *push_notification_driver_lua_to_fn(const char *evname);
 
@@ -239,35 +240,73 @@ static const char *push_notification_driver_lua_to_fn(const char *evname)
 	return str_c(fn);
 }
 
+/* pushes lua list of flags */
+static void dlua_pushflags(struct dlua_script *script, enum mail_flags flags)
+{
+	lua_newtable(script->L);
+	int idx = 1;
+
+	if ((flags & MAIL_ANSWERED) != 0) {
+		lua_pushliteral(script->L, "\\Answered");
+		lua_rawseti(script->L, -2, idx++);
+	}
+	if ((flags & MAIL_FLAGGED) != 0) {
+		lua_pushliteral(script->L, "\\Flagged");
+		lua_rawseti(script->L, -2, idx++);
+	}
+	if ((flags & MAIL_DELETED) != 0) {
+		lua_pushliteral(script->L, "\\Deleted");
+		lua_rawseti(script->L, -2, idx++);
+	}
+	if ((flags & MAIL_SEEN) != 0) {
+		lua_pushliteral(script->L, "\\Seen");
+		lua_rawseti(script->L, -2, idx++);
+	}
+	if ((flags & MAIL_DRAFT) != 0) {
+		lua_pushliteral(script->L, "\\Draft");
+		lua_rawseti(script->L, -2, idx++);
+	}
+	if ((flags & MAIL_RECENT) != 0) {
+		lua_pushliteral(script->L, "\\Recent");
+		lua_rawseti(script->L, -2, idx++);
+	}
+}
+
+static void
+dlua_pushkeywords(struct dlua_script *script, const char *const *keywords,
+		  unsigned int count)
+{
+	lua_newtable(script->L);
+	if (keywords == NULL)
+		return;
+	for (unsigned int idx = 0; idx < count; idx++) {
+		lua_pushstring(script->L, keywords[idx]);
+		lua_rawseti(script->L, -2, idx+1);
+	}
+}
+
 static void
 push_notification_lua_push_flagsclear(const struct push_notification_txn_event *event,
 				      struct dlua_script *script)
 {
 	/* push cleared flags */
-	unsigned int size;
+	unsigned int size = 0;
 	struct push_notification_event_flagsclear_data *data = event->data;
 
+	dlua_pushflags(script, data->flags_clear);
+	lua_setfield(script->L, -2, "flags");
+	dlua_pushflags(script, data->flags_old);
+	lua_setfield(script->L, -2, "flags_old");
+
 	if (array_is_created(&data->keywords_clear)) {
-		size = array_count(&data->keywords_clear);
-		lua_createtable(script->L, size, 0);
-		for(unsigned int i=0; i<size; i++) {
-			const char *const *kw =
-				array_idx(&data->keywords_clear, i);
-			lua_pushstring(script->L, *kw);
-			lua_rawseti(script->L, -2, i+1);
-		}
-		lua_setfield(script->L, -2, "keywords_clear");
+		const char *const *kw = array_get(&data->keywords_clear, &size);
+		dlua_pushkeywords(script, kw, size);
+		lua_setfield(script->L, -2, "keywords");
 	}
 
 	if (array_is_created(&data->keywords_old)) {
-		size = array_count(&data->keywords_old);
-		lua_createtable(script->L, size, 0);
-		for(unsigned int i=0; i<size; i++) {
-			const char *const *kw =
-				array_idx(&data->keywords_old, i);
-			lua_pushstring(script->L, *kw);
-			lua_rawseti(script->L, -2, i+1);
-		}
+		const char *const *kw = array_get(&data->keywords_old, &size);
+		dlua_pushkeywords(script, kw, size);
 		lua_setfield(script->L, -2, "keywords_old");
 	}
 }
@@ -276,23 +315,17 @@ static void
 push_notification_lua_push_flagsset(const struct push_notification_txn_event *event,
 				    struct dlua_script *script)
 {
-	/* push cleared flags */
-	unsigned int size;
+	/* push set flags */
+	unsigned int size = 0;
 	struct push_notification_event_flagsset_data *data = event->data;
 
-	lua_pushnumber(script->L, data->flags_set);
+	dlua_pushflags(script, data->flags_set);
 	lua_setfield(script->L, -2, "flags");
 
 	if (array_is_created(&data->keywords_set)) {
-		size = array_count(&data->keywords_set);
-		lua_createtable(script->L, size, 0);
-		for(unsigned int i=0; i<size; i++) {
-			const char *const *kw =
-				array_idx(&data->keywords_set, i);
-			lua_pushstring(script->L, *kw);
-			lua_rawseti(script->L, -2, i+1);
-		}
-		lua_setfield(script->L, -2, "keywords_set");
+		const char *const *kw = array_get(&data->keywords_set, &size);
+		dlua_pushkeywords(script, kw, size);
+		lua_setfield(script->L, -2, "keywords");
 	}
 }
 
@@ -329,6 +362,12 @@ push_notification_lua_push_messageappend(const struct push_notification_txn_even
 
 	lua_pushstring(script->L, data->snippet);
 	lua_setfield(script->L, -2, "snippet");
+
+	dlua_pushflags(script, data->flags);
+	lua_setfield(script->L, -2, "flags");
+
+	dlua_pushkeywords(script, data->keywords, str_array_length(data->keywords));
+	lua_setfield(script->L, -2, "keywords");
 }
 
 static void
@@ -354,6 +393,12 @@ push_notification_lua_push_messagenew(const struct push_notification_txn_event *
 
 	lua_pushstring(script->L, data->snippet);
 	lua_setfield(script->L, -2, "snippet");
+
+	dlua_pushflags(script, data->flags);
+	lua_setfield(script->L, -2, "flags");
+
+	dlua_pushkeywords(script, data->keywords, str_array_length(data->keywords));
+	lua_setfield(script->L, -2, "keywords");
 }
 
 /* events that need special treatment */

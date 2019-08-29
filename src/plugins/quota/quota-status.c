@@ -41,7 +41,7 @@ static void client_connected(struct master_service_connection *conn)
 
 	client = i_new(struct quota_client, 1);
 	connection_init_server(clients, &client->conn,
-			       "(quota client)", conn->fd, conn->fd);
+			       "quota-client", conn->fd, conn->fd);
 	master_service_client_connection_accept(conn);
 }
 
@@ -91,7 +91,7 @@ static void client_handle_request(struct quota_client *client)
 	int ret;
 
 	if (client->recipient == NULL) {
-		o_stream_send_str(client->conn.output, "action=DUNNO\n\n");
+		o_stream_nsend_str(client->conn.output, "action=DUNNO\n\n");
 		return;
 	}
 
@@ -142,11 +142,11 @@ static void client_handle_request(struct quota_client *client)
 
 	if (ret < 0) {
 		/* temporary failure */
-		o_stream_send_str(client->conn.output, t_strdup_printf(
+		o_stream_nsend_str(client->conn.output, t_strdup_printf(
 			"action=DEFER_IF_PERMIT %s\n\n", error));
 	} else {
-		o_stream_send_str(client->conn.output,
-				  t_strdup_printf("action=%s\n\n", value));
+		o_stream_nsend_str(client->conn.output,
+				   t_strdup_printf("action=%s\n\n", value));
 	}
 }
 

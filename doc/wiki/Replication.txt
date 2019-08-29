@@ -92,6 +92,7 @@ Enable doveadm replicator commands by setting:
 service replicator {
   unix_listener replicator-doveadm {
     mode = 0600
+    user = vmail
   }
 }
 ---%<-------------------------------------------------------------------------
@@ -378,4 +379,4 @@ Random things to remember:
     * v2.2.6+: If you're having trouble, verify that 'dovecot --hostdomain'
       returns different values for the servers.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

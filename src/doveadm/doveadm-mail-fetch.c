@@ -483,6 +483,7 @@ static const struct fetch_field fetch_fields[] = {
 	{ "modseq",        0,                        fetch_modseq },
 	{ "hdr",           MAIL_FETCH_STREAM_HEADER, fetch_hdr },
 	{ "body",          MAIL_FETCH_STREAM_BODY,   fetch_body },
+	{ "body.preview",  MAIL_FETCH_BODY_SNIPPET,  fetch_body_snippet },
 	{ "body.snippet",  MAIL_FETCH_BODY_SNIPPET,  fetch_body_snippet },
 	{ "text",          MAIL_FETCH_STREAM_HEADER |
 	                   MAIL_FETCH_STREAM_BODY,   fetch_text },
@@ -548,13 +549,13 @@ static void parse_fetch_fields(struct fetch_cmd_context *ctx, const char *str)
 		doveadm_print_header_simple(name);
 		if ((field = fetch_field_find(name)) != NULL) {
 			ctx->wanted_fields |= field->wanted_fields;
-			array_append(&ctx->fields, field, 1);
+			array_push_back(&ctx->fields, field);
 		} else if (str_begins(name, "hdr.")) {
 			name += 4;
 			hdr_field.name = name;
-			array_append(&ctx->fields, &hdr_field, 1);
+			array_push_back(&ctx->fields, &hdr_field);
 			name = t_strcut(name, '.');
-			array_append(&ctx->header_fields, &name, 1);
+			array_push_back(&ctx->header_fields, &name);
 		} else if (str_begins(name, "body.") ||
 			   str_begins(name, "binary.")) {
 			bool binary = str_begins(name, "binary.");
@@ -565,7 +566,7 @@ static void parse_fetch_fields(struct fetch_cmd_context *ctx, const char *str)
 				print_fetch_fields();
 				i_fatal("Unknown fetch section: %s", name);
 			}
-			array_append(&ctx->fields, &body_field, 1);
+			array_push_back(&ctx->fields, &body_field);
 			ctx->wanted_fields |= imap_msgpart_get_fetch_data(msgpart);
 			imap_msgpart_free(&msgpart);
 		} else {
@@ -606,7 +607,7 @@ cmd_fetch_box(struct fetch_cmd_context *ctx, const struct mailbox_info *info)
 
 	if (doveadm_mail_iter_init(&ctx->ctx, info, ctx->ctx.search_args,
 				   ctx->wanted_fields,
-				   array_idx(&ctx->header_fields, 0),
+				   array_front(&ctx->header_fields),
 				   FALSE,
 				   &iter) < 0)
 		return -1;
