@@ -460,16 +460,18 @@ static int act_store_start
 
 static struct mail_keywords *act_store_keywords_create
 (const struct sieve_action_exec_env *aenv, ARRAY_TYPE(const_string) *keywords,
-	struct mailbox *box)
+ struct mailbox *box, bool create_empty)
 {
 	struct mail_keywords *box_keywords = NULL;
-
-	if ( array_is_created(keywords) && array_count(keywords) > 0 )
+	bool has_keywords = array_is_created(keywords) && array_count(keywords) > 0;
+	if ( has_keywords || create_empty )
 	{
-		const char *const *kwds;
+		const char *const *kwds = NULL;
 
-		(void)array_append_space(keywords);
-		kwds = array_idx(keywords, 0);
+		if (has_keywords) {
+			(void)array_append_space(keywords);
+			kwds = array_idx(keywords, 0);
+		}
 
 		if ( mailbox_keywords_create(box, kwds, &box_keywords) < 0) {
 			sieve_result_error(aenv, "invalid keywords set for stored message");
@@ -478,6 +480,32 @@ static struct mail_keywords *act_store_keywords_create
 	}
 
 	return box_keywords;
+}
+
+static bool
+have_equal_keywords(struct mail *mail, struct mail_keywords *new_kw)
+{
+	const ARRAY_TYPE(keyword_indexes) *old_kw_arr =
+		mail_get_keyword_indexes(mail);
+	const unsigned int *old_kw;
+	unsigned int i, j;
+
+	if (array_count(old_kw_arr) != new_kw->count)
+		return FALSE;
+	if (new_kw->count == 0)
+		return TRUE;
+
+	old_kw = array_front(old_kw_arr);
+	for (i = 0; i < new_kw->count; i++) {
+		/* new_kw->count equals old_kw's count and it's easier to use */
+		for (j = 0; j < new_kw->count; j++) {
+			if (old_kw[j] == new_kw->idx[i])
+				break;
+		}
+		if (j == new_kw->count)
+			return FALSE;
+	}
+	return TRUE;
 }
 
 static int act_store_execute
@@ -533,14 +561,20 @@ static int act_store_execute
 
 		if ( trans->flags_altered && !mailbox_is_readonly(mail->box) ) {
 			keywords = act_store_keywords_create
-				(aenv, &trans->keywords, mail->box);
+				(aenv, &trans->keywords, mail->box, TRUE);
 
 			if ( keywords != NULL ) {
-				mail_update_keywords(mail, MODIFY_REPLACE, keywords);
+				if (!have_equal_keywords(mail, keywords)) {
+					aenv->exec_status->significant_action_executed = TRUE;
+					mail_update_keywords(mail, MODIFY_REPLACE, keywords);
+				}
 				mailbox_keywords_unref(&keywords);
 			}
 
-			mail_update_flags(mail, MODIFY_REPLACE, trans->flags);
+			if ((mail_get_flags(mail) & MAIL_FLAGS_NONRECENT) != trans->flags) {
+				aenv->exec_status->significant_action_executed = TRUE;
+				mail_update_flags(mail, MODIFY_REPLACE, trans->flags);
+			}
 		}
 
 		return SIEVE_EXEC_OK;
@@ -577,9 +611,12 @@ static int act_store_execute
 
 	/* Apply keywords and flags that side-effects may have added */
 	if ( trans->flags_altered ) {
-		keywords = act_store_keywords_create(aenv, &trans->keywords, trans->box);
+		keywords = act_store_keywords_create(aenv, &trans->keywords, trans->box, FALSE);
 
-		mailbox_save_set_flags(save_ctx, trans->flags, keywords);
+		if (trans->flags != 0 || keywords != NULL) {
+			aenv->exec_status->significant_action_executed = TRUE;
+			mailbox_save_set_flags(save_ctx, trans->flags, keywords);
+		}
 	} else {
 		mailbox_save_copy_flags(save_ctx, mail);
 	}
@@ -588,6 +625,8 @@ static int act_store_execute
 		sieve_act_store_get_storage_error(aenv, trans);
 		status = ( trans->error_code == MAIL_ERROR_TEMP ?
 			SIEVE_EXEC_TEMP_FAILURE : SIEVE_EXEC_FAILURE );
+	} else {
+		aenv->exec_status->significant_action_executed = TRUE;
 	}
 
 	/* Deallocate keywords */

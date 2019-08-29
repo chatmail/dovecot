@@ -39,6 +39,15 @@ sieve_variables_get_max_scope_size(const struct sieve_extension *var_ext)
 	return config->max_scope_size;
 }
 
+size_t
+sieve_variables_get_max_variable_size(const struct sieve_extension *var_ext)
+{
+	const struct ext_variables_config *config =
+		ext_variables_get_config(var_ext);
+
+	return config->max_variable_size;
+}
+
 /*
  * Extension configuration
  */
@@ -611,7 +620,7 @@ bool sieve_variable_assign
 
 	/* Just a precaution, caller should prevent this in the first place */
 	if ( str_len(varval) > config->max_variable_size )
-		str_truncate(varval, config->max_variable_size);
+		str_truncate_utf8(varval, config->max_variable_size);
 
 	return TRUE;
 }
@@ -632,7 +641,7 @@ bool sieve_variable_assign_cstr
 
 	/* Just a precaution, caller should prevent this in the first place */
 	if ( str_len(varval) > config->max_variable_size )
-		str_truncate(varval, config->max_variable_size);
+		str_truncate_utf8(varval, config->max_variable_size);
 
 	return TRUE;
 }

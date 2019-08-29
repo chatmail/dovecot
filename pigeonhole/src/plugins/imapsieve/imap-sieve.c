@@ -166,11 +166,16 @@ static void *imap_sieve_smtp_start
 	struct mail_user *user = isieve->client->user;
 	const struct smtp_submit_settings *smtp_set = isieve->client->smtp_set;
 	struct ssl_iostream_settings ssl_set;
+	struct smtp_submit_input submit_input;
 	
 	i_zero(&ssl_set);
 	mail_user_init_ssl_client_settings(user, &ssl_set);
 
-	return (void *)smtp_submit_init_simple(smtp_set, &ssl_set, mail_from);
+	i_zero(&submit_input);
+	submit_input.ssl = &ssl_set;
+
+	return (void *)smtp_submit_init_simple(&submit_input, smtp_set,
+					       mail_from);
 }
 
 static void imap_sieve_smtp_add_rcpt
@@ -499,7 +504,7 @@ imap_sieve_run_open_script(
 
 static int imap_sieve_handle_exec_status
 (struct imap_sieve_run *isrun,
-	struct sieve_script *script, int status, bool keep,
+	struct sieve_script *script, int status,
 	struct sieve_exec_status *estatus)
 	ATTR_NULL(2)
 {
@@ -512,8 +517,7 @@ static int imap_sieve_handle_exec_status
 
 	error_func = user_error_func = sieve_sys_error;
 
-	if ( estatus != NULL && estatus->last_storage != NULL &&
-		estatus->store_failed) {
+	if (estatus->last_storage != NULL && estatus->store_failed) {
 		mail_storage_get_last_error(estatus->last_storage, &mail_error);
 
 		/* Don't bother administrator too much with benign errors */
@@ -559,7 +563,7 @@ static int imap_sieve_handle_exec_status
 		ret = 0;
 		break;
 	case SIEVE_EXEC_OK:
-		ret = (keep ? 0 : 1);
+		ret = (estatus->keep_original ? 0 : 1);
 		break;
 	}
 
@@ -580,7 +584,7 @@ static int imap_sieve_run_scripts
 	struct sieve_error_handler *ehandler;
 	struct sieve_script *last_script = NULL;
 	bool user_script = FALSE, more = TRUE;
-	bool debug = user->mail_debug, keep = TRUE;
+	bool debug = user->mail_debug;
 	enum sieve_compile_flags cpflags;
 	enum sieve_execute_flags exflags;
 	enum sieve_error compile_error = SIEVE_ERROR_NONE;
@@ -686,7 +690,7 @@ static int imap_sieve_run_scripts
 			(&mscript, ehandler, exflags);
 	} else {
 		ret = sieve_multiscript_finish
-			(&mscript, ehandler, exflags, &keep);
+			(&mscript, ehandler, exflags, NULL);
 	}
 
 	/* Don't log additional messages about compile failure */
@@ -699,7 +703,7 @@ static int imap_sieve_run_scripts
 	}
 
 	return imap_sieve_handle_exec_status
-		(isrun, last_script, ret, keep, scriptenv->exec_status);
+		(isrun, last_script, ret, scriptenv->exec_status);
 }
 
 int imap_sieve_run_mail

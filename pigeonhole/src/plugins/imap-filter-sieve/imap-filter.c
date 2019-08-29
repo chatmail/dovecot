@@ -37,27 +37,30 @@ imap_filter_mail(struct client_command_context *cmd, struct mail *mail)
 	struct client *client = cmd->client;
 	string_t *errors = NULL;
 	bool have_warnings = FALSE;
+	bool have_changes = FALSE;
+	string_t *reply = t_str_new(128);
 	int ret;
 
 	// FIXME: return fatal error status when no mail filter activity will
 	// work (e.g. when binary is corrupt)
 	ret = imap_sieve_filter_run_mail(ctx->sieve, mail,
-					 &errors, &have_warnings);
+					 &errors, &have_warnings, &have_changes);
 
-	o_stream_nsend_str(client->output,
-		t_strdup_printf("* %u FILTERED (TAG %s) UID %u ",
-				mail->seq, cmd->tag, mail->uid));
+	str_printfa(reply, "* %u FILTERED (TAG %s) UID %u ",
+		    mail->seq, cmd->tag, mail->uid);
 	if (ret < 0 || have_warnings) {
-		o_stream_nsend_str(client->output,
-			t_strdup_printf("%s {%"PRIuSIZE_T"}\r\n",
-					(ret < 0 ? "ERRORS" : "WARNINGS"),
-					str_len(errors)));
-		o_stream_nsend(client->output,
-			       str_data(errors), str_len(errors));
-		o_stream_nsend_str(client->output, "\r\n");
+		str_printfa(reply, "%s {%"PRIuSIZE_T"}\r\n",
+			    (ret < 0 ? "ERRORS" : "WARNINGS"),
+			    str_len(errors));
+		str_append_str(reply, errors);
+		str_append(reply, "\r\n");
+	} else if (have_changes || ret > 0) {
+		str_append(reply, "OK\r\n");
 	} else {
-		o_stream_nsend_str(client->output, "OK\r\n");
+		str_truncate(reply, 0);
 	}
+	if (str_len(reply) > 0)
+		o_stream_nsend(client->output, str_data(reply), str_len(reply));
 
 	/* Handle the result */
 	if (ret < 0) {
@@ -87,7 +90,11 @@ static bool imap_filter_more(struct client_command_context *cmd)
 
 	while (mailbox_search_next_nonblock(ctx->search_ctx,
 					    &mail, &tryagain)) {
-		if (!imap_filter_mail(cmd, mail))
+		bool ret;
+		T_BEGIN {
+			ret = imap_filter_mail(cmd, mail);
+		} T_END;
+		if (!ret)
 			break;
 	}
 	if (tryagain)

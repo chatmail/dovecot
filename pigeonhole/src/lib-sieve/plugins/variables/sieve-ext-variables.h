@@ -17,6 +17,8 @@
 
 unsigned int
 sieve_variables_get_max_scope_size(const struct sieve_extension *var_ext);
+size_t
+sieve_variables_get_max_variable_size(const struct sieve_extension *var_ext);
 
 /*
  * Variable extension
@@ -283,16 +285,20 @@ static inline bool sieve_operand_is_variable
 
 /* Definition */
 
+struct sieve_variables_modifier;
+
 struct sieve_variables_modifier_def {
 	struct sieve_object_def obj_def;
 
 	unsigned int precedence;
 
-	bool (*modify)(string_t *in, string_t **result);
+	bool (*modify)(const struct sieve_variables_modifier *modf,
+		       string_t *in, string_t **result);
 };
 
 struct sieve_variables_modifier {
 	struct sieve_object object;
+	const struct sieve_extension *var_ext;
 
 	const struct sieve_variables_modifier_def *def;
 };
@@ -334,9 +340,10 @@ extern const struct sieve_operand_class
 
 bool sieve_variables_modifiers_code_dump
 	(const struct sieve_dumptime_env *denv, sieve_size_t *address);
-int sieve_variables_modifiers_code_read
-	(const struct sieve_runtime_env *renv, sieve_size_t *address,
-		ARRAY_TYPE(sieve_variables_modifier) *modifiers);
+int sieve_variables_modifiers_code_read(
+	const struct sieve_runtime_env *renv,
+	const struct sieve_extension *var_ext, sieve_size_t *address,
+	ARRAY_TYPE(sieve_variables_modifier) *modifiers);
 
 /* Application */
 
