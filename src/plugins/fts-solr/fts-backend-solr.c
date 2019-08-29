@@ -28,8 +28,6 @@
 #define SOLR_HEADER_LINE_MAX_TRUNC_SIZE 1024
 
 #define SOLR_QUERY_MAX_MAILBOX_COUNT 10
-/* How often to flush indexing request to Solr before beginning a new one. */
-#define SOLR_MAIL_FLUSH_INTERVAL 1000
 
 struct solr_fts_backend {
 	struct fts_backend backend;
@@ -197,9 +195,8 @@ fts_backend_solr_init(struct fts_backend *_backend, const char **error_r)
 	i_zero(&ssl_set);
 	mail_user_init_ssl_client_settings(_backend->ns->user, &ssl_set);
 
-	return solr_connection_init(fuser->set.url, &ssl_set,
-				    fuser->set.debug, &backend->solr_conn,
-				    error_r);
+	return solr_connection_init(&fuser->set, &ssl_set,
+				    &backend->solr_conn, error_r);
 }
 
 static void fts_backend_solr_deinit(struct fts_backend *_backend)
@@ -334,7 +331,7 @@ fts_solr_field_get(struct solr_fts_backend_update_context *ctx, const char *key)
 	i_zero(&new_field);
 	new_field.key = str_lcase(i_strdup(key));
 	new_field.value = str_new(default_pool, 128);
-	array_append(&ctx->fields, &new_field, 1);
+	array_push_back(&ctx->fields, &new_field);
 	return new_field.value;
 }
 
@@ -392,6 +389,7 @@ fts_backend_solr_update_deinit(struct fts_backend_update_context *_ctx)
 		(struct solr_fts_backend_update_context *)_ctx;
 	struct solr_fts_backend *backend =
 		(struct solr_fts_backend *)_ctx->backend;
+	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT(_ctx->backend->ns->user);
 	struct solr_fts_field *field;
 	const char *str;
 	int ret = _ctx->failed ? -1 : 0;
@@ -404,10 +402,12 @@ fts_backend_solr_update_deinit(struct fts_backend_update_context *_ctx)
 		   visible to the following search */
 		if (ctx->expunges)
 			fts_backend_solr_expunge_flush(ctx);
-		str = t_strdup_printf("<commit softCommit=\"true\" waitSearcher=\"%s\"/>",
-				      ctx->documents_added ? "true" : "false");
-		if (solr_connection_post(backend->solr_conn, str) < 0)
-			ret = -1;
+		if (fuser->set.soft_commit) {
+			str = t_strdup_printf("<commit softCommit=\"true\" waitSearcher=\"%s\"/>",
+					      ctx->documents_added ? "true" : "false");
+			if (solr_connection_post(backend->solr_conn, str) < 0)
+				ret = -1;
+		}
 	}
 
 	str_free(&ctx->cmd);
@@ -494,11 +494,13 @@ fts_backend_solr_uid_changed(struct solr_fts_backend_update_context *ctx,
 {
 	struct solr_fts_backend *backend =
 		(struct solr_fts_backend *)ctx->ctx.backend;
+	struct fts_solr_user *fuser = FTS_SOLR_USER_CONTEXT(ctx->ctx.backend->ns->user);
 
-	if (ctx->mails_since_flush++ >= SOLR_MAIL_FLUSH_INTERVAL) {
+	if (ctx->mails_since_flush >= fuser->set.batch_size) {
 		if (fts_backed_solr_build_flush(ctx) < 0)
 			ctx->ctx.failed = TRUE;
 	}
+	ctx->mails_since_flush++;
 	if (ctx->post == NULL) {
 		if (ctx->cmd == NULL)
 			ctx->cmd = str_new(default_pool, SOLR_CMDBUF_SIZE);
@@ -928,7 +930,7 @@ solr_search_multi(struct fts_backend *_backend, string_t *str,
 		fts_result->scores_sorted = TRUE;
 	}
 	array_append_zero(&fts_results);
-	result->box_results = array_idx_modifiable(&fts_results, 0);
+	result->box_results = array_front_modifiable(&fts_results);
 	hash_table_destroy(&mailboxes);
 	return 0;
 }

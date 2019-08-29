@@ -68,7 +68,7 @@ New mail in a folder just left
 
 There is a bug with dovecot in <=0.99. It can sometimes make mutt think there
 is new email in a mailbox you just
-'left'...http://www.dovecot.org/list/dovecot/2004-February/002950.html
+'left'...https://dovecot.org/list/dovecot/2004-February/002950.html
 
 Authentication realm
 --------------------
@@ -101,4 +101,4 @@ References
  * mutt with IMAP documentation [http://mutt.sourceforge.net/imap/]
  * http://jamespo.org.uk/blog/archives/000271.html
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

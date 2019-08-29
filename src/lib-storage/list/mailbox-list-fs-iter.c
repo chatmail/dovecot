@@ -386,11 +386,11 @@ fs_list_get_valid_patterns(struct fs_list_iterate_context *ctx,
 		if (mailbox_list_is_valid_name(_list, test_pattern, &error) &&
 		    mailbox_list_is_valid_name(_list, real_pattern, &error)) {
 			pattern = p_strdup(ctx->ctx.pool, *patterns);
-			array_append(&valid_patterns, &pattern, 1);
+			array_push_back(&valid_patterns, &pattern);
 		}
 	}
 	array_append_zero(&valid_patterns); /* NULL-terminate */
-	ctx->valid_patterns = array_idx(&valid_patterns, 0);
+	ctx->valid_patterns = array_front(&valid_patterns);
 
 	return array_count(&valid_patterns) > 1;
 }
@@ -473,7 +473,7 @@ static void fs_list_get_roots(struct fs_list_iterate_context *ctx)
 			/* mailbox name */
 		}
 		root = p_strdup(ctx->ctx.pool, root);
-		array_append(&ctx->roots, &root, 1);
+		array_push_back(&ctx->roots, &root);
 	}
 	/* sort the root dirs so that /foo is before /foo/bar */
 	array_sort(&ctx->roots, i_strcmp_p);

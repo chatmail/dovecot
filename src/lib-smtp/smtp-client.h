@@ -42,7 +42,11 @@ struct smtp_client_settings {
 	const char *my_hostname;
 	const char *temp_path_prefix;
 
+	/* Capabilities that are assumed to be enabled no matter whether the
+	   server indicates support. */
 	enum smtp_capability forced_capabilities;
+	/* Record these extra capabilities if returned in the EHLO response */
+	const char *const *extra_capabilities;
 
 	struct dns_client *dns_client;
 	const char *dns_client_socket_path;
@@ -85,10 +89,18 @@ struct smtp_client_settings {
 	size_t socket_send_buffer_size;
 	size_t socket_recv_buffer_size;
 
+	/* Event to use as the parent for the smtp client/connection event. For
+	   specific transactions this can be overridden with
+	   smtp_client_transaction_set_event(). */
+	struct event *event_parent;
+
 	/* enable logging debug messages */
 	bool debug;
 	/* peer is trusted, so e.g. attempt sending XCLIENT data */
 	bool peer_trusted;
+	/* defer sending XCLIENT command until authentication or first mail
+	   transaction. */
+	bool xclient_defer;
 	/* don't clear password after first successful authentication */
 	bool remember_password;
 };

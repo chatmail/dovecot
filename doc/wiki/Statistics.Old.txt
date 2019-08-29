@@ -141,9 +141,9 @@ optional sort field is one of:
  * any other statistics field
 
 This "top" isn't very good, but a much better one can be found as a Perl
-script:stats-top.pl [http://www.dovecot.org/tools/stats-top.pl], which also
-requires stats.pl [http://www.dovecot.org/tools/stats.pl] and tab-formatter.pl
-[http://www.dovecot.org/tools/tab-formatter.pl].
+script:stats-top.pl [https://dovecot.org/tools/stats-top.pl], which also
+requires stats.pl [https://dovecot.org/tools/stats.pl] and tab-formatter.pl
+[https://dovecot.org/tools/tab-formatter.pl].
 
 dump
 ----
@@ -222,6 +222,6 @@ service stats {
 ---%<-------------------------------------------------------------------------
 
 this will send all available global statistics in carbon format
-[http://graphite.readthedocs.io/en/latest/feeding-carbon.html].
+[https://graphite.readthedocs.io/en/latest/feeding-carbon.html].
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

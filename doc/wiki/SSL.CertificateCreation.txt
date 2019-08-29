@@ -90,4 +90,4 @@ CA. The simplest way is to use a CA managing tool as gnoMint
 However, if you need to tailor the properties of the CA, you always can use
 OpenSSL, very much customizable, but however a bit cumbersome.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

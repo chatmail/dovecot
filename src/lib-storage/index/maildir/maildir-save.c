@@ -494,6 +494,25 @@ static void maildir_save_remove_last_filename(struct maildir_save_context *ctx)
 	ctx->files_count--;
 }
 
+void maildir_save_finish_keywords(struct mail_save_context *_ctx)
+{
+	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
+
+	ARRAY_TYPE(keyword_indexes) keyword_idx;
+	t_array_init(&keyword_idx, 8);
+	mail_index_lookup_keywords(ctx->ctx.transaction->view, ctx->seq,
+				   &keyword_idx);
+
+	if (array_count(&keyword_idx) > 0) {
+		/* copy keywords */
+		p_array_init(&ctx->file_last->keywords, ctx->pool,
+			     array_count(&keyword_idx));
+		array_copy(&ctx->file_last->keywords.arr, 0, &keyword_idx.arr, 0,
+			   array_count(&keyword_idx));
+		ctx->have_keywords = TRUE;
+	}
+}
+
 static int maildir_save_finish_real(struct mail_save_context *_ctx)
 {
 	struct maildir_save_context *ctx = MAILDIR_SAVECTX(_ctx);
@@ -510,7 +529,7 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 	}
 
 	path = t_strconcat(ctx->tmpdir, "/", ctx->file_last->tmp_name, NULL);
-	if (!ctx->failed && o_stream_finish(_ctx->data.output) < 0) {
+	if (o_stream_finish(_ctx->data.output) < 0) {
 		if (!mail_storage_set_error_from_errno(storage)) {
 			mail_set_critical(_ctx->dest_mail,
 				"write(%s) failed: %s", path,
@@ -548,19 +567,7 @@ static int maildir_save_finish_real(struct mail_save_context *_ctx)
 	output_errstr = t_strdup(o_stream_get_error(_ctx->data.output));
 	o_stream_destroy(&_ctx->data.output);
 
-	ARRAY_TYPE(keyword_indexes) keyword_idx;
-	t_array_init(&keyword_idx, 8);
-	mail_index_lookup_keywords(ctx->ctx.transaction->view, ctx->seq,
-				   &keyword_idx);
-
-	if (array_count(&keyword_idx) > 0) {
-		/* copy keywords */
-		p_array_init(&ctx->file_last->keywords, ctx->pool,
-			     array_count(&keyword_idx));
-		array_copy(&ctx->file_last->keywords.arr, 0, &keyword_idx.arr, 0,
-			   array_count(&keyword_idx));
-		ctx->have_keywords = TRUE;
-	}
+	maildir_save_finish_keywords(_ctx);
 
 	if (storage->set->parsed_fsync_mode != FSYNC_MODE_NEVER &&
 	    !ctx->failed) {
@@ -866,7 +873,7 @@ maildir_save_move_files_to_newcur(struct maildir_save_context *ctx)
 	   filenames within this transaction. */
 	t_array_init(&files, ctx->files_count);
 	for (mf = ctx->files; mf != NULL; mf = mf->next)
-		array_append(&files, &mf, 1);
+		array_push_back(&files, &mf);
 	array_sort(&files, maildir_filename_dest_basename_cmp);
 
 	new_changed = cur_changed = FALSE;

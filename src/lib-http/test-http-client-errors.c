@@ -19,6 +19,8 @@
 #include <signal.h>
 #include <unistd.h>
 
+#define CLIENT_PROGRESS_TIMEOUT     10
+
 /*
  * Types
  */
@@ -59,6 +61,7 @@ static unsigned int server_index;
 static void (*test_server_input)(struct server_connection *conn);
 
 /* client */
+static struct timeout *to_client_progress = NULL;
 static struct http_client *http_client = NULL;
 
 /*
@@ -1299,6 +1302,11 @@ test_client_connection_lost_sub_ioloop_response2(
 {
 	if (debug)
 		i_debug("SUB-RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_assert(resp->status == 200 ||
+		    resp->status == HTTP_CLIENT_REQUEST_ERROR_CONNECTION_LOST);
+	test_assert(resp->reason != NULL && *resp->reason != '\0');
+
 	io_loop_stop(sub_ioloop);
 }
 
@@ -1313,7 +1321,8 @@ test_client_connection_lost_sub_ioloop_response(
 	if (debug)
 		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
 
-	test_assert(resp->status == 200);
+	test_assert(resp->status == 200 ||
+		    resp->status == HTTP_CLIENT_REQUEST_ERROR_CONNECTION_LOST);
 	test_assert(resp->reason != NULL && *resp->reason != '\0');
 
 	sub_ioloop = io_loop_create();
@@ -2883,7 +2892,7 @@ test_client_reconnect_failure_response1(
 	test_assert(resp->status == 200);
 	test_assert(resp->reason != NULL && *resp->reason != '\0');
 
-	ctx->to = timeout_add_short(999,
+	ctx->to = timeout_add_short(5000,
 		test_client_reconnect_failure_next, ctx);
 }
 
@@ -2914,7 +2923,7 @@ static void test_reconnect_failure(void)
 
 	test_client_defaults(&http_client_set);
 	http_client_set.dns_client_socket_path = "./dns-test";
-	http_client_set.dns_ttl_msecs = 2000;
+	http_client_set.dns_ttl_msecs = 10000;
 	http_client_set.max_idle_time_msecs = 1000;
 	http_client_set.max_attempts = 1;
 	http_client_set.request_timeout_msecs = 1000;
@@ -2924,6 +2933,182 @@ static void test_reconnect_failure(void)
 		test_client_reconnect_failure,
 		test_server_reconnect_failure, 1,
 		test_dns_reconnect_failure);
+	test_end();
+}
+
+/*
+ * Multi IP attempts
+ */
+
+/* dns */
+
+static void
+test_multi_ip_attempts_input(struct server_connection *conn)
+{
+	unsigned int count = 0;
+	const char *line;
+
+	if (!conn->version_sent) {
+		conn->version_sent = TRUE;
+		o_stream_nsend_str(conn->conn.output, "VERSION\tdns\t1\t0\n");
+	}
+
+	while ((line=i_stream_read_next_line(conn->conn.input)) != NULL) {
+		if (str_begins(line, "VERSION"))
+			continue;
+		if (debug)
+			i_debug("DNS REQUEST %u: %s", count, line);
+
+		if (strcmp(line, "IP\ttest1.local") == 0) {
+			o_stream_nsend_str(conn->conn.output,
+				   "0\t127.0.0.4\t127.0.0.3\t"
+				   "127.0.0.2\t127.0.0.1\n");
+			continue;
+		}
+
+		o_stream_nsend_str(conn->conn.output,
+				   "0\t10.255.255.1\t192.168.0.0\t"
+				   "192.168.255.255\t127.0.0.1\n");
+	}
+}
+
+static void test_dns_multi_ip_attempts(void)
+{
+	test_server_input = test_multi_ip_attempts_input;
+	test_server_run(0);
+}
+
+/* server */
+
+static void
+test_server_multi_ip_attempts_input(struct server_connection *conn)
+{
+	string_t *resp;
+
+	resp = t_str_new(512);
+	str_printfa(resp,
+		"HTTP/1.1 200 OK\r\n"
+		"Connection: close\r\n"
+		"\r\n");
+	o_stream_nsend(conn->conn.output,
+		str_data(resp), str_len(resp));
+	server_connection_deinit(&conn);
+}
+
+static void test_server_multi_ip_attempts(unsigned int index)
+{
+	test_server_input = test_server_multi_ip_attempts_input;
+	test_server_run(index);
+}
+
+/* client */
+
+struct _multi_ip_attempts {
+	unsigned int count;
+};
+
+static void
+test_client_multi_ip_attempts_response(
+	const struct http_response *resp,
+	struct _multi_ip_attempts *ctx)
+{
+	if (debug)
+		i_debug("RESPONSE: %u %s", resp->status, resp->reason);
+
+	test_assert(resp->status == 200);
+	test_assert(resp->reason != NULL && *resp->reason != '\0');
+
+	if (--ctx->count == 0) {
+		i_free(ctx);
+		io_loop_stop(ioloop);
+	}
+}
+
+static bool
+test_client_multi_ip_attempts1(const struct http_client_settings *client_set)
+{
+	struct http_client_request *hreq;
+	struct _multi_ip_attempts *ctx;
+
+	ctx = i_new(struct _multi_ip_attempts, 1);
+	ctx->count = 2;
+
+	http_client = http_client_init(client_set);
+
+	hreq = http_client_request(http_client,
+		"GET", "test1.local", "/multi-ip-attempts.txt",
+		test_client_multi_ip_attempts_response, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_submit(hreq);
+
+	hreq = http_client_request(http_client,
+		"GET", "test1.local", "/multi-ip-attempts2.txt",
+		test_client_multi_ip_attempts_response, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_submit(hreq);
+
+	return TRUE;
+}
+
+static bool
+test_client_multi_ip_attempts2(const struct http_client_settings *client_set)
+{
+	struct http_client_request *hreq;
+	struct _multi_ip_attempts *ctx;
+
+	ctx = i_new(struct _multi_ip_attempts, 1);
+	ctx->count = 2;
+
+	http_client = http_client_init(client_set);
+
+	hreq = http_client_request(http_client,
+		"GET", "test2.local", "/multi-ip-attempts.txt",
+		test_client_multi_ip_attempts_response, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_submit(hreq);
+
+	hreq = http_client_request(http_client,
+		"GET", "test2.local", "/multi-ip-attempts2.txt",
+		test_client_multi_ip_attempts_response, ctx);
+	http_client_request_set_port(hreq, bind_ports[0]);
+	http_client_request_submit(hreq);
+
+	return TRUE;
+}
+
+/* test */
+
+static void test_multi_ip_attempts(void)
+{
+	struct http_client_settings http_client_set;
+
+	test_client_defaults(&http_client_set);
+	http_client_set.connect_timeout_msecs = 1000;
+	http_client_set.request_timeout_msecs = 1000;
+	http_client_set.dns_client_socket_path = "./dns-test";
+	http_client_set.max_connect_attempts = 4;
+
+	test_begin("multi IP attempts (connection refused)");
+	test_run_client_server(&http_client_set,
+		test_client_multi_ip_attempts1,
+		test_server_multi_ip_attempts, 1,
+		test_dns_multi_ip_attempts);
+	test_end();
+
+	test_begin("multi IP attempts (connect timeout)");
+	test_run_client_server(&http_client_set,
+		test_client_multi_ip_attempts2,
+		test_server_multi_ip_attempts, 1,
+		test_dns_multi_ip_attempts);
+	test_end();
+
+	http_client_set.soft_connect_timeout_msecs = 100;
+
+	test_begin("multi IP attempts (soft connect timeout)");
+	test_run_client_server(&http_client_set,
+		test_client_multi_ip_attempts2,
+		test_server_multi_ip_attempts, 1,
+		test_dns_multi_ip_attempts);
 	test_end();
 }
 
@@ -2959,6 +3144,7 @@ static void (*const test_functions[])(void) = {
 	test_dns_lookup_ttl,
 	test_peer_reuse_failure,
 	test_reconnect_failure,
+	test_multi_ip_attempts,
 	NULL
 };
 
@@ -2979,11 +3165,44 @@ test_client_defaults(struct http_client_settings *http_set)
 	http_set->debug = debug;
 }
 
+static void
+test_client_progress_timeout(void *context ATTR_UNUSED)
+{
+	/* Terminate test due to lack of progress */
+	test_assert(FALSE);
+	timeout_remove(&to_client_progress);
+	io_loop_stop(current_ioloop);
+}
+
+static bool
+test_client_init(test_client_init_t client_test,
+		 const struct http_client_settings *client_set)
+{
+	i_assert(client_test != NULL);
+	if (!client_test(client_set))
+		return FALSE;
+
+	to_client_progress = timeout_add(CLIENT_PROGRESS_TIMEOUT*1000,
+		test_client_progress_timeout, NULL);
+
+	return TRUE;
+}
+
 static void test_client_deinit(void)
 {
+	timeout_remove(&to_client_progress);
+
 	if (http_client != NULL)
 		http_client_deinit(&http_client);
-	http_client = NULL;
+}
+
+static void
+test_client_run(test_client_init_t client_test,
+		const struct http_client_settings *client_set)
+{
+	if (test_client_init(client_test, client_set))
+		io_loop_run(ioloop);
+	test_client_deinit();
 }
 
 /*
@@ -3210,9 +3429,7 @@ static void test_run_client_server(
 	usleep(100000); /* wait a little for server setup */
 
 	ioloop = io_loop_create();
-	if (client_test(client_set))
-		io_loop_run(ioloop);
-	test_client_deinit();
+	test_client_run(client_test, client_set);
 	io_loop_destroy(&ioloop);
 
 	test_servers_kill_all();
@@ -3274,5 +3491,5 @@ int main(int argc, char *argv[])
 	bind_ip.family = AF_INET;
 	bind_ip.u.ip4.s_addr = htonl(INADDR_LOOPBACK);	
 
-	test_run(test_functions);
+	return test_run(test_functions);
 }

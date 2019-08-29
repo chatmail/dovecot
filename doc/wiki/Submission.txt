@@ -153,6 +153,8 @@ submission_relay_ssl_verify = yes :
 submission_relay_rawlog_dir :
   Write protocol logs for relay connection to this directory for debugging.
 
+See <Debugging.Rawlog.txt> for more details on rawlogs.
+
 Login Proxy
 -----------
 
@@ -169,4 +171,21 @@ described in the <previous section> [Submission.txt]. If you get this wrong,
 things will seem to work (at least to some extent), but the service provided by
 Dovecot will be effectively bypassed.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+Client Support
+--------------
+
+As of April 2019 there aren't many clients that support the BURL extension.
++-------------+-----------+-------------------------------------------------------------------------------------------------------+
+| *Client*    | *Supports | *Notes*                                                                                               |
+|             | BURL?*    |                                                                                                       |
++-------------+-----------+-------------------------------------------------------------------------------------------------------+
+| Trojita     | Yes       | Mentioned on the dovecot discussion list                                                              |
+|             |           | [http://dovecot.2317879.n4.nabble.com/New-Dovecot-service-SMTP-Submission-RFC6409-tp62117p62122.html] |
++-------------+-----------+-------------------------------------------------------------------------------------------------------+
+| Thunderbird | No        | Vote on bugzilla [https://bugzilla.mozilla.org/page.cgi?id=voting/user.html&bug_id=421779]            |
++-------------+-----------+-------------------------------------------------------------------------------------------------------+
+| KDE Akonadi | No        | KDE bugzilla [https://bugs.kde.org/show_bug.cgi?id=408732]                                            |
+| / KMail     |           |                                                                                                       |
++-------------+-----------+-------------------------------------------------------------------------------------------------------+
+
+(This file was created from the wiki on 2019-06-19 12:42)

@@ -805,7 +805,7 @@ mail_storage_service_io_deactivate_user_cb(struct mail_storage_service_user *use
 		i_assert(event != NULL);
 		if (!array_is_created(&user->event_stack))
 			i_array_init(&user->event_stack, 4);
-		array_append(&user->event_stack, &event, 1);
+		array_push_back(&user->event_stack, &event);
 		event_pop_global(event);
 	}
 	event_pop_global(user->event);
@@ -1415,7 +1415,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 			input->session_id != NULL ? input->session_id :
 			(input->session_id_prefix != NULL ?
 			 input->session_id_prefix : NULL);
-		i_set_failure_prefix("%s(%s%s,%s)",
+		i_set_failure_prefix("%s(%s%s%s): ",
 			master_service_get_name(ctx->service), input->username,
 			session_id == NULL ? "" : t_strdup_printf(",%s", session_id),
 			input->remote_ip.family == 0 ? "" :
@@ -1425,7 +1425,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 		/* we might be here because we're doing a user lookup for a
 		   shared user. the log prefix is likely already usable, so
 		   just append our own without replacing the whole thing. */
-		i_set_failure_prefix("%suser-lookup(%s)",
+		i_set_failure_prefix("%suser-lookup(%s): ",
 				     old_log_prefix, input->username);
 		update_log_prefix = FALSE;
 	}

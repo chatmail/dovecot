@@ -13,6 +13,7 @@
 #include "test-common.h"
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -223,23 +224,6 @@ static void signal_process(const char *signal_file)
 	i_close_fd(&fd);
 }
 
-static int launch_test_stats(void)
-{
-	/* Make sure files are not existing */
-	i_unlink_if_exists(test_done);
-	i_unlink_if_exists(exit_stats);
-	i_unlink_if_exists(stats_ready);
-
-	if ((stats_pid = fork()) == (pid_t)-1)
-		i_fatal("fork() failed: %m");
-	if (stats_pid == 0) {
-		stats_proc();
-		return 0;
-	}
-	wait_for_signal(stats_ready);
-	return run_tests();
-}
-
 static bool compare_test_stats_data_line(const char *reference, const char *actual)
 {
 	const char *const *ref_args = t_strsplit(reference, "\t");
@@ -259,7 +243,7 @@ static bool compare_test_stats_data_line(const char *reference, const char *actu
 	return TRUE;
 }
 
-static bool compare_test_stats_data_lines(const char *reference, const char *actual)
+static bool compare_test_stats_data_lines(const char *actual, const char *reference)
 {
 	const char *const *lines_ref = t_strsplit(reference, "\n");
 	const char *const *lines_act = t_strsplit(actual, "\n");
@@ -360,7 +344,7 @@ static void test_no_merging2(void)
 	event_unref(&child_ev);
 	test_assert(
 		compare_test_stats_to(
-			"EVENT	%lu	1	0	0"
+			"EVENT	%"PRIu64"	1	0	0"
 			"	stest-event-stats.c	%d"
 			"	l0	0	ctest2\n", id, l));
 	test_end();
@@ -386,12 +370,12 @@ static void test_no_merging3(void)
 	event_unref(&child_ev);
 	test_assert(
 		compare_test_stats_to(
-			"BEGIN	%lu	0	1	0	0"
+			"BEGIN	%"PRIu64"	0	1	0	0"
 			"	stest-event-stats.c	%d	ctest1\n"
-			"EVENT	%lu	1	1	0"
+			"EVENT	%"PRIu64"	1	1	0"
 			"	stest-event-stats.c	%d"
 			"	l1	0	ctest2\n"
-			"END\t%lu\n", idp, lp, idp, l, idp));
+			"END\t%"PRIu64"\n", idp, lp, idp, l, idp));
 	test_end();
 }
 
@@ -451,7 +435,7 @@ static void test_merge_events2(void)
 	event_unref(&merge_ev2);
 	test_assert(
 		compare_test_stats_to(
-			"EVENT	%lu	1	0	0"
+			"EVENT	%"PRIu64"	1	0	0"
 			"	stest-event-stats.c	%d	l0	0"
 			"	ctest3	ctest2	ctest1	Tkey3"
 			"	10	0	Ikey2	20"
@@ -483,11 +467,11 @@ static void test_skip_parents(void)
 	event_unref(&child_ev);
 	test_assert(
 		compare_test_stats_to(
-			"BEGIN	%lu	0	1	0	0"
+			"BEGIN	%"PRIu64"	0	1	0	0"
 			"	stest-event-stats.c	%d	ctest1\n"
-			"EVENT	%lu	1	3	0	"
+			"EVENT	%"PRIu64"	1	3	0	"
 			"stest-event-stats.c	%d	l3	0"
-			"	ctest2\nEND\t%lu\n", id, lp, id, l, id));
+			"	ctest2\nEND\t%"PRIu64"\n", id, lp, id, l, id));
 	test_end();
 }
 
@@ -525,12 +509,12 @@ static void test_merge_events_skip_parents(void)
 	event_unref(&child2_ev);
 	test_assert(
 		compare_test_stats_to(
-			"BEGIN	%lu	0	1	0	0"
+			"BEGIN	%"PRIu64"	0	1	0	0"
 			"	stest-event-stats.c	%d	ctest1\n"
-			"EVENT	%lu	1	3	0	"
+			"EVENT	%"PRIu64"	1	3	0	"
 			"stest-event-stats.c	%d	l3	0	"
 			"ctest4	ctest5	Tkey3	10	0	Skey4"
-			"	str4\nEND\t%lu\n", id, lp, id, l, id));
+			"	str4\nEND\t%"PRIu64"\n", id, lp, id, l, id));
 	test_end();
 }
 
@@ -558,9 +542,38 @@ static int run_tests(void)
 	signal_process(exit_stats);
 	signal_process(test_done);
 	(void)waitpid(stats_pid, NULL, 0);
-	/* Just in case if something was put to file after tests */
-	i_unlink_if_exists(stats_data_file);
 	io_loop_destroy(&ioloop);
+	return ret;
+}
+
+static void cleanup_test_stats(void)
+{
+	i_unlink_if_exists(SOCK_FULL);
+	i_unlink_if_exists(stats_data_file);
+	i_unlink_if_exists(test_done);
+	i_unlink_if_exists(exit_stats);
+	i_unlink_if_exists(stats_ready);
+}
+
+static int launch_test_stats(void)
+{
+	int ret;
+
+	/* Make sure files are not existing */
+	cleanup_test_stats();
+
+	if ((stats_pid = fork()) == (pid_t)-1)
+		i_fatal("fork() failed: %m");
+	if (stats_pid == 0) {
+		stats_proc();
+		return 0;
+	}
+	wait_for_signal(stats_ready);
+	ret = run_tests();
+
+	/* Make sure we don't leave anything behind */
+	cleanup_test_stats();
+
 	return ret;
 }
 

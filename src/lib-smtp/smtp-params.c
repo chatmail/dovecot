@@ -100,10 +100,12 @@ static bool smtp_param_value_valid(const char *value)
 
 void smtp_param_write(string_t *out, const struct smtp_param *param)
 {
-	i_assert(smtp_param_value_valid(param->value));
 	str_append(out, t_str_ucase(param->keyword));
-	str_append_c(out, '=');
-	str_append(out, param->value);
+	if (param->value != NULL) {
+		i_assert(smtp_param_value_valid(param->value));
+		str_append_c(out, '=');
+		str_append(out, param->value);
+	}
 }
 
 /*
@@ -169,7 +171,7 @@ static int smtp_params_mail_parse_auth(
 
 static int smtp_params_mail_parse_body(
 	struct smtp_params_mail_parser *pmparser,
-	const char *value, bool extensions)
+	const char *value, const char *const *extensions)
 {
 	struct smtp_params_mail *params = pmparser->params;
 	enum smtp_capability caps = pmparser->caps;
@@ -204,7 +206,8 @@ static int smtp_params_mail_parse_body(
 			strcmp(value, "BINARYMIME") == 0) {
 		params->body.type = SMTP_PARAM_MAIL_BODY_TYPE_BINARYMIME;
 	/* =?? */
-	} else if (extensions) {
+	} else if (extensions != NULL &&
+		   str_array_icase_find(extensions, value)) {
 		params->body.type = SMTP_PARAM_MAIL_BODY_TYPE_EXTENSION;
 		params->body.ext = p_strdup(pmparser->pool, value);
 	} else {
@@ -331,10 +334,12 @@ smtp_params_mail_parse_size(
 }
 
 int smtp_params_mail_parse(pool_t pool, const char *args,
-	enum smtp_capability caps, bool extensions,
-	struct smtp_params_mail *params_r,
-	enum smtp_param_parse_error *error_code_r,
-	const char **error_r)
+			   enum smtp_capability caps,
+			   const char *const *extensions,
+			   const char *const *body_extensions,
+			   struct smtp_params_mail *params_r,
+			   enum smtp_param_parse_error *error_code_r,
+			   const char **error_r)
 {
 	struct smtp_params_mail_parser pmparser;
 	struct smtp_param param;
@@ -369,8 +374,8 @@ int smtp_params_mail_parse(pool_t pool, const char *args,
 				break;
 			}
 		} else if (strcmp(param.keyword, "BODY") == 0) {
-			if (smtp_params_mail_parse_body
-				(&pmparser, param.value, extensions) < 0) {
+			if (smtp_params_mail_parse_body(
+				&pmparser, param.value, body_extensions) < 0) {
 				ret = -1;
 				break;
 			}
@@ -395,14 +400,12 @@ int smtp_params_mail_parse(pool_t pool, const char *args,
 				ret = -1;
 				break;
 			}
-		} else if (extensions) {
+		} else if (extensions != NULL &&
+			   str_array_icase_find(extensions, param.keyword)) {
 			/* add the rest to ext_param for specific
 			   applications */
-			if (!array_is_created(&params_r->extra_params))
-				p_array_init(&params_r->extra_params, pool, 4);
-			param.keyword = p_strdup(pool, param.keyword);
-			param.value = p_strdup(pool, param.value);
-			array_append(&params_r->extra_params, &param, 1);
+			smtp_params_mail_add_extra(params_r, pool,
+						   param.keyword, param.value);
 		} else {
 			/* RFC 5321, Section 4.1.1.11:
 			   If the server SMTP does not recognize or cannot
@@ -448,9 +451,44 @@ void smtp_params_mail_copy(pool_t pool,
 		array_foreach(&src->extra_params, param) {
 			param_new.keyword = p_strdup(pool, param->keyword);
 			param_new.value = p_strdup(pool, param->value);
-			array_append(&dst->extra_params, &param_new, 1);
+			array_push_back(&dst->extra_params, &param_new);
 		}
 	}
+}
+
+void smtp_params_mail_add_extra(struct smtp_params_mail *params, pool_t pool,
+				const char *keyword, const char *value)
+{
+	struct smtp_param param;
+
+	if (!array_is_created(&params->extra_params))
+		p_array_init(&params->extra_params, pool, 4);
+
+	i_zero(&param);
+	param.keyword = p_strdup(pool, keyword);
+	param.value = p_strdup(pool, value);
+	array_push_back(&params->extra_params, &param);
+}
+
+bool smtp_params_mail_drop_extra(struct smtp_params_mail *params,
+				 const char *keyword, const char **value_r)
+{
+	const struct smtp_param *param;
+
+	if (!array_is_created(&params->extra_params))
+		return FALSE;
+
+	array_foreach(&params->extra_params, param) {
+		if (strcasecmp(param->keyword, keyword) == 0) {
+			if (value_r != NULL)
+				*value_r = param->value;
+			array_delete(&params->extra_params,
+				     array_foreach_idx(&params->extra_params,
+						       param), 1);
+			return TRUE;
+		}
+	}
+	return FALSE;
 }
 
 /* write */
@@ -614,6 +652,96 @@ smtp_params_mail_get_extra(const struct smtp_params_mail *params,
 	return NULL;
 }
 
+/* events */
+
+static void
+smtp_params_mail_add_auth_to_event(const struct smtp_params_mail *params,
+				   struct event *event)
+{
+	/* AUTH: RFC 4954 */
+	if (params->auth == NULL)
+		return;
+
+	event_add_str(event, "mail_param_auth",
+		      smtp_address_encode(params->auth));
+}
+
+static void
+smtp_params_mail_add_body_to_event(const struct smtp_params_mail *params,
+				   struct event *event)
+{
+	/* BODY: RFC 6152 */
+	switch (params->body.type) {
+	case SMTP_PARAM_MAIL_BODY_TYPE_UNSPECIFIED:
+		break;
+	case SMTP_PARAM_MAIL_BODY_TYPE_7BIT:
+		event_add_str(event, "mail_param_body", "7BIT");
+		break;
+	case SMTP_PARAM_MAIL_BODY_TYPE_8BITMIME:
+		event_add_str(event, "mail_param_body", "8BITMIME");
+		break;
+	case SMTP_PARAM_MAIL_BODY_TYPE_BINARYMIME:
+		event_add_str(event, "mail_param_body", "BINARYMIME");
+		break;
+	case SMTP_PARAM_MAIL_BODY_TYPE_EXTENSION:
+		event_add_str(event, "mail_param_body", params->body.ext);
+		break;
+	default:
+		i_unreached();
+	}
+}
+
+static void
+smtp_params_mail_add_envid_to_event(const struct smtp_params_mail *params,
+				    struct event *event)
+{
+	/* ENVID: RFC 3461, Section 4.4 */
+	if (params->envid == NULL)
+		return;
+
+	event_add_str(event, "mail_param_envid", params->envid);
+}
+
+static void
+smtp_params_mail_add_ret_to_event(const struct smtp_params_mail *params,
+				  struct event *event)
+{
+	/* RET: RFC 3461, Section 4.3 */
+	switch (params->ret) {
+	case SMTP_PARAM_MAIL_RET_UNSPECIFIED:
+		break;
+	case SMTP_PARAM_MAIL_RET_HDRS:
+		event_add_str(event, "mail_param_ret", "HDRS");
+		break;
+	case SMTP_PARAM_MAIL_RET_FULL:
+		event_add_str(event, "mail_param_ret", "FULL");
+		break;
+	default:
+		i_unreached();
+	}
+}
+
+static void
+smtp_params_mail_add_size_to_event(const struct smtp_params_mail *params,
+				   struct event *event)
+{
+	/* SIZE: RFC 1870 */
+	if (params->size == 0)
+		return;
+
+	event_add_int(event, "mail_param_size", params->size);
+}
+
+void smtp_params_mail_add_to_event(const struct smtp_params_mail *params,
+				   struct event *event)
+{
+	smtp_params_mail_add_auth_to_event(params, event);
+	smtp_params_mail_add_body_to_event(params, event);
+	smtp_params_mail_add_envid_to_event(params, event);
+	smtp_params_mail_add_ret_to_event(params, event);
+	smtp_params_mail_add_size_to_event(params, event);
+}
+
 /*
  * RCPT parameters
  */
@@ -725,6 +853,7 @@ smtp_params_rcpt_parse_orcpt(struct smtp_params_rcpt_parser *prparser,
 	struct smtp_parser parser;
 	const unsigned char *p, *pend;
 	string_t *address;
+	const char *addr_type;
 	int ret;
 
 	/* ORCPT=<address>: RFC 3461
@@ -751,12 +880,13 @@ smtp_params_rcpt_parse_orcpt(struct smtp_params_rcpt_parser *prparser,
 
 	/* check addr-type */
 	smtp_parser_init(&parser, pool_datastack_create(), value);
-	if (smtp_parser_parse_atom(&parser, &params->orcpt.addr_type) <= 0 ||
+	if (smtp_parser_parse_atom(&parser, &addr_type) <= 0 ||
 		parser.cur >= parser.end || *parser.cur != ';') {
 		prparser->error = "Invalid addr-type for ORCPT= parameter";
 		prparser->error_code = SMTP_PARAM_PARSE_ERROR_BAD_SYNTAX;
 		return -1;
 	}
+	params->orcpt.addr_type = p_strdup(prparser->pool, addr_type);
 	parser.cur++;
 
 	/* check xtext */
@@ -819,10 +949,11 @@ smtp_params_rcpt_parse_orcpt(struct smtp_params_rcpt_parser *prparser,
 }
 
 int smtp_params_rcpt_parse(pool_t pool, const char *args,
-	enum smtp_capability caps, bool extensions,
-	struct smtp_params_rcpt *params_r,
-	enum smtp_param_parse_error *error_code_r,
-	const char **error_r)
+			   enum smtp_capability caps,
+			   const char *const *extensions,
+			   struct smtp_params_rcpt *params_r,
+			   enum smtp_param_parse_error *error_code_r,
+			   const char **error_r)
 {
 	struct smtp_params_rcpt_parser prparser;
 	struct smtp_param param;
@@ -864,14 +995,12 @@ int smtp_params_rcpt_parse(pool_t pool, const char *args,
 				ret = -1;
 				break;
 			}
-		} else if (extensions) {
+		} else if (extensions != NULL &&
+			   str_array_icase_find(extensions, param.keyword)) {
 			/* add the rest to ext_param for specific applications
 			 */
-			if (!array_is_created(&params_r->extra_params))
-				p_array_init(&params_r->extra_params, pool, 4);
-			param.keyword = p_strdup(pool, param.keyword);
-			param.value = p_strdup(pool, param.value);
-			array_append(&params_r->extra_params, &param, 1);
+			smtp_params_rcpt_add_extra(params_r, pool,
+						   param.keyword, param.value);
 		} else {
 			/* RFC 5321, Section 4.1.1.11:
 			   If the server SMTP does not recognize or cannot
@@ -915,9 +1044,44 @@ void smtp_params_rcpt_copy(pool_t pool,
 		array_foreach(&src->extra_params, param) {
 			param_new.keyword = p_strdup(pool, param->keyword);
 			param_new.value = p_strdup(pool, param->value);
-			array_append(&dst->extra_params, &param_new, 1);
+			array_push_back(&dst->extra_params, &param_new);
 		}
 	}
+}
+
+void smtp_params_rcpt_add_extra(struct smtp_params_rcpt *params, pool_t pool,
+				const char *keyword, const char *value)
+{
+	struct smtp_param param;
+
+	if (!array_is_created(&params->extra_params))
+		p_array_init(&params->extra_params, pool, 4);
+
+	i_zero(&param);
+	param.keyword = p_strdup(pool, keyword);
+	param.value = p_strdup(pool, value);
+	array_push_back(&params->extra_params, &param);
+}
+
+bool smtp_params_rcpt_drop_extra(struct smtp_params_rcpt *params,
+				 const char *keyword, const char **value_r)
+{
+	const struct smtp_param *param;
+
+	if (!array_is_created(&params->extra_params))
+		return FALSE;
+
+	array_foreach(&params->extra_params, param) {
+		if (strcasecmp(param->keyword, keyword) == 0) {
+			if (value_r != NULL)
+				*value_r = param->value;
+			array_delete(&params->extra_params,
+				     array_foreach_idx(&params->extra_params,
+						       param), 1);
+			return TRUE;
+		}
+	}
+	return FALSE;
 }
 
 /* write */
@@ -1070,4 +1234,62 @@ bool smtp_params_rcpt_equals(const struct smtp_params_rcpt *params1,
 		}
 	}
 	return TRUE;
+}
+
+/* events */
+
+static void
+smtp_params_rcpt_add_notify_to_event(const struct smtp_params_rcpt *params,
+				     struct event *event)
+{
+	/* NOTIFY: RFC 3461, Section 4.1 */
+	if (params->notify == SMTP_PARAM_RCPT_NOTIFY_UNSPECIFIED)
+		return;
+	if ((params->notify & SMTP_PARAM_RCPT_NOTIFY_NEVER) != 0) {
+		i_assert(params->notify ==
+			 SMTP_PARAM_RCPT_NOTIFY_NEVER);
+		event_add_str(event, "rcpt_param_notify", "NEVER");
+	} else {
+		string_t *str = t_str_new(32);
+		if ((params->notify & SMTP_PARAM_RCPT_NOTIFY_SUCCESS) != 0)
+			str_append(str, "SUCCESS");
+		if ((params->notify & SMTP_PARAM_RCPT_NOTIFY_FAILURE) != 0) {
+			if (str_len(str) > 0)
+				str_append_c(str, ',');
+			str_append(str, "FAILURE");
+		}
+		if ((params->notify & SMTP_PARAM_RCPT_NOTIFY_DELAY) != 0) {
+			if (str_len(str) > 0)
+				str_append_c(str, ',');
+			str_append(str, "DELAY");
+		}
+		event_add_str(event, "rcpt_param_notify", str_c(str));
+	}
+}
+
+static void
+smtp_params_rcpt_add_orcpt_to_event(const struct smtp_params_rcpt *params,
+				    struct event *event)
+{
+	/* ORCPT: RFC 3461, Section 4.2 */
+	if (params->orcpt.addr_type == NULL)
+		return;
+
+	event_add_str(event, "rcpt_param_orcpt_type",
+		      params->orcpt.addr_type);
+	if (strcasecmp(params->orcpt.addr_type, "rfc822") == 0) {
+		event_add_str(event, "rcpt_param_orcpt",
+			      smtp_address_encode(params->orcpt.addr));
+	} else {
+		i_assert(params->orcpt.addr_raw != NULL);
+		event_add_str(event, "rcpt_param_orcpt",
+			      params->orcpt.addr_raw);
+	}
+}
+
+void smtp_params_rcpt_add_to_event(const struct smtp_params_rcpt *params,
+				   struct event *event)
+{
+	smtp_params_rcpt_add_notify_to_event(params, event);
+	smtp_params_rcpt_add_orcpt_to_event(params, event);
 }

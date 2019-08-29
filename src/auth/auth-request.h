@@ -1,6 +1,7 @@
 #ifndef AUTH_REQUEST_H
 #define AUTH_REQUEST_H
 
+#include "array.h"
 #include "net.h"
 #include "var-expand.h"
 #include "mech.h"
@@ -35,6 +36,9 @@ struct auth_request {
 	pool_t pool;
 
 	struct event *event;
+	struct event *mech_event;
+	ARRAY(struct event *) authdb_event;
+
         enum auth_request_state state;
         /* user contains the user who is being authenticated.
            When master user is logging in as someone else, it gets more
@@ -163,6 +167,8 @@ struct auth_request {
 	bool policy_refusal:1;
 	bool policy_processed:1;
 
+	bool event_finished_sent:1;
+
 	/* ... mechanism specific data ... */
 };
 
@@ -254,6 +260,9 @@ int auth_request_password_verify_log(struct auth_request *request,
 				 const char *scheme, const char *subsystem,
 				 bool log_password_mismatch);
 
+void auth_request_get_log_prefix(string_t *str, struct auth_request *auth_request,
+				 const char *subsystem);
+
 void auth_request_log_debug(struct auth_request *auth_request,
 			    const char *subsystem,
 			    const char *format, ...) ATTR_FORMAT(3, 4);
@@ -290,5 +299,26 @@ void auth_request_userdb_callback(enum userdb_result result,
 void auth_request_refresh_last_access(struct auth_request *request);
 void auth_str_append(string_t *dest, const char *key, const char *value);
 bool auth_request_username_accepted(const char *const *filter, const char *username);
+struct event_passthrough *
+auth_request_finished_event(struct auth_request *request, struct event *event);
+void auth_request_log_finished(struct auth_request *request);
+
+void auth_request_passdb_lookup_begin(struct auth_request *request);
+void auth_request_passdb_lookup_end(struct auth_request *request,
+				    enum passdb_result result);
+void auth_request_userdb_lookup_begin(struct auth_request *request);
+void auth_request_userdb_lookup_end(struct auth_request *request,
+				    enum userdb_result result);
+
+/* Fetches the current authdb event, this is done because
+   some lookups can recurse into new lookups, requiring new event,
+   which will be returned here. */
+static inline struct event *authdb_event(struct auth_request *request)
+{
+	if (array_count(&request->authdb_event) == 0)
+		return request->event;
+	struct event **e = array_back_modifiable(&request->authdb_event);
+	return *e;
+}
 
 #endif

@@ -81,12 +81,16 @@ static bool event_get_log_prefix(struct event *event, string_t *log_prefix,
 				 bool *replace_prefix, unsigned int *type_pos)
 {
 	bool ret = FALSE;
+	const char *prefix = event->log_prefix;
+
+	if (event->log_prefix_callback != NULL)
+		prefix = event->log_prefix_callback(event->log_prefix_callback_context);
 
 	if (event->log_prefix_replace) {
 		/* this event replaces all parent log prefixes */
 		*replace_prefix = TRUE;
-		*type_pos = event->log_prefix == NULL ? 0 :
-			strlen(event->log_prefix);
+		*type_pos = prefix == NULL ? 0 :
+			strlen(prefix);
 	} else if (event->parent == NULL) {
 		/* append to default log prefix, don't replace it */
 	} else {
@@ -94,8 +98,8 @@ static bool event_get_log_prefix(struct event *event, string_t *log_prefix,
 					 replace_prefix, type_pos))
 			ret = TRUE;
 	}
-	if (event->log_prefix != NULL) {
-		str_append(log_prefix, event->log_prefix);
+	if (prefix != NULL) {
+		str_append(log_prefix, prefix);
 		ret = TRUE;
 	}
 	return ret;
@@ -111,11 +115,15 @@ void event_log(struct event *event, const struct event_log_params *params,
 	va_end(args);
 }
 
-#undef event_want_debug_log
-bool event_want_debug_log(struct event *event, const char *source_filename,
-		     unsigned int source_linenum)
+#undef event_want_log_level
+bool event_want_log_level(struct event *event, enum log_type level,
+			  const char *source_filename,
+			  unsigned int source_linenum)
 {
 	struct failure_context ctx = { .type = LOG_TYPE_DEBUG };
+
+	if (event->min_log_level <= level)
+		return TRUE;
 
 	if (event->forced_debug)
 		event->sending_debug_log = TRUE;
@@ -133,12 +141,16 @@ bool event_want_debug_log(struct event *event, const char *source_filename,
 	return event->sending_debug_log;
 }
 
-#undef event_want_debug
-bool event_want_debug(struct event *event, const char *source_filename,
+#undef event_want_level
+bool event_want_level(struct event *event, enum log_type level,
+		      const char *source_filename,
 		      unsigned int source_linenum)
 {
-	(void)event_want_debug_log(event, source_filename, source_linenum);
+	(void)event_want_log_level(event, level, source_filename, source_linenum);
 	if (event->sending_debug_log)
+		return TRUE;
+
+	if (event->min_log_level <= level)
 		return TRUE;
 
 	/* see if debug send filtering matches */
@@ -237,8 +249,7 @@ struct event_filter *event_get_global_debug_log_filter(void)
 
 void event_unset_global_debug_log_filter(void)
 {
-	if (global_debug_log_filter != NULL)
-		event_filter_unref(&global_debug_log_filter);
+	event_filter_unref(&global_debug_log_filter);
 }
 
 void event_set_global_debug_send_filter(struct event_filter *filter)
@@ -255,8 +266,7 @@ struct event_filter *event_get_global_debug_send_filter(void)
 
 void event_unset_global_debug_send_filter(void)
 {
-	if (global_debug_send_filter != NULL)
-		event_filter_unref(&global_debug_send_filter);
+	event_filter_unref(&global_debug_send_filter);
 }
 
 void event_set_global_core_log_filter(struct event_filter *filter)
@@ -273,6 +283,5 @@ struct event_filter *event_get_global_core_log_filter(void)
 
 void event_unset_global_core_log_filter(void)
 {
-	if (global_core_log_filter != NULL)
-		event_filter_unref(&global_core_log_filter);
+	event_filter_unref(&global_core_log_filter);
 }

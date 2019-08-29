@@ -281,12 +281,21 @@ This should work most of the times. If not, generate new file.
 By default Dovecot's allowed ciphers list contains:
 
 ---%<-------------------------------------------------------------------------
-ssl_cipher_list = ALL:!LOW:!SSLv2:!EXP:!aNULL
+ssl_cipher_list =
+ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH
 ---%<-------------------------------------------------------------------------
 
 Disallowing more won't really gain any security for those using better ciphers,
 but it does prevent people from accidentally using insecure ciphers. See
 http://www.openssl.org/docs/apps/ciphers.html for a list of the ciphers.
+
+You should usually prefer server ciphers and their order, so setting
+
+---%<-------------------------------------------------------------------------
+ssl_prefer_server_ciphers=yes
+---%<-------------------------------------------------------------------------
+
+is recommended.
 
 SSL verbosity
 -------------
@@ -369,7 +378,7 @@ Testing
 Try out your new setup:
 
 ---%<-------------------------------------------------------------------------
-openssl s_client -connect mail.sample.com:pop3s
+openssl s_client -servername mail.sample.com -connect mail.sample.com:pop3s
 ---%<-------------------------------------------------------------------------
 
 You should see something like this:
@@ -510,4 +519,4 @@ ssl_client_ca_dir = /path/to/pem/certificates
 ssl_client_ca_file = /path/to/pem/bundle
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

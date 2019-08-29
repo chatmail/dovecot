@@ -65,6 +65,11 @@ unsigned int mbox_save_drop_headers_count = N_ELEMENTS(mbox_save_drop_headers);
 extern struct mail_storage mbox_storage;
 extern struct mailbox mbox_mailbox;
 
+static struct event_category event_category_mbox = {
+	.name = "mbox",
+	.parent = &event_category_storage,
+};
+
 static MODULE_CONTEXT_DEFINE_INIT(mbox_mailbox_list_module,
 				  &mailbox_list_module_register);
 
@@ -183,7 +188,8 @@ static void mbox_storage_get_list_settings(const struct mail_namespace *ns,
 	if (set->subscription_fname == NULL)
 		set->subscription_fname = MBOX_SUBSCRIPTION_FILE_NAME;
 
-	if (set->inbox_path == NULL) {
+	if (set->inbox_path == NULL &&
+	    strcasecmp(set->layout, MAILBOX_LIST_NAME_FS) == 0) {
 		set->inbox_path = t_strconcat(set->root_dir, "/inbox", NULL);
 		e_debug(ns->user->event, "mbox: INBOX defaulted to %s", set->inbox_path);
 	}
@@ -713,8 +719,7 @@ static void mbox_storage_add_list(struct mail_storage *storage,
 	mlist->module_ctx.super = list->v;
 	mlist->set = mail_namespace_get_driver_settings(list->ns, storage);
 
-	if (strcmp(list->name, MAILBOX_LIST_NAME_FS) == 0 &&
-	    *list->set.maildir_name == '\0') {
+	if (*list->set.maildir_name == '\0') {
 		/* have to use .imap/ directories */
 		list->v.get_path = mbox_list_get_path;
 	}
@@ -815,6 +820,7 @@ struct mail_storage mbox_storage = {
 	.class_flags = MAIL_STORAGE_CLASS_FLAG_MAILBOX_IS_FILE |
 		MAIL_STORAGE_CLASS_FLAG_OPEN_STREAMS |
 		MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_GUIDS,
+	.event_category = &event_category_mbox,
 
 	.v = {
                 mbox_get_setting_parser_info,

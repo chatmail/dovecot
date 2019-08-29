@@ -51,7 +51,9 @@ Since one login process can handle only one connection, the service's
 the same time (defaults to 'default_process_limit=100'). SSL/TLS proxying
 processes are also counted here, so if you're using SSL/TLS you'll need to make
 sure this count is higher than the maximum number of users that can be logged
-in simultaneously.
+in simultaneously. With TLS/SSL connections, the login process will not
+terminate, and remains to perform proxying between imap backend process and the
+client.
 
  * If the maximum login process count is reached, the oldest process in
    logging-in state (ie. non-proxying) is destroyed.
@@ -121,4 +123,4 @@ service tcpwrap {
 Remember to configure your rules! The format is described in hosts.allow(5) and
 hosts.deny(5). Files used are usually /etc/hosts.allow and /etc/hosts.deny.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

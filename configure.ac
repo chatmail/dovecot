@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.3.4.1],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.3.ABIv4($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.3.7.2],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.3.ABIv7($PACKAGE_VERSION)", [Dovecot ABI version])
 
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_MACRO_DIR([m4])
@@ -15,14 +15,6 @@ PKG_PROG_PKG_CONFIG
 
 ACLOCAL_AMFLAGS='-I $(top_srcdir)/m4'
 AC_SUBST(ACLOCAL_AMFLAGS)
-
-AC_ARG_ENABLE(hardening,
-AS_HELP_STRING([--enable-hardening=yes], [Enable various hardenings (default: yes)]),
-        enable_hardening=$enableval,
-        enable_hardening=yes)
-
-AC_MSG_CHECKING([Whether to enable hardening])
-AC_MSG_RESULT([$enable_hardening])
 
 AC_ARG_ENABLE(devel-checks,
 AS_HELP_STRING([--enable-devel-checks], [Enable some extra expensive checks for developers]),
@@ -272,6 +264,7 @@ if test "$systemdsystemunitdir" != ""; then
 fi
 AM_CONDITIONAL(HAVE_SYSTEMD, test "$systemdsystemunitdir" != "")
 
+dovecot_moduledir="$libdir/dovecot"
 DC_DOVECOT_MODULEDIR
 
 AC_ARG_WITH(docs,
@@ -318,14 +311,9 @@ AC_CHECK_HEADERS(strings.h stdint.h unistd.h dirent.h malloc.h \
   sys/utsname.h glob.h linux/falloc.h ucred.h sys/ucred.h crypt.h)
 
 CC_CLANG
-AC_CC_PIE
-AC_CC_F_STACK_PROTECTOR
-AC_CC_D_FORTIFY_SOURCE
-AC_CC_RETPOLINE
-AC_LD_RELRO
 AC_LD_WHOLE_ARCHIVE
-
-DOVECOT_CFLAGS
+DC_DOVECOT_HARDENING
+DC_DOVECOT_CFLAGS
 
 DOVECOT_NSL
 DOVECOT_FDATASYNC
@@ -788,7 +776,7 @@ dnl **
 dnl IDLE doesn't really belong to banner. It's there just to make Blackberries
 dnl happy, because otherwise BIS server disables push email.
 capability_banner="IMAP4rev1 SASL-IR LOGIN-REFERRALS ID ENABLE IDLE"
-capability="$capability_banner SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE SNIPPET=FUZZY"
+capability="$capability_banner SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE SNIPPET=FUZZY PREVIEW=FUZZY"
 AC_DEFINE_UNQUOTED(CAPABILITY_STRING, "$capability", [IMAP capabilities])
 AC_DEFINE_UNQUOTED(CAPABILITY_BANNER_STRING, "$capability_banner", [IMAP capabilities advertised in banner])
 

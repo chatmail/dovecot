@@ -330,6 +330,24 @@ static int buffer_flush(struct file_ostream *fstream)
 	return IS_STREAM_EMPTY(fstream) ? 1 : 0;
 }
 
+static void o_stream_tcp_flush_via_nodelay(struct file_ostream *fstream)
+{
+	if (net_set_tcp_nodelay(fstream->fd, TRUE) < 0) {
+		/* Don't bother logging errors. There are quite a lot of
+		   different errors that need to be ignored, and it differs
+		   between OSes. At least:
+		   Linux: ENOTSUP, ENOTSOCK, ENOPROTOOPT
+		   FreeBSD: EINVAL, ECONNRESET */
+		fstream->no_socket_nodelay = TRUE;
+	} else if (net_set_tcp_nodelay(fstream->fd, FALSE) < 0) {
+		/* We already successfully enabled TCP_NODELAY, so there
+		   shouldn't really be errors. Except ECONNRESET can possibly
+		   still happen between these two calls, so again don't log
+		   errors. */
+		fstream->no_socket_nodelay = TRUE;
+	}
+}
+
 static void o_stream_file_cork(struct ostream_private *stream, bool set)
 {
 	struct file_ostream *fstream = (struct file_ostream *)stream;
@@ -352,12 +370,22 @@ static void o_stream_file_cork(struct ostream_private *stream, bool set)
 					stream_send_io, fstream);
 			}
 		}
+		if (stream->ostream.closed) {
+			/* flushing may have closed the stream already */
+			return;
+		}
 
 		if (fstream->socket_cork_set) {
 			i_assert(!set);
 			if (net_set_cork(fstream->fd, FALSE) < 0)
 				fstream->no_socket_cork = TRUE;
 			fstream->socket_cork_set = FALSE;
+		}
+		if (!set && !fstream->no_socket_nodelay) {
+			/* Uncorking - send all the pending data immediately.
+			   Remove nodelay immediately afterwards, so if any
+			   output is sent outside corking it may get delayed. */
+			o_stream_tcp_flush_via_nodelay(fstream);
 		}
 		stream->corked = set;
 	}
@@ -997,6 +1025,7 @@ static void fstream_init_file(struct file_ostream *fstream)
 
 	if (S_ISREG(st.st_mode)) {
 		fstream->no_socket_cork = TRUE;
+		fstream->no_socket_nodelay = TRUE;
 		fstream->file = TRUE;
 	}
 }
@@ -1020,9 +1049,17 @@ struct ostream * o_stream_create_fd_common(int fd, size_t max_buffer_size,
 		fstream->buffer_offset = offset;
 		fstream_init_file(fstream);
 	} else {
-		if (net_getsockname(fd, NULL, NULL) < 0) {
+		struct ip_addr local_ip;
+
+		if (net_getsockname(fd, &local_ip, NULL) < 0) {
+			/* not a socket */
 			fstream->no_sendfile = TRUE;
 			fstream->no_socket_cork = TRUE;
+			fstream->no_socket_nodelay = TRUE;
+		} else if (local_ip.family == 0) {
+			/* UNIX domain socket */
+			fstream->no_socket_cork = TRUE;
+			fstream->no_socket_nodelay = TRUE;
 		}
 	}
 

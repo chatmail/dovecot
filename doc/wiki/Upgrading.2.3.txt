@@ -26,7 +26,7 @@ Settings Changes
    .. }' instead.
  * 'mdbox_purge_preserve_alt' setting removed. It's always assumed to be "yes"
    now.
- * 'recipient_delimiters' setting used to be treated as a separator string. Now
+ * 'recipient_delimiter' setting used to be treated as a separator string. Now
    it's instead treated as a list of alternative delimiter characters.
  * Time interval based settings no longer default to "seconds". All numbers
    must explicitly be followed by the time unit (except 0). This is important,
@@ -47,6 +47,7 @@ Statistics Redesign
 
 The statistics code was redesigned.
 
+ * Statistics is no longer optional - it is always there.
  * The old "stats" plugin was renamed to "old_stats".
  * The "doveadm stats" command was renamed to "doveadm oldstats".
     * There's a new "doveadm stats" command that isn't compatible with the old
@@ -84,12 +85,13 @@ it would likely be a webmail that would have its own delays, but there are no
 guarantees about this.
 
 If the old behavior is still wanted, it's possible to do nowadays even more
-generically with e.g.:
+generically with e.g. setting following as the first passdb:
 
 ---%<-------------------------------------------------------------------------
 passdb {
  driver = passwd-file
  args = username_format=%{rip} /etc/dovecot/passdb
+ default_fields = noauthenticate=y
 }
 ---%<-------------------------------------------------------------------------
 
@@ -150,7 +152,7 @@ Diffie-Hellman Parameters for SSL
    invited to amend ciphers to disallow non-ECC based DH algorithms, but if you
    don't and someone does try to use them, error will be emitted.
     * Example:
-      'ssl_ciphers=ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW:!DH@STRENGTH'
+      'ssl_cipher_list=ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW:!DH@STRENGTH'
 
 Other Changes
 -------------
@@ -197,6 +199,8 @@ Other Changes
 
 ---%<-------------------------------------------------------------------------
 service stats {
+  client_limit = 10000 # make this large enough so all Dovecot processes
+(especially imap, pop3, lmtp) can connect to it
   unix_listener stats-writer {
     user = vmail
     #mode = 0666 # Use only if nothing else works. It's a bit insecure, since
@@ -205,4 +209,4 @@ it allows any user in the system to mess up with the statistics.
 }
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

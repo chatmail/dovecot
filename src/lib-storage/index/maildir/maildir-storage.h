@@ -104,7 +104,7 @@ typedef int maildir_file_do_func(struct maildir_mailbox *mbox,
 int maildir_file_do(struct maildir_mailbox *mbox, uint32_t uid,
 		    maildir_file_do_func *callback, void *context);
 #define maildir_file_do(mbox, seq, callback, context) \
-	maildir_file_do(mbox, seq + \
+	maildir_file_do(mbox, seq - \
 		CALLBACK_TYPECHECK(callback, int (*)( \
 			struct maildir_mailbox *, const char *, typeof(context))), \
 		(maildir_file_do_func *)callback, context)
@@ -118,6 +118,7 @@ struct mail_save_context *
 maildir_save_alloc(struct mailbox_transaction_context *_t);
 int maildir_save_begin(struct mail_save_context *ctx, struct istream *input);
 int maildir_save_continue(struct mail_save_context *ctx);
+void maildir_save_finish_keywords(struct mail_save_context *ctx);
 int maildir_save_finish(struct mail_save_context *ctx);
 void maildir_save_cancel(struct mail_save_context *ctx);
 

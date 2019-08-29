@@ -267,10 +267,8 @@ static void imap_parser_save_arg(struct imap_parser *parser,
 
 		/* remove the escapes */
 		if (parser->str_first_escape >= 0 &&
-		    (parser->flags & IMAP_PARSE_FLAG_NO_UNESCAPE) == 0) {
-			/* -1 because we skipped the '"' prefix */
-			(void)str_unescape(str + parser->str_first_escape-1);
-		}
+		    (parser->flags & IMAP_PARSE_FLAG_NO_UNESCAPE) == 0)
+			(void)str_unescape(str);
 		arg->_data.str = str;
 		arg->str_len = strlen(str);
 		break;
@@ -361,6 +359,12 @@ static bool imap_parser_read_string(struct imap_parser *parser,
 
 			i++; /* skip the trailing '"' too */
 			break;
+		}
+
+		if (data[i] == '\0') {
+			parser->error = IMAP_PARSE_ERROR_BAD_SYNTAX;
+			parser->error_msg = "NULs not allowed in strings";
+			return FALSE;
 		}
 
 		if (data[i] == '\\') {
@@ -536,7 +540,7 @@ static bool imap_parser_is_next_resp_text(struct imap_parser *parser)
 	    array_count(parser->cur_list) != 1)
 		return FALSE;
 
-	arg = array_idx(&parser->root_list, 0);
+	arg = array_front(&parser->root_list);
 	if (arg->type != IMAP_ARG_ATOM)
 		return FALSE;
 
@@ -554,7 +558,7 @@ static bool imap_parser_is_next_text(struct imap_parser *parser)
 	if (parser->cur_list != &parser->root_list)
 		return FALSE;
 
-	arg = array_idx(&parser->root_list, array_count(&parser->root_list)-1);
+	arg = array_back(&parser->root_list);
 	if (arg->type != IMAP_ARG_ATOM)
 		return FALSE;
 
@@ -779,8 +783,7 @@ int imap_parser_read_args(struct imap_parser *parser, unsigned int count,
 
 	if (parser->args_added_extra_eol) {
 		/* delete EOL */
-		array_delete(&parser->root_list,
-			     array_count(&parser->root_list)-1, 1);
+		array_pop_back(&parser->root_list);
 		parser->args_added_extra_eol = FALSE;
 		parser->literal_size_return = FALSE;
 	}
@@ -871,11 +874,11 @@ void imap_parser_read_last_literal(struct imap_parser *parser)
 	i_assert(parser->literal_size == last_arg->_data.literal_size);
 
 	/* delete EOL */
-	array_delete(&parser->root_list, array_count(&parser->root_list)-1, 1);
+	array_pop_back(&parser->root_list);
 	parser->args_added_extra_eol = FALSE;
 
 	/* delete literal size */
-	array_delete(list, array_count(list)-1, 1);
+	array_pop_back(list);
 	parser->literal_size_return = FALSE;
 }
 

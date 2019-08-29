@@ -115,18 +115,17 @@ static char *solr_connection_create_http_base_url(struct http_url *http_url)
 	return i_strconcat(http_url->path, http_url->enc_query, NULL);
 }
 
-int solr_connection_init(const char *url,
+int solr_connection_init(const struct fts_solr_settings *solr_set,
 			 const struct ssl_iostream_settings *ssl_client_set,
-			 bool debug, struct solr_connection **conn_r,
-			 const char **error_r)
+			 struct solr_connection **conn_r, const char **error_r)
 {
 	struct http_client_settings http_set;
 	struct solr_connection *conn;
 	struct http_url *http_url;
 	const char *error;
 
-	if (http_url_parse(url, NULL, HTTP_URL_ALLOW_USERINFO_PART, pool_datastack_create(),
-			   &http_url, &error) < 0) {
+	if (http_url_parse(solr_set->url, NULL, HTTP_URL_ALLOW_USERINFO_PART,
+			   pool_datastack_create(), &http_url, &error) < 0) {
 		*error_r = t_strdup_printf(
 			"fts_solr: Failed to parse HTTP url: %s", error);
 		return -1;
@@ -143,7 +142,7 @@ int solr_connection_init(const char *url,
 		conn->http_password = i_strdup(http_url->password != NULL ? http_url->password : "");
 	}
 
-	conn->debug = debug;
+	conn->debug = solr_set->debug;
 
 	if (solr_http_client == NULL) {
 		i_zero(&http_set);
@@ -155,7 +154,8 @@ int solr_connection_init(const char *url,
 		http_set.connect_timeout_msecs = 5*1000;
 		http_set.request_timeout_msecs = 60*1000;
 		http_set.ssl = ssl_client_set;
-		http_set.debug = debug;
+		http_set.debug = solr_set->debug;
+		http_set.rawlog_dir = solr_set->rawlog_dir;
 		solr_http_client = http_client_init(&http_set);
 	}
 
@@ -261,7 +261,7 @@ solr_result_get(struct solr_lookup_xml_context *ctx, const char *box_id)
 	p_array_init(&result->uids, ctx->result_pool, 32);
 	p_array_init(&result->scores, ctx->result_pool, 32);
 	hash_table_insert(ctx->mailboxes, box_id_dup, result);
-	array_append(&ctx->results, &result, 1);
+	array_push_back(&ctx->results, &result);
 	return result;
 }
 
@@ -489,7 +489,7 @@ int solr_connection_select(struct solr_connection *conn, const char *query,
 	hash_table_destroy(&solr_lookup_context.mailboxes);
 
 	array_append_zero(&solr_lookup_context.results);
-	*box_results_r = array_idx_modifiable(&solr_lookup_context.results, 0);
+	*box_results_r = array_front_modifiable(&solr_lookup_context.results);
 	return parse_ret;
 }
 
