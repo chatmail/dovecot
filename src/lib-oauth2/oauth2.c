@@ -17,8 +17,6 @@ oauth2_parse_json(struct oauth2_request *req)
 	const char *token, *error;
 	int ret;
 
-	req->field_name = NULL;
-
 	while((ret = json_parse_next(req->parser, &type, &token)) > 0) {
 		if (req->field_name == NULL) {
 			if (type != JSON_TYPE_OBJECT_KEY) break;
@@ -28,7 +26,7 @@ oauth2_parse_json(struct oauth2_request *req)
 		} else if (type < JSON_TYPE_STRING) {
 			/* this should be last allocation */
 			p_free(req->pool, req->field_name);
-			json_parse_skip_next(req->parser);
+			json_parse_skip(req->parser);
 		} else {
 			if (!array_is_created(&req->fields))
 				p_array_init(&req->fields, req->pool, 4);

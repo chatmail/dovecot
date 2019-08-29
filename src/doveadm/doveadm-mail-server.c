@@ -119,12 +119,12 @@ static void doveadm_cmd_callback(int exit_code, const char *error,
 
 	if (array_count(&server->queue) > 0) {
 		struct server_connection *conn;
-		char *const *usernamep = array_idx(&server->queue, 0);
+		char *const *usernamep = array_front(&server->queue);
 		char *username = *usernamep;
 
 		conn = doveadm_server_find_unused_conn(server);
 		if (conn != NULL) {
-			array_delete(&server->queue, 0, 1);
+			array_pop_front(&server->queue);
 			doveadm_mail_server_handle(conn, username);
 			i_free(username);
 		}
@@ -293,16 +293,18 @@ int doveadm_mail_server_user(struct doveadm_mail_cmd_context *ctx,
 		doveadm_mail_server_handle(conn, user);
 	else if (array_count(&server->connections) <
 		 	I_MAX(ctx->set->doveadm_worker_count, 1)) {
-		if (server_connection_create(server, &conn) < 0)
+		if (server_connection_create(server, &conn, error_r) < 0) {
 			internal_failure = TRUE;
-		else
+			return -1;
+		} else {
 			doveadm_mail_server_handle(conn, user);
+		}
 	} else {
 		if (array_count(&server->queue) >= DOVEADM_SERVER_QUEUE_MAX)
 			doveadm_server_flush_one(server);
 
 		username_dup = i_strdup(user);
-		array_append(&server->queue, &username_dup, 1);
+		array_push_back(&server->queue, &username_dup);
 	}
 	*error_r = "doveadm server failure";
 	return DOVEADM_MAIL_SERVER_FAILED() ? -1 : 1;
@@ -337,7 +339,7 @@ static void doveadm_servers_destroy_all_connections(void)
 		while (array_count(&server->connections) > 0) {
 			struct server_connection *const *connp, *conn;
 
-			connp = array_idx(&server->connections, 0);
+			connp = array_front(&server->connections);
 			conn = *connp;
 			server_connection_destroy(&conn);
 		}

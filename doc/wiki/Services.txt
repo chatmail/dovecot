@@ -227,6 +227,8 @@ ssl:
   If yes, the listener does an immediate SSL/TLS handshake after accepting a
   connection. This is needed for the legacy imaps and pop3s ports.
 
+  All listeners with ssl=yes will be removed if global ssl is turned off
+
 haproxy (v2.2.19+):
   If yes, this listener is configured for use with <HAProxy.txt>. It expects a
   Proxy Protocol [http://blog.haproxy.com/haproxy/proxy-protocol/] header right
@@ -484,7 +486,7 @@ ssl-params
 ----------
 
 Build SSL parameters every n days, based on *ssl_parameters_regenerate*
-setting.
+setting. Obsoleted in v2.3.0.
 
  * *type=startup* so that the (re)generation can be started immediately at
    startup when needed, instead of waiting until the first SSL handshake
@@ -497,4 +499,4 @@ Mail process statistics tracking. Its behavior is very similar to the anvil
 process, but anvil's data is of higher importance and lower traffic than stats,
 so stats are tracked in a separate process.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

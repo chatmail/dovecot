@@ -97,27 +97,22 @@ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
 	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
-	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
-	$(top_srcdir)/m4/cc_pie.m4 $(top_srcdir)/m4/cc_retpoline.m4 \
-	$(top_srcdir)/m4/cc_stack_protector.m4 \
-	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
-	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
-	$(top_srcdir)/m4/dbqlk.m4 $(top_srcdir)/m4/dirent_dtype.m4 \
-	$(top_srcdir)/m4/dovecot.m4 $(top_srcdir)/m4/fd_passing.m4 \
-	$(top_srcdir)/m4/fdatasync.m4 \
+	$(top_srcdir)/m4/clock_gettime.m4 $(top_srcdir)/m4/crypt.m4 \
+	$(top_srcdir)/m4/crypt_xpg6.m4 $(top_srcdir)/m4/dbqlk.m4 \
+	$(top_srcdir)/m4/dirent_dtype.m4 $(top_srcdir)/m4/dovecot.m4 \
+	$(top_srcdir)/m4/fd_passing.m4 $(top_srcdir)/m4/fdatasync.m4 \
 	$(top_srcdir)/m4/flexible_array_member.m4 \
 	$(top_srcdir)/m4/glibc.m4 $(top_srcdir)/m4/gmtime_max.m4 \
 	$(top_srcdir)/m4/gmtime_tm_gmtoff.m4 \
 	$(top_srcdir)/m4/ioloop.m4 $(top_srcdir)/m4/iovec.m4 \
-	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/ld_relro.m4 \
-	$(top_srcdir)/m4/ld_whole_archive.m4 \
-	$(top_srcdir)/m4/libcap.m4 $(top_srcdir)/m4/libtool.m4 \
-	$(top_srcdir)/m4/libwrap.m4 $(top_srcdir)/m4/linux_mremap.m4 \
-	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
-	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/mmap_write.m4 $(top_srcdir)/m4/mntctl.m4 \
-	$(top_srcdir)/m4/modules.m4 $(top_srcdir)/m4/notify.m4 \
-	$(top_srcdir)/m4/nsl.m4 $(top_srcdir)/m4/off_t_max.m4 \
+	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/libcap.m4 \
+	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/libwrap.m4 \
+	$(top_srcdir)/m4/linux_mremap.m4 $(top_srcdir)/m4/ltoptions.m4 \
+	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/mmap_write.m4 \
+	$(top_srcdir)/m4/mntctl.m4 $(top_srcdir)/m4/modules.m4 \
+	$(top_srcdir)/m4/notify.m4 $(top_srcdir)/m4/nsl.m4 \
+	$(top_srcdir)/m4/off_t_max.m4 \
 	$(top_srcdir)/m4/pr_set_dumpable.m4 \
 	$(top_srcdir)/m4/q_quotactl.m4 $(top_srcdir)/m4/quota.m4 \
 	$(top_srcdir)/m4/random.m4 $(top_srcdir)/m4/rlimit.m4 \
@@ -147,8 +142,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/warnings.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
@@ -176,10 +170,10 @@ am__v_lt_1 =
 am__EXEEXT_1 = test-http-date$(EXEEXT) test-http-url$(EXEEXT) \
 	test-http-header-parser$(EXEEXT) test-http-transfer$(EXEEXT) \
 	test-http-auth$(EXEEXT) test-http-response-parser$(EXEEXT) \
-	test-http-request-parser$(EXEEXT)
-am__EXEEXT_2 = test-http-payload$(EXEEXT) test-http-client$(EXEEXT) \
-	test-http-client-errors$(EXEEXT) test-http-server$(EXEEXT) \
+	test-http-request-parser$(EXEEXT) test-http-payload$(EXEEXT) \
+	test-http-client-errors$(EXEEXT) \
 	test-http-server-errors$(EXEEXT)
+am__EXEEXT_2 = test-http-client$(EXEEXT) test-http-server$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_http_auth_OBJECTS = test-http-auth.$(OBJEXT)
 test_http_auth_OBJECTS = $(am_test_http_auth_OBJECTS)
@@ -611,14 +605,14 @@ test_programs = \
 	test-http-transfer \
 	test-http-auth \
 	test-http-response-parser \
-	test-http-request-parser
+	test-http-request-parser \
+	test-http-payload \
+	test-http-client-errors \
+	test-http-server-errors
 
 test_nocheck_programs = \
-	test-http-payload \
 	test-http-client \
-	test-http-client-errors \
-	test-http-server \
-	test-http-server-errors
+	test-http-server
 
 test_libs = \
 	../lib-test/libtest.la \
@@ -700,7 +694,8 @@ test_http_libs_ssl = $(am__append_1)
 test_http_payload_SOURCES = test-http-payload.c
 test_http_payload_LDFLAGS = -export-dynamic
 test_http_payload_LDADD = \
-	$(test_http_libs)
+	$(test_http_libs) \
+	$(test_http_libs_ssl)
 
 test_http_payload_DEPENDENCIES = \
 	$(test_http_deps)

@@ -94,27 +94,22 @@ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
 	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
-	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
-	$(top_srcdir)/m4/cc_pie.m4 $(top_srcdir)/m4/cc_retpoline.m4 \
-	$(top_srcdir)/m4/cc_stack_protector.m4 \
-	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
-	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
-	$(top_srcdir)/m4/dbqlk.m4 $(top_srcdir)/m4/dirent_dtype.m4 \
-	$(top_srcdir)/m4/dovecot.m4 $(top_srcdir)/m4/fd_passing.m4 \
-	$(top_srcdir)/m4/fdatasync.m4 \
+	$(top_srcdir)/m4/clock_gettime.m4 $(top_srcdir)/m4/crypt.m4 \
+	$(top_srcdir)/m4/crypt_xpg6.m4 $(top_srcdir)/m4/dbqlk.m4 \
+	$(top_srcdir)/m4/dirent_dtype.m4 $(top_srcdir)/m4/dovecot.m4 \
+	$(top_srcdir)/m4/fd_passing.m4 $(top_srcdir)/m4/fdatasync.m4 \
 	$(top_srcdir)/m4/flexible_array_member.m4 \
 	$(top_srcdir)/m4/glibc.m4 $(top_srcdir)/m4/gmtime_max.m4 \
 	$(top_srcdir)/m4/gmtime_tm_gmtoff.m4 \
 	$(top_srcdir)/m4/ioloop.m4 $(top_srcdir)/m4/iovec.m4 \
-	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/ld_relro.m4 \
-	$(top_srcdir)/m4/ld_whole_archive.m4 \
-	$(top_srcdir)/m4/libcap.m4 $(top_srcdir)/m4/libtool.m4 \
-	$(top_srcdir)/m4/libwrap.m4 $(top_srcdir)/m4/linux_mremap.m4 \
-	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
-	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/mmap_write.m4 $(top_srcdir)/m4/mntctl.m4 \
-	$(top_srcdir)/m4/modules.m4 $(top_srcdir)/m4/notify.m4 \
-	$(top_srcdir)/m4/nsl.m4 $(top_srcdir)/m4/off_t_max.m4 \
+	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/libcap.m4 \
+	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/libwrap.m4 \
+	$(top_srcdir)/m4/linux_mremap.m4 $(top_srcdir)/m4/ltoptions.m4 \
+	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/mmap_write.m4 \
+	$(top_srcdir)/m4/mntctl.m4 $(top_srcdir)/m4/modules.m4 \
+	$(top_srcdir)/m4/notify.m4 $(top_srcdir)/m4/nsl.m4 \
+	$(top_srcdir)/m4/off_t_max.m4 \
 	$(top_srcdir)/m4/pr_set_dumpable.m4 \
 	$(top_srcdir)/m4/q_quotactl.m4 $(top_srcdir)/m4/quota.m4 \
 	$(top_srcdir)/m4/random.m4 $(top_srcdir)/m4/rlimit.m4 \
@@ -144,8 +139,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/warnings.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
@@ -177,11 +171,12 @@ am__objects_1 = cmd-append.$(OBJEXT) cmd-capability.$(OBJEXT) \
 am_imap_OBJECTS = $(am__objects_1) imap-client.$(OBJEXT) \
 	imap-client-hibernate.$(OBJEXT) imap-commands.$(OBJEXT) \
 	imap-commands-util.$(OBJEXT) imap-expunge.$(OBJEXT) \
-	imap-fetch.$(OBJEXT) imap-fetch-body.$(OBJEXT) \
-	imap-list.$(OBJEXT) imap-master-client.$(OBJEXT) \
-	imap-notify.$(OBJEXT) imap-search.$(OBJEXT) \
-	imap-search-args.$(OBJEXT) imap-settings.$(OBJEXT) \
-	imap-status.$(OBJEXT) imap-state.$(OBJEXT) imap-sync.$(OBJEXT) \
+	imap-feature.$(OBJEXT) imap-fetch.$(OBJEXT) \
+	imap-fetch-body.$(OBJEXT) imap-list.$(OBJEXT) \
+	imap-master-client.$(OBJEXT) imap-notify.$(OBJEXT) \
+	imap-search.$(OBJEXT) imap-search-args.$(OBJEXT) \
+	imap-settings.$(OBJEXT) imap-status.$(OBJEXT) \
+	imap-state.$(OBJEXT) imap-sync.$(OBJEXT) \
 	mail-storage-callbacks.$(OBJEXT) main.$(OBJEXT)
 imap_OBJECTS = $(am_imap_OBJECTS)
 am__DEPENDENCIES_1 =
@@ -560,6 +555,7 @@ imap_SOURCES = \
 	imap-commands.c \
 	imap-commands-util.c \
 	imap-expunge.c \
+	imap-feature.c \
 	imap-fetch.c \
 	imap-fetch-body.c \
 	imap-list.c \
@@ -580,6 +576,7 @@ headers = \
 	imap-commands-util.h \
 	imap-common.h \
 	imap-expunge.h \
+	imap-feature.h \
 	imap-fetch.h \
 	imap-list.h \
 	imap-master-client.h \
@@ -729,6 +726,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-commands-util.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-commands.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-expunge.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-feature.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-fetch-body.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-fetch.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-list.Po@am__quote@

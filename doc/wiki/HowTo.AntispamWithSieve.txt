@@ -49,6 +49,8 @@ Caveats and possible pitfalls
    [http://www.iredmail.org/docs/store.spamassassin.bayes.in.sql.html]. In this
    case, the '-u' parameter passed to 'sa-learn' (and the relevant sieve
    variables) is obsolete and can be safely removed.
+ * Reloading dovecot doesn't activate changes in this configuration, you'll
+   need to perform a full restart.
 
 Changes:
 
@@ -214,6 +216,9 @@ By default, rspamd does global learning. If you want per-user classification,
 or something more complex, see
 https://rspamd.com/doc/configuration/statistic.html
 
+Alternative scripts can be found from
+https://github.com/darix/dovecot-sieve-antispam-rspamd/
+
 sa-learn-spam.sh
 
 ---CodeArea-------------------------------------------------------------------
@@ -262,4 +267,4 @@ plugin [https://plugins.roundcube.net/packages/johndoh/markasjunk2] for
 allowing users to mark Spam/Ham in a convenient way. Please make sure the
 Junk/Spam folder matches your configuration.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

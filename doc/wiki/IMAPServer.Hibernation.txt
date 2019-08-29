@@ -1,6 +1,8 @@
 Hibernation
 ===========
 
+This is not supported on kqueue based systems currently, such as FreeBSD.
+
 Dovecot supports moving connections that have issued IDLE to a special holding
 process, called imap-hibernate. This process is responsible for holding the
 idle processes until they need to be thawed.
@@ -46,4 +48,4 @@ idling, until they issue some command that requires them to be thawed into a
 imap process. This way, memory and CPU resources are saved, since there is only
 one hibernation process.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

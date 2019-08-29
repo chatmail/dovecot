@@ -47,11 +47,12 @@ Configuration
 
 The important settings to change for rootless installation are:
 
- * Set usernames to the user which dovecot will be run under:
+ * Set usernames and group to the user which dovecot will be run under:
 
    ---%<----------------------------------------------------------------------
    default_internal_user = user
    default_login_user = user
+   default_internal_group = group
    ---%<----------------------------------------------------------------------
 
  * Remove default chrooting from all services:
@@ -115,4 +116,4 @@ The important settings to change for rootless installation are:
    user:{PLAIN}pass
    ---%<----------------------------------------------------------------------
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

@@ -100,6 +100,7 @@ struct imap_fetch_context {
 	bool flags_have_handler:1;
 	bool flags_update_seen:1;
 	bool flags_show_only_seen_changes:1;
+	bool preview_command:1;
 };
 
 void imap_fetch_handlers_register(const struct imap_fetch_handler *handlers,
@@ -112,7 +113,7 @@ void imap_fetch_add_handler(struct imap_fetch_init_context *ctx,
 			    imap_fetch_handler_t *handler, void *context)
 	ATTR_NULL(3, 5);
 #define imap_fetch_add_handler(ctx, flags, nil_reply, handler, context) \
-	  imap_fetch_add_handler(ctx, flags, nil_reply + \
+	  imap_fetch_add_handler(ctx, flags, nil_reply - \
 		CALLBACK_TYPECHECK(handler, int (*)( \
 			struct imap_fetch_context *, struct mail *, \
 			typeof(context))), \
@@ -121,7 +122,7 @@ void imap_fetch_add_handler(struct imap_fetch_init_context *ctx,
 int imap_fetch_att_list_parse(struct client *client, pool_t pool,
 			      const struct imap_arg *list,
 			      struct imap_fetch_context **fetch_ctx_r,
-			      const char **error_r);
+			      const char **client_error_r);
 
 struct imap_fetch_context *
 imap_fetch_alloc(struct client *client, pool_t pool, const char *reason);
@@ -155,6 +156,7 @@ bool imap_fetch_uid_init(struct imap_fetch_init_context *ctx);
 bool imap_fetch_body_section_init(struct imap_fetch_init_context *ctx);
 bool imap_fetch_rfc822_init(struct imap_fetch_init_context *ctx);
 bool imap_fetch_binary_init(struct imap_fetch_init_context *ctx);
+bool imap_fetch_preview_init(struct imap_fetch_init_context *ctx);
 bool imap_fetch_snippet_init(struct imap_fetch_init_context *ctx);
 
 void imap_fetch_handlers_init(void);

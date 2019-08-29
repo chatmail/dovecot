@@ -44,6 +44,7 @@ static void event_copy_parent_defaults(struct event *event,
 {
 	event->always_log_source = parent->always_log_source;
 	event->passthrough = parent->passthrough;
+	event->min_log_level = parent->min_log_level;
 	event->forced_debug = parent->forced_debug;
 }
 
@@ -53,12 +54,16 @@ event_find_category(struct event *event, const struct event_category *category);
 static struct event_field *
 event_find_field_int(struct event *event, const char *key);
 
-void event_copy_categories_fields(struct event *to, struct event *from)
+void event_copy_categories(struct event *to, struct event *from)
 {
 	unsigned int cat_count;
 	struct event_category *const *categories = event_get_categories(from, &cat_count);
 	while (cat_count-- > 0)
 		event_add_category(to, categories[cat_count]);
+}
+
+void event_copy_fields(struct event *to, struct event *from)
+{
 	const struct event_field *fld;
 	if (!array_is_created(&from->fields))
 		return;
@@ -117,6 +122,160 @@ struct event *event_dup(const struct event *source)
 	return ret;
 }
 
+/*
+ * Copy the source's categories and fields recursively.
+ *
+ * We recurse to the parent before copying this event's data because we may
+ * be overriding a field.
+ */
+static void event_flatten_recurse(struct event *dst, struct event *src,
+				  struct event *limit)
+{
+	if (src->parent != limit)
+		event_flatten_recurse(dst, src->parent, limit);
+
+	event_copy_categories(dst, src);
+	event_copy_fields(dst, src);
+}
+
+struct event *event_flatten(struct event *src)
+{
+	struct event *dst;
+
+	/* If we don't have a parent, we have nothing to flatten. */
+	if (src->parent == NULL)
+		return event_ref(src);
+
+	/* We have to flatten the event. */
+
+	dst = event_create(NULL);
+	dst = event_set_name(dst, src->sending_name);
+	dst = event_set_source(dst, src->source_filename, src->source_linenum,
+			       FALSE);
+
+	event_flatten_recurse(dst, src, NULL);
+
+	dst->tv_created_ioloop = src->tv_created_ioloop;
+	dst->tv_created = src->tv_created;
+	dst->tv_last_sent = src->tv_last_sent;
+
+	return dst;
+}
+
+static inline void replace_parent_ref(struct event *event, struct event *new)
+{
+	if (event->parent == new)
+		return; /* no-op */
+
+	if (new != NULL)
+		event_ref(new);
+
+	event_unref(&event->parent);
+
+	event->parent = new;
+}
+
+/*
+ * Minimize the event and its ancestry.
+ *
+ * In general, the chain of parents starting from this event can be divided
+ * up into four consecutive ranges:
+ *
+ *  1. the event itself
+ *  2. a range of events that should be flattened into the event itself
+ *  3. a range of trivial (i.e., no categories or fields) events that should
+ *     be skipped
+ *  4. the rest of the chain
+ *
+ * Except for the first range, the event itself, the remaining ranges can
+ * have zero events.
+ *
+ * As the names of these ranges imply, we want to flatten certain parts of
+ * the ancestry, skip other parts of the ancestry and leave the remainder
+ * untouched.
+ *
+ * For example, suppose that we have an event (A) with ancestors forming the
+ * following graph:
+ *
+ *	A -> B -> C -> D -> E -> F
+ *
+ * Further, suppose that B, C, and F contain some categories or fields but
+ * have not yet been sent to an external process that knows how to reference
+ * previously encountered events, and D contains no fields or categories of
+ * its own (but it inherits some from E and F).
+ *
+ * We can define the 4 ranges:
+ *
+ *	A:     the event
+ *	B-C:   flattening
+ *	D:     skipping
+ *	E-end: the rest
+ *
+ * The output would therefore be:
+ *
+ *	G -> E -> F
+ *
+ * where G contains the fields and categories of A, B, and C (and trivially
+ * D beacuse D was empty).
+ *
+ * Note that even though F has not yet been sent out, we send it now because
+ * it is part of the "rest" range.
+ *
+ * TODO: We could likely apply this function recursively on the "rest"
+ * range, but further investigation is required to determine whether it is
+ * worth it.
+ */
+struct event *event_minimize(struct event *event)
+{
+	struct event *flatten_bound;
+	struct event *skip_bound;
+	struct event *new_event;
+	struct event *cur;
+
+	if (event->parent == NULL)
+		return event_ref(event);
+
+	/* find the bound for field/category flattening */
+	flatten_bound = NULL;
+	for (cur = event->parent; cur != NULL; cur = cur->parent) {
+		if (!cur->id_sent_to_stats &&
+		    timeval_cmp(&cur->tv_created_ioloop,
+				&event->tv_created_ioloop) == 0)
+			continue;
+
+		flatten_bound = cur;
+		break;
+	}
+
+	/* continue to find the bound for empty event skipping */
+	skip_bound = NULL;
+	for (; cur != NULL; cur = cur->parent) {
+		if (!cur->id_sent_to_stats &&
+		    (!array_is_created(&cur->fields) || array_is_empty(&cur->fields)) &&
+		    (!array_is_created(&cur->categories) || array_is_empty(&cur->categories)))
+			continue;
+
+		skip_bound = cur;
+		break;
+	}
+
+	/* fast path - no flattening and no skipping to do */
+	if ((event->parent == flatten_bound) &&
+	    (event->parent == skip_bound))
+		return event_ref(event);
+
+	new_event = event_dup(event);
+
+	/* flatten */
+	event_flatten_recurse(new_event, event, flatten_bound);
+	replace_parent_ref(new_event, flatten_bound);
+
+	/* skip */
+	replace_parent_ref(new_event, skip_bound);
+
+	return new_event;
+}
+
 #undef event_create
 struct event *event_create(struct event *parent, const char *source_filename,
 			   unsigned int source_linenum)
@@ -130,6 +289,7 @@ struct event *event_create(struct event *parent, const char *source_filename,
 	event->id = ++event_id_counter;
 	event->pool = pool;
 	event->tv_created_ioloop = ioloop_timeval;
+	event->min_log_level = LOG_TYPE_INFO;
 	if (gettimeofday(&event->tv_created, NULL) < 0)
 		i_panic("gettimeofday() failed: %m");
 	event->source_filename = p_strdup(pool, source_filename);
@@ -245,7 +405,7 @@ struct event *event_push_global(struct event *event)
 	if (current_global_event != NULL) {
 		if (!array_is_created(&global_event_stack))
 			i_array_init(&global_event_stack, 4);
-		array_append(&global_event_stack, &current_global_event, 1);
+		array_push_back(&global_event_stack, &current_global_event);
 	}
 	current_global_event = event;
 	return event;
@@ -279,6 +439,8 @@ struct event *event_get_global(void)
 static struct event *
 event_set_log_prefix(struct event *event, const char *prefix, bool append)
 {
+	event->log_prefix_callback = NULL;
+	event->log_prefix_callback_context = NULL;
 	if (event->log_prefix == NULL) {
 		/* allocate the first log prefix from the pool */
 		event->log_prefix = p_strdup(event->pool, prefix);
@@ -306,6 +468,23 @@ struct event *event_replace_log_prefix(struct event *event, const char *prefix)
 	return event_set_log_prefix(event, prefix, FALSE);
 }
 
+#undef event_set_log_prefix_callback
+struct event *
+event_set_log_prefix_callback(struct event *event,
+			      bool replace,
+			      event_log_prefix_callback_t *callback,
+			      void *context)
+{
+	if (event->log_prefix_from_system_pool)
+		i_free(event->log_prefix);
+	else
+		event->log_prefix = NULL;
+	event->log_prefix_replace = replace;
+	event->log_prefix_callback = callback;
+	event->log_prefix_callback_context = context;
+	return event;
+}
+
 struct event *
 event_set_name(struct event *event, const char *name)
 {
@@ -328,6 +507,17 @@ struct event *event_set_always_log_source(struct event *event)
 {
 	event->always_log_source = TRUE;
 	return event;
+}
+
+struct event *event_set_min_log_level(struct event *event, enum log_type level)
+{
+	event->min_log_level = level;
+	return event;
+}
+
+enum log_type event_get_min_log_level(const struct event *event)
+{
+	return event->min_log_level;
 }
 
 struct event_category *event_category_find_registered(const char *name)
@@ -362,7 +552,7 @@ static void event_category_register(struct event_category *category)
 	   Event filtering uses pointer comparisons for efficiency. */
 	i_assert(event_category_find_registered(category->name) == NULL);
 	category->registered = TRUE;
-	array_append(&event_registered_categories, &category, 1);
+	array_push_back(&event_registered_categories, &category);
 
 	array_foreach(&event_category_callbacks, callbackp) T_BEGIN {
 		(*callbackp)(category);
@@ -391,7 +581,7 @@ event_add_categories(struct event *event,
 	for (unsigned int i = 0; categories[i] != NULL; i++) {
 		event_category_register(categories[i]);
 		if (!event_find_category(event, categories[i]))
-			array_append(&event->categories, &categories[i], 1);
+			array_push_back(&event->categories, &categories[i]);
 	}
 	return event;
 }
@@ -751,7 +941,7 @@ bool event_import_unescaped(struct event *event, const char *const *args,
 			}
 			if (!array_is_created(&event->categories))
 				p_array_init(&event->categories, event->pool, 4);
-			array_append(&event->categories, &category, 1);
+			array_push_back(&event->categories, &category);
 			break;
 		}
 		case EVENT_CODE_TV_LAST_SENT:
@@ -827,7 +1017,7 @@ bool event_import_unescaped(struct event *event, const char *const *args,
 
 void event_register_callback(event_callback_t *callback)
 {
-	array_append(&event_handlers, &callback, 1);
+	array_push_back(&event_handlers, &callback);
 }
 
 void event_unregister_callback(event_callback_t *callback)
@@ -846,7 +1036,7 @@ void event_unregister_callback(event_callback_t *callback)
 
 void event_category_register_callback(event_category_callback_t *callback)
 {
-	array_append(&event_category_callbacks, &callback, 1);
+	array_push_back(&event_category_callbacks, &callback);
 }
 
 void event_category_unregister_callback(event_category_callback_t *callback)

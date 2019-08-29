@@ -96,27 +96,22 @@ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
 	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
-	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
-	$(top_srcdir)/m4/cc_pie.m4 $(top_srcdir)/m4/cc_retpoline.m4 \
-	$(top_srcdir)/m4/cc_stack_protector.m4 \
-	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
-	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
-	$(top_srcdir)/m4/dbqlk.m4 $(top_srcdir)/m4/dirent_dtype.m4 \
-	$(top_srcdir)/m4/dovecot.m4 $(top_srcdir)/m4/fd_passing.m4 \
-	$(top_srcdir)/m4/fdatasync.m4 \
+	$(top_srcdir)/m4/clock_gettime.m4 $(top_srcdir)/m4/crypt.m4 \
+	$(top_srcdir)/m4/crypt_xpg6.m4 $(top_srcdir)/m4/dbqlk.m4 \
+	$(top_srcdir)/m4/dirent_dtype.m4 $(top_srcdir)/m4/dovecot.m4 \
+	$(top_srcdir)/m4/fd_passing.m4 $(top_srcdir)/m4/fdatasync.m4 \
 	$(top_srcdir)/m4/flexible_array_member.m4 \
 	$(top_srcdir)/m4/glibc.m4 $(top_srcdir)/m4/gmtime_max.m4 \
 	$(top_srcdir)/m4/gmtime_tm_gmtoff.m4 \
 	$(top_srcdir)/m4/ioloop.m4 $(top_srcdir)/m4/iovec.m4 \
-	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/ld_relro.m4 \
-	$(top_srcdir)/m4/ld_whole_archive.m4 \
-	$(top_srcdir)/m4/libcap.m4 $(top_srcdir)/m4/libtool.m4 \
-	$(top_srcdir)/m4/libwrap.m4 $(top_srcdir)/m4/linux_mremap.m4 \
-	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
-	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/mmap_write.m4 $(top_srcdir)/m4/mntctl.m4 \
-	$(top_srcdir)/m4/modules.m4 $(top_srcdir)/m4/notify.m4 \
-	$(top_srcdir)/m4/nsl.m4 $(top_srcdir)/m4/off_t_max.m4 \
+	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/libcap.m4 \
+	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/libwrap.m4 \
+	$(top_srcdir)/m4/linux_mremap.m4 $(top_srcdir)/m4/ltoptions.m4 \
+	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/mmap_write.m4 \
+	$(top_srcdir)/m4/mntctl.m4 $(top_srcdir)/m4/modules.m4 \
+	$(top_srcdir)/m4/notify.m4 $(top_srcdir)/m4/nsl.m4 \
+	$(top_srcdir)/m4/off_t_max.m4 \
 	$(top_srcdir)/m4/pr_set_dumpable.m4 \
 	$(top_srcdir)/m4/q_quotactl.m4 $(top_srcdir)/m4/quota.m4 \
 	$(top_srcdir)/m4/random.m4 $(top_srcdir)/m4/rlimit.m4 \
@@ -146,8 +141,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/warnings.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -217,11 +211,14 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-bsearch-insert-pos.$(OBJEXT) \
 	test_lib-test-buffer.$(OBJEXT) \
 	test_lib-test-byteorder.$(OBJEXT) \
+	test_lib-test-connection.$(OBJEXT) \
 	test_lib-test-crc32.$(OBJEXT) \
 	test_lib-test-data-stack.$(OBJEXT) \
-	test_lib-test-event-log.$(OBJEXT) \
 	test_lib-test-event-filter.$(OBJEXT) \
+	test_lib-test-event-flatten.$(OBJEXT) \
+	test_lib-test-event-log.$(OBJEXT) \
 	test_lib-test-failures.$(OBJEXT) \
+	test_lib-test-fd-util.$(OBJEXT) \
 	test_lib-test-file-create-locked.$(OBJEXT) \
 	test_lib-test-guid.$(OBJEXT) test_lib-test-hash.$(OBJEXT) \
 	test_lib-test-hash-format.$(OBJEXT) \
@@ -912,11 +909,14 @@ test_lib_SOURCES = \
 	test-bsearch-insert-pos.c \
 	test-buffer.c \
 	test-byteorder.c \
+	test-connection.c \
 	test-crc32.c \
 	test-data-stack.c \
-	test-event-log.c \
 	test-event-filter.c \
+	test-event-flatten.c \
+	test-event-log.c \
 	test-failures.c \
+	test-fd-util.c \
 	test-file-create-locked.c \
 	test-guid.c \
 	test-hash.c \
@@ -1213,11 +1213,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-bsearch-insert-pos.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-buffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-byteorder.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-crc32.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-data-stack.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-filter.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-flatten.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-log.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-failures.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-fd-util.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-file-create-locked.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-guid.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hash-format.Po@am__quote@
@@ -1459,6 +1462,20 @@ test_lib-test-byteorder.obj: test-byteorder.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-byteorder.obj `if test -f 'test-byteorder.c'; then $(CYGPATH_W) 'test-byteorder.c'; else $(CYGPATH_W) '$(srcdir)/test-byteorder.c'; fi`
 
+test_lib-test-connection.o: test-connection.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-connection.o -MD -MP -MF $(DEPDIR)/test_lib-test-connection.Tpo -c -o test_lib-test-connection.o `test -f 'test-connection.c' || echo '$(srcdir)/'`test-connection.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-connection.Tpo $(DEPDIR)/test_lib-test-connection.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-connection.c' object='test_lib-test-connection.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-connection.o `test -f 'test-connection.c' || echo '$(srcdir)/'`test-connection.c
+
+test_lib-test-connection.obj: test-connection.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-connection.obj -MD -MP -MF $(DEPDIR)/test_lib-test-connection.Tpo -c -o test_lib-test-connection.obj `if test -f 'test-connection.c'; then $(CYGPATH_W) 'test-connection.c'; else $(CYGPATH_W) '$(srcdir)/test-connection.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-connection.Tpo $(DEPDIR)/test_lib-test-connection.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-connection.c' object='test_lib-test-connection.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-connection.obj `if test -f 'test-connection.c'; then $(CYGPATH_W) 'test-connection.c'; else $(CYGPATH_W) '$(srcdir)/test-connection.c'; fi`
+
 test_lib-test-crc32.o: test-crc32.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-crc32.o -MD -MP -MF $(DEPDIR)/test_lib-test-crc32.Tpo -c -o test_lib-test-crc32.o `test -f 'test-crc32.c' || echo '$(srcdir)/'`test-crc32.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-crc32.Tpo $(DEPDIR)/test_lib-test-crc32.Po
@@ -1487,20 +1504,6 @@ test_lib-test-data-stack.obj: test-data-stack.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-data-stack.obj `if test -f 'test-data-stack.c'; then $(CYGPATH_W) 'test-data-stack.c'; else $(CYGPATH_W) '$(srcdir)/test-data-stack.c'; fi`
 
-test_lib-test-event-log.o: test-event-log.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-log.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-log.Tpo -c -o test_lib-test-event-log.o `test -f 'test-event-log.c' || echo '$(srcdir)/'`test-event-log.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-log.Tpo $(DEPDIR)/test_lib-test-event-log.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-log.c' object='test_lib-test-event-log.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-log.o `test -f 'test-event-log.c' || echo '$(srcdir)/'`test-event-log.c
-
-test_lib-test-event-log.obj: test-event-log.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-log.obj -MD -MP -MF $(DEPDIR)/test_lib-test-event-log.Tpo -c -o test_lib-test-event-log.obj `if test -f 'test-event-log.c'; then $(CYGPATH_W) 'test-event-log.c'; else $(CYGPATH_W) '$(srcdir)/test-event-log.c'; fi`
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-log.Tpo $(DEPDIR)/test_lib-test-event-log.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-log.c' object='test_lib-test-event-log.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-log.obj `if test -f 'test-event-log.c'; then $(CYGPATH_W) 'test-event-log.c'; else $(CYGPATH_W) '$(srcdir)/test-event-log.c'; fi`
-
 test_lib-test-event-filter.o: test-event-filter.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-filter.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-filter.Tpo -c -o test_lib-test-event-filter.o `test -f 'test-event-filter.c' || echo '$(srcdir)/'`test-event-filter.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-filter.Tpo $(DEPDIR)/test_lib-test-event-filter.Po
@@ -1515,6 +1518,34 @@ test_lib-test-event-filter.obj: test-event-filter.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-filter.obj `if test -f 'test-event-filter.c'; then $(CYGPATH_W) 'test-event-filter.c'; else $(CYGPATH_W) '$(srcdir)/test-event-filter.c'; fi`
 
+test_lib-test-event-flatten.o: test-event-flatten.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-flatten.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-flatten.Tpo -c -o test_lib-test-event-flatten.o `test -f 'test-event-flatten.c' || echo '$(srcdir)/'`test-event-flatten.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-flatten.Tpo $(DEPDIR)/test_lib-test-event-flatten.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-flatten.c' object='test_lib-test-event-flatten.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-flatten.o `test -f 'test-event-flatten.c' || echo '$(srcdir)/'`test-event-flatten.c
+
+test_lib-test-event-flatten.obj: test-event-flatten.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-flatten.obj -MD -MP -MF $(DEPDIR)/test_lib-test-event-flatten.Tpo -c -o test_lib-test-event-flatten.obj `if test -f 'test-event-flatten.c'; then $(CYGPATH_W) 'test-event-flatten.c'; else $(CYGPATH_W) '$(srcdir)/test-event-flatten.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-flatten.Tpo $(DEPDIR)/test_lib-test-event-flatten.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-flatten.c' object='test_lib-test-event-flatten.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-flatten.obj `if test -f 'test-event-flatten.c'; then $(CYGPATH_W) 'test-event-flatten.c'; else $(CYGPATH_W) '$(srcdir)/test-event-flatten.c'; fi`
+
+test_lib-test-event-log.o: test-event-log.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-log.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-log.Tpo -c -o test_lib-test-event-log.o `test -f 'test-event-log.c' || echo '$(srcdir)/'`test-event-log.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-log.Tpo $(DEPDIR)/test_lib-test-event-log.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-log.c' object='test_lib-test-event-log.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-log.o `test -f 'test-event-log.c' || echo '$(srcdir)/'`test-event-log.c
+
+test_lib-test-event-log.obj: test-event-log.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-log.obj -MD -MP -MF $(DEPDIR)/test_lib-test-event-log.Tpo -c -o test_lib-test-event-log.obj `if test -f 'test-event-log.c'; then $(CYGPATH_W) 'test-event-log.c'; else $(CYGPATH_W) '$(srcdir)/test-event-log.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-log.Tpo $(DEPDIR)/test_lib-test-event-log.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-log.c' object='test_lib-test-event-log.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-log.obj `if test -f 'test-event-log.c'; then $(CYGPATH_W) 'test-event-log.c'; else $(CYGPATH_W) '$(srcdir)/test-event-log.c'; fi`
+
 test_lib-test-failures.o: test-failures.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-failures.o -MD -MP -MF $(DEPDIR)/test_lib-test-failures.Tpo -c -o test_lib-test-failures.o `test -f 'test-failures.c' || echo '$(srcdir)/'`test-failures.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-failures.Tpo $(DEPDIR)/test_lib-test-failures.Po
@@ -1528,6 +1559,20 @@ test_lib-test-failures.obj: test-failures.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-failures.c' object='test_lib-test-failures.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-failures.obj `if test -f 'test-failures.c'; then $(CYGPATH_W) 'test-failures.c'; else $(CYGPATH_W) '$(srcdir)/test-failures.c'; fi`
+
+test_lib-test-fd-util.o: test-fd-util.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-fd-util.o -MD -MP -MF $(DEPDIR)/test_lib-test-fd-util.Tpo -c -o test_lib-test-fd-util.o `test -f 'test-fd-util.c' || echo '$(srcdir)/'`test-fd-util.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-fd-util.Tpo $(DEPDIR)/test_lib-test-fd-util.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-fd-util.c' object='test_lib-test-fd-util.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-fd-util.o `test -f 'test-fd-util.c' || echo '$(srcdir)/'`test-fd-util.c
+
+test_lib-test-fd-util.obj: test-fd-util.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-fd-util.obj -MD -MP -MF $(DEPDIR)/test_lib-test-fd-util.Tpo -c -o test_lib-test-fd-util.obj `if test -f 'test-fd-util.c'; then $(CYGPATH_W) 'test-fd-util.c'; else $(CYGPATH_W) '$(srcdir)/test-fd-util.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-fd-util.Tpo $(DEPDIR)/test_lib-test-fd-util.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-fd-util.c' object='test_lib-test-fd-util.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-fd-util.obj `if test -f 'test-fd-util.c'; then $(CYGPATH_W) 'test-fd-util.c'; else $(CYGPATH_W) '$(srcdir)/test-fd-util.c'; fi`
 
 test_lib-test-file-create-locked.o: test-file-create-locked.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-file-create-locked.o -MD -MP -MF $(DEPDIR)/test_lib-test-file-create-locked.Tpo -c -o test_lib-test-file-create-locked.o `test -f 'test-file-create-locked.c' || echo '$(srcdir)/'`test-file-create-locked.c

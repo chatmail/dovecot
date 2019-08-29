@@ -128,7 +128,7 @@ modseq:
 
 delay-login:
   Don't connect to the remote server until some command requires it. By default
-  the server is connected to immediately on logout. (v2.2.29+)
+  the server is connected to immediately on login. (v2.2.29+)
 
 Quota
 -----
@@ -175,4 +175,4 @@ fetch-fix-broken-mails:
   a permanent error rather than a temporary error. This feature should be
   enabled only for specific users who have been determined to be broken.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

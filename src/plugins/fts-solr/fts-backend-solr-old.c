@@ -255,9 +255,8 @@ fts_backend_solr_init(struct fts_backend *_backend, const char **error_r)
 	i_zero(&ssl_set);
 	mail_user_init_ssl_client_settings(_backend->ns->user, &ssl_set);
 
-	if (solr_connection_init(fuser->set.url, &ssl_set,
-				 fuser->set.debug, &backend->solr_conn,
-				 error_r) < 0)
+	if (solr_connection_init(&fuser->set, &ssl_set,
+				 &backend->solr_conn, error_r) < 0)
 		return -1;
 
 	str = solr_escape_id_str(_backend->ns->user->username);
@@ -822,7 +821,7 @@ solr_search_multi(struct solr_fts_backend *backend, string_t *str,
 		fts_result->scores_sorted = TRUE;
 	}
 	array_append_zero(&fts_results);
-	result->box_results = array_idx_modifiable(&fts_results, 0);
+	result->box_results = array_front_modifiable(&fts_results);
 	hash_table_destroy(&mailboxes);
 	return 0;
 }

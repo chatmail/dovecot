@@ -72,12 +72,12 @@ static struct connection_list *redis_connections;
 static void
 redis_input_state_add(struct redis_dict *dict, enum redis_input_state state)
 {
-	array_append(&dict->input_states, &state, 1);
+	array_push_back(&dict->input_states, &state);
 }
 
 static void redis_input_state_remove(struct redis_dict *dict)
 {
-	array_delete(&dict->input_states, 0, 1);
+	array_pop_front(&dict->input_states);
 }
 
 static void redis_callback(struct redis_dict *dict,
@@ -246,7 +246,7 @@ redis_conn_input_more(struct redis_connection *conn, const char **error_r)
 		if (line[0] != '*' || str_to_uint(line+1, &num_replies) < 0)
 			break;
 
-		reply = array_idx_modifiable(&dict->replies, 0);
+		reply = array_front_modifiable(&dict->replies);
 		i_assert(reply->reply_count > 0);
 		if (reply->reply_count != num_replies) {
 			*error_r = t_strdup_printf(
@@ -259,14 +259,14 @@ redis_conn_input_more(struct redis_connection *conn, const char **error_r)
 		if (*line != '+' && *line != ':')
 			break;
 		/* success, just ignore the actual reply */
-		reply = array_idx_modifiable(&dict->replies, 0);
+		reply = array_front_modifiable(&dict->replies);
 		i_assert(reply->reply_count > 0);
 		if (--reply->reply_count == 0) {
 			const struct dict_commit_result result = {
 				DICT_COMMIT_RET_OK, NULL
 			};
 			redis_callback(dict, reply, &result);
-			array_delete(&dict->replies, 0, 1);
+			array_pop_front(&dict->replies);
 			/* if we're running in a dict-ioloop, we're handling a
 			   synchronous commit and need to stop now */
 			if (array_count(&dict->replies) == 0 &&
@@ -435,7 +435,7 @@ redis_dict_init(struct dict *driver, const char *uri,
 					    unix_path);
 	} else {
 		connection_init_client_ip(redis_connections, &dict->conn.conn,
-					  &ip, port);
+					  NULL, &ip, port);
 	}
 	dict->dict = *driver;
 	dict->conn.last_reply = str_new(default_pool, 256);

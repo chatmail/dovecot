@@ -48,6 +48,13 @@ The default ACL for mailboxes is to give the mailbox owner all permissions and
 other users none. Mailboxes in public namespaces don't have owners, so by
 default no one can access them.
 
+Master users
+------------
+
+Note that master users have their own ACLs. They're not the the mailbox owners,
+so by default they have no permissions to any of the mailboxes. See
+Authentication/MasterUsers#ACLs for more information.
+
 ACL vfile backend
 -----------------
 
@@ -91,8 +98,7 @@ mailboxes. They are used mainly for two purposes:
 
  1. Removing some permissions from users' personal mailboxes. For example each
     user might have an "Invoices" mailbox which will be read-only.
- 2. Giving permissions to master user logins. Master user is not the mailbox
-    owner, so by default it has no permissions to any of the mailboxes. See
+ 2. Giving permissions to master user logins. See
     <Authentication/MasterUsers#ACLs> [Authentication.MasterUsers.txt] for more
     information.
 
@@ -249,4 +255,4 @@ List cache
 you manually add/edit 'dovecot-acl' files, you may need to delete the
 'dovecot-acl-list' to get the mailboxes visible.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

@@ -38,7 +38,7 @@ void passdb_register_module(struct passdb_module_interface *iface)
 		i_panic("passdb_register_module(%s): Already registered",
 			iface->name);
 	}
-	array_append(&passdb_interfaces, &iface, 1);
+	array_push_back(&passdb_interfaces, &iface);
 }
 
 void passdb_unregister_module(struct passdb_module_interface *iface)
@@ -76,11 +76,11 @@ bool passdb_get_credentials(struct auth_request *auth_request,
 			      credentials_r, size_r, &error);
 	if (ret <= 0) {
 		if (ret < 0) {
-			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
+			e_error(authdb_event(auth_request),
 				"Password data is not valid for scheme %s: %s",
 				input_scheme, error);
 		} else {
-			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
+			e_error(authdb_event(auth_request),
 				"Unknown scheme %s", input_scheme);
 		}
 		return FALSE;
@@ -103,8 +103,8 @@ bool passdb_get_credentials(struct auth_request *auth_request,
 				error = t_strdup_printf("%s (input: %s)",
 							error, input);
 			}
-			auth_request_log_info(auth_request, AUTH_SUBSYS_DB,
-					      "%s", error);
+			e_info(authdb_event(auth_request),
+			       "%s", error);
 			return FALSE;
 		}
 
@@ -119,13 +119,13 @@ bool passdb_get_credentials(struct auth_request *auth_request,
 					       auth_request->realm, NULL);
 		}
 		if (auth_request->set->debug_passwords) {
-			auth_request_log_debug(auth_request, AUTH_SUBSYS_DB,
+			e_debug(authdb_event(auth_request),
 				"Generating %s from user '%s', password '%s'",
 				wanted_scheme, pwd_gen_params.user, plaintext);
 		}
 		if (!password_generate(plaintext, &pwd_gen_params,
 				       wanted_scheme, credentials_r, size_r)) {
-			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
+			e_error(authdb_event(auth_request),
 				"Requested unknown scheme %s", wanted_scheme);
 			return FALSE;
 		}
@@ -162,9 +162,9 @@ void passdb_handle_credentials(enum passdb_result result,
 		   passdb lookup. auth_request_lookup_credentials_finish()
 		   will use them. */
 	} else {
-		auth_request_log_info(auth_request, AUTH_SUBSYS_DB,
-			"Requested %s scheme, but we have a NULL password",
-			auth_request->credentials_scheme);
+		e_info(authdb_event(auth_request),
+		       "Requested %s scheme, but we have a NULL password",
+		       auth_request->credentials_scheme);
 		result = PASSDB_RESULT_SCHEME_NOT_AVAILABLE;
 	}
 
@@ -238,7 +238,7 @@ passdb_preinit(pool_t pool, const struct auth_passdb_settings *set)
 	} else {
 		passdb->username_filter = (const char* const*)p_strsplit_spaces(pool, set->username_filter, " ,");
 	}
-	array_append(&passdb_modules, &passdb, 1);
+	array_push_back(&passdb_modules, &passdb);
 	return passdb;
 }
 
@@ -284,6 +284,30 @@ void passdbs_generate_md5(unsigned char md5[STATIC_ARRAY MD5_RESULTLEN])
 		md5_update(&ctx, passdbs[i]->args, strlen(passdbs[i]->args));
 	}
 	md5_final(&ctx, md5);
+}
+
+const char *
+passdb_result_to_string(enum passdb_result result)
+{
+	switch (result) {
+	case PASSDB_RESULT_INTERNAL_FAILURE:
+		return "internal_failure";
+	case PASSDB_RESULT_SCHEME_NOT_AVAILABLE:
+		return "scheme_not_available";
+	case PASSDB_RESULT_USER_UNKNOWN:
+		return "user_unknown";
+	case PASSDB_RESULT_USER_DISABLED:
+		return "user_disabled";
+	case PASSDB_RESULT_PASS_EXPIRED:
+		return "pass_expired";
+	case PASSDB_RESULT_NEXT:
+		return "next";
+	case PASSDB_RESULT_PASSWORD_MISMATCH:
+		return "password_mismatch";
+	case PASSDB_RESULT_OK:
+		return "ok";
+	}
+	i_unreached();
 }
 
 extern struct passdb_module_interface passdb_passwd;

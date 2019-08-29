@@ -18,6 +18,10 @@
 #define SMTP_DEFAULT_PORT 80
 #define SSMTP_DEFAULT_PORT 465
 
+static struct event_category event_category_smtp_client = {
+	.name = "smtp-client"
+};
+
 /*
  * Client
  */
@@ -35,6 +39,10 @@ struct smtp_client *smtp_client_init(const struct smtp_client_settings *set)
 	client->set.my_hostname = p_strdup(pool, set->my_hostname);
 
 	client->set.forced_capabilities = set->forced_capabilities;
+	if (set->extra_capabilities != NULL) {
+		client->set.extra_capabilities =
+			p_strarray_dup(pool, set->extra_capabilities);
+	}
 
 	client->set.dns_client = set->dns_client;
 	client->set.dns_client_socket_path =
@@ -80,6 +88,12 @@ struct smtp_client *smtp_client_init(const struct smtp_client_settings *set)
 
 	client->conn_list = smtp_client_connection_list_init();
 
+	/* There is no event log prefix added here, since the client itself does
+	   not log anything and the prefix is protocol-dependent. */
+	client->event = event_create(set->event_parent);
+	event_add_category(client->event, &event_category_smtp_client);
+	event_set_forced_debug(client->event, set->debug);
+
 	return client;
 }
 
@@ -91,6 +105,7 @@ void smtp_client_deinit(struct smtp_client **_client)
 
 	if (client->ssl_ctx != NULL)
 		ssl_iostream_context_unref(&client->ssl_ctx);
+	event_unref(&client->event);
 	pool_unref(&client->pool);
 	*_client = NULL;
 }

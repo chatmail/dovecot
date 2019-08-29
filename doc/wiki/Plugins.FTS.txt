@@ -13,7 +13,7 @@ The following FTS indexers (in preferred order) are supported:
    v2.1+)
  * fts-xapian [https://github.com/grosjo/fts-xapian] is Xapian
    [https://xapian.org] based plugin maintained by '<jom AT NOSPAM grosjo DOT
-   net>'
+   net>'.  (Requires v2.3+)
 
 Indexing
 --------
@@ -99,4 +99,4 @@ All the FTS settings go inside 'plugin {} ' section of 90-plugin.conf.
    SEARCH fails with:'NO [INUSE] Timeout while waiting for indexing to finish'
    (v2.1+)
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

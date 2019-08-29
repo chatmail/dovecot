@@ -82,7 +82,7 @@ static void server_set_print_pending(struct doveadm_server *server)
 		if (*serverp == server)
 			return;
 	}
-	array_append(&print_pending_servers, &server, 1);
+	array_push_back(&print_pending_servers, &server);
 }
 
 static void server_print_connection_released(struct doveadm_server *server)
@@ -459,7 +459,8 @@ static bool server_connection_input_one(struct server_connection *conn)
 	i_unreached();
 }
 
-static int server_connection_read_settings(struct server_connection *conn)
+static int server_connection_read_settings(struct server_connection *conn,
+					   const char **error_r)
 {
 	const struct setting_parser_info *set_roots[] = {
 		&doveadm_setting_parser_info,
@@ -480,7 +481,8 @@ static int server_connection_read_settings(struct server_connection *conn)
 
 	if (master_service_settings_read(master_service, &input,
 					 &output, &error) < 0) {
-		i_error("Error reading configuration: %s", error);
+		*error_r = t_strdup_printf(
+			"Error reading configuration: %s", error);
 		return -1;
 	}
 	set = master_service_settings_get_others(master_service)[0];
@@ -488,20 +490,8 @@ static int server_connection_read_settings(struct server_connection *conn)
 	return 0;
 }
 
-static int server_connection_ssl_handshaked(const char **error_r, void *context)
-{
-	struct server_connection *conn = context;
-
-	if (ssl_iostream_check_cert_validity(conn->ssl_iostream,
-					     conn->server->hostname,
-					     error_r) < 0)
-		return -1;
-	if (doveadm_debug)
-		i_debug("%s: SSL handshake successful", conn->server->name);
-	return 0;
-}
-
-static int server_connection_init_ssl(struct server_connection *conn)
+static int server_connection_init_ssl(struct server_connection *conn,
+				      const char **error_r)
 {
 	struct ssl_iostream_settings ssl_set;
 	const char *error;
@@ -509,21 +499,21 @@ static int server_connection_init_ssl(struct server_connection *conn)
 	if (conn->server->ssl_ctx == NULL)
 		return 0;
 
-	i_zero(&ssl_set);
-	ssl_set.verbose_invalid_cert = TRUE;
+	doveadm_get_ssl_settings(&ssl_set, conn->pool);
+	if (ssl_set.allow_invalid_cert)
+		ssl_set.verbose_invalid_cert = TRUE;
 
 	if (io_stream_create_ssl_client(conn->server->ssl_ctx,
 					conn->server->hostname, &ssl_set,
 					&conn->input, &conn->output,
 					&conn->ssl_iostream, &error) < 0) {
-		i_error("Couldn't initialize SSL client: %s", error);
+		*error_r = t_strdup_printf(
+			"Couldn't initialize SSL client: %s", error);
 		return -1;
 	}
-	ssl_iostream_set_handshake_callback(conn->ssl_iostream,
-					    server_connection_ssl_handshaked,
-					    conn);
 	if (ssl_iostream_handshake(conn->ssl_iostream) < 0) {
-		i_error("SSL handshake failed: %s",
+		*error_r = t_strdup_printf(
+			"SSL handshake failed: %s",
 			ssl_iostream_get_last_error(conn->ssl_iostream));
 		return -1;
 	}
@@ -531,7 +521,8 @@ static int server_connection_init_ssl(struct server_connection *conn)
 }
 
 int server_connection_create(struct doveadm_server *server,
-			     struct server_connection **conn_r)
+			     struct server_connection **conn_r,
+			     const char **error_r)
 {
 	struct server_connection *conn;
 	pool_t pool;
@@ -551,10 +542,10 @@ int server_connection_create(struct doveadm_server *server,
 	i_stream_set_name(conn->input, server->name);
 	o_stream_set_name(conn->output, server->name);
 
-	array_append(&conn->server->connections, &conn, 1);
+	array_push_back(&conn->server->connections, &conn);
 
-	if (server_connection_read_settings(conn) < 0 ||
-	    server_connection_init_ssl(conn) < 0) {
+	if (server_connection_read_settings(conn, error_r) < 0 ||
+	    server_connection_init_ssl(conn, error_r) < 0) {
 		server_connection_destroy(&conn);
 		return -1;
 	}

@@ -2,8 +2,7 @@ Master users/passwords
 ======================
 
 It's possible to configure master users who are able to log in as other users.
-It's also possible to directly log in as any user using a master password,
-although this isn't recommended.
+It's also possible to directly log in as any user using a master password.
 
 Master users
 ------------
@@ -60,11 +59,10 @@ to any mailboxes of the user. The options for handling this are:
 
  1. Adding a global <ACL.txt> for the master user. You can create a "default
     ACL", that applies to all mailboxes. See example below.
- 2. Assigning 'MASTER_USER=$USER' in a <postlogin-script>
-    [PostLoginScripting.txt]. The result is that the login username's ACL is
-    used, rather than the master username's.
- 3. Assigning 'master_user=%u' in <userdb lookup> [UserDatabase.txt], which
-    basically does the same as the post-login script.
+ 2. Set 'plugin { acl_user=%u } ' This preserves the master_user for other
+    purposes (e.g. %{master_user} variable).
+ 3. Set 'plugin { master_user=%u } ' This fully hides that master user login is
+    being used.
 
 Example configuration
 ---------------------
@@ -154,41 +152,21 @@ If you had any problems, set 'auth_debug=yes' and look at the logs.
 Master passwords
 ----------------
 
-The easiest way to implement this is with SQL:
+You can configure a passdb which first performs authentication using the master
+password. Then it continues to the primary passdb to verify that the user
+exists and get other extra fields.
 
 ---%<-------------------------------------------------------------------------
-password_query = SELECT user, 'master-password' AS password FROM users WHERE
-userid = '%u'
----%<-------------------------------------------------------------------------
-
-If you don't have the users in SQL database, you can still fake it:
-
----%<-------------------------------------------------------------------------
-password_query = SELECT '%u' AS user, 'master-password' AS password
----%<-------------------------------------------------------------------------
-
-However note that the above will allow logins for any username using the master
-password, even those that don't really exist.
-
-Then in your dovecot.conf, have something like:
-
----%<-------------------------------------------------------------------------
+# master password passdb
+passdb {
+  driver = static
+  default_fields = password=master-password
+  result_success = continue
+}
+# primary passdb
 passdb {
   driver = pam
 }
-passdb {
-  driver = sql
-  args = /etc/dovecot-sql-master.conf.ext
-}
----%<-------------------------------------------------------------------------
-
-One way to do this without SQL is to create a <passwd-file>
-[AuthDatabase.PasswdFile.txt] containing every user:
-
----%<-------------------------------------------------------------------------
-user1:{plain}master-password
-user2:{plain}master-password
-..etc..
 ---%<-------------------------------------------------------------------------
 
 Advanced SQL Examples
@@ -313,4 +291,4 @@ user_name = '%n' AND domain_name = '%d' AND ( \
 group by uid
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

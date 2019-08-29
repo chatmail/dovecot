@@ -57,7 +57,7 @@ void fs_class_register(const struct fs *fs_class)
 {
 	if (!array_is_created(&fs_classes))
 		fs_classes_init();
-	array_append(&fs_classes, &fs_class, 1);
+	array_push_back(&fs_classes, &fs_class);
 }
 
 static void fs_classes_deinit(void)
@@ -366,7 +366,7 @@ void fs_metadata_init_or_clear(struct fs_file *file)
 		array_foreach(&file->metadata, md) {
 			if (strncmp(md->key, FS_METADATA_INTERNAL_PREFIX,
 				    strlen(FS_METADATA_INTERNAL_PREFIX)) == 0)
-				array_append(&internal_metadata, md, 1);
+				array_push_back(&internal_metadata, md);
 		}
 		array_clear(&file->metadata);
 		array_append_array(&file->metadata, &internal_metadata);
@@ -471,6 +471,11 @@ int fs_get_metadata(struct fs_file *file,
 	int ret;
 
 	if (file->fs->v.get_metadata == NULL) {
+		if (array_is_created(&file->metadata)) {
+			/* Return internal metadata. */
+			*metadata_r = &file->metadata;
+			return 0;
+		}
 		fs_set_error(file->fs, "Metadata not supported by backend");
 		return -1;
 	}

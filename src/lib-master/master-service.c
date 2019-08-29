@@ -538,7 +538,7 @@ bool master_service_parse_option(struct master_service *service,
 	case 'o':
 		if (!array_is_created(&service->config_overrides))
 			i_array_init(&service->config_overrides, 16);
-		array_append(&service->config_overrides, &arg, 1);
+		array_push_back(&service->config_overrides, &arg);
 		break;
 	case 'O':
 		service->flags |= MASTER_SERVICE_FLAG_NO_CONFIG_SETTINGS;
@@ -640,7 +640,7 @@ static void master_service_import_environment_real(const char *import_environmen
 	/* preserve existing DOVECOT_PRESERVE_ENVS */
 	value = getenv(DOVECOT_PRESERVE_ENVS_ENV);
 	if (value != NULL)
-		array_append(&keys, &value, 1);
+		array_push_back(&keys, &value);
 	/* add new environments */
 	envs = t_strsplit_spaces(import_environment, " ");
 	for (; *envs != NULL; envs++) {
@@ -651,11 +651,11 @@ static void master_service_import_environment_real(const char *import_environmen
 			key = t_strdup_until(*envs, value);
 			env_put(*envs);
 		}
-		array_append(&keys, &key, 1);
+		array_push_back(&keys, &key);
 	}
 	array_append_zero(&keys);
 
-	value = t_strarray_join(array_idx(&keys, 0), " ");
+	value = t_strarray_join(array_front(&keys), " ");
 	env_put(t_strconcat(DOVECOT_PRESERVE_ENVS_ENV"=", value, NULL));
 }
 

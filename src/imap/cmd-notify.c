@@ -195,7 +195,7 @@ cmd_notify_add_mailbox(struct imap_notify_context *ctx,
 		}
 	}
 	name = p_strdup(ctx->pool, name);
-	array_append(&notify_boxes->names, &name, 1);
+	array_push_back(&notify_boxes->names, &name);
 
 	ctx->global_max_mailbox_names =
 		I_MAX(ctx->global_max_mailbox_names,
@@ -437,8 +437,7 @@ imap_notify_box_send_status(struct client_command_context *cmd,
 
 	box = mailbox_alloc(info->ns->list, info->vname, MAILBOX_FLAG_READONLY);
 	mailbox_set_reason(box, "NOTIFY send STATUS");
-	if (ctx->client->enabled_features != 0)
-		(void)mailbox_enable(box, ctx->client->enabled_features);
+	(void)mailbox_enable(box, client_enabled_mailbox_features(ctx->client));
 
 	if (imap_status_get(cmd, info->ns, info->vname, &items, &result) < 0) {
 		if (result.error == MAIL_ERROR_PERM)
@@ -543,19 +542,19 @@ bool cmd_notify(struct client_command_context *cmd)
 	}
 
 	if ((ctx->global_used_events & UNSUPPORTED_EVENTS) != 0) {
-		string_t *str = t_str_new(128);
+		string_t *client_error = t_str_new(128);
 		unsigned int i;
 
-		str_append(str, "NO [BADEVENT");
+		str_append(client_error, "NO [BADEVENT");
 		for (i = 0; i < N_ELEMENTS(imap_notify_event_names); i++) {
 			if ((ctx->global_used_events & (1 << i)) != 0 &&
 			    ((1 << i) & UNSUPPORTED_EVENTS) != 0) {
-				str_append_c(str, ' ');
-				str_append(str, imap_notify_event_names[i]);
+				str_append_c(client_error, ' ');
+				str_append(client_error, imap_notify_event_names[i]);
 			}
 		}
-		str_append(str, "] Unsupported NOTIFY events.");
-		client_send_tagline(cmd, str_c(str));
+		str_append(client_error, "] Unsupported NOTIFY events.");
+		client_send_tagline(cmd, str_c(client_error));
 		pool_unref(&pool);
 		return TRUE;
 	}

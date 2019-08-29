@@ -60,14 +60,14 @@ passdb_imap_login_callback(const struct imapc_command_reply *reply,
 		break;
 	case IMAPC_COMMAND_STATE_NO:
 		result = passdb_imap_get_failure_result(reply);
-		auth_request_log_info(request->auth_request, AUTH_SUBSYS_DB,
-				      "%s", reply->text_full);
+		e_info(authdb_event(request->auth_request),
+		       "%s", reply->text_full);
 		break;
 	case IMAPC_COMMAND_STATE_AUTH_FAILED:
 	case IMAPC_COMMAND_STATE_BAD:
 	case IMAPC_COMMAND_STATE_DISCONNECTED:
-		auth_request_log_error(request->auth_request, AUTH_SUBSYS_DB,
-				       "%s", reply->text_full);
+		e_error(authdb_event(request->auth_request),
+			"%s", reply->text_full);
 		break;
 	}
 	request->verify_callback(result, request->auth_request);
@@ -97,16 +97,16 @@ passdb_imap_verify_plain(struct auth_request *auth_request,
 			    DNS_CLIENT_SOCKET_NAME, NULL);
 	set.password = password;
 	set.max_idle_time = IMAPC_DEFAULT_MAX_IDLE_TIME;
-	if (set.ssl_ca_dir == NULL)
-		set.ssl_ca_dir = auth_request->set->ssl_client_ca_dir;
-	if (set.ssl_ca_file == NULL)
-		set.ssl_ca_file = auth_request->set->ssl_client_ca_file;
+	if (set.ssl_set.ca_dir == NULL)
+		set.ssl_set.ca_dir = auth_request->set->ssl_client_ca_dir;
+	if (set.ssl_set.ca_file == NULL)
+		set.ssl_set.ca_file = auth_request->set->ssl_client_ca_file;
 
 	if (module->set_have_vars) {
 		str = t_str_new(128);
 		if (auth_request_var_expand(str, set.username, auth_request,
 					    NULL, &error) <= 0) {
-			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
+			e_error(authdb_event(auth_request),
 				"Failed to expand username=%s: %s",
 				set.username, error);
 			callback(PASSDB_RESULT_INTERNAL_FAILURE, auth_request);
@@ -117,7 +117,7 @@ passdb_imap_verify_plain(struct auth_request *auth_request,
 		str_truncate(str, 0);
 		if (auth_request_var_expand(str, set.host, auth_request,
 					    NULL, &error) <= 0) {
-			auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
+			e_error(authdb_event(auth_request),
 				"Failed to expand host=%s: %s",
 				set.host, error);
 			callback(PASSDB_RESULT_INTERNAL_FAILURE, auth_request);
@@ -125,8 +125,8 @@ passdb_imap_verify_plain(struct auth_request *auth_request,
 		}
 		set.host = t_strdup(str_c(str));
 	}
-	auth_request_log_debug(auth_request, AUTH_SUBSYS_DB,
-			       "lookup host=%s port=%d", set.host, set.port);
+	e_debug(authdb_event(auth_request),
+		"lookup host=%s port=%d", set.host, set.port);
 
 	request = p_new(auth_request->pool, struct imap_auth_request, 1);
 	request->client = imapc_client_init(&set);
@@ -152,7 +152,6 @@ passdb_imap_preinit(pool_t pool, const char *args)
 	module->set.ssl_mode = IMAPC_CLIENT_SSL_MODE_NONE;
 	module->set.username = "%u";
 	module->set.rawlog_dir = "";
-	module->set.ssl_verify = TRUE;
 
 	for (tmp = p_strsplit(pool, args, " "); *tmp != NULL; tmp++) {
 		key = *tmp;
@@ -170,9 +169,9 @@ passdb_imap_preinit(pool_t pool, const char *args)
 		} else if (strcmp(key, "username") == 0)
 			module->set.username = value;
 		else if (strcmp(key, "ssl_ca_dir") == 0)
-			module->set.ssl_ca_dir = value;
+			module->set.ssl_set.ca_dir = value;
 		else if (strcmp(key, "ssl_ca_file") == 0)
-			module->set.ssl_ca_file = value;
+			module->set.ssl_set.ca_file = value;
 		else if (strcmp(key, "rawlog_dir") == 0)
 			module->set.rawlog_dir = value;
 		else if (strcmp(key, "ssl") == 0) {
@@ -190,9 +189,9 @@ passdb_imap_preinit(pool_t pool, const char *args)
 			}
 		} else if (strcmp(key, "allow_invalid_cert") == 0) {
 			if (strcmp(value, "yes") == 0) {
-				module->set.ssl_verify = FALSE;
+				module->set.ssl_set.allow_invalid_cert = TRUE;
 			} else if (strcmp(value, "no") == 0) {
-				module->set.ssl_verify = TRUE;
+				module->set.ssl_set.allow_invalid_cert = FALSE;
 			} else {
 				i_fatal("passdb imap: Invalid allow_invalid_cert value: %s",
 					value);
@@ -202,8 +201,8 @@ passdb_imap_preinit(pool_t pool, const char *args)
 		}
 	}
 
-	if (module->set.ssl_verify == TRUE && module->set.ssl_mode != IMAPC_CLIENT_SSL_MODE_NONE ) {
-		if (module->set.ssl_ca_dir == NULL && module->set.ssl_ca_file == NULL)
+	if (!module->set.ssl_set.allow_invalid_cert && module->set.ssl_mode != IMAPC_CLIENT_SSL_MODE_NONE) {
+		if (module->set.ssl_set.ca_dir == NULL && module->set.ssl_set.ca_file == NULL)
 			i_fatal("passdb imap: Cannot verify certificate without ssl_ca_dir or ssl_ca_file setting");
 	}
 

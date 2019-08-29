@@ -136,6 +136,7 @@ struct mail_storage {
 	   MAIL_FETCH_IMAP_BODYSTRUCTURE from the remote server. Adding fields
 	   here avoids adding them to index_mail_data.access_part. */
 	enum mail_fetch_field nonbody_access_fields;
+	struct event_category *event_category;
 
         struct mail_storage_vfuncs v, *vlast;
 
@@ -841,5 +842,8 @@ void mail_storage_free_binary_cache(struct mail_storage *storage);
 enum mail_index_open_flags
 mail_storage_settings_to_index_flags(const struct mail_storage_settings *set);
 void mailbox_save_context_deinit(struct mail_save_context *ctx);
+
+/* for unit testing */
+int mailbox_verify_name(struct mailbox *box);
 
 #endif

@@ -16,6 +16,7 @@
 #include "master-service.h"
 #include "all-settings.h"
 #include "sysinfo-get.h"
+#include "old-set-parser.h"
 #include "config-connection.h"
 #include "config-parser.h"
 #include "config-request.h"
@@ -81,10 +82,10 @@ config_request_get_strings(const char *key, const char *value,
 		break;
 	case CONFIG_KEY_ERROR:
 		value = p_strdup(ctx->pool, value);
-		array_append(&ctx->errors, &value, 1);
+		array_push_back(&ctx->errors, &value);
 		return;
 	}
-	array_append(&ctx->strings, &value, 1);
+	array_push_back(&ctx->strings, &value);
 }
 
 static int config_string_cmp(const char *const *p1, const char *const *p2)
@@ -354,14 +355,14 @@ config_dump_human_output(struct config_dump_human_context *ctx,
 			/* "strlist=" */
 			str = p_strdup_printf(ctx->pool, "%s/",
 					      t_strcut(strings[i]+1, '='));
-			array_append(&prefixes_arr, &str, 1);
+			array_push_back(&prefixes_arr, &str);
 		} else {
 			/* string is in format: "list=0 1 2" */
 			for (args = t_strsplit(p + 1, " "); *args != NULL; args++) {
 				str = p_strdup_printf(ctx->pool, "%s/%s/",
 						      t_strcut(strings[i]+1, '='),
 						      *args);
-				array_append(&prefixes_arr, &str, 1);
+				array_push_back(&prefixes_arr, &str);
 			}
 		}
 	} T_END;
@@ -421,7 +422,7 @@ config_dump_human_output(struct config_dump_human_context *ctx,
 					str_len(ctx->list_prefix);
 				prefix_idx = j;
 				prefix.prefix_idx = prefix_idx;
-				array_append(&prefix_stack, &prefix, 1);
+				array_push_back(&prefix_stack, &prefix);
 
 				str_append_max(ctx->list_prefix, indent_str, indent*2);
 				p = strchr(key2, '/');
@@ -912,7 +913,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'm':
 			module = t_strdup(optarg);
-			array_append(&module_names, &module, 1);
+			array_push_back(&module_names, &module);
 			break;
 		case 'n':
 			scope = CONFIG_DUMP_SCOPE_CHANGED;
@@ -938,7 +939,7 @@ int main(int argc, char *argv[])
 	}
 	array_append_zero(&module_names);
 	wanted_modules = array_count(&module_names) == 1 ? NULL :
-		array_idx(&module_names, 0);
+		array_front(&module_names);
 
 	config_path = master_service_get_config_path(master_service);
 	/* use strcmp() instead of !=, because dovecot -n always gives us
@@ -1057,6 +1058,7 @@ int main(int argc, char *argv[])
 		i_fatal("Errors in configuration");
 
 	config_filter_deinit(&config_filter);
+	old_settings_deinit_global();
 	module_dir_unload(&modules);
 	config_parser_deinit();
 	master_service_deinit(&master_service);

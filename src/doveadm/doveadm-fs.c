@@ -43,11 +43,8 @@ cmd_fs_init(int *argc, char **argv[], int own_arg_count, doveadm_command_t *cmd)
 			fs_cmd_help(cmd);
 	}
 
-	i_zero(&ssl_set);
-	ssl_set.ca_dir = doveadm_settings->ssl_client_ca_dir;
-	ssl_set.ca_file = doveadm_settings->ssl_client_ca_file;
+	doveadm_get_ssl_settings(&ssl_set, pool_datastack_create());
 	ssl_set.verbose = doveadm_debug;
-
 	i_zero(&fs_set);
 	fs_set.ssl_client_set = &ssl_set;
 	fs_set.temp_dir = "/tmp";
@@ -352,7 +349,7 @@ cmd_fs_delete_dir_recursive(struct fs *fs, unsigned int async_count,
 		   we'll include the "/" suffix in the filename when deleting
 		   it. */
 		fname = t_strconcat(fname, "/", NULL);
-		array_append(&fnames, &fname, 1);
+		array_push_back(&fnames, &fname);
 	}
 	if (fs_iter_deinit(&iter) < 0) {
 		i_error("fs_iter_deinit(%s) failed: %s",
@@ -374,7 +371,7 @@ cmd_fs_delete_dir_recursive(struct fs *fs, unsigned int async_count,
 	iter = fs_iter_init(fs, path_prefix, 0);
 	while ((fname = fs_iter_next(iter)) != NULL) {
 		fname = t_strdup(fname);
-		array_append(&fnames, &fname, 1);
+		array_push_back(&fnames, &fname);
 	}
 	if (fs_iter_deinit(&iter) < 0) {
 		i_error("fs_iter_deinit(%s) failed: %s",
