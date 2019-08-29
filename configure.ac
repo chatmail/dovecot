@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Pigeonhole], [0.5.4], [dovecot@dovecot.org], [dovecot-2.3-pigeonhole])
-AC_DEFINE_UNQUOTED([PIGEONHOLE_ABI_VERSION], "0.5.ABIv0($PACKAGE_VERSION)", [Pigeonhole ABI version])
+AC_INIT([Pigeonhole], [0.5.7.2], [dovecot@dovecot.org], [dovecot-2.3-pigeonhole])
+AC_DEFINE_UNQUOTED([PIGEONHOLE_ABI_VERSION], "0.5.ABIv7($PACKAGE_VERSION)", [Pigeonhole ABI version])
 
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_SRCDIR([src])
@@ -34,10 +34,10 @@ AC_PROG_LIBTOOL
 DC_DOVECOT
 DC_DOVECOT_MODULEDIR
 LIBDOVECOT_INCLUDE="$LIBDOVECOT_INCLUDE $LIBDOVECOT_STORAGE_INCLUDE"
-CFLAGS="$DOVECOT_CFLAGS -I\$(top_srcdir)"
+CFLAGS="$CFLAGS -I\$(top_srcdir)"
 LIBS="$DOVECOT_LIBS"
-BINARY_CFLAGS="$DOVECOT_BINARY_CFLAGS"
-BINARY_LDFLAGS="$DOVECOT_BINARY_LDFLAGS"
+BINARY_LDFLAGS="$PIE_LDFLAGS $RELRO_LDFLAGS"
+BINARY_CFLAGS="$PIE_CFLAGS"
 AC_SUBST(BINARY_CFLAGS)
 AC_SUBST(BINARY_LDFLAGS)
 AC_SUBST(LIBDOVECOT_INCLUDE)

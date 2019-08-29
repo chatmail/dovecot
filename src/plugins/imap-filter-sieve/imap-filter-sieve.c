@@ -504,11 +504,16 @@ imap_filter_sieve_smtp_start(const struct sieve_script_env *senv,
 		IMAP_FILTER_SIEVE_USER_CONTEXT_REQUIRE(user);
 	const struct smtp_submit_settings *smtp_set = ifsuser->client->smtp_set;
 	struct ssl_iostream_settings ssl_set;
+	struct smtp_submit_input submit_input;
 
 	i_zero(&ssl_set);
 	mail_user_init_ssl_client_settings(user, &ssl_set);
 
-	return (void *)smtp_submit_init_simple(smtp_set, &ssl_set, mail_from);
+	i_zero(&submit_input);
+	submit_input.ssl = &ssl_set;
+
+	return (void *)smtp_submit_init_simple(&submit_input, smtp_set,
+					       mail_from);
 }
 
 static void
@@ -596,7 +601,6 @@ imap_filter_sieve_duplicate_flush(const struct sieve_script_env *senv)
 static int
 imap_sieve_filter_handle_exec_status(struct imap_filter_sieve_context *sctx,
 				     struct sieve_script *script, int status,
-				     bool keep,
 				     struct sieve_exec_status *estatus)
 {
 	struct imap_filter_sieve_user *ifsuser =
@@ -608,8 +612,7 @@ imap_sieve_filter_handle_exec_status(struct imap_filter_sieve_context *sctx,
 
 	error_func = user_error_func = sieve_sys_error;
 
-	if (estatus != NULL && estatus->last_storage != NULL &&
-	    estatus->store_failed) {
+	if (estatus->last_storage != NULL && estatus->store_failed) {
 		(void)mail_storage_get_last_error(estatus->last_storage,
 						  &mail_error);
 
@@ -649,7 +652,7 @@ imap_sieve_filter_handle_exec_status(struct imap_filter_sieve_context *sctx,
 		ret = -1;
 		break;
 	case SIEVE_EXEC_OK:
-		ret = (keep ? 0 : 1);
+		ret = (estatus->keep_original ? 0 : 1);
 		break;
 	}
 
@@ -672,7 +675,7 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 	struct sieve_error_handler *ehandler;
 	struct sieve_script *last_script = NULL;
 	bool user_script = FALSE, more = TRUE;
-	bool debug = user->mail_debug, keep = TRUE;
+	bool debug = user->mail_debug;
 	enum sieve_compile_flags cpflags;
 	enum sieve_execute_flags exflags;
 	enum sieve_error compile_error = SIEVE_ERROR_NONE;
@@ -761,7 +764,7 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 		ret = sieve_multiscript_tempfail(&mscript, ehandler, exflags);
 	} else {
 		ret = sieve_multiscript_finish(&mscript, ehandler, exflags,
-					       &keep);
+					       NULL);
 	}
 
 	/* Don't log additional messages about compile failure */
@@ -770,12 +773,12 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 		sieve_sys_info(svinst,
 			"Aborted script execution sequence "
 			"with successful implicit keep");
-		return 1;
+		return 0;
 	}
 
 	i_assert(last_script != NULL); /* at least one script is executed */
 	return imap_sieve_filter_handle_exec_status(sctx,
-		last_script, ret, keep, scriptenv->exec_status);
+		last_script, ret, scriptenv->exec_status);
 }
 
 static int
@@ -860,7 +863,7 @@ imap_sieve_filter_get_msgdata(struct imap_filter_sieve_context *sctx,
 
 int imap_sieve_filter_run_mail(struct imap_filter_sieve_context *sctx,
 			       struct mail *mail, string_t **errors_r,
-			       bool *have_warnings_r)
+			       bool *have_warnings_r, bool *have_changes_r)
 {
 	struct sieve_instance *svinst = imap_filter_sieve_get_svinst(sctx);
 	struct mail_user *user = sctx->user;
@@ -875,6 +878,8 @@ int imap_sieve_filter_run_mail(struct imap_filter_sieve_context *sctx,
 
 	*errors_r = NULL;
 	*have_warnings_r = FALSE;
+	*have_changes_r = FALSE;
+	i_zero(&estatus);
 
 	/* Prepare error handler */
 	user_ehandler = imap_filter_sieve_create_error_handler(sctx);
@@ -916,7 +921,6 @@ int imap_sieve_filter_run_mail(struct imap_filter_sieve_context *sctx,
 			scriptenv.trace_config = trace_config;
 			scriptenv.script_context = sctx;
 
-			i_zero(&estatus);
 			scriptenv.exec_status = &estatus;
 
 			/* Execute script(s) */
@@ -930,6 +934,7 @@ int imap_sieve_filter_run_mail(struct imap_filter_sieve_context *sctx,
 		sieve_trace_log_free(&trace_log);
 
 	*have_warnings_r = (sieve_get_warnings(user_ehandler) > 0);
+	*have_changes_r = estatus.significant_action_executed;
 	*errors_r = sctx->errors;
 
 	sieve_error_handler_unref(&user_ehandler);

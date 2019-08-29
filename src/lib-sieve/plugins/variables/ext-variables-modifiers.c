@@ -100,6 +100,7 @@ const struct sieve_variables_modifier *ext_variables_modifier_create_instance
 	pool = sieve_command_pool(cmd);
 	modf = p_new(pool, struct sieve_variables_modifier, 1);
 	modf->object = object;
+	modf->var_ext = var_ext;
 	modf->def = (const struct sieve_variables_modifier_def *) object.def;
 
   return modf;
@@ -123,12 +124,24 @@ void ext_variables_register_core_modifiers
 
 /* Forward declarations */
 
-bool mod_lower_modify(string_t *in, string_t **result);
-bool mod_upper_modify(string_t *in, string_t **result);
-bool mod_lowerfirst_modify(string_t *in, string_t **result);
-bool mod_upperfirst_modify(string_t *in, string_t **result);
-bool mod_length_modify(string_t *in, string_t **result);
-bool mod_quotewildcard_modify(string_t *in, string_t **result);
+static bool
+mod_lower_modify(const struct sieve_variables_modifier *modf,
+		 string_t *in, string_t **result);
+static bool
+mod_upper_modify(const struct sieve_variables_modifier *modf,
+		 string_t *in, string_t **result);
+static bool
+mod_lowerfirst_modify(const struct sieve_variables_modifier *modf,
+		      string_t *in, string_t **result);
+static bool
+mod_upperfirst_modify(const struct sieve_variables_modifier *modf,
+		      string_t *in, string_t **result);
+static bool
+mod_length_modify(const struct sieve_variables_modifier *modf,
+		  string_t *in, string_t **result);
+static bool
+mod_quotewildcard_modify(const struct sieve_variables_modifier *modf,
+			 string_t *in, string_t **result);
 
 /* Modifier objects */
 
@@ -173,7 +186,9 @@ const struct sieve_variables_modifier_def length_modifier = {
 
 /* Modifier implementations */
 
-bool mod_upperfirst_modify(string_t *in, string_t **result)
+static bool
+mod_upperfirst_modify(const struct sieve_variables_modifier *modf ATTR_UNUSED,
+		      string_t *in, string_t **result)
 {
 	char *content;
 
@@ -191,7 +206,9 @@ bool mod_upperfirst_modify(string_t *in, string_t **result)
 	return TRUE;
 }
 
-bool mod_lowerfirst_modify(string_t *in, string_t **result)
+static bool
+mod_lowerfirst_modify(const struct sieve_variables_modifier *modf ATTR_UNUSED,
+		      string_t *in, string_t **result)
 {
 	char *content;
 
@@ -209,7 +226,9 @@ bool mod_lowerfirst_modify(string_t *in, string_t **result)
 	return TRUE;
 }
 
-bool mod_upper_modify(string_t *in, string_t **result)
+static bool
+mod_upper_modify(const struct sieve_variables_modifier *modf ATTR_UNUSED,
+		 string_t *in, string_t **result)
 {
 	char *content;
 
@@ -227,7 +246,9 @@ bool mod_upper_modify(string_t *in, string_t **result)
 	return TRUE;
 }
 
-bool mod_lower_modify(string_t *in, string_t **result)
+static bool
+mod_lower_modify(const struct sieve_variables_modifier *modf ATTR_UNUSED,
+		 string_t *in, string_t **result)
 {
 	char *content;
 
@@ -245,7 +266,9 @@ bool mod_lower_modify(string_t *in, string_t **result)
 	return TRUE;
 }
 
-bool mod_length_modify(string_t *in, string_t **result)
+static bool
+mod_length_modify(const struct sieve_variables_modifier *modf ATTR_UNUSED,
+		  string_t *in, string_t **result)
 {
 	*result = t_str_new(64);
 	str_printfa(*result, "%llu", (unsigned long long)
@@ -253,25 +276,53 @@ bool mod_length_modify(string_t *in, string_t **result)
 	return TRUE;
 }
 
-bool mod_quotewildcard_modify(string_t *in, string_t **result)
+static bool
+mod_quotewildcard_modify(const struct sieve_variables_modifier *modf,
+			 string_t *in, string_t **result)
 {
-	unsigned int i;
-	const char *content;
+	size_t max_var_size =
+		sieve_variables_get_max_variable_size(modf->var_ext);
+	const unsigned char *p, *poff, *pend;
+	size_t new_size;
 
 	if ( str_len(in) == 0 ) {
+		/* empty string */
 		*result = in;
 		return TRUE;
 	}
 
-	*result = t_str_new(str_len(in) * 2);
-	content = (const char *) str_data(in);
+	/* allocate new string */
+	new_size = str_len(in) + 16;
+	if (new_size > max_var_size)
+		new_size = max_var_size;
+	*result = t_str_new(new_size + 1);
 
-	for ( i = 0; i < str_len(in); i++ ) {
-		if ( content[i] == '*' || content[i] == '?' || content[i] == '\\' ) {
+	/* escape string */
+	p = str_data(in);
+	pend = p + str_len(in);
+	poff = p;
+	while (p < pend) {
+		unsigned int n = uni_utf8_char_bytes((char)*p);
+
+		if (n == 1 && (*p == '*' || *p == '?' || *p == '\\')) {
+			str_append_data(*result, poff, p - poff);
+			poff = p;
+
+			if (str_len(*result) + 2 > max_var_size)
+				break;
+
 			str_append_c(*result, '\\');
+		} else if ((str_len(*result) + (p - poff) + n) > max_var_size) {
+			break;
 		}
-		str_append_c(*result, content[i]);
+		if (p + n > pend) {
+			p = pend;
+			break;
+		}
+		p += n;
 	}
+
+	str_append_data(*result, poff, p - poff);
 
 	return TRUE;
 }
@@ -432,8 +483,9 @@ bool sieve_variables_modifiers_code_dump
 	return TRUE;
 }
 
-int sieve_variables_modifiers_code_read
-(const struct sieve_runtime_env *renv, sieve_size_t *address,
+int sieve_variables_modifiers_code_read(
+	const struct sieve_runtime_env *renv,
+	const struct sieve_extension *var_ext, sieve_size_t *address,
 	ARRAY_TYPE(sieve_variables_modifier) *modifiers)
 {
 	unsigned int lprec, mdfs, i;
@@ -449,7 +501,8 @@ int sieve_variables_modifiers_code_read
 	for ( i = 0; i < mdfs; i++ ) {
 		struct sieve_variables_modifier modf;
 
-		if ( !ext_variables_opr_modifier_read(renv, address, &modf) )
+		if ( !ext_variables_opr_modifier_read(renv, var_ext,
+						      address, &modf) )
 			return SIEVE_EXEC_BIN_CORRUPT;
 		if ( modf.def != NULL ) {
 			if ( modf.def->precedence >= lprec ) {
@@ -482,8 +535,13 @@ int sieve_variables_modifiers_apply
 	unsigned int i, modf_count;
 
 	/* Hold value within limits */
-	if ( str_len(*value) > config->max_variable_size )
-		str_truncate(*value, config->max_variable_size);
+	if ( str_len(*value) > config->max_variable_size ) {
+		/* assume variable originates from code, so copy it first */
+		string_t *new_value = t_str_new(config->max_variable_size+3);
+		str_append_str(new_value, *value);
+		*value = new_value;
+		str_truncate_utf8(*value, config->max_variable_size);
+	}
 	
 	if ( !array_is_created(modifiers) )
 		return SIEVE_EXEC_OK;
@@ -497,7 +555,7 @@ int sieve_variables_modifiers_apply
 		const struct sieve_variables_modifier *modf = &modfs[i];
 
 		if ( modf->def != NULL && modf->def->modify != NULL ) {
-			if ( !modf->def->modify(*value, &new_value) )
+			if ( !modf->def->modify(modf, *value, &new_value) )
 				return SIEVE_EXEC_FAILURE;
 
 			*value = new_value;
@@ -513,7 +571,7 @@ int sieve_variables_modifiers_apply
 
 			/* Hold value within limits */
 			if ( str_len(*value) > config->max_variable_size )
-				str_truncate(*value, config->max_variable_size);
+				str_truncate_utf8(*value, config->max_variable_size);
 		}
 	}
 	return SIEVE_EXEC_OK;
