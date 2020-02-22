@@ -17,7 +17,11 @@ dovecot (1:2.3.13+dfsg1-1) UNRELEASED; urgency=medium
   * [6f33f3f] Ignore package-contains-documentation-outside-usr-share-doc
     false-positives
 
- -- Christian Göttsche <cgzones@googlemail.com>  Mon, 04 Jan 2021 15:29:15 +0100
+  [ Pino Toscano ]
+  * [15fcb1d] d/{control,rules}: disable apparmor support on !linux archs
+    (Closes: #951869)
+
+ -- Christian Göttsche <cgzones@googlemail.com>  Mon, 04 Jan 2021 15:38:02 +0100
 
 dovecot (1:2.3.11.3+dfsg1-2) unstable; urgency=medium
 
