@@ -1,3 +1,41 @@
+dovecot (1:2.3.4.1-5+deb10u2) buster-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Apply upstream fixes for CVE-2020-10957, CVE-2020-10958 and CVE-2020-10967
+    (Closes: #960963)
+    - lib-smtp: smtp-server-cmd-vrfy - Restructure parameter parsing.
+    - lib-smtp: smtp-syntax - Do not allow NULL return parameters for
+      smtp_string_parse().
+    - lib-smtp: smtp-syntax - Do not allow NULL return parameters for
+      smtp_xtext_parse().
+    - lib-smtp: syntax: Fix smtp_ehlo_line_parse() to also record the last
+      parameter.
+    - lib-smtp: smtp-syntax - Do not allow NULL return parameters for
+      smtp_ehlo_line_parse().
+    - lib-smtp: smtp-syntax - Return 0 for smtp_string_parse() with empty
+      input.
+    - lib-smtp: Add tests for smtp_string_parse() and smtp_string_write().
+    - lib-smtp: test-smtp-server-errors - Add tests for VRFY and NOOP commands
+      with invalid parameters.
+    - lib-smtp: server: command: Move core of
+      smtp_server_command_submit_reply() into a separate function.
+    - lib-smtp: smtp-server-command - Assign cmd->reg immediately.
+    - lib-smtp: smtp-server-command - Guarantee that non-destroy hooks aren't
+      called for an ended command.
+    - lib-smtp: smtp-server-command - Perform initial command execution in
+      separate function.
+    - lib-smtp: smtp-server-connection - Hold a command reference while
+      executing a command.
+    - lib-smtp: test-smtp-server-errors - Add tests for large series of empty
+      and bad commands.
+    - lib-smtp: smtp-address - Don't return NULL from smtp_address_clone*()
+      unless the input is NULL.
+    - lib-smtp: smtp-address - Don't recognize an address with empty localpart
+      as <>.
+    - lmtp: lmtp-commands - Explicity prohibit empty RCPT path.
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Mon, 18 May 2020 22:09:08 +0200
+
 dovecot (1:2.3.4.1-5+deb10u1) buster-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
