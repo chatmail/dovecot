@@ -191,10 +191,3 @@ override_dh_installdocs:
 	dh_installdocs
 	cp pigeonhole/README	$(CORE_DIR)/usr/share/doc/dovecot-core/pigeonhole.README
 	cp pigeonhole/NEWS	$(CORE_DIR)/usr/share/doc/dovecot-core/pigeonhole.NEWS
-
-.PHONY: override_dh_auto_configure override_dh_auto_build \
-	override_dh_auto_clean override_dh_auto_install \
-	override_dh_gencontrol override_dh_installinit \
-	override_dh_strip override_dh_installpam \
-	override_dh_makeshlibs override_dh_installdocs \
-	override_dh_install override_dh_systemd_enable
