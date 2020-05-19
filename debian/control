@@ -39,6 +39,7 @@ Vcs-Browser: https://salsa.debian.org/debian/dovecot
 
 Package: dovecot-core
 Architecture: any
+Pre-Depends: ${misc:Pre-Depends}
 Depends: adduser,
          libpam-runtime (>= 0.76-13.1),
          lsb-base,
