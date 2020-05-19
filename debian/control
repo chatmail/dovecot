@@ -33,7 +33,7 @@ Build-Depends: debhelper-compat (= 12),
                pkg-config,
                zlib1g-dev
 Standards-Version: 4.4.0
-Homepage: http://dovecot.org/
+Homepage: https://dovecot.org/
 Vcs-Git: https://salsa.debian.org/debian/dovecot.git
 Vcs-Browser: https://salsa.debian.org/debian/dovecot
 
