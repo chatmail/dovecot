@@ -20,3 +20,5 @@ dovecot-core: package-contains-empty-directory usr/share/dovecot/protocols.d/
 dovecot-core: package-contains-empty-directory usr/lib/dovecot/modules/dict/
 dovecot-core: package-contains-empty-directory usr/lib/dovecot/modules/settings/
 dovecot-core: spelling-error-in-readme-debian dovenull dovenull (duplicate word) dovenull
+dovecot-core: library-not-linked-against-libc usr/lib/dovecot/modules/old-stats/libold_stats_mail.so
+dovecot-core: library-not-linked-against-libc usr/lib/dovecot/modules/old-stats/libstats_auth.so
