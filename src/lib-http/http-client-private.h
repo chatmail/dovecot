@@ -99,6 +99,7 @@ struct http_client_request {
 	struct http_client_connection *conn;
 
 	struct event *event;
+	const char *const *event_headers;
 	unsigned int last_status;
 
 	string_t *headers;
@@ -108,11 +109,22 @@ struct http_client_request {
 	uoff_t payload_size, payload_offset;
 	struct ostream *payload_output;
 
+	/* Time when request can be sent the next time. This is set by
+	   http_client_request_delay*(). Default is 0 = immediately. Retries
+	   can update this. */
 	struct timeval release_time;
+	/* Time when http_client_request_submit() was called. */
 	struct timeval submit_time;
+	/* Time when the request was first sent to the server. The HTTP
+	   connection already exists at this time. */
 	struct timeval first_sent_time;
+	/* Time when the request was last sent to the server (if it was
+	   retried). */
 	struct timeval sent_time;
+	/* Time when the HTTP response header was last received. */
 	struct timeval response_time;
+	/* Time when the request will be aborted. Set by
+	   http_client_request_set_timeout(). */
 	struct timeval timeout_time;
 	unsigned int timeout_msecs;
 	unsigned int attempt_timeout_msecs;
@@ -478,8 +490,6 @@ void http_client_request_ref(struct http_client_request *req);
 bool http_client_request_unref(struct http_client_request **_req);
 void http_client_request_destroy(struct http_client_request **_req);
 
-int http_client_request_delay_from_response(struct http_client_request *req,
-	const struct http_response *response);
 void http_client_request_get_peer_addr(const struct http_client_request *req,
 	struct http_client_peer_addr *addr);
 enum http_response_payload_type

@@ -1,6 +1,7 @@
 /* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
+#include "var-expand.h"
 #include "buffer.h"
 #include "settings-parser.h"
 #include "service-settings.h"
@@ -59,12 +60,14 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, libexec_dir),
 	DEF(SET_STR, mail_plugins),
 	DEF(SET_STR, mail_plugin_dir),
+	DEF(SET_STR_VARS, mail_temp_dir),
 	DEF(SET_BOOL, auth_debug),
 	DEF(SET_STR, auth_socket_path),
 	DEF(SET_STR, doveadm_socket_path),
 	DEF(SET_UINT, doveadm_worker_count),
 	DEF(SET_IN_PORT, doveadm_port),
 	{ SET_ALIAS, "doveadm_proxy_port", 0, NULL },
+	DEF(SET_ENUM, doveadm_ssl),
 	DEF(SET_STR, doveadm_username),
 	DEF(SET_STR, doveadm_password),
 	DEF(SET_STR, doveadm_allowed_commands),
@@ -87,11 +90,13 @@ const struct doveadm_settings doveadm_default_settings = {
 	.libexec_dir = PKG_LIBEXECDIR,
 	.mail_plugins = "",
 	.mail_plugin_dir = MODULEDIR,
+	.mail_temp_dir = "/tmp",
 	.auth_debug = FALSE,
 	.auth_socket_path = "auth-userdb",
 	.doveadm_socket_path = "doveadm-server",
 	.doveadm_worker_count = 0,
 	.doveadm_port = 0,
+	.doveadm_ssl = "no:ssl:starttls",
 	.doveadm_username = "doveadm",
 	.doveadm_password = "",
 	.doveadm_allowed_commands = "",
@@ -204,4 +209,14 @@ void doveadm_get_ssl_settings(struct ssl_iostream_settings *set_r, pool_t pool)
 	master_service_ssl_settings_to_iostream_set(doveadm_ssl_set, pool,
 						    MASTER_SERVICE_SSL_SETTINGS_TYPE_CLIENT,
 						    set_r);
+}
+
+void doveadm_settings_expand(struct doveadm_settings *set, pool_t pool)
+{
+	struct var_expand_table tab[] = { { '\0', NULL, NULL } };
+	const char *error;
+
+	if (settings_var_expand(&doveadm_setting_parser_info, set,
+				pool, tab, &error) <= 0)
+		i_fatal("Failed to expand settings: %s", error);
 }

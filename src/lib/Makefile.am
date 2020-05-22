@@ -1,3 +1,6 @@
+AM_CPPFLAGS = \
+	$(LIBUNWIND_CFLAGS)
+
 noinst_LTLIBRARIES = liblib.la
 
 BUILT_SOURCES = $(srcdir)/unicodemap.c
@@ -10,6 +13,7 @@ $(srcdir)/UnicodeData.txt:
 $(srcdir)/unicodemap.c: $(srcdir)/unicodemap.pl $(srcdir)/UnicodeData.txt
 	perl $(srcdir)/unicodemap.pl < $(srcdir)/UnicodeData.txt > $@
 
+liblib_la_LIBADD = $(LIBUNWIND_LIBS)
 liblib_la_SOURCES = \
 	array.c \
 	aqueue.c \
@@ -18,7 +22,6 @@ liblib_la_SOURCES = \
 	base32.c \
 	base64.c \
 	bits.c \
-	bloomfilter.c \
 	bsearch-insert-pos.c \
 	buffer.c \
 	child-wait.c \
@@ -113,7 +116,6 @@ liblib_la_SOURCES = \
 	mmap-util.c \
 	module-dir.c \
 	mountpoint.c \
-	murmurhash3.c \
 	net.c \
 	nfs-workarounds.c \
 	numpack.c \
@@ -145,6 +147,7 @@ liblib_la_SOURCES = \
 	sha1.c \
 	sha2.c \
 	sha3.c \
+	sleep.c \
 	sort.c \
 	stats-dist.c \
 	str.c \
@@ -176,7 +179,6 @@ headers = \
 	base32.h \
 	base64.h \
 	bits.h \
-	bloomfilter.h \
 	bsearch-insert-pos.h \
 	buffer.h \
 	byteorder.h \
@@ -267,7 +269,6 @@ headers = \
 	module-context.h \
 	module-dir.h \
 	mountpoint.h \
-	murmurhash3.h \
 	net.h \
 	nfs-workarounds.h \
 	numpack.h \
@@ -299,6 +300,7 @@ headers = \
 	sha1.h \
 	sha2.h \
 	sha3.h \
+	sleep.h \
 	sort.h \
 	stats-dist.h \
 	str.h \
@@ -335,16 +337,17 @@ test_lib_SOURCES = \
 	test-lib.c \
 	test-array.c \
 	test-aqueue.c \
+	test-backtrace.c \
 	test-base32.c \
 	test-base64.c \
 	test-bits.c \
-	test-bloomfilter.c \
 	test-bsearch-insert-pos.c \
 	test-buffer.c \
 	test-byteorder.c \
 	test-connection.c \
 	test-crc32.c \
 	test-data-stack.c \
+	test-event-category-register.c \
 	test-event-filter.c \
 	test-event-flatten.c \
 	test-event-log.c \
@@ -387,7 +390,6 @@ test_lib_SOURCES = \
 	test-mempool.c \
 	test-mempool-allocfree.c \
 	test-mempool-alloconly.c \
-	test-murmurhash3.c \
 	test-pkcs5.c \
 	test-net.c \
 	test-numpack.c \

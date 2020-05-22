@@ -64,6 +64,8 @@ struct sieve_environment {
 	const char *home_dir;
 	const char *temp_dir;
 
+	struct event *event_parent;
+
 	enum sieve_flag flags;
 	enum sieve_env_location location;
 	enum sieve_delivery_phase delivery_phase;
@@ -158,6 +160,8 @@ enum sieve_execute_flags {
 	SIEVE_EXECUTE_FLAG_NO_ENVELOPE = (1<<2),
 	/* Skip sending responses */
 	SIEVE_EXECUTE_FLAG_SKIP_RESPONSES = (1<<3),
+	/* Log result as info (when absent, only debug logging is performed) */
+	SIEVE_EXECUTE_FLAG_LOG_RESULT = (1<<4),
 };
 
 /*
@@ -234,6 +238,12 @@ struct sieve_script_env {
 	/* Interface for rejecting mail */
 	int (*reject_mail)(const struct sieve_script_env *senv,
 		const struct smtp_address *recipient, const char *reason);
+
+	/* Interface for amending result messages */
+	const char *
+	(*result_amend_log_message)(const struct sieve_script_env *senv,
+				    enum log_type log_type,
+				    const char *message);
 
 	/* Execution status record */
 	struct sieve_exec_status *exec_status;

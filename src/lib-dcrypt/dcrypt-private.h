@@ -129,10 +129,12 @@ struct dcrypt_vfs {
 
 	bool (*rsa_encrypt)(struct dcrypt_public_key *key,
 			    const unsigned char *data, size_t data_len,
-			    buffer_t *result, const char **error_r);
+			    buffer_t *result, enum dcrypt_padding padding,
+			    const char **error_r);
 	bool (*rsa_decrypt)(struct dcrypt_private_key *key,
 			    const unsigned char *data, size_t data_len,
-			    buffer_t *result, const char **error_r);
+			    buffer_t *result, enum dcrypt_padding padding,
+			    const char **error_r);
 
 	const char *(*oid2name)(const unsigned char *oid,
 				size_t oid_len, const char **error_r);
@@ -151,6 +153,49 @@ struct dcrypt_vfs {
 			       const char **error_r);
 	bool (*private_key_id_old)(struct dcrypt_private_key *key,
 				   buffer_t *result, const char **error_r);
+	bool (*key_store_private_raw)(struct dcrypt_private_key *key,
+				      pool_t pool,
+				      enum dcrypt_key_type *key_type_r,
+				      ARRAY_TYPE(dcrypt_raw_key) *keys_r,
+				      const char **error_r);
+	bool (*key_store_public_raw)(struct dcrypt_public_key *key,
+				     pool_t pool,
+				     enum dcrypt_key_type *key_type_r,
+				     ARRAY_TYPE(dcrypt_raw_key) *keys_r,
+				     const char **error_r);
+	bool (*key_load_private_raw)(struct dcrypt_private_key **key_r,
+				     enum dcrypt_key_type key_type,
+				     const ARRAY_TYPE(dcrypt_raw_key) *keys,
+				     const char **error_r);
+	bool (*key_load_public_raw)(struct dcrypt_public_key **key_r,
+				    enum dcrypt_key_type key_type,
+				    const ARRAY_TYPE(dcrypt_raw_key) *keys,
+				    const char **error_r);
+	bool (*key_get_curve_public)(struct dcrypt_public_key *key,
+				     const char **curve_r, const char **error_r);
+	const char *(*key_get_id_public)(struct dcrypt_public_key *key);
+	const char *(*key_get_id_private)(struct dcrypt_private_key *key);
+	void (*key_set_id_public)(struct dcrypt_public_key *key, const char *id);
+	void (*key_set_id_private)(struct dcrypt_private_key *key, const char *id);
+	enum dcrypt_key_usage (*key_get_usage_public)(struct dcrypt_public_key *key);
+	enum dcrypt_key_usage (*key_get_usage_private)(struct dcrypt_private_key *key);
+	void (*key_set_usage_public)(struct dcrypt_public_key *key,
+				     enum dcrypt_key_usage usage);
+	void (*key_set_usage_private)(struct dcrypt_private_key *key,
+				      enum dcrypt_key_usage usage);
+	bool (*sign)(struct dcrypt_private_key *key, const char *algorithm,
+		     enum dcrypt_signature_format format,
+		     const void *data, size_t data_len, buffer_t *signature_r,
+		     enum dcrypt_padding padding, const char **error_r);
+	bool (*verify)(struct dcrypt_public_key *key, const char *algorithm,
+		       enum dcrypt_signature_format format,
+		       const void *data, size_t data_len,
+		       const unsigned char *signature, size_t signature_len,
+		       bool *valid_r, enum dcrypt_padding padding,
+		       const char **error_r);
+	bool (*ecdh_derive_secret)(struct dcrypt_private_key *priv_key,
+				   struct dcrypt_public_key *pub_key,
+				   buffer_t *shared_secret, const char **error_r);
 };
 
 void dcrypt_set_vfs(struct dcrypt_vfs *vfs);
@@ -159,5 +204,8 @@ void dcrypt_openssl_init(struct module *module ATTR_UNUSED);
 void dcrypt_gnutls_init(struct module *module ATTR_UNUSED);
 void dcrypt_openssl_deinit(void);
 void dcrypt_gnutls_deinit(void);
+
+int parse_jwk_key(const char *key_data, struct json_tree **tree_r,
+		  const char **error_r);
 
 #endif

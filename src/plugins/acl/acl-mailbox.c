@@ -174,6 +174,7 @@ static void acl_mailbox_fail_not_found(struct mailbox *box)
 		mail_storage_set_error(box->storage, MAIL_ERROR_PERM,
 				       MAIL_ERRSTR_NO_PERMISSION);
 	} else if (ret == 0) {
+		box->acl_no_lookup_right = TRUE;
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
 				T_MAIL_ERR_MAILBOX_NOT_FOUND(box->vname));
 	}
@@ -486,6 +487,34 @@ static int acl_mailbox_exists(struct mailbox *box, bool auto_boxes,
 	return 0;
 }
 
+bool acl_mailbox_have_extra_attribute_rights(struct mailbox *box)
+{
+	/* RFC 5464:
+
+	   When the ACL extension [RFC4314] is present, users can only set and
+	   retrieve private or shared mailbox annotations on a mailbox on which
+	   they have the "l" right and any one of the "r", "s", "w", "i", or "p"
+	   rights.
+	*/
+	const enum acl_storage_rights check_rights[] = {
+		ACL_STORAGE_RIGHT_READ,
+		ACL_STORAGE_RIGHT_WRITE_SEEN,
+		ACL_STORAGE_RIGHT_WRITE,
+		ACL_STORAGE_RIGHT_INSERT,
+		ACL_STORAGE_RIGHT_POST,
+	};
+	for (unsigned int i = 0; i < N_ELEMENTS(check_rights); i++) {
+		int ret = acl_mailbox_right_lookup(box, check_rights[i]);
+		if (ret > 0)
+			return TRUE;
+		if (ret < 0) {
+			/* unexpected error - stop checking further */
+			return FALSE;
+		}
+	}
+	return FALSE;
+}
+
 static int acl_mailbox_open_check_acl(struct mailbox *box)
 {
 	struct acl_mailbox *abox = ACL_CONTEXT_REQUIRE(box);
@@ -505,6 +534,10 @@ static int acl_mailbox_open_check_acl(struct mailbox *box)
 			ACL_STORAGE_RIGHT_POST : ACL_STORAGE_RIGHT_INSERT;
 	} else if (box->deleting) {
 		open_right = ACL_STORAGE_RIGHT_DELETE;
+	} else if ((box->flags & MAILBOX_FLAG_ATTRIBUTE_SESSION) != 0) {
+		/* GETMETADATA/SETMETADATA requires "l" right and another one
+		   which is checked afterwards. */
+		open_right = ACL_STORAGE_RIGHT_LOOKUP;
 	} else {
 		open_right = ACL_STORAGE_RIGHT_READ;
 	}
@@ -524,6 +557,10 @@ static int acl_mailbox_open_check_acl(struct mailbox *box)
 			return -1;
 		if (ret == 0)
 			abox->no_read_right = TRUE;
+	}
+	if ((box->flags & MAILBOX_FLAG_ATTRIBUTE_SESSION) != 0) {
+		if (!acl_mailbox_have_extra_attribute_rights(box))
+			return -1;
 	}
 	return 0;
 }

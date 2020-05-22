@@ -1,6 +1,7 @@
 SUBDIRS = \
 	man \
 	example-config \
+	rfc \
 	extensions \
 	locations \
 	plugins

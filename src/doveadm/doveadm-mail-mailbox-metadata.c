@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "str.h"
+#include "istream.h"
 #include "mail-namespace.h"
 #include "mail-storage.h"
 #include "doveadm-print.h"
@@ -35,16 +36,20 @@ cmd_mailbox_metadata_open_mailbox(struct metadata_cmd_context *mctx,
 			return -1;
 		}
 
-		/* server attribute */
+		/* Server attribute. It shouldn't depend on INBOX's ACLs,
+		   so ignore them. */
 		*ns_r = mail_namespace_find_inbox(user->namespaces);
-		*box_r = mailbox_alloc((*ns_r)->list, "INBOX", 0);
+		*box_r = mailbox_alloc((*ns_r)->list, "INBOX",
+				       MAILBOX_FLAG_IGNORE_ACLS |
+				       MAILBOX_FLAG_ATTRIBUTE_SESSION);
 
 		mctx->key = t_strconcat(MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT_SERVER,
 					mctx->key, NULL);
 	} else {
 		/* mailbox attributes */
 		*ns_r = mail_namespace_find(user->namespaces, mctx->mailbox);
-		*box_r = mailbox_alloc((*ns_r)->list, mctx->mailbox, 0);
+		*box_r = mailbox_alloc((*ns_r)->list, mctx->mailbox,
+				       MAILBOX_FLAG_ATTRIBUTE_SESSION);
 	}
 	mailbox_set_reason(*box_r, mctx->ctx.cmd->name);
 
@@ -74,9 +79,9 @@ cmd_mailbox_metadata_set_run(struct doveadm_mail_cmd_context *_ctx,
 	if (ret != 0)
 		return ret;
 
-	trans = mailbox_transaction_begin(box, ctx->empty_mailbox_name ?
-					  MAILBOX_TRANSACTION_FLAG_EXTERNAL : 0,
-					  __func__);
+	trans = mailbox_transaction_begin(box, (ctx->empty_mailbox_name ?
+					  MAILBOX_TRANSACTION_FLAG_EXTERNAL : 0) |
+					  ctx->ctx.transaction_flags, __func__);
 
 	ret = ctx->value.value == NULL ?
 		mailbox_attribute_unset(trans, ctx->key_type, ctx->key) :
@@ -215,7 +220,12 @@ cmd_mailbox_metadata_get_run(struct doveadm_mail_cmd_context *_ctx,
 		/* not found, print as empty */
 		doveadm_print("");
 	} else if (value.value_stream != NULL) {
-		doveadm_print_istream(value.value_stream);
+		if (doveadm_print_istream(value.value_stream) < 0) {
+			i_error("read(%s) failed: %s",
+				i_stream_get_name(value.value_stream),
+				i_stream_get_error(value.value_stream));
+			ret = -1;
+		}
 	} else {
 		doveadm_print(value.value);
 	}

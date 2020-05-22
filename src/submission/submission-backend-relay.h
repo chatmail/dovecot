@@ -14,12 +14,14 @@ struct submision_backend_relay_settings {
 
 	enum smtp_protocol protocol;
 	const char *path, *host;
+	struct ip_addr ip; /* if empty, resolve host */
 	in_port_t port;
 
 	const char *const *extra_capabilities;
 
 	const char *user, *master_user;
 	const char *password;
+	const struct dsasl_client_mech *sasl_mech;
 
 	enum smtp_client_connection_ssl_mode ssl_mode;
 

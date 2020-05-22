@@ -107,7 +107,7 @@ static int maildir_mail_stat(struct mail *mail, struct stat *st_r)
 	const char *path;
 	int fd, ret;
 
-	if (mail->lookup_abort == MAIL_LOOKUP_ABORT_NOT_IN_CACHE) {
+	if (mail->lookup_abort >= MAIL_LOOKUP_ABORT_NOT_IN_CACHE) {
 		mail_set_aborted(mail);
 		return -1;
 	}
@@ -580,6 +580,12 @@ maildir_mail_get_special(struct mail *_mail, enum mail_fetch_field field,
 			return -1;
 		*value_r = p_strdup_printf(mail->mail.data_pool, "%lu",
 					   (unsigned long)st.st_nlink);
+		return 0;
+	case MAIL_FETCH_REFCOUNT_ID:
+		if (maildir_mail_stat(_mail, &st) < 0)
+			return -1;
+		*value_r = p_strdup_printf(mail->mail.data_pool, "%llu",
+					   (unsigned long long)st.st_ino);
 		return 0;
 	default:
 		return index_mail_get_special(_mail, field, value_r);

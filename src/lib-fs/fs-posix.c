@@ -11,6 +11,7 @@
 #include "write-full.h"
 #include "file-lock.h"
 #include "file-dotlock.h"
+#include "time-util.h"
 #include "fs-api-private.h"
 
 #include <stdio.h>
@@ -75,9 +76,10 @@ static struct fs *fs_posix_alloc(void)
 }
 
 static int
-fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
+fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set,
+	      const char **error_r)
 {
-	struct posix_fs *fs = (struct posix_fs *)_fs;
+	struct posix_fs *fs = container_of(_fs, struct posix_fs, fs);
 	const char *const *tmp;
 
 	fs->temp_file_prefix = set->temp_file_prefix != NULL ?
@@ -107,21 +109,21 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 			fs->have_dirs = TRUE;
 		} else if (strcmp(arg, "no-fsync") == 0) {
 			fs->disable_fsync = TRUE;
-		} else if (str_begins(arg, "accurate-mtime")) {
+		} else if (strcmp(arg, "accurate-mtime") == 0) {
 			fs->accurate_mtime = TRUE;
 		} else if (str_begins(arg, "mode=")) {
 			unsigned int mode;
 			if (str_to_uint_oct(arg+5, &mode) < 0) {
-				fs_set_error(_fs, "Invalid mode value: %s", arg+5);
+				*error_r = t_strdup_printf("Invalid mode value: %s", arg+5);
 				return -1;
 			}
 			fs->mode = mode & 0666;
 			if (fs->mode == 0) {
-				fs_set_error(_fs, "Invalid mode: %s", arg+5);
+				*error_r = t_strdup_printf("Invalid mode: %s", arg+5);
 				return -1;
 			}
 		} else {
-			fs_set_error(_fs, "Unknown arg '%s'", arg);
+			*error_r = t_strdup_printf("Unknown arg '%s'", arg);
 			return -1;
 		}
 	}
@@ -130,7 +132,7 @@ fs_posix_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 
 static void fs_posix_deinit(struct fs *_fs)
 {
-	struct posix_fs *fs = (struct posix_fs *)_fs;
+	struct posix_fs *fs = container_of(_fs, struct posix_fs, fs);
 
 	i_free(fs->temp_file_prefix);
 	i_free(fs->root_path);
@@ -140,7 +142,7 @@ static void fs_posix_deinit(struct fs *_fs)
 
 static enum fs_properties fs_posix_get_properties(struct fs *_fs)
 {
-	struct posix_fs *fs = (struct posix_fs *)_fs;
+	struct posix_fs *fs = container_of(_fs, struct posix_fs, fs);
 	enum fs_properties props =
 		FS_PROPERTY_LOCKS | FS_PROPERTY_FASTCOPY | FS_PROPERTY_RENAME |
 		FS_PROPERTY_STAT | FS_PROPERTY_ITER | FS_PROPERTY_RELIABLEITER;
@@ -156,16 +158,21 @@ static enum fs_properties fs_posix_get_properties(struct fs *_fs)
 }
 
 static int
-fs_posix_get_mode(struct posix_fs *fs, const char *path, mode_t *mode_r)
+fs_posix_get_mode(struct posix_fs_file *file, const char *path, mode_t *mode_r)
 {
+	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
 	struct stat st;
 	const char *p;
 
 	*mode_r = fs->mode;
 
+	/* This function is used to get mode of the parent directory, so path
+	   is never the same as file->path. The file is used just to set the
+	   errors. */
 	while (stat(path, &st) < 0) {
 		if (errno != ENOENT) {
-			fs_set_error(&fs->fs, "stat(%s) failed: %m", path);
+			fs_set_error_errno(file->file.event,
+					   "stat(%s) failed: %m", path);
 			return -1;
 		}
 		p = strrchr(path, '/');
@@ -183,7 +190,7 @@ fs_posix_get_mode(struct posix_fs *fs, const char *path, mode_t *mode_r)
 	return 0;
 }
 
-static int fs_posix_mkdir_parents(struct posix_fs *fs, const char *path)
+static int fs_posix_mkdir_parents(struct posix_fs_file *file, const char *path)
 {
 	const char *dir, *fname;
 	mode_t mode, dir_mode;
@@ -193,7 +200,7 @@ static int fs_posix_mkdir_parents(struct posix_fs *fs, const char *path)
 		return 1;
 	dir = t_strdup_until(path, fname);
 
-	if (fs_posix_get_mode(fs, dir, &mode) < 0)
+	if (fs_posix_get_mode(file, dir, &mode) < 0)
 		return -1;
 	dir_mode = mode;
 	if ((dir_mode & 0600) != 0) dir_mode |= 0100;
@@ -205,13 +212,15 @@ static int fs_posix_mkdir_parents(struct posix_fs *fs, const char *path)
 	else if (errno == EEXIST)
 		return 1;
 	else {
-		fs_set_error(&fs->fs, "mkdir_parents(%s) failed: %m", dir);
+		fs_set_error_errno(file->file.event,
+				   "mkdir_parents(%s) failed: %m", dir);
 		return -1;
 	}
 }
 
-static int fs_posix_rmdir_parents(struct posix_fs *fs, const char *path)
+static int fs_posix_rmdir_parents(struct posix_fs_file *file, const char *path)
 {
+	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
 	const char *p;
 
 	if (fs->have_dirs)
@@ -233,7 +242,8 @@ static int fs_posix_rmdir_parents(struct posix_fs *fs, const char *path)
 			/* some other not-unexpected error */
 			break;
 		} else {
-			fs_set_error(&fs->fs, "rmdir(%s) failed: %m", path);
+			fs_set_error_errno(file->file.event,
+					   "rmdir(%s) failed: %m", path);
 			return -1;
 		}
 	}
@@ -242,7 +252,7 @@ static int fs_posix_rmdir_parents(struct posix_fs *fs, const char *path)
 
 static int fs_posix_create(struct posix_fs_file *file)
 {
-	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
+	struct posix_fs *fs = container_of(file->file.fs, struct posix_fs, fs);
 	string_t *str = t_str_new(256);
 	const char *slash;
 	unsigned int try_count = 0;
@@ -253,11 +263,11 @@ static int fs_posix_create(struct posix_fs_file *file)
 
 	if ((slash = strrchr(file->full_path, '/')) != NULL) {
 		str_append_data(str, file->full_path, slash - file->full_path);
-		if (fs_posix_get_mode(fs, str_c(str), &mode) < 0)
+		if (fs_posix_get_mode(file, str_c(str), &mode) < 0)
 			return -1;
 		str_append_c(str, '/');
 	} else {
-		if (fs_posix_get_mode(fs, ".", &mode) < 0)
+		if (fs_posix_get_mode(file, ".", &mode) < 0)
 			return -1;
 	}
 	str_append(str, fs->temp_file_prefix);
@@ -265,13 +275,14 @@ static int fs_posix_create(struct posix_fs_file *file)
 	fd = safe_mkstemp_hostpid(str, mode, (uid_t)-1, (gid_t)-1);
 	while (fd == -1 && errno == ENOENT &&
 	       try_count <= MAX_MKDIR_RETRY_COUNT) {
-		if (fs_posix_mkdir_parents(fs, str_c(str)) < 0)
+		if (fs_posix_mkdir_parents(file, str_c(str)) < 0)
 			return -1;
 		fd = safe_mkstemp_hostpid(str, mode, (uid_t)-1, (gid_t)-1);
 		try_count++;
 	}
 	if (fd == -1) {
-		fs_set_error(&fs->fs, "safe_mkstemp(%s) failed: %m", str_c(str));
+		fs_set_error_errno(file->file.event,
+				   "safe_mkstemp(%s) failed: %m", str_c(str));
 		return -1;
 	}
 	file->temp_path = i_strdup(str_c(str));
@@ -280,7 +291,6 @@ static int fs_posix_create(struct posix_fs_file *file)
 
 static int fs_posix_open(struct posix_fs_file *file)
 {
-	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
 	const char *path = file->full_path;
 
 	i_assert(file->fd == -1);
@@ -289,12 +299,14 @@ static int fs_posix_open(struct posix_fs_file *file)
 	case FS_OPEN_MODE_READONLY:
 		file->fd = open(path, O_RDONLY);
 		if (file->fd == -1)
-			fs_set_error(&fs->fs, "open(%s) failed: %m", path);
+			fs_set_error_errno(file->file.event,
+					   "open(%s) failed: %m", path);
 		break;
 	case FS_OPEN_MODE_APPEND:
 		file->fd = open(path, O_RDWR | O_APPEND);
 		if (file->fd == -1)
-			fs_set_error(&fs->fs, "open(%s) failed: %m", path);
+			fs_set_error_errno(file->file.event,
+					   "open(%s) failed: %m", path);
 		break;
 	case FS_OPEN_MODE_CREATE_UNIQUE_128:
 	case FS_OPEN_MODE_CREATE:
@@ -319,8 +331,9 @@ static void
 fs_posix_file_init(struct fs_file *_file, const char *path,
 		   enum fs_open_mode mode, enum fs_open_flags flags)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
-	struct posix_fs *fs = (struct posix_fs *)_file->fs;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
+	struct posix_fs *fs = container_of(_file->fs, struct posix_fs, fs);
 	guid_128_t guid;
 	size_t path_len = strlen(path);
 
@@ -346,12 +359,13 @@ fs_posix_file_init(struct fs_file *_file, const char *path,
 
 static void fs_posix_file_close(struct fs_file *_file)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 
 	if (file->fd != -1 && file->file.output == NULL) {
 		if (close(file->fd) < 0) {
-			fs_set_critical(file->file.fs, "close(%s) failed: %m",
-					file->full_path);
+			e_error(_file->event, "close(%s) failed: %m",
+				file->full_path);
 		}
 		file->fd = -1;
 	}
@@ -359,7 +373,8 @@ static void fs_posix_file_close(struct fs_file *_file)
 
 static void fs_posix_file_deinit(struct fs_file *_file)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 
 	i_assert(_file->output == NULL);
 
@@ -374,12 +389,13 @@ static void fs_posix_file_deinit(struct fs_file *_file)
 			break;
 		/* failed to create/replace this. delete the temp file */
 		if (unlink(file->temp_path) < 0) {
-			fs_set_critical(_file->fs, "unlink(%s) failed: %m",
-					file->temp_path);
+			e_error(_file->event, "unlink(%s) failed: %m",
+				file->temp_path);
 		}
 		break;
 	}
 
+	fs_file_free(_file);
 	i_free(file->temp_path);
 	i_free(file->full_path);
 	i_free(file->file.path);
@@ -400,7 +416,8 @@ static int fs_posix_open_for_read(struct posix_fs_file *file)
 
 static bool fs_posix_prefetch(struct fs_file *_file, uoff_t length ATTR_UNUSED)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 
 	if (fs_posix_open_for_read(file) < 0)
 		return TRUE;
@@ -417,7 +434,8 @@ static bool fs_posix_prefetch(struct fs_file *_file, uoff_t length ATTR_UNUSED)
 
 static ssize_t fs_posix_read(struct fs_file *_file, void *buf, size_t size)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 	ssize_t ret;
 
 	if (fs_posix_open_for_read(file) < 0)
@@ -426,15 +444,17 @@ static ssize_t fs_posix_read(struct fs_file *_file, void *buf, size_t size)
 	if (file->seek_to_beginning) {
 		file->seek_to_beginning = FALSE;
 		if (lseek(file->fd, 0, SEEK_SET) < 0) {
-			fs_set_critical(_file->fs, "lseek(%s, 0) failed: %m",
-					file->full_path);
+			fs_set_error_errno(_file->event,
+					   "lseek(%s, 0) failed: %m",
+					   file->full_path);
 			return -1;
 		}
 	}
 
 	ret = read(file->fd, buf, size);
 	if (ret < 0)
-		fs_set_error(_file->fs, "read(%s) failed: %m", file->full_path);
+		fs_set_error_errno(_file->event, "read(%s) failed: %m",
+				   file->full_path);
 	fs_posix_file_close(_file);
 	return ret;
 }
@@ -442,12 +462,13 @@ static ssize_t fs_posix_read(struct fs_file *_file, void *buf, size_t size)
 static struct istream *
 fs_posix_read_stream(struct fs_file *_file, size_t max_buffer_size)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 	struct istream *input;
 	int fd_dup;
 
 	if (fs_posix_open_for_read(file) < 0)
-		input = i_stream_create_error_str(errno, "%s", fs_last_error(_file->fs));
+		input = i_stream_create_error_str(errno, "%s", fs_file_last_error(_file));
 	else if ((fd_dup = dup(file->fd)) == -1)
 		input = i_stream_create_error_str(errno, "dup() failed: %m");
 	else {
@@ -463,7 +484,7 @@ fs_posix_read_stream(struct fs_file *_file, size_t max_buffer_size)
 
 static void fs_posix_write_rename_if_needed(struct posix_fs_file *file)
 {
-	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
+	struct posix_fs *fs = container_of(file->file.fs, struct posix_fs, fs);
 	const char *new_fname;
 
 	new_fname = fs_metadata_find(&file->file.metadata, FS_METADATA_WRITE_FNAME);
@@ -480,36 +501,36 @@ static void fs_posix_write_rename_if_needed(struct posix_fs_file *file)
 
 static int fs_posix_write_finish_link(struct posix_fs_file *file)
 {
-	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
 	unsigned int try_count = 0;
 	int ret;
 
 	ret = link(file->temp_path, file->full_path);
 	while (ret < 0 && errno == ENOENT &&
 	       try_count <= MAX_MKDIR_RETRY_COUNT) {
-		if (fs_posix_mkdir_parents(fs, file->full_path) < 0)
+		if (fs_posix_mkdir_parents(file, file->full_path) < 0)
 			return -1;
 		ret = link(file->temp_path, file->full_path);
 		try_count++;
 	}
 	if (ret < 0) {
-		fs_set_error(file->file.fs, "link(%s, %s) failed: %m",
-			     file->temp_path, file->full_path);
+		fs_set_error_errno(file->file.event, "link(%s, %s) failed: %m",
+				   file->temp_path, file->full_path);
 	}
 	return ret;
 }
 
 static int fs_posix_write_finish(struct posix_fs_file *file)
 {
-	struct posix_fs *fs = (struct posix_fs *)file->file.fs;
+	struct posix_fs *fs = container_of(file->file.fs, struct posix_fs, fs);
 	unsigned int try_count = 0;
 	int ret, old_errno;
 
 	if ((file->open_flags & FS_OPEN_FLAG_FSYNC) != 0 &&
 	    !fs->disable_fsync) {
 		if (fdatasync(file->fd) < 0) {
-			fs_set_error(file->file.fs, "fdatasync(%s) failed: %m",
-				     file->full_path);
+			fs_set_error_errno(file->file.event,
+					   "fdatasync(%s) failed: %m",
+					   file->full_path);
 			return -1;
 		}
 	}
@@ -519,12 +540,12 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 		   If requested, use utimes() to explicitly set a more accurate
 		   mtime. */
 		struct timeval tv[2];
-		if (gettimeofday(&tv[0], NULL) < 0)
-			i_fatal("gettimeofday() failed: %m");
+		i_gettimeofday(&tv[0]);
 		tv[1] = tv[0];
 		if ((utimes(file->temp_path, tv)) < 0) {
-			fs_set_error(file->file.fs, "utimes(%s) failed: %m",
-				     file->temp_path);
+			fs_set_error_errno(file->file.event,
+					   "utimes(%s) failed: %m",
+					   file->temp_path);
 			return -1;
 		}
 	}
@@ -536,8 +557,9 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 		ret = fs_posix_write_finish_link(file);
 		old_errno = errno;
 		if (unlink(file->temp_path) < 0) {
-			fs_set_error(file->file.fs, "unlink(%s) failed: %m",
-				     file->temp_path);
+			fs_set_error_errno(file->file.event,
+					   "unlink(%s) failed: %m",
+					   file->temp_path);
 		}
 		errno = old_errno;
 		if (ret < 0) {
@@ -550,14 +572,15 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 		ret = rename(file->temp_path, file->full_path);
 		while (ret < 0 && errno == ENOENT &&
 		       try_count <= MAX_MKDIR_RETRY_COUNT) {
-			if (fs_posix_mkdir_parents(fs, file->full_path) < 0)
+			if (fs_posix_mkdir_parents(file, file->full_path) < 0)
 				return -1;
 			ret = rename(file->temp_path, file->full_path);
 			try_count++;
 		}
 		if (ret < 0) {
-			fs_set_error(file->file.fs, "rename(%s, %s) failed: %m",
-				     file->temp_path, file->full_path);
+			fs_set_error_errno(file->file.event,
+					   "rename(%s, %s) failed: %m",
+					   file->temp_path, file->full_path);
 			return -1;
 		}
 		break;
@@ -573,7 +596,8 @@ static int fs_posix_write_finish(struct posix_fs_file *file)
 
 static int fs_posix_write(struct fs_file *_file, const void *data, size_t size)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 	ssize_t ret;
 
 	if (file->fd == -1) {
@@ -584,8 +608,8 @@ static int fs_posix_write(struct fs_file *_file, const void *data, size_t size)
 
 	if (file->open_mode != FS_OPEN_MODE_APPEND) {
 		if (write_full(file->fd, data, size) < 0) {
-			fs_set_error(_file->fs, "write(%s) failed: %m",
-				     file->full_path);
+			fs_set_error_errno(_file->event, "write(%s) failed: %m",
+					   file->full_path);
 			return -1;
 		}
 		return fs_posix_write_finish(file);
@@ -594,14 +618,14 @@ static int fs_posix_write(struct fs_file *_file, const void *data, size_t size)
 	/* atomic append - it should either succeed or fail */
 	ret = write(file->fd, data, size);
 	if (ret < 0) {
-		fs_set_error(_file->fs, "write(%s) failed: %m", file->full_path);
+		fs_set_error_errno(_file->event, "write(%s) failed: %m",
+				   file->full_path);
 		return -1;
 	}
 	if ((size_t)ret != size) {
-		fs_set_error(_file->fs,
+		fs_set_error(_file->event, ENOSPC,
 			     "write(%s) returned %"PRIuSIZE_T"/%"PRIuSIZE_T,
 			     file->full_path, (size_t)ret, size);
-		errno = ENOSPC;
 		return -1;
 	}
 	return 0;
@@ -609,7 +633,8 @@ static int fs_posix_write(struct fs_file *_file, const void *data, size_t size)
 
 static void fs_posix_write_stream(struct fs_file *_file)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 
 	i_assert(_file->output == NULL);
 
@@ -629,7 +654,8 @@ static void fs_posix_write_stream(struct fs_file *_file)
 
 static int fs_posix_write_stream_finish(struct fs_file *_file, bool success)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 	int ret = success ? 0 : -1;
 
 	o_stream_destroy(&_file->output);
@@ -657,8 +683,9 @@ static int fs_posix_write_stream_finish(struct fs_file *_file, bool success)
 static int
 fs_posix_lock(struct fs_file *_file, unsigned int secs, struct fs_lock **lock_r)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
-	struct posix_fs *fs = (struct posix_fs *)_file->fs;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
+	struct posix_fs *fs = container_of(_file->fs, struct posix_fs, fs);
 	struct dotlock_settings dotlock_set;
 	struct posix_fs_lock fs_lock, *ret_lock;
 	int ret = -1;
@@ -669,8 +696,9 @@ fs_posix_lock(struct fs_file *_file, unsigned int secs, struct fs_lock **lock_r)
 	switch (fs->lock_method) {
 	case FS_POSIX_LOCK_METHOD_FLOCK:
 #ifndef HAVE_FLOCK
-		fs_set_error(_file->fs, "flock() not supported by OS "
-			     "(for file %s)", file->full_path);
+		fs_set_error(_file->event, ENOTSUP,
+			     "flock() not supported by OS (for file %s)",
+			     file->full_path);
 #else
 		if (secs == 0) {
 			ret = file_try_lock(file->fd, file->full_path, F_WRLCK,
@@ -682,8 +710,8 @@ fs_posix_lock(struct fs_file *_file, unsigned int secs, struct fs_lock **lock_r)
 					     &fs_lock.file_lock);
 		}
 		if (ret < 0) {
-			fs_set_error(_file->fs, "flock(%s) failed: %m",
-				     file->full_path);
+			fs_set_error_errno(_file->event, "flock(%s) failed: %m",
+					   file->full_path);
 		}
 #endif
 		break;
@@ -698,9 +726,9 @@ fs_posix_lock(struct fs_file *_file, unsigned int secs, struct fs_lock **lock_r)
 					  DOTLOCK_CREATE_FLAG_NONBLOCK,
 					  &fs_lock.dotlock);
 		if (ret < 0) {
-			fs_set_error(_file->fs,
-				     "file_dotlock_create(%s) failed: %m",
-				     file->full_path);
+			fs_set_error_errno(_file->event,
+					   "file_dotlock_create(%s) failed: %m",
+					   file->full_path);
 		}
 		break;
 	}
@@ -715,7 +743,8 @@ fs_posix_lock(struct fs_file *_file, unsigned int secs, struct fs_lock **lock_r)
 
 static void fs_posix_unlock(struct fs_lock *_lock)
 {
-	struct posix_fs_lock *lock = (struct posix_fs_lock *)_lock;
+	struct posix_fs_lock *lock =
+		container_of(_lock, struct posix_fs_lock, lock);
 
 	if (lock->file_lock != NULL)
 		file_unlock(&lock->file_lock);
@@ -726,13 +755,14 @@ static void fs_posix_unlock(struct fs_lock *_lock)
 
 static int fs_posix_exists(struct fs_file *_file)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 	struct stat st;
 
 	if (stat(file->full_path, &st) < 0) {
 		if (errno != ENOENT) {
-			fs_set_error(_file->fs, "stat(%s) failed: %m",
-				     file->full_path);
+			fs_set_error_errno(_file->event, "stat(%s) failed: %m",
+					   file->full_path);
 			return -1;
 		}
 		return 0;
@@ -742,19 +772,22 @@ static int fs_posix_exists(struct fs_file *_file)
 
 static int fs_posix_stat(struct fs_file *_file, struct stat *st_r)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 
 	/* in case output != NULL it means that we're still writing to the file
 	   and fs_stat() shouldn't stat the unfinished file. this is done by
 	   fs-sis after fs_copy(). */
 	if (file->fd != -1 && _file->output == NULL) {
 		if (fstat(file->fd, st_r) < 0) {
-			fs_set_error(_file->fs, "fstat(%s) failed: %m", file->full_path);
+			fs_set_error_errno(_file->event, "fstat(%s) failed: %m",
+					   file->full_path);
 			return -1;
 		}
 	} else {
 		if (stat(file->full_path, st_r) < 0) {
-			fs_set_error(_file->fs, "stat(%s) failed: %m", file->full_path);
+			fs_set_error_errno(_file->event, "stat(%s) failed: %m",
+					   file->full_path);
 			return -1;
 		}
 	}
@@ -763,9 +796,10 @@ static int fs_posix_stat(struct fs_file *_file, struct stat *st_r)
 
 static int fs_posix_copy(struct fs_file *_src, struct fs_file *_dest)
 {
-	struct posix_fs_file *src = (struct posix_fs_file *)_src;
-	struct posix_fs_file *dest = (struct posix_fs_file *)_dest;
-	struct posix_fs *fs = (struct posix_fs *)_src->fs;
+	struct posix_fs_file *src =
+		container_of(_src, struct posix_fs_file, file);
+	struct posix_fs_file *dest =
+		container_of(_dest, struct posix_fs_file, file);
 	unsigned int try_count = 0;
 	int ret;
 
@@ -778,14 +812,14 @@ static int fs_posix_copy(struct fs_file *_src, struct fs_file *_dest)
 	}
 	while (ret < 0 && errno == ENOENT &&
 	       try_count <= MAX_MKDIR_RETRY_COUNT) {
-		if (fs_posix_mkdir_parents(fs, dest->full_path) < 0)
+		if (fs_posix_mkdir_parents(dest, dest->full_path) < 0)
 			return -1;
 		ret = link(src->full_path, dest->full_path);
 		try_count++;
 	}
 	if (ret < 0) {
-		fs_set_error(_src->fs, "link(%s, %s) failed: %m",
-			     src->full_path, dest->full_path);
+		fs_set_error_errno(_src->event, "link(%s, %s) failed: %m",
+				   src->full_path, dest->full_path);
 		return -1;
 	}
 	return 0;
@@ -793,23 +827,24 @@ static int fs_posix_copy(struct fs_file *_src, struct fs_file *_dest)
 
 static int fs_posix_rename(struct fs_file *_src, struct fs_file *_dest)
 {
-	struct posix_fs *fs = (struct posix_fs *)_src->fs;
-	struct posix_fs_file *src = (struct posix_fs_file *)_src;
-	struct posix_fs_file *dest = (struct posix_fs_file *)_dest;
+	struct posix_fs_file *src =
+		container_of(_src, struct posix_fs_file, file);
+	struct posix_fs_file *dest =
+		container_of(_dest, struct posix_fs_file, file);
 	unsigned int try_count = 0;
 	int ret;
 
 	ret = rename(src->full_path, dest->full_path);
 	while (ret < 0 && errno == ENOENT &&
 	       try_count <= MAX_MKDIR_RETRY_COUNT) {
-		if (fs_posix_mkdir_parents(fs, dest->full_path) < 0)
+		if (fs_posix_mkdir_parents(dest, dest->full_path) < 0)
 			return -1;
 		ret = rename(src->full_path, dest->full_path);
 		try_count++;
 	}
 	if (ret < 0) {
-		fs_set_error(_src->fs, "rename(%s, %s) failed: %m",
-			     src->full_path, dest->full_path);
+		fs_set_error_errno(_src->event, "rename(%s, %s) failed: %m",
+				   src->full_path, dest->full_path);
 		return -1;
 	}
 	return 0;
@@ -817,22 +852,24 @@ static int fs_posix_rename(struct fs_file *_src, struct fs_file *_dest)
 
 static int fs_posix_delete(struct fs_file *_file)
 {
-	struct posix_fs_file *file = (struct posix_fs_file *)_file;
-	struct posix_fs *fs = (struct posix_fs *)_file->fs;
+	struct posix_fs_file *file =
+		container_of(_file, struct posix_fs_file, file);
 
 	if (unlink(file->full_path) < 0) {
 		if (!UNLINK_EISDIR(errno)) {
-			fs_set_error(_file->fs, "unlink(%s) failed: %m", file->full_path);
+			fs_set_error_errno(_file->event, "unlink(%s) failed: %m",
+					   file->full_path);
 			return -1;
 		}
 		/* attempting to delete a directory. convert it to rmdir()
 		   automatically. */
 		if (rmdir(file->full_path) < 0) {
-			fs_set_error(_file->fs, "rmdir(%s) failed: %m", file->full_path);
+			fs_set_error_errno(_file->event, "rmdir(%s) failed: %m",
+					   file->full_path);
 			return -1;
 		}
 	}
-	(void)fs_posix_rmdir_parents(fs, file->full_path);
+	(void)fs_posix_rmdir_parents(file, file->full_path);
 	return 0;
 }
 
@@ -846,8 +883,9 @@ static void
 fs_posix_iter_init(struct fs_iter *_iter, const char *path,
 		   enum fs_iter_flags flags ATTR_UNUSED)
 {
-	struct posix_fs_iter *iter = (struct posix_fs_iter *)_iter;
-	struct posix_fs *fs = (struct posix_fs *)_iter->fs;
+	struct posix_fs_iter *iter =
+		container_of(_iter, struct posix_fs_iter, iter);
+	struct posix_fs *fs = container_of(_iter->fs, struct posix_fs, fs);
 
 	iter->path = fs->path_prefix == NULL ? i_strdup(path) :
 		i_strconcat(fs->path_prefix, path, NULL);
@@ -858,7 +896,8 @@ fs_posix_iter_init(struct fs_iter *_iter, const char *path,
 	iter->dir = opendir(iter->path);
 	if (iter->dir == NULL && errno != ENOENT) {
 		iter->err = errno;
-		fs_set_error(_iter->fs, "opendir(%s) failed: %m", iter->path);
+		fs_set_error_errno(_iter->event,
+				   "opendir(%s) failed: %m", iter->path);
 	}
 }
 
@@ -883,8 +922,9 @@ static bool fs_posix_iter_want(struct posix_fs_iter *iter, const char *fname)
 
 static const char *fs_posix_iter_next(struct fs_iter *_iter)
 {
-	struct posix_fs_iter *iter = (struct posix_fs_iter *)_iter;
-	struct posix_fs *fs = (struct posix_fs *)_iter->fs;
+	struct posix_fs_iter *iter =
+		container_of(_iter, struct posix_fs_iter, iter);
+	struct posix_fs *fs = container_of(_iter->fs, struct posix_fs, fs);
 	struct dirent *d;
 
 	if (iter->dir == NULL)
@@ -920,26 +960,28 @@ static const char *fs_posix_iter_next(struct fs_iter *_iter)
 	}
 	if (errno != 0) {
 		iter->err = errno;
-		fs_set_error(_iter->fs, "readdir(%s) failed: %m", iter->path);
+		fs_set_error_errno(_iter->event,
+				   "readdir(%s) failed: %m", iter->path);
 	}
 	return NULL;
 }
 
 static int fs_posix_iter_deinit(struct fs_iter *_iter)
 {
-	struct posix_fs_iter *iter = (struct posix_fs_iter *)_iter;
+	struct posix_fs_iter *iter =
+		container_of(_iter, struct posix_fs_iter, iter);
 	int ret = 0;
 
 	if (iter->dir != NULL && closedir(iter->dir) < 0 && iter->err == 0) {
 		iter->err = errno;
-		fs_set_error(_iter->fs, "closedir(%s) failed: %m", iter->path);
+		fs_set_error_errno(_iter->event,
+				   "closedir(%s) failed: %m", iter->path);
 	}
 	if (iter->err != 0) {
 		errno = iter->err;
 		ret = -1;
 	}
 	i_free(iter->path);
-	i_free(iter);
 	return ret;
 }
 

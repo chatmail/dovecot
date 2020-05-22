@@ -153,7 +153,6 @@ struct client {
 
 	struct imap_client_vfuncs v;
 	struct event *event;
-	const char *session_id;
 	const char *const *userdb_fields; /* for internal session saving/restoring */
 
 	int fd_in, fd_out;
@@ -239,7 +238,6 @@ struct client {
 	bool notify_immediate_expunges:1;
 	bool notify_count_changes:1;
 	bool notify_flag_changes:1;
-	bool imap_metadata_enabled:1;
 	bool nonpermanent_modseqs:1;
 	bool state_import_bad_idle_done:1;
 	bool state_import_idle_continue:1;
@@ -263,7 +261,7 @@ extern unsigned int imap_feature_qresync;
 
 /* Create new client with specified input/output handles. socket specifies
    if the handle is a socket. */
-struct client *client_create(int fd_in, int fd_out, const char *session_id,
+struct client *client_create(int fd_in, int fd_out,
 			     struct event *event, struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
 			     const struct imap_settings *set,
@@ -309,6 +307,8 @@ bool client_read_args(struct client_command_context *cmd, unsigned int count,
    store the arguments. */
 bool client_read_string_args(struct client_command_context *cmd,
 			     unsigned int count, ...);
+void client_args_finished(struct client_command_context *cmd,
+			  const struct imap_arg *args);
 
 /* SEARCHRES extension: Call if $ is being used/updated, returns TRUE if we
    have to wait for an existing SEARCH SAVE to finish. */

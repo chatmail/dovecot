@@ -1076,6 +1076,9 @@ static void smtp_client_connection_input(struct connection *_conn)
 			i_assert(ret == 0);
 			return;
 		}
+
+		if (conn->to_connect != NULL)
+			timeout_reset(conn->to_connect);
 	}
 
 	if (!conn->connect_succeeded) {
@@ -1338,7 +1341,8 @@ smtp_client_connection_ssl_init(struct smtp_client_connection *conn,
 		return -1;
 	}
 
-	if (ssl_iostream_is_handshaked(conn->ssl_iostream)) {
+	if (ssl_iostream_is_handshaked(conn->ssl_iostream) &&
+	    !conn->connect_succeeded) {
 		smtp_client_connection_established(conn);
 	} else {
 		/* wait for handshake to complete; connection input handler
@@ -1693,8 +1697,8 @@ void smtp_client_connection_disconnect(struct smtp_client_connection *conn)
 	if (conn->conn.output != NULL && !conn->sent_quit &&
 		!conn->sending_command) {
 		/* Close the connection gracefully if possible */
-		o_stream_uncork(conn->conn.output);
 		o_stream_nsend_str(conn->conn.output, "QUIT\r\n");
+		o_stream_uncork(conn->conn.output);
 	}
 
 	if (conn->dns_lookup != NULL)
@@ -1803,6 +1807,8 @@ smtp_client_connection_do_create(struct smtp_client *client, const char *name,
 				      &set->proxy_data);
 		conn->set.xclient_defer = set->xclient_defer;
 		conn->set.peer_trusted = set->peer_trusted;
+
+		conn->set.mail_send_broken_path = set->mail_send_broken_path;
 	}
 
 

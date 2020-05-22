@@ -391,7 +391,7 @@ cmd_dsync_run_local(struct dsync_cmd_context *ctx, struct mail_user *user,
 			"virtual mailbox hierarchy separator "
 			"(specify separator for the default namespace)");
 		ctx->ctx.exit_code = EX_CONFIG;
-		mail_user_unref(&user2);
+		mail_user_deinit(&user2);
 		return -1;
 	}
 	if (paths_are_equal(user, user2, MAILBOX_LIST_PATH_TYPE_MAILBOX) &&
@@ -401,7 +401,7 @@ cmd_dsync_run_local(struct dsync_cmd_context *ctx, struct mail_user *user,
 			mailbox_list_get_root_forced(user->namespaces->list,
 						     MAILBOX_LIST_PATH_TYPE_MAILBOX));
 		ctx->ctx.exit_code = EX_CONFIG;
-		mail_user_unref(&user2);
+		mail_user_deinit(&user2);
 		return -1;
 	}
 
@@ -578,9 +578,18 @@ cmd_dsync_run(struct doveadm_mail_cmd_context *_ctx, struct mail_user *user)
 	enum dsync_brain_flags brain_flags;
 	enum mail_error mail_error = 0, mail_error2;
 	bool remote_errors_logged = FALSE;
+	bool cli = (cctx->conn_type == DOVEADM_CONNECTION_TYPE_CLI);
 	const char *changes_during_sync, *changes_during_sync2 = NULL;
 	bool remote_only_changes;
 	int ret = 0;
+
+	/* replicator_notify indicates here automated attempt,
+	   we still want to allow manual sync/backup */
+	if (!cli && ctx->replicator_notify &&
+	    mail_user_plugin_getenv_bool(_ctx->cur_mail_user, "noreplicate")) {
+		ctx->ctx.exit_code = DOVEADM_EX_NOREPLICATE;
+		return -1;
+	}
 
 	i_zero(&set);
 	if (cctx->remote_ip.family != 0) {
@@ -775,6 +784,10 @@ static void dsync_connected_callback(int exit_code, const char *error,
 	case EX_NOUSER:
 		ctx->error = "Unknown user in remote";
 		break;
+	case DOVEADM_EX_NOREPLICATE:
+		if (doveadm_debug)
+			i_debug("user is disabled for replication");
+		break;
 	default:
 		ctx->error = p_strdup_printf(ctx->ctx.pool,
 			"Failed to start remote dsync-server command: "
@@ -843,6 +856,7 @@ dsync_connect_tcp(struct dsync_cmd_context *ctx,
 				"Couldn't initialize SSL context: %s", error);
 			return -1;
 		}
+		server->ssl_flags = PROXY_SSL_FLAG_YES;
 		server->ssl_ctx = ctx->ssl_ctx;
 	}
 	p_array_init(&server->connections, ctx->ctx.pool, 1);
@@ -1168,6 +1182,14 @@ cmd_dsync_server_run(struct doveadm_mail_cmd_context *_ctx,
 	enum mail_error mail_error;
 
 	if (!cli) {
+		/* replicator_notify indicates here automated attempt,
+		   we still want to allow manual sync/backup */
+		if (ctx->replicator_notify &&
+		    mail_user_plugin_getenv_bool(_ctx->cur_mail_user, "noreplicate")) {
+			_ctx->exit_code = DOVEADM_EX_NOREPLICATE;
+			return -1;
+		}
+
 		/* doveadm-server connection. start with a success reply.
 		   after that follows the regular dsync protocol. */
 		ctx->fd_in = ctx->fd_out = -1;

@@ -273,6 +273,8 @@ cmd_setmetadata_start(struct imap_setmetadata_context *ctx)
 	struct client_command_context *cmd = ctx->cmd;
 	struct client *client = cmd->client;
 
+	imap_metadata_transaction_validated_only(ctx->trans,
+		!cmd->client->set->imap_metadata);
 	/* we support large literals, so read the values from client
 	   asynchronously the same way as APPEND does. */
 	client->input_lock = cmd;
@@ -310,7 +312,8 @@ cmd_setmetadata_mailbox(struct imap_setmetadata_context *ctx,
 	    mailbox_equals(client->mailbox, ns, mailbox))
 		ctx->box = client->mailbox;
 	else {
-		ctx->box = mailbox_alloc(ns->list, mailbox, 0);
+		ctx->box = mailbox_alloc(ns->list, mailbox,
+					 MAILBOX_FLAG_ATTRIBUTE_SESSION);
 		mailbox_set_reason(ctx->box, "SETMETADATA");
 		if (mailbox_open(ctx->box) < 0) {
 			client_send_box_error(cmd, ctx->box);
@@ -318,6 +321,7 @@ cmd_setmetadata_mailbox(struct imap_setmetadata_context *ctx,
 			return TRUE;
 		}
 	}
+	event_add_str(ctx->cmd->event, "mailbox", mailbox_get_vname(ctx->box));
 	ctx->trans = imap_metadata_transaction_begin(ctx->box);
 	return cmd_setmetadata_start(ctx);
 }
@@ -340,11 +344,6 @@ bool cmd_setmetadata(struct client_command_context *cmd)
 	if (!imap_arg_get_astring(&args[0], &mailbox) ||
 	    args[1].type != IMAP_ARG_LIST) {
 		client_send_command_error(cmd, "Invalid arguments.");
-		return TRUE;
-	}
-
-	if (!cmd->client->imap_metadata_enabled) {
-		client_send_command_error(cmd, "METADATA disabled.");
 		return TRUE;
 	}
 

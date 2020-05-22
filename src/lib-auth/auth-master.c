@@ -524,8 +524,7 @@ auth_master_next_request_id(struct auth_master_connection *conn)
 	return conn->request_counter;
 }
 
-static void
-auth_user_info_export(string_t *str, const struct auth_user_info *info)
+void auth_user_info_export(string_t *str, const struct auth_user_info *info)
 {
 	if (info->service != NULL) {
 		str_append(str, "\tservice=");
@@ -540,6 +539,18 @@ auth_user_info_export(string_t *str, const struct auth_user_info *info)
 		str_printfa(str, "\trip=%s", net_ip2addr(&info->remote_ip));
 	if (info->remote_port != 0)
 		str_printfa(str, "\trport=%d", info->remote_port);
+	if (info->real_remote_ip.family != 0 &&
+	    !net_ip_compare(&info->real_remote_ip, &info->remote_ip))
+		str_printfa(str, "\treal_rip=%s", net_ip2addr(&info->real_remote_ip));
+	if (info->real_local_ip.family != 0 &&
+	    !net_ip_compare(&info->real_local_ip, &info->local_ip))
+		str_printfa(str, "\treal_lip=%s", net_ip2addr(&info->real_local_ip));
+	if (info->real_local_port != 0 &&
+	    info->real_local_port != info->local_port)
+		str_printfa(str, "\treal_lport=%d", info->real_local_port);
+	if (info->real_remote_port != 0 &&
+	    info->real_remote_port != info->remote_port)
+		str_printfa(str, "\treal_rport=%d", info->real_remote_port);
 	if (info->debug)
 		str_append(str, "\tdebug");
 }

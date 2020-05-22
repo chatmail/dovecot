@@ -75,6 +75,7 @@ struct client {
 	struct event *event;
 
 	const struct setting_parser_info *user_set_info;
+	const struct mail_user_settings *user_set;
 	const struct lda_settings *unexpanded_lda_set;
 	const struct lmtp_settings *lmtp_set;
 	const struct master_service_settings *service_set;
@@ -82,8 +83,8 @@ struct client {
 	struct smtp_server_connection *conn;
 	enum smtp_server_state last_state;
 
-	struct ip_addr remote_ip, local_ip;
-	in_port_t remote_port, local_port;
+	struct ip_addr remote_ip, local_ip, real_local_ip, real_remote_ip;
+	in_port_t remote_port, local_port, real_local_port, real_remote_port;
 
 	struct mail_user *raw_mail_user;
 	const char *my_domain;

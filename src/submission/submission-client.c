@@ -176,7 +176,7 @@ static void client_init_urlauth(struct client *client)
 	config.url_port = client->set->imap_urlauth_port;
 	config.socket_path = t_strconcat(client->user->set->base_dir,
 					 "/"IMAP_URLAUTH_SOCKET_NAME, NULL);
-	config.session_id = client->session_id;
+	config.session_id = client->user->session_id;
 	config.access_anonymous = client->user->anonymous;
 	config.access_user = client->user->username;
 	config.access_service = "submission";
@@ -186,7 +186,7 @@ static void client_init_urlauth(struct client *client)
 }
 
 struct client *client_create(int fd_in, int fd_out,
-			     const char *session_id, struct mail_user *user,
+			     struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
 			     const struct submission_settings *set,
 			     const char *helo,
@@ -211,7 +211,6 @@ struct client *client_create(int fd_in, int fd_out,
 	client->user = user;
 	client->service_user = service_user;
 	client->set = set;
-	client->session_id = p_strdup(pool, session_id);
 
 	i_array_init(&client->pending_backends, 4);
 	i_array_init(&client->rcpt_to, 8);
@@ -226,11 +225,11 @@ struct client *client_create(int fd_in, int fd_out,
 	smtp_set.rawlog_dir = set->rawlog_dir;
 	smtp_set.debug = user->mail_debug;
 
-	if ((workarounds & WORKAROUND_WHITESPACE_BEFORE_PATH) != 0) {
+	if ((workarounds & SUBMISSION_WORKAROUND_WHITESPACE_BEFORE_PATH) != 0) {
 		smtp_set.workarounds |=
 			SMTP_SERVER_WORKAROUND_WHITESPACE_BEFORE_PATH;
 	}
-	if ((workarounds & WORKAROUND_MAILBOX_FOR_PATH) != 0) {
+	if ((workarounds & SUBMISSION_WORKAROUND_MAILBOX_FOR_PATH) != 0) {
 		smtp_set.workarounds |=
 			SMTP_SERVER_WORKAROUND_MAILBOX_FOR_PATH;
 	}
@@ -247,14 +246,6 @@ struct client *client_create(int fd_in, int fd_out,
 		pdata, pdata_len, user->conn.ssl_secured);
 
 	client_create_backend_default(client, set);
-
-	if (client->backend_capabilities_configured) {
-		client_apply_backend_capabilities(client);
-		smtp_server_connection_start(client->conn);
-	} else {
-		submission_backend_start(client->backend_default);
-		smtp_server_connection_start_pending(client->conn);
-	}
 
 	mail_set = mail_user_set_get_storage_set(user);
 	if (*set->imap_urlauth_host != '\0' &&
@@ -277,6 +268,18 @@ struct client *client_create(int fd_in, int fd_out,
 
 	if (hook_client_created != NULL)
 		hook_client_created(&client);
+
+	if (user->anonymous && !client->anonymous_allowed) {
+		smtp_server_connection_abort(
+			&client->conn, 534, "5.7.9",
+			"Anonymous login is not allowed for submission");
+	} else if (client->backend_capabilities_configured) {
+		client_apply_backend_capabilities(client);
+		smtp_server_connection_start(client->conn);
+	} else {
+		submission_backend_start(client->backend_default);
+		smtp_server_connection_start_pending(client->conn);
+	}
 
 	submission_refresh_proctitle();
 	return client;
@@ -324,7 +327,7 @@ client_default_destroy(struct client *client, const char *prefix,
 	if (client->urlauth_ctx != NULL)
 		imap_urlauth_deinit(&client->urlauth_ctx);
 
-	mail_user_unref(&client->user);
+	mail_user_deinit(&client->user);
 	mail_storage_service_user_unref(&client->service_user);
 
 	client_state_reset(client);
@@ -422,7 +425,6 @@ static const char *client_stats(struct client *client)
 		{ 'o', dec2str(client->stats.output), "output" },
 		{ '\0', dec2str(client->stats.command_count), "command_count" },
 		{ '\0', dec2str(client->stats.reply_count), "reply_count" },
-		{ '\0', client->session_id, "session" },
 		{ '\0', trans_id, "transaction_id" },
 		{ '\0', NULL, NULL }
 	};

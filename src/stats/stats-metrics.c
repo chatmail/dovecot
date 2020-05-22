@@ -2,12 +2,15 @@
 
 #include "lib.h"
 #include "array.h"
+#include "str.h"
 #include "stats-dist.h"
 #include "time-util.h"
 #include "event-filter.h"
 #include "event-exporter.h"
 #include "stats-settings.h"
 #include "stats-metrics.h"
+
+#include <ctype.h>
 
 struct stats_metrics {
 	pool_t pool;
@@ -17,6 +20,28 @@ struct stats_metrics {
 	ARRAY(struct exporter *) exporters;
 	ARRAY(struct metric *) metrics;
 };
+
+static void
+stats_metric_event(struct metric *metric, struct event *event, pool_t pool);
+static struct metric *
+stats_metric_sub_metric_alloc(struct metric *metric, const char *name, pool_t pool);
+
+/* This does not need to be unique as it's a display name */
+static const char *sub_metric_name_create(pool_t pool, const char *name)
+{
+	string_t *sub_name = str_new(pool, 32);
+	/* use up to 32 bytes */
+	for (const char *p = name; *p != '\0' && sub_name->used < 32;
+	    p++) {
+		char c = *p;
+		if (!i_isalnum(c))
+			c = '_';
+		else
+			c = i_tolower(c);
+		str_append_c(sub_name, c);
+	}
+	return str_c(sub_name);
+}
 
 static void
 stats_metric_settings_to_query(const struct stats_metric_settings *set,
@@ -57,6 +82,7 @@ static void stats_exporters_add_set(struct stats_metrics *metrics,
 	exporter = p_new(metrics->pool, struct exporter, 1);
 	exporter->name = p_strdup(metrics->pool, set->name);
 	exporter->transport_args = p_strdup(metrics->pool, set->transport_args);
+	exporter->transport_timeout = set->transport_timeout;
 	exporter->time_format = set->parsed_time_format;
 
 	/* TODO: The following should be plugable.
@@ -97,6 +123,24 @@ static void stats_exporters_add_set(struct stats_metrics *metrics,
 	array_push_back(&metrics->exporters, &exporter);
 }
 
+static struct metric *
+stats_metric_alloc(pool_t pool, const char *name, const char *const *fields)
+{
+	struct metric *metric = p_new(pool, struct metric, 1);
+	metric->name = p_strdup(pool, name);
+	metric->duration_stats = stats_dist_init();
+	metric->fields_count = str_array_length(fields);
+	if (metric->fields_count > 0) {
+	    metric->fields = p_new(pool, struct metric_field,
+				   metric->fields_count);
+		for (unsigned int i = 0; i < metric->fields_count; i++) {
+			metric->fields[i].field_key = p_strdup(pool, fields[i]);
+			metric->fields[i].stats = stats_dist_init();
+		}
+	}
+	return metric;
+}
+
 static void stats_metrics_add_set(struct stats_metrics *metrics,
 				  const struct stats_metric_settings *set)
 {
@@ -106,21 +150,12 @@ static void stats_metrics_add_set(struct stats_metrics *metrics,
 	const char *const *fields;
 	const char *const *tmp;
 
-	metric = p_new(metrics->pool, struct metric, 1);
-	metric->name = p_strdup(metrics->pool, set->name);
-	metric->duration_stats = stats_dist_init();
-
 	fields = t_strsplit_spaces(set->fields, " ");
-	metric->fields_count = str_array_length(fields);
-	if (metric->fields_count > 0) {
-		metric->fields = p_new(metrics->pool, struct metric_field,
-				       metric->fields_count);
-		for (unsigned int i = 0; i < metric->fields_count; i++) {
-			metric->fields[i].field_key =
-				p_strdup(metrics->pool, fields[i]);
-			metric->fields[i].stats = stats_dist_init();
-		}
-	}
+	metric = stats_metric_alloc(metrics->pool, set->name, fields);
+
+	if (*set->group_by != '\0')
+		metric->group_by = (const char *const *)p_strsplit_spaces(metrics->pool, set->group_by, " ");
+
 	array_push_back(&metrics->metrics, &metric);
 
 	stats_metric_settings_to_query(set, &query);
@@ -215,9 +250,14 @@ struct stats_metrics *stats_metrics_init(const struct stats_settings *set)
 
 static void stats_metric_free(struct metric *metric)
 {
+	struct metric *const *metricp;
 	stats_dist_deinit(&metric->duration_stats);
 	for (unsigned int i = 0; i < metric->fields_count; i++)
 		stats_dist_deinit(&metric->fields[i].stats);
+	if (!array_is_created(&metric->sub_metrics))
+		return;
+	array_foreach(&metric->sub_metrics, metricp)
+		stats_metric_free(*metricp);
 }
 
 static void stats_export_deinit(void)
@@ -244,15 +284,24 @@ void stats_metrics_deinit(struct stats_metrics **_metrics)
 	pool_unref(&metrics->pool);
 }
 
+static void stats_metric_reset(struct metric *metric)
+{
+	struct metric *const *metricp;
+	stats_dist_reset(metric->duration_stats);
+	for (unsigned int i = 0; i < metric->fields_count; i++)
+		stats_dist_reset(metric->fields[i].stats);
+	if (!array_is_created(&metric->sub_metrics))
+		return;
+	array_foreach(&metric->sub_metrics, metricp)
+		stats_metric_reset(*metricp);
+}
+
 void stats_metrics_reset(struct stats_metrics *metrics)
 {
 	struct metric *const *metricp;
 
-	array_foreach(&metrics->metrics, metricp) {
-		stats_dist_reset((*metricp)->duration_stats);
-		for (unsigned int i = 0; i < (*metricp)->fields_count; i++)
-			stats_dist_reset((*metricp)->fields[i].stats);
-	}
+	array_foreach(&metrics->metrics, metricp)
+		stats_metric_reset(*metricp);
 }
 
 struct event_filter *
@@ -261,8 +310,97 @@ stats_metrics_get_event_filter(struct stats_metrics *metrics)
 	return metrics->combined_filter;
 }
 
+static struct metric *
+stats_metric_get_sub_metric(struct metric *metric,
+			    const struct metric_value *value)
+{
+	struct metric *const *sub_metrics;
+
+	/* lookup sub-metric */
+	array_foreach (&metric->sub_metrics, sub_metrics) {
+		if ((*sub_metrics)->group_value.type == METRIC_VALUE_TYPE_STR &&
+		    memcmp((*sub_metrics)->group_value.hash, value->hash,
+			   SHA1_RESULTLEN) == 0)
+			return *sub_metrics;
+		else if ((*sub_metrics)->group_value.type == METRIC_VALUE_TYPE_INT &&
+		    (*sub_metrics)->group_value.intmax == value->intmax)
+			return *sub_metrics;
+	}
+	return NULL;
+}
+
+static struct metric *
+stats_metric_sub_metric_alloc(struct metric *metric, const char *name, pool_t pool)
+{
+	struct metric *sub_metric;
+	ARRAY_TYPE(const_string) fields;
+	t_array_init(&fields, metric->fields_count);
+	for (unsigned int i = 0; i < metric->fields_count; i++)
+		array_append(&fields, &metric->fields[i].field_key, 1);
+	array_append_zero(&fields);
+	sub_metric = stats_metric_alloc(pool, metric->name,
+					array_idx(&fields, 0));
+	sub_metric->sub_name = sub_metric_name_create(pool, name);
+	array_append(&metric->sub_metrics, &sub_metric, 1);
+	return sub_metric;
+}
+
 static void
-stats_metric_event(struct metric *metric, struct event *event)
+stats_metric_group_by(struct metric *metric, struct event *event, pool_t pool)
+{
+	struct metric *sub_metric;
+	const char *const *group = metric->group_by;
+	const struct event_field *field =
+		event_find_field(event, *group);
+	struct metric_value value;
+
+	/* ignore missing field */
+	if (field == NULL)
+		return;
+	switch (field->value_type) {
+	case EVENT_FIELD_VALUE_TYPE_STR:
+		value.type = METRIC_VALUE_TYPE_STR;
+		/* use sha1 of value to avoid excessive memory usage in case the
+		   actual value is quite long */
+		sha1_get_digest(field->value.str, strlen(field->value.str),
+				value.hash);
+		break;
+	case EVENT_FIELD_VALUE_TYPE_INTMAX:
+		value.type = METRIC_VALUE_TYPE_INT;
+		value.intmax = field->value.intmax;
+		break;
+	case EVENT_FIELD_VALUE_TYPE_TIMEVAL:
+		return;
+	}
+
+	if (!array_is_created(&metric->sub_metrics))
+		p_array_init(&metric->sub_metrics, pool, 8);
+
+	sub_metric = stats_metric_get_sub_metric(metric, &value);
+
+	if (sub_metric == NULL) T_BEGIN {
+		const char *value_label;
+		if (value.type == METRIC_VALUE_TYPE_STR)
+			value_label = field->value.str;
+		else if (value.type == METRIC_VALUE_TYPE_INT)
+			value_label = dec2str(field->value.intmax);
+		else
+			i_unreached();
+		sub_metric = stats_metric_sub_metric_alloc(metric, value_label,
+							   pool);
+		if (group[1] != NULL)
+			sub_metric->group_by = group+1;
+		sub_metric->group_value.intmax = value.intmax;
+		memcpy(sub_metric->group_value.hash, value.hash, SHA1_RESULTLEN);
+	} T_END;
+
+	/* sub-metrics are recursive, so each sub-metric can have additional
+	   sub-metrics. */
+	stats_metric_event(sub_metric, event, pool);
+}
+
+static void
+stats_metric_event(struct metric *metric, struct event *event, pool_t pool)
 {
 	intmax_t duration;
 
@@ -289,6 +427,9 @@ stats_metric_event(struct metric *metric, struct event *event)
 		}
 		stats_dist_add(metric->fields[i].stats, num);
 	}
+
+	if (metric->group_by != NULL)
+		stats_metric_group_by(metric, event, pool);
 }
 
 static void
@@ -322,14 +463,16 @@ void stats_metrics_event(struct stats_metrics *metrics, struct event *event,
 
 	/* process stats */
 	iter = event_filter_match_iter_init(metrics->stats_filter, event, ctx);
-	while ((metric = event_filter_match_iter_next(iter)) != NULL)
-		stats_metric_event(metric, event);
+	while ((metric = event_filter_match_iter_next(iter)) != NULL) T_BEGIN {
+		stats_metric_event(metric, event, metrics->pool);
+	} T_END;
 	event_filter_match_iter_deinit(&iter);
 
 	/* process exports */
 	iter = event_filter_match_iter_init(metrics->export_filter, event, ctx);
-	while ((metric = event_filter_match_iter_next(iter)) != NULL)
+	while ((metric = event_filter_match_iter_next(iter)) != NULL) T_BEGIN {
 		stats_export_event(metric, event);
+	} T_END;
 	event_filter_match_iter_deinit(&iter);
 }
 

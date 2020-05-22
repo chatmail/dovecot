@@ -293,13 +293,20 @@ void http_client_request_set_urgent(struct http_client_request *req);
 void http_client_request_set_preserve_exact_reason(struct http_client_request *req);
 
 /* add a custom header to the request. This can override headers that are
-   otherwise created implicitly. */
+   otherwise created implicitly. If the same header key was already added,
+   the value is replaced. */
 void http_client_request_add_header(struct http_client_request *req,
 				    const char *key, const char *value);
+/* add a custom header to the request. Do nothing if it was already added. */
+void http_client_request_add_missing_header(struct http_client_request *req,
+					    const char *key, const char *value);
 /* remove a header added earlier. This has no influence on implicitly created
    headers. */
 void http_client_request_remove_header(struct http_client_request *req,
 				       const char *key);
+/* lookup the value for a header added earlier. Returns NULL if not found. */
+const char *http_client_request_lookup_header(struct http_client_request *req,
+					      const char *key);
 
 /* set the value of the "Date" header for the request using a time_t value.
    Use this instead of setting it directly using
@@ -344,6 +351,11 @@ void http_client_request_set_attempt_timeout_msecs(struct http_client_request *r
 void http_client_request_set_max_attempts(struct http_client_request *req,
 	unsigned int max_attempts);
 
+/* Include the specified HTTP response headers in the http_request_finished
+   event parameters with "http_hdr_" prefix. */
+void http_client_request_set_event_headers(struct http_client_request *req,
+					   const char *const *headers);
+
 /* set the username:password credentials for this request for simple
    authentication. This function is meant for simple schemes that use a
    password. More complex schemes will need to be handled manually.
@@ -371,6 +383,12 @@ void http_client_request_delay(struct http_client_request *req,
 void http_client_request_delay_msecs(struct http_client_request *req,
 	unsigned int msecs);
 
+/* Try to set request delay based on the Retry-After header. Returns 1 if
+   successful, 0 if it doesn't exist or is already expired, -1 if the delay
+   would be too long. */
+int http_client_request_delay_from_response(struct http_client_request *req,
+	const struct http_response *response);
+
 /* return the HTTP method for the request */
 const char *
 http_client_request_get_method(const struct http_client_request *req)
@@ -382,6 +400,10 @@ http_client_request_get_target(const struct http_client_request *req)
 /* return the request state */
 enum http_request_state
 http_client_request_get_state(const struct http_client_request *req)
+	ATTR_PURE;
+/* return number of retry attempts */
+unsigned int
+http_client_request_get_attempts(const struct http_client_request *req)
 	ATTR_PURE;
 /* return origin_url */
 const struct http_url *
@@ -411,7 +433,8 @@ void http_client_request_set_destroy_callback(struct http_client_request *req,
 					      void (*callback)(void *),
 					      void *context);
 #define http_client_request_set_destroy_callback(req, callback, context) \
-        http_client_request_set_destroy_callback(req, (void(*)(void*))callback, context - \
+        http_client_request_set_destroy_callback(req, (void(*)(void*))callback, \
+		TRUE ? context : \
                 CALLBACK_TYPECHECK(callback, void (*)(typeof(context))))
 
 /* submits request and blocks until the provided payload is sent. Multiple

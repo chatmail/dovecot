@@ -39,6 +39,7 @@ master_service_settings_check(void *_set, pool_t pool, const char **error_r);
 static const struct setting_define master_service_setting_defines[] = {
 	DEF(SET_STR, base_dir),
 	DEF(SET_STR, state_dir),
+	DEF(SET_STR, instance_name),
 	DEF(SET_STR, log_path),
 	DEF(SET_STR, info_log_path),
 	DEF(SET_STR, debug_log_path),
@@ -75,6 +76,7 @@ static const struct setting_define master_service_setting_defines[] = {
 static const struct master_service_settings master_service_default_settings = {
 	.base_dir = PKG_RUNDIR,
 	.state_dir = PKG_STATEDIR,
+	.instance_name = PACKAGE,
 	.log_path = "syslog",
 	.info_log_path = "",
 	.debug_log_path = "",
@@ -106,6 +108,13 @@ const struct setting_parser_info master_service_setting_parser_info = {
 };
 
 /* <settings checks> */
+static void add_category(ARRAY_TYPE(const_string) *categories, const char *name)
+{
+	if (!array_is_created(categories))
+		t_array_init(categories, 4);
+	array_push_back(categories, &name);
+}
+
 static int parse_query(const char *str, struct event_filter_query *query_r,
 		       const char **error_r)
 {
@@ -148,14 +157,13 @@ static int parse_query(const char *str, struct event_filter_query *query_r,
 				array_append_space(&fields);
 			field->key = t_strdup_until(str+6, value);
 			field->value = value+1;
-		} else if (strncmp(str, "cat:", 4) == 0 ||
-			   strncmp(str, "category:", 9) == 0) {
-			if (!array_is_created(&categories))
-				t_array_init(&categories, 4);
-			str = strchr(str, ':');
-			i_assert(str != NULL);
-			str++;
-			array_push_back(&categories, &str);
+		} else if (str_begins(str, "cat:"))
+			add_category(&categories, str+4);
+		else if (str_begins(str, "category:"))
+			add_category(&categories, str+9);
+		else if (str_begins(str, "service:")) {
+			/* service:name is short for category:service:name */
+			add_category(&categories, str);
 		} else {
 			*error_r = t_strdup_printf("Unknown event '%s'", str);
 			return -1;

@@ -1,8 +1,284 @@
-v2.3.7.2 2019-08-28  Aki Tuomi <aki.tuomi@open-xchange.com>
+v2.3.10.1  2020-05-18  Aki Tuomi <aki.tuomi@open-xchange.com>
 
-	* CVE-2019-11500: IMAP protocol parser does not properly handle NUL byte
-	  when scanning data in quoted strings, leading to out of bounds heap
-	  memory writes. Found by Nick Roessler and Rafi Rubin.
+	- CVE-2020-10957: lmtp/submission: A client can crash the server by
+	  sending a NOOP command with an invalid string parameter. This occurs
+	  particularly for a parameter that doesn't start with a double quote.
+	  This applies to all SMTP services, including submission-login, which
+	  makes it possible to crash the submission service without
+	  authentication.
+	- CVE-2020-10958: lmtp/submission: Sending many invalid or unknown
+	  commands can cause the server to access freed memory, which can lead
+	  to a server crash. This happens when the server closes the connection
+	  with a "421 Too many invalid commands" error. The bad command limit
+	  depends on the service (lmtp or submission) and varies between 10 to
+	  20 bad commands.
+	- CVE-2020-10967: lmtp/submission: Issuing the RCPT command with an
+	  address that has the empty quoted string as local-part causes the lmtp
+	  service to crash.
+
+v2.3.10  2020-03-06  Aki Tuomi <aki.tuomi@open-xchange.com>
+
+	* Disable retpoline migitations by default. These can cause severe
+	  performance regressions, so they should be only enabled when
+	  applicable.
+	* IMAP MOVE now commits transactions in batches of 1000 mails. This
+	  helps especially with lazy_expunge when moving a lot of mails. It
+	  mainly avoids situations where multiple IMAP sessions are running the
+	  same MOVE command and duplicating the mails in the lazy_expunge folder.
+	  With this change there can still be some duplication, but the MOVE
+	  always progresses forward. Also if the MOVE fails at some point, the
+	  changes up to the last 1000 mails are still committed instead of
+	  rolled back. Note that the COPY command behavior hasn't changed,
+	  because it is required by IMAP standard to be an atomic operation.
+	* IMAP EXPUNGE and CLOSE now expunges mails in batches of 1000 mails.
+	  This helps especially with lazy_expunge when expunging a lot of mails
+	  (e.g. millions) to make sure that the progress always moves forward
+	  even if the process is killed.
+	* Autoexpunging now expunges mails in batches of 1000 mails. This helps
+	  especially with lazy_expunge when expunging a lot of mails
+	  (e.g. millions) to make sure that the progress always moves forward
+	  even if the process is killed.
+	+ Add tool for generating sysreport called dovecot-sysreport.
+	  This generates a bundle of information usually needed for support
+	  requests.
+	+ Add support for the new IMAP \Important SPECIAL-USE flag (RFC 8457).
+	+ Add metric { group_by } setting. This allows automatically creating
+	  new metrics based on the fields you want to group statistics by.
+	  NOTE: This feature is considered experimental and syntax is subject
+	  to change in future release.
+	+ auth: Support SCRAM-SHA-256 authentication mechanism.
+	+ imap: Support the new IMAP STATUS=SIZE extension.
+	+ Use TCP_QUICKACK to reduce latency for some TCP connections.
+	+ quota-status: Made the service more robust against erroneous use with
+	  Postfix ACL policies other than smtpd_recipient_restrictions.
+	+ Add "revision" field support to imap_id_send setting. Using
+	  "revision *" will send in IMAP ID command response the short commit
+	  hash of the Dovecot git source tree HEAD (same as in dovecot --version).
+	+ IMAP ENVELOPE includes now all addresses when there are multiple
+	  headers (From, To, Cc, etc.) The standard way of having multiple
+	  addresses is to just list them all in a single header. It's
+	  non-standard to have multiple headers. However, since MTAs allow these
+	  mails to pass through and different software may handle them in
+	  different ways, it's better from security point of view to show all
+	  the addresses.
+	+ Event filters now support using "field_name=" to match a field that
+	  doesn't exist or has an empty value. For example use "error=" to match
+	  only events that didn't fail.
+	- acl: INBOX ACLs shouldn't apply for IMAP GETMETADATA/SETMETADATA
+	  commands.
+	- cassandra: CASS_ERROR_SERVER_WRITE_FAILURE error should also be
+	  treated as "uncertain write failure".
+	- dict-redis: Using quota_clone configured with dict-redis could have
+	  crashed when Redis responded slowly.
+	- imap-hibernate: Communication trouble with imap-master leads to
+	  segfault.
+	- imap-hibernate: Unhibernation retrying wasn't working.
+	- imap: Fixed auth lookup privilege problem when imap process was reused
+	  and user was being un-hibernated.
+	- Fix potential crash when copying/moving mails within the same folder.
+	  This happened only when there were a lot of fields in dovecot.index.cache.
+	- lib-index: Recreating dovecot.index.cache file could have crashed when
+	  merging bitmask fields.
+	- lib-index: Using public/shared folders with INDEXPVT configured to use
+	  private \Seen flags, trying to search seen/unseen in an empty folder
+	  crashes with segfault.
+	- lib-mail: Large base64-encoded mails weren't decoded properly.
+	  This could have affected searching/indexing mails and message snippet
+	  generation.
+	- lib-mail: Message with only quoted text could have caused message
+	  snippet to ignore its 200 character limit and return the entire
+	  message. This was added also to dovecot.index.cache file, which
+	  increased disk space and memory usage unnecessarily.
+	  v2.3.9.2 regression (previous versions cached the quoted snippet as
+	  empty). In a large mail quoted text could have become wrongly added
+	  to the snippet, possibly mixed together with non-quoted text.
+	- lib-smtp: client could have assert-crashed if STARTTLS handshake
+	  finished earlier than usually.
+	- lib-ssl-iostream: remove -static flag for lib-ssl-iostream linking to
+	  prevent a compile issue.
+	- lib-storage: Mailbox synchronization may have assert-crashed in some
+	  rare situations.
+	- lib-storage: mdbox didn't preserve date.saved with dsync.
+	- lib: Don't require EAI_{ADDRFAMILY,NODATA}, breaks FreeBSD
+	- master: Some services could respawn unthrottled if they crash during
+	  startup.
+	- push-notification: Do not send push_notification_finished event if
+	  nothing was done. This happens when mail transaction is started and
+	  ended with no changes.
+	- quota-status: Addresses with special characters in the local part caused
+	  problems in the interaction between Postfix and Dovecot. Postfix sent
+	  its own internal representation in the recipient field, while Dovecot
+	  expected a valid RFC5321 mailbox address.
+	- submission-login: SESSION was not correctly encoded field for the
+	  XCLIENT command. Particularly, a '+' character introduced by the
+	  session ID's Base64 encoding causes problems.
+	- submission: Fix submission_max_mail_size to work correctly on 32-bit
+	  systems.
+	- submission: Trusted connections crashed in second connection's EHLO
+	  if submission-login { service_count } is something else than 1 (which
+	  is the default).
+	- submission: XCLIENT command was never used in the protocol exchange
+	  with the relay MTA when submission_backend_capabilities is configured,
+	  even when the relay MTA was properly configured to accept the XCLIENT
+	  command.
+
+v2.3.9.3 2020-02-12  Aki Tuomi <aki.tuomi@open-xchange.com>
+
+	* CVE-2020-7046: Truncated UTF-8 can be used to DoS
+	  submission-login and lmtp processes.
+	* CVE-2020-7957: Specially crafted mail can crash snippet generation.
+
+v2.3.9.2 2019-12-13  Aki Tuomi <aki.tuomi@open-xchange.com>
+
+	- Mails with empty From/To headers can also cause crash
+	  in push notification drivers.
+
+v2.3.9.1 2019-12-13  Aki Tuomi <aki.tuomi@open-xchange.com>
+
+	* CVE-2019-19722: Mails with group addresses in From or To fields
+	  caused crash in push notification drivers.
+
+v2.3.9 2019-12-04  Aki Tuomi <aki.tuomi@open-xchange.com>
+
+	* Changed several event field names for consistency and to avoid
+	  conflicts in parent-child event relationships:
+	   * SMTP server command events: Renamed "name" to "cmd_name"
+	   * Events inheriting from a mailbox: Renamed "name" to "mailbox"
+	   * Server connection events have only "remote_ip", "remote_port",
+	     "local_ip" and "local_port".
+	   * Removed duplicate "client_ip", "ip" and "port".
+	   * Mail storage events: Removed "service" field.
+	     Use "service:<name>" category instead.
+	   * HTTP client connection events: Renamed "host" to "dest_host" and
+	     "port" to "dest_port"
+	* auth: Drop Postfix socketmap support. It hasn't been working
+	  with recent Postfix versions for a while now.
+	* push-notification-lua: The "subject" field is now decoded to UTF8
+	  instead of kept as MIME-encoded.
+	+ push-notification-lua: Added new "from_address", "from_display_name",
+	  "to_address" and "to_display_name" fields. The display names are
+	  decoded to UTF8.
+	+ Added various new fields to existing events.
+	  See http://doc.dovecot.net/admin_manual/list_of_events.html
+	+ Add lmtp_add_received_header setting. It can be used to prevent LMTP
+	  from adding "Received:" headers.
+	+ doveadm: Support SSL/STARTTLS for proxied doveadm connections based on
+	  doveadm_ssl setting and proxy ssl/tls settings.
+	+ Log filters support now "service:<name>", which matches all events for
+	  the given service. It can also be used as a category.
+	+ lib: Use libunwind to get abort backtraces with function names
+	  where available.
+	+ lmtp: When the LMTP proxy changes the username (from passdb lookup)
+	  add an appropriate ORCPT parameter.
+	- lmtp: Add lmtp_client_workarounds setting to implement workarounds for
+	  clients that send MAIL and RCPT commands with additional spaces before
+	  the path and for clients that omit <> brackets around the path.
+	  See example-config/conf.d/20-lmtp.conf.
+	- lda/lmtp: Invalid MAIL FROM addresses were rejcted too aggressively.
+	  Now mails from addresses with unicode characters are delivered, but
+	  their Return-Path header will be <> instead of the given MAIL FROM
+	  address.
+	- lmtp: The lmtp_hdr_delivery_address setting is ignored.
+	- imap: imap_command_finished event's "args" and "human_args" parameters
+	  were always empty.
+	- mbox: Seeking in zlib and bzip2 compressed input streams didn't work
+	  correctly.
+	- imap-hibernate: Process crashed when client got destroyed while it was
+	  attempted to be unhibernated, and the unhibernation fails.
+	- *-login: Proxying may have crashed if SSL handshake to the backend
+	  failed immediately. This was unlikely to happen in normal operation.
+	- *-login: If TLS handshake to upstream server failed during proxying,
+	  login process could crash due to invalid memory access.
+	- *-login: v2.3 regression: Using SASL authentication without initial
+	  response may have caused SSL connections to hang. This happened often
+	  at least with PHP's IMAP library.
+	- *-login: When login processes are flooded with authentication attempts
+	  it starts logging errors about "Authentication server sent unknown id".
+	  This is still expected. However, it also caused the login process to
+	  disconnect from auth server and potentially log some user's password
+	  in the error message.
+	- dict-sql: SQL prepared statements were not shared between sessions.
+	  This resulted in creating a lot of prepared statements, which was
+	  especially inefficient when using Cassandra backend with a lot of
+	  Cassandra nodes.
+	- auth: auth_request_finished event didn't have success=yes parameter
+	  set for successful authentications.
+	- auth: userdb dict - Trying to list users crashed.
+	- submission: Service could be configured to allow anonymous
+	  authentication mechanism and anonymous user access.
+	- LAYOUT=index: Corrupted dovecot.list.index caused folder creation to
+	  panic.
+	- doveadm: HTTP server crashes if request target starts with double "/".
+	- dsync: Remote dsync started hanging if the initial doveadm
+	  "dsync-server" command was sent in the same TCP packet as the
+	  following dsync handshake. v2.3.8 regression.
+	- lib: Several "input streams" had a bug that in some rare situations
+	  might cause it to access freed memory. This could lead to crashes or
+	  corruption.
+	  The only currently known effect of this is that using zlib plugin with
+	  external mail attachments (mail_attachment_dir) could cause fetching
+	  the mail to return a few bytes of garbage data at the beginning of the
+	  header. Note that the mail wasn't saved corrupted, but fetching it
+	  caused corrupted mail to be sent to the client.
+	- lib-storage: If a mail only has quoted content, use the quoted text
+	  for generating message snippet (IMAP PREVIEW) instead of returning
+	  empty snippet.
+	- lib-storage: When vsize header was rebuilt, newly calculated message
+	  sizes were added to dovecot.index.cache instead of being directly
+	  saved into vsize records in dovecot.index.
+	- lib: JSON generator was escaping UTF-8 characters unnecessarily.
+
+v2.3.8 2019-10-08  Aki Tuomi <aki.tuomi@open-xchange.com>
+
+	+ Added mail_delivery_started and mail_delivery_finished events, see
+	  https://doc.dovecot.org/admin_manual/list_of_events/ for details.
+	+ dsync-replication: Don't replicate users who have "noreplicate" extra
+	  field in userdb.
+	+ doveadm service status: Show total number of processes created.
+	+ When logging to syslog, use instance_name setting's value for the
+	  ident. This commonly is added as a log prefix.
+	+ Base64 encoding/decoding code was rewritten with additional features.
+	  It shouldn't cause any user visible changes.
+	- v2.3.7 regression: If a folder only receives new mails without any
+	  other mail access, dovecot.index.log keeps growing forever and
+	  dovecot.index keeps being rewritten for every mail delivery.
+	- dsync-replication may lose keywords after syncing mails restored from
+	  another replica. This only happened if the mail only had keywords and
+	  no system flags.
+	- event filters: Non-textual event fields could not be filtered using
+	  wildcards.
+	- auth: Scope parameter was missing from OAuth password grant
+	  request.
+	- doveadm client-server communication may hang in some situations.
+	  It is also using unnecessarily small TCP/IP packet sizes.
+	- doveadm who and kick did not flush protocol output correctly.
+	- imap: SETMETADATA with literal value would delete the metadata value
+	  instead of updating it.
+	- imap: When client issues FETCH PREVIEW (LAZY=FUZZY) command, the
+	  caching decisions should be updated so that newly saved mails will
+	  have the preview cached.
+	- With mail_nfs_index=yes and/or mail_nfs_storage=yes setuid/setgid
+	  permission bits in some files may have become dropped with some NFS
+	  servers. Changed NFS flushing to now use chmod() instead of chown().
+	- quota: warnings did not work if quota root was noenforcing
+	- acl: Global ACL file ignored the last line if it didn't end with LF.
+	- doveadm stats dump: With JSON formatter output numbers using the
+	  number type instead of as strings
+	- lmtp_proxy: Ensure that real_* variables are correctly set when using
+	  lmtp_proxy.
+	- event exporter: http-post driver had hardcoded timeout and did not
+	  support DNS lookups or TLS connections.
+	- auth: Fix user iteration to work with userdb passwd with glibc v2.28.
+	- auth: auth service can crash if auth-policy JSON response is invalid
+	  or returned too fast.
+	- In some rare situations "ps" output could have shown a lot of "?"
+	  characters after Dovecot process titles.
+	- When dovecot.index.pvt is empty, an unnecessary error is logged:
+	  Error: .../dovecot.index.pvt reset, view is now inconsistent
+	- SMTP address encoder duplicated initial double quote character when
+	  the localpart of an address ended in '..'. For example
+	  "user+..@example.com" became ""user+.."@example.com in a
+	  sieve redirect.
 
 v2.3.7.1 2019-07-23  Timo Sirainen <timo.sirainen@open-xchange.com>
 

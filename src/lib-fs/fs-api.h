@@ -230,6 +230,10 @@ struct fs_file *fs_file_init_with_event(struct fs *fs, struct event *event,
 					const char *path, int mode_flags);
 void fs_file_deinit(struct fs_file **file);
 
+/* Change flags for a file (and its parents). */
+void fs_file_set_flags(struct fs_file *file,
+		       enum fs_open_flags add_flags,
+		       enum fs_open_flags remove_flags);
 /* If the file has an input streams open, close them. */
 void fs_file_close(struct fs_file *file);
 
@@ -246,6 +250,12 @@ int fs_get_metadata(struct fs_file *file,
    is set, 0 if key wasn't found, -1 if error. */
 int fs_lookup_metadata(struct fs_file *file, const char *key,
 		       const char **value_r);
+/* Try to find key from the currently set metadata (without refreshing it).
+   This is typically used e.g. after writing or copying a file to find some
+   extra metadata they may have set. It can also be used after
+   fs_get_metadata() or fs_lookup_metadata() to search within the looked up
+   metadata. */
+const char *fs_lookup_loaded_metadata(struct fs_file *file, const char *key);
 
 /* Returns the path given to fs_open(). If file was opened with
    FS_OPEN_MODE_CREATE_UNIQUE_128 and the write has already finished,
@@ -256,9 +266,9 @@ struct fs *fs_file_fs(struct fs_file *file);
 /* Returns the file's event. */
 struct event *fs_file_event(struct fs_file *file);
 
-/* Return the error message for the last failed operation. */
-const char *fs_last_error(struct fs *fs);
-/* Convenience function for the above. Errors aren't preserved across files. */
+/* Return the error message for the last failed file operation. Each file
+   keeps track of its own errors. For failed copy/rename operations the "dest"
+   file contains the error. */
 const char *fs_file_last_error(struct fs_file *file);
 
 /* Try to asynchronously prefetch file into memory. Returns TRUE if file is
@@ -330,12 +340,13 @@ int fs_stat(struct fs_file *file, struct stat *st_r);
 int fs_get_nlinks(struct fs_file *file, nlink_t *nlinks_r);
 /* Copy an object with possibly updated metadata. Destination parent
    directories are created automatically. Returns 0 if ok, -1 if error
-   occurred. */
+   occurred. The "dest" file contains the error. */
 int fs_copy(struct fs_file *src, struct fs_file *dest);
 /* Try to finish asynchronous fs_copy(). Returns the same as fs_copy(). */
 int fs_copy_finish_async(struct fs_file *dest);
 /* Atomically rename a file. Destination parent directories are created
-   automatically. Returns 0 if ok, -1 if error occurred. */
+   automatically. Returns 0 if ok, -1 if error occurred. The "dest" file
+   contains the error. */
 int fs_rename(struct fs_file *src, struct fs_file *dest);
 
 /* Exclusively lock a file. If file is already locked, wait for it for given
@@ -353,7 +364,7 @@ struct fs_iter *
 fs_iter_init_with_event(struct fs *fs, struct event *event,
 			const char *path, enum fs_iter_flags flags);
 /* Returns 0 if ok, -1 if iteration failed. */
-int fs_iter_deinit(struct fs_iter **iter);
+int fs_iter_deinit(struct fs_iter **iter, const char **error_r);
 /* Returns the next filename. */
 const char *fs_iter_next(struct fs_iter *iter);
 

@@ -106,6 +106,7 @@ static void client_read_settings(struct client *client, bool ssl)
 {
 	struct mail_storage_service_input input;
 	const struct setting_parser_context *set_parser;
+	struct mail_user_settings *user_set;
 	struct lmtp_settings *lmtp_set;
 	struct lda_settings *lda_set;
 	const char *error;
@@ -126,13 +127,15 @@ static void client_read_settings(struct client *client, bool ssl)
 					       &set_parser, &error) < 0)
 		i_fatal("%s", error);
 
-	lmtp_settings_dup(set_parser, client->pool, &lmtp_set, &lda_set);
+	lmtp_settings_dup(set_parser, client->pool,
+			  &user_set, &lmtp_set, &lda_set);
 	const struct var_expand_table *tab =
 		mail_storage_service_get_var_expand_table(storage_service, &input);
 	if (settings_var_expand(&lmtp_setting_parser_info, lmtp_set,
 				client->pool, tab, &error) <= 0)
 		i_fatal("Failed to expand settings: %s", error);
 	client->service_set = master_service_settings_get(master_service);
+	client->user_set = user_set;
 	client->lmtp_set = lmtp_set;
 	client->unexpanded_lda_set = lda_set;
 }
@@ -140,6 +143,7 @@ static void client_read_settings(struct client *client, bool ssl)
 struct client *client_create(int fd_in, int fd_out,
 			     const struct master_service_connection *conn)
 {
+	enum lmtp_client_workarounds workarounds;
 	struct smtp_server_settings lmtp_set;
 	struct client *client;
 	pool_t pool;
@@ -152,6 +156,10 @@ struct client *client_create(int fd_in, int fd_out,
 	client->remote_port = conn->remote_port;
 	client->local_ip = conn->local_ip;
 	client->local_port = conn->local_port;
+	client->real_local_ip = conn->real_local_ip;
+	client->real_local_port = conn->real_local_port;
+	client->real_remote_ip = conn->real_remote_ip;
+	client->real_remote_port = conn->real_remote_port;
 	client->state_pool = pool_alloconly_create("client state", 4096);
 
 	client->event = event_create(NULL);
@@ -184,6 +192,16 @@ struct client *client_create(int fd_in, int fd_out,
 	lmtp_set.max_client_idle_time_msecs = CLIENT_IDLE_TIMEOUT_MSECS;
 	lmtp_set.rawlog_dir = client->lmtp_set->lmtp_rawlog_dir;
 	lmtp_set.event_parent = client->event;
+
+	workarounds = client->lmtp_set->parsed_workarounds;
+	if ((workarounds & LMTP_WORKAROUND_WHITESPACE_BEFORE_PATH) != 0) {
+		lmtp_set.workarounds |=
+			SMTP_SERVER_WORKAROUND_WHITESPACE_BEFORE_PATH;
+	}
+	if ((workarounds & LMTP_WORKAROUND_MAILBOX_FOR_PATH) != 0) {
+		lmtp_set.workarounds |=
+			SMTP_SERVER_WORKAROUND_MAILBOX_FOR_PATH;
+	}
 
 	client->conn = smtp_server_connection_create
 		(lmtp_server, fd_in, fd_out,
@@ -237,7 +255,7 @@ client_default_destroy(struct client *client, const char *enh_code,
 	DLLIST_REMOVE(&clients, client);
 
 	if (client->raw_mail_user != NULL)
-		mail_user_unref(&client->raw_mail_user);
+		mail_user_deinit(&client->raw_mail_user);
 
 	client_state_reset(client);
 	event_unref(&client->event);

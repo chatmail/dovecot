@@ -93,6 +93,9 @@ struct sieve_binary_block;
 struct sieve_binary_debug_writer;
 struct sieve_binary_debug_reader;
 
+/* sieve-execute.h */
+struct sieve_execute;
+
 /* sieve-objects.h */
 struct sieve_object_def;
 struct sieve_object;
@@ -176,7 +179,8 @@ struct sieve_instance {
 	const struct sieve_callbacks *callbacks;
 	void *context;
 
-	/* Engine debug */
+	/* Logging, events, and debug */
+	struct event *event;
 	bool debug;
 
 	/* Extension registry */
@@ -184,9 +188,6 @@ struct sieve_instance {
 
 	/* Storage class registry */
 	struct sieve_storage_class_registry *storage_reg;
-
-	/* System error handler */
-	struct sieve_error_handler *system_ehandler;
 
 	/* Plugin modules */
 	struct sieve_plugin *plugins;

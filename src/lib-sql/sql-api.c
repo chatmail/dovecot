@@ -3,16 +3,12 @@
 #include "lib.h"
 #include "array.h"
 #include "ioloop.h"
+#include "hash.h"
 #include "str.h"
 #include "time-util.h"
 #include "sql-api-private.h"
 
 #include <time.h>
-
-struct default_sql_prepared_statement {
-	struct sql_prepared_statement prep_stmt;
-	char *query_template;
-};
 
 struct event_category event_category_sql = {
 	.name = "sql",
@@ -107,18 +103,65 @@ int sql_init_full(const struct sql_settings *set, struct sql_db **db_r,
 	if (ret < 0)
 		return -1;
 
-	i_array_init(&db->module_contexts, 5);
+	sql_init_common(db);
 	*db_r = db;
 	return 0;
 }
 
-void sql_deinit(struct sql_db **_db)
+void sql_init_common(struct sql_db *db)
+{
+	db->refcount = 1;
+	i_array_init(&db->module_contexts, 5);
+	hash_table_create(&db->prepared_stmt_hash, default_pool, 0,
+			  str_hash, strcmp);
+}
+
+void sql_ref(struct sql_db *db)
+{
+	i_assert(db->refcount > 0);
+	db->refcount++;
+}
+
+static void
+default_sql_prepared_statement_deinit(struct sql_prepared_statement *prep_stmt)
+{
+	i_free(prep_stmt->query_template);
+	i_free(prep_stmt);
+}
+
+static void sql_prepared_statements_free(struct sql_db *db)
+{
+	struct hash_iterate_context *iter;
+	struct sql_prepared_statement *prep_stmt;
+	char *query;
+
+	iter = hash_table_iterate_init(db->prepared_stmt_hash);
+	while (hash_table_iterate(iter, db->prepared_stmt_hash, &query, &prep_stmt)) {
+		i_assert(prep_stmt->refcount == 0);
+		if (prep_stmt->db->v.prepared_statement_deinit != NULL)
+			prep_stmt->db->v.prepared_statement_deinit(prep_stmt);
+		else
+			default_sql_prepared_statement_deinit(prep_stmt);
+	}
+	hash_table_iterate_deinit(&iter);
+	hash_table_clear(db->prepared_stmt_hash, TRUE);
+}
+
+void sql_unref(struct sql_db **_db)
 {
 	struct sql_db *db = *_db;
 
 	*_db = NULL;
 
+	i_assert(db->refcount > 0);
+	if (db->v.unref != NULL)
+		db->v.unref(db);
+	if (--db->refcount > 0)
+		return;
+
 	timeout_remove(&db->to_reconnect);
+	sql_prepared_statements_free(db);
+	hash_table_destroy(&db->prepared_stmt_hash);
 	db->v.deinit(db);
 }
 
@@ -187,30 +230,19 @@ static struct sql_prepared_statement *
 default_sql_prepared_statement_init(struct sql_db *db,
 				    const char *query_template)
 {
-	struct default_sql_prepared_statement *prep_stmt;
+	struct sql_prepared_statement *prep_stmt;
 
-	prep_stmt = i_new(struct default_sql_prepared_statement, 1);
-	prep_stmt->prep_stmt.db = db;
+	prep_stmt = i_new(struct sql_prepared_statement, 1);
+	prep_stmt->db = db;
+	prep_stmt->refcount = 1;
 	prep_stmt->query_template = i_strdup(query_template);
-	return &prep_stmt->prep_stmt;
-}
-
-static void
-default_sql_prepared_statement_deinit(struct sql_prepared_statement *_prep_stmt)
-{
-	struct default_sql_prepared_statement *prep_stmt =
-		(struct default_sql_prepared_statement *)_prep_stmt;
-
-	i_free(prep_stmt->query_template);
-	i_free(prep_stmt);
+	return prep_stmt;
 }
 
 static struct sql_statement *
-default_sql_statement_init_prepared(struct sql_prepared_statement *_stmt)
+default_sql_statement_init_prepared(struct sql_prepared_statement *stmt)
 {
-	struct default_sql_prepared_statement *stmt =
-		(struct default_sql_prepared_statement *)_stmt;
-	return sql_statement_init(_stmt->db, stmt->query_template);
+	return sql_statement_init(stmt->db, stmt->query_template);
 }
 
 const char *sql_statement_get_query(struct sql_statement *stmt)
@@ -270,21 +302,31 @@ static void default_sql_update_stmt(struct sql_transaction_context *ctx,
 struct sql_prepared_statement *
 sql_prepared_statement_init(struct sql_db *db, const char *query_template)
 {
+	struct sql_prepared_statement *stmt;
+
+	stmt = hash_table_lookup(db->prepared_stmt_hash, query_template);
+	if (stmt != NULL) {
+		stmt->refcount++;
+		return stmt;
+	}
+
 	if (db->v.prepared_statement_init != NULL)
-		return db->v.prepared_statement_init(db, query_template);
+		stmt = db->v.prepared_statement_init(db, query_template);
 	else
-		return default_sql_prepared_statement_init(db, query_template);
+		stmt = default_sql_prepared_statement_init(db, query_template);
+
+	hash_table_insert(db->prepared_stmt_hash, stmt->query_template, stmt);
+	return stmt;
 }
 
-void sql_prepared_statement_deinit(struct sql_prepared_statement **_prep_stmt)
+void sql_prepared_statement_unref(struct sql_prepared_statement **_prep_stmt)
 {
 	struct sql_prepared_statement *prep_stmt = *_prep_stmt;
 
 	*_prep_stmt = NULL;
-	if (prep_stmt->db->v.prepared_statement_deinit != NULL)
-		prep_stmt->db->v.prepared_statement_deinit(prep_stmt);
-	else
-		default_sql_prepared_statement_deinit(prep_stmt);
+
+	i_assert(prep_stmt->refcount > 0);
+	prep_stmt->refcount--;
 }
 
 static void

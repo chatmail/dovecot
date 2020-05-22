@@ -9,6 +9,8 @@
 
 struct base64_decoder_istream {
 	struct istream_private istream;
+
+	struct base64_decoder decoder;
 };
 
 static int i_stream_read_parent(struct istream_private *stream)
@@ -25,7 +27,6 @@ static int i_stream_read_parent(struct istream_private *stream)
 	ret = i_stream_read_memarea(stream->parent);
 	if (ret <= 0) {
 		stream->istream.stream_errno = stream->parent->stream_errno;
-		stream->istream.eof = stream->parent->eof;
 		return ret;
 	}
 	size = i_stream_get_data_size(stream->parent);
@@ -38,27 +39,18 @@ i_stream_base64_try_decode_block(struct base64_decoder_istream *bstream)
 {
 	struct istream_private *stream = &bstream->istream;
 	const unsigned char *data;
-	size_t size, avail, buffer_avail, pos;
+	size_t size, avail, pos;
 	buffer_t buf;
 
 	data = i_stream_get_data(stream->parent, &size);
 	if (size == 0)
 		return 0;
 
-	i_stream_try_alloc(stream, (size+3)/4*3, &avail);
-	buffer_avail = stream->buffer_size - stream->pos;
+	if (!i_stream_try_alloc(stream, (size+3)/4*3, &avail))
+		return -2;
 
-	if ((size + 3) / 4 * 3 > buffer_avail) {
-		/* can't fit everything to destination buffer.
-		   write as much as we can. */
-		size = (buffer_avail / 3) * 4;
-		if (size == 0)
-			return -2;
-	}
-
-	buffer_create_from_data(&buf, stream->w_buffer + stream->pos,
-				buffer_avail);
-	if (base64_decode(data, size, &pos, &buf) < 0) {
+	buffer_create_from_data(&buf, stream->w_buffer + stream->pos, avail);
+	if (base64_decode_more(&bstream->decoder, data, size, &pos, &buf) < 0) {
 		io_stream_set_error(&stream->iostream,
 			"Invalid base64 data: 0x%s",
 			binary_to_hex(data+pos, I_MIN(size-pos, 8)));
@@ -71,27 +63,17 @@ i_stream_base64_try_decode_block(struct base64_decoder_istream *bstream)
 	return pos > 0 ? 1 : 0;
 }
 
-static void i_stream_base64_last_partial_block(struct istream_private *stream)
+static void
+i_stream_base64_finish_decode(struct base64_decoder_istream *bstream)
 {
-	const unsigned char *data;
-	size_t i, size;
+	struct istream_private *stream = &bstream->istream;
 
-	/* base64 input with a partial block */
-	data = i_stream_get_data(stream->parent, &size);
-	for (i = 0; i < size; i++) {
-		if (!base64_is_valid_char(data[i]))
-			break;
-	}
-	if (i == size) {
+	i_assert(i_stream_get_data_size(stream->parent) ==  0);
+
+	if (base64_decode_finish(&bstream->decoder) < 0) {
 		io_stream_set_error(&stream->iostream,
-			    "base64 input ends with a partial block: 0x%s",
-			    binary_to_hex(data, size));
+			"Base64 data ends prematurely");
 		stream->istream.stream_errno = EPIPE;
-	} else {
-		io_stream_set_error(&stream->iostream,
-			"Invalid base64 data: 0x%s",
-			binary_to_hex(data, size));
-		stream->istream.stream_errno = EINVAL;
 	}
 }
 
@@ -102,13 +84,23 @@ static ssize_t i_stream_base64_decoder_read(struct istream_private *stream)
 	size_t pre_count, post_count;
 	int ret;
 
+	if (base64_decode_is_finished(&bstream->decoder)) {
+		stream->istream.eof = TRUE;
+		return -1;
+	}
+
 	do {
 		ret = i_stream_read_parent(stream);
-		if (ret <= 0) {
-			if (ret < 0 && stream->istream.stream_errno == 0 &&
-			    i_stream_get_data_size(stream->parent) > 0)
-				i_stream_base64_last_partial_block(stream);
-			return ret;
+		if (ret == 0)
+			return 0;
+		if (ret < 0 && ret != -2) {
+			if (stream->istream.stream_errno != 0)
+				return -1;
+			if (i_stream_get_data_size(stream->parent) == 0) {
+				i_stream_base64_finish_decode(bstream);
+				stream->istream.eof = TRUE;
+				return -1;
+			}
 		}
 
 		/* encode as many blocks as fits into destination buffer */
@@ -128,6 +120,9 @@ static void
 i_stream_base64_decoder_seek(struct istream_private *stream,
 			     uoff_t v_offset, bool mark)
 {
+	struct base64_decoder_istream *bstream =
+		(struct base64_decoder_istream *)stream;
+
 	if (v_offset < stream->istream.v_offset) {
 		/* seeking backwards - go back to beginning and seek
 		   forward from there. */
@@ -135,12 +130,15 @@ i_stream_base64_decoder_seek(struct istream_private *stream,
 		stream->skip = stream->pos = 0;
 		stream->istream.v_offset = 0;
 		i_stream_seek(stream->parent, 0);
+
+		base64_decode_reset(&bstream->decoder);
 	}
 	i_stream_default_seek_nonseekable(stream, v_offset, mark);
 }
 
-struct istream *
-i_stream_create_base64_decoder(struct istream *input)
+static struct istream *
+i_stream_create_base64_decoder_common(const struct base64_scheme *b64,
+				      struct istream *input)
 {
 	struct base64_decoder_istream *bstream;
 
@@ -153,6 +151,21 @@ i_stream_create_base64_decoder(struct istream *input)
 	bstream->istream.istream.readable_fd = FALSE;
 	bstream->istream.istream.blocking = input->blocking;
 	bstream->istream.istream.seekable = input->seekable;
+
+	base64_decode_init(&bstream->decoder, b64, 0);
+
 	return i_stream_create(&bstream->istream, input,
 			       i_stream_get_fd(input), 0);
+}
+
+struct istream *
+i_stream_create_base64_decoder(struct istream *input)
+{
+	return i_stream_create_base64_decoder_common(&base64_scheme, input);
+}
+
+struct istream *
+i_stream_create_base64url_decoder(struct istream *input)
+{
+	return i_stream_create_base64_decoder_common(&base64url_scheme, input);
 }

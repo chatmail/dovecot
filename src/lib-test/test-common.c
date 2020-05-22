@@ -56,7 +56,14 @@ void test_assert_failed_strcmp(const char *code, const char *file, unsigned int 
 				const char * src, const char * dst)
 {
 	printf("%s: Assert(#%u) failed: %s\n", file, line, code);
-	printf("        \"%s\" != \"%s\"\n", src, dst);
+	if (src != NULL)
+		printf("        \"%s\" != ", src);
+	else
+		printf("        NULL != ");
+	if (dst != NULL)
+		printf("\"%s\"\n", dst);
+	else
+		printf("NULL\n");
 	fflush(stdout);
 	test_success = FALSE;
 }
@@ -149,11 +156,16 @@ void test_out_reason(const char *name, bool success, const char *reason)
 }
 
 void
-test_expect_error_string(const char *substr)
+test_expect_error_string_n_times(const char *substr, unsigned int times)
 {
 	i_assert(expected_errors == 0);
-	expected_errors = 1;
+	expected_errors = times;
 	expected_error_str = i_strdup(substr);
+}
+void
+test_expect_error_string(const char *substr)
+{
+	test_expect_error_string_n_times(substr, 1);
 }
 void
 test_expect_errors(unsigned int expected)

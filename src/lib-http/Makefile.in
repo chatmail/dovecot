@@ -141,6 +141,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
 	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -172,6 +173,7 @@ am__EXEEXT_1 = test-http-date$(EXEEXT) test-http-url$(EXEEXT) \
 	test-http-auth$(EXEEXT) test-http-response-parser$(EXEEXT) \
 	test-http-request-parser$(EXEEXT) test-http-payload$(EXEEXT) \
 	test-http-client-errors$(EXEEXT) \
+	test-http-client-request$(EXEEXT) \
 	test-http-server-errors$(EXEEXT)
 am__EXEEXT_2 = test-http-client$(EXEEXT) test-http-server$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
@@ -197,6 +199,14 @@ test_http_client_errors_OBJECTS =  \
 test_http_client_errors_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(test_http_client_errors_LDFLAGS) \
+	$(LDFLAGS) -o $@
+am_test_http_client_request_OBJECTS =  \
+	test-http-client-request.$(OBJEXT)
+test_http_client_request_OBJECTS =  \
+	$(am_test_http_client_request_OBJECTS)
+test_http_client_request_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(AM_CFLAGS) $(CFLAGS) $(test_http_client_request_LDFLAGS) \
 	$(LDFLAGS) -o $@
 am_test_http_date_OBJECTS = test-http-date.$(OBJEXT)
 test_http_date_OBJECTS = $(am_test_http_date_OBJECTS)
@@ -272,7 +282,8 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libhttp_la_SOURCES) $(test_http_auth_SOURCES) \
 	$(test_http_client_SOURCES) $(test_http_client_errors_SOURCES) \
-	$(test_http_date_SOURCES) $(test_http_header_parser_SOURCES) \
+	$(test_http_client_request_SOURCES) $(test_http_date_SOURCES) \
+	$(test_http_header_parser_SOURCES) \
 	$(test_http_payload_SOURCES) \
 	$(test_http_request_parser_SOURCES) \
 	$(test_http_response_parser_SOURCES) \
@@ -280,7 +291,8 @@ SOURCES = $(libhttp_la_SOURCES) $(test_http_auth_SOURCES) \
 	$(test_http_transfer_SOURCES) $(test_http_url_SOURCES)
 DIST_SOURCES = $(libhttp_la_SOURCES) $(test_http_auth_SOURCES) \
 	$(test_http_client_SOURCES) $(test_http_client_errors_SOURCES) \
-	$(test_http_date_SOURCES) $(test_http_header_parser_SOURCES) \
+	$(test_http_client_request_SOURCES) $(test_http_date_SOURCES) \
+	$(test_http_header_parser_SOURCES) \
 	$(test_http_payload_SOURCES) \
 	$(test_http_request_parser_SOURCES) \
 	$(test_http_response_parser_SOURCES) \
@@ -375,6 +387,7 @@ CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DICT_LIBS = @DICT_LIBS@
+DLLIB = @DLLIB@
 DLLTOOL = @DLLTOOL@
 DSYMUTIL = @DSYMUTIL@
 DUMPBIN = @DUMPBIN@
@@ -424,6 +437,8 @@ LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
 LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
 LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
+LIBUNWIND_CFLAGS = @LIBUNWIND_CFLAGS@
+LIBUNWIND_LIBS = @LIBUNWIND_LIBS@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LIPO = @LIPO@
@@ -551,7 +566,8 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-dns \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
-	-I$(top_srcdir)/src/lib-master
+	-I$(top_srcdir)/src/lib-master \
+	-DPKG_RUNDIR=\""$(rundir)"\"
 
 libhttp_la_SOURCES = \
 	http-date.c \
@@ -608,6 +624,7 @@ test_programs = \
 	test-http-request-parser \
 	test-http-payload \
 	test-http-client-errors \
+	test-http-client-request \
 	test-http-server-errors
 
 test_nocheck_programs = \
@@ -717,6 +734,14 @@ test_http_client_errors_LDADD = \
 test_http_client_errors_DEPENDENCIES = \
 	$(test_http_deps)
 
+test_http_client_request_SOURCES = test-http-client-request.c
+test_http_client_request_LDFLAGS = -export-dynamic
+test_http_client_request_LDADD = \
+	$(test_http_libs)
+
+test_http_client_request_DEPENDENCIES = \
+	$(test_http_deps)
+
 test_http_server_SOURCES = test-http-server.c
 test_http_server_LDFLAGS = -export-dynamic
 test_http_server_LDADD = \
@@ -802,6 +827,10 @@ test-http-client-errors$(EXEEXT): $(test_http_client_errors_OBJECTS) $(test_http
 	@rm -f test-http-client-errors$(EXEEXT)
 	$(AM_V_CCLD)$(test_http_client_errors_LINK) $(test_http_client_errors_OBJECTS) $(test_http_client_errors_LDADD) $(LIBS)
 
+test-http-client-request$(EXEEXT): $(test_http_client_request_OBJECTS) $(test_http_client_request_DEPENDENCIES) $(EXTRA_test_http_client_request_DEPENDENCIES) 
+	@rm -f test-http-client-request$(EXEEXT)
+	$(AM_V_CCLD)$(test_http_client_request_LINK) $(test_http_client_request_OBJECTS) $(test_http_client_request_LDADD) $(LIBS)
+
 test-http-date$(EXEEXT): $(test_http_date_OBJECTS) $(test_http_date_DEPENDENCIES) $(EXTRA_test_http_date_DEPENDENCIES) 
 	@rm -f test-http-date$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_http_date_OBJECTS) $(test_http_date_LDADD) $(LIBS)
@@ -868,6 +897,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-url.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-auth.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-client-errors.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-client-request.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-client.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-date.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-http-header-parser.Po@am__quote@

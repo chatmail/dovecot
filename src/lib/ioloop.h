@@ -32,7 +32,8 @@ enum io_notify_result {
 
 typedef void io_callback_t(void *context);
 typedef void timeout_callback_t(void *context);
-typedef void io_loop_time_moved_callback_t(time_t old_time, time_t new_time);
+typedef void io_loop_time_moved_callback_t(const struct timeval *old_time,
+					   const struct timeval *new_time);
 typedef void io_switch_callback_t(struct ioloop *prev_ioloop);
 
 /* Time when the I/O loop started calling handlers.
@@ -180,7 +181,11 @@ void timeout_reset(struct timeout *timeout);
 void io_loop_time_refresh(void);
 
 void io_loop_run(struct ioloop *ioloop);
-void io_loop_stop(struct ioloop *ioloop); /* safe to run in signal handler */
+/* Stop the ioloop immediately. No further IO or timeout callbacks are called.
+   This is safe to run in a signal handler. */
+void io_loop_stop(struct ioloop *ioloop);
+/* Stop ioloop after finishing all the pending IOs and timeouts. */
+void io_loop_stop_delayed(struct ioloop *ioloop);
 
 bool io_loop_is_running(struct ioloop *ioloop);
 
@@ -200,6 +205,8 @@ void io_loop_set_time_moved_callback(struct ioloop *ioloop,
 
 /* Change the current_ioloop. */
 void io_loop_set_current(struct ioloop *ioloop);
+/* Return the root ioloop. */
+struct ioloop *io_loop_get_root(void);
 /* Call the callback whenever ioloop is changed. */
 void io_loop_add_switch_callback(io_switch_callback_t *callback);
 void io_loop_remove_switch_callback(io_switch_callback_t *callback);

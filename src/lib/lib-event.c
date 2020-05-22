@@ -22,6 +22,38 @@ enum event_code {
 	EVENT_CODE_FIELD_TIMEVAL	= 'T',
 };
 
+/* Internal event category state.
+
+   Each (unique) event category maps to one internal category.  (I.e., if
+   two places attempt to register the same category, they will share the
+   internal state.)
+
+   This is required in order to support multiple registrations of the same
+   category.  Currently, the only situation in which this occurs is the
+   stats process receiving categories from other processes and also using
+   the same categories internally.
+
+   During registration, we look up the internal state based on the new
+   category's name.  If found, we use it after sanity checking that the two
+   are identical (i.e., they both have the same name and parent).  If not
+   found, we allocate a new internal state and use it.
+
+   We stash a pointer to the internal state in struct event_category (the
+   "internal" member).  As a result, all category structs for the same
+   category point to the same internal state. */
+struct event_internal_category {
+	/* More than one category can be represented by the internal state.
+	   To give consumers a unique but consistent category pointer, we
+	   return a pointer to this 'represetative' category structure.
+	   Because we allocated it, we know that it will live exactly as
+	   long as we need it to. */
+	struct event_category representative;
+
+	struct event_internal_category *parent;
+	char *name;
+	int refcount;
+};
+
 extern const struct event_passthrough event_passthrough_vfuncs;
 
 static struct event *events = NULL;
@@ -29,9 +61,16 @@ static struct event *current_global_event = NULL;
 static struct event_passthrough *event_last_passthrough = NULL;
 static ARRAY(event_callback_t *) event_handlers;
 static ARRAY(event_category_callback_t *) event_category_callbacks;
-static ARRAY(struct event_category *) event_registered_categories;
+static ARRAY(struct event_internal_category *) event_registered_categories_internal;
+static ARRAY(struct event_category *) event_registered_categories_representative;
 static ARRAY(struct event *) global_event_stack;
 static uint64_t event_id_counter = 0;
+
+static struct event *
+event_create_internal(struct event *parent, const char *source_filename,
+		      unsigned int source_linenum);
+static struct event_internal_category *
+event_category_find_internal(const char *name);
 
 static struct event *last_passthrough_event(void)
 {
@@ -53,6 +92,40 @@ event_find_category(struct event *event, const struct event_category *category);
 
 static struct event_field *
 event_find_field_int(struct event *event, const char *key);
+
+static bool
+event_call_callbacks(struct event *event, enum event_callback_type type,
+		     struct failure_context *ctx, const char *fmt, va_list args)
+{
+	event_callback_t *const *callbackp;
+
+	array_foreach(&event_handlers, callbackp) {
+		bool ret;
+
+		T_BEGIN {
+			ret = (*callbackp)(event, type, ctx, fmt, args);
+		} T_END;
+		if (!ret) {
+			/* event sending was stopped */
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+
+static void
+event_call_callbacks_noargs(struct event *event,
+			    enum event_callback_type type, ...)
+{
+	va_list args;
+
+	/* the args are empty and not used for anything, but there doesn't seem
+	   to be any nice and standard way of passing an initialized va_list
+	   as a parameter without va_start(). */
+	va_start(args, type);
+	(void)event_call_callbacks(event, type, NULL, NULL, args);
+	va_end(args);
+}
 
 void event_copy_categories(struct event *to, struct event *from)
 {
@@ -112,7 +185,9 @@ bool event_has_all_fields(struct event *event, const struct event *other)
 
 struct event *event_dup(const struct event *source)
 {
-	struct event *ret = event_create(source->parent);
+	struct event *ret =
+		event_create_internal(source->parent, source->source_filename,
+				      source->source_linenum);
 	string_t *str = t_str_new(256);
 	const char *err;
 	event_export(source, str);
@@ -148,10 +223,9 @@ struct event *event_flatten(struct event *src)
 
 	/* We have to flatten the event. */
 
-	dst = event_create(NULL);
+	dst = event_create_internal(NULL, src->source_filename,
+				    src->source_linenum);
 	dst = event_set_name(dst, src->sending_name);
-	dst = event_set_source(dst, src->source_filename, src->source_linenum,
-			       FALSE);
 
 	event_flatten_recurse(dst, src, NULL);
 
@@ -276,9 +350,9 @@ struct event *event_minimize(struct event *event)
 	return new_event;
 }
 
-#undef event_create
-struct event *event_create(struct event *parent, const char *source_filename,
-			   unsigned int source_linenum)
+static struct event *
+event_create_internal(struct event *parent, const char *source_filename,
+		      unsigned int source_linenum)
 {
 	struct event *event;
 	pool_t pool = pool_alloconly_create(MEMPOOL_GROWING"event", 64);
@@ -290,8 +364,7 @@ struct event *event_create(struct event *parent, const char *source_filename,
 	event->pool = pool;
 	event->tv_created_ioloop = ioloop_timeval;
 	event->min_log_level = LOG_TYPE_INFO;
-	if (gettimeofday(&event->tv_created, NULL) < 0)
-		i_panic("gettimeofday() failed: %m");
+	i_gettimeofday(&event->tv_created);
 	event->source_filename = p_strdup(pool, source_filename);
 	event->source_linenum = source_linenum;
 	if (parent != NULL) {
@@ -300,6 +373,17 @@ struct event *event_create(struct event *parent, const char *source_filename,
 		event_copy_parent_defaults(event, parent);
 	}
 	DLLIST_PREPEND(&events, event);
+	return event;
+}
+
+#undef event_create
+struct event *event_create(struct event *parent, const char *source_filename,
+			   unsigned int source_linenum)
+{
+	struct event *event;
+
+	event = event_create_internal(parent, source_filename, source_linenum);
+	(void)event_call_callbacks_noargs(event, EVENT_CALLBACK_TYPE_CREATE);
 	return event;
 }
 
@@ -327,45 +411,12 @@ event_create_passthrough(struct event *parent, const char *source_filename,
 	return event_last_passthrough;
 }
 
-static bool
-event_send_callbacks(struct event *event, enum event_callback_type type,
-		     struct failure_context *ctx, const char *fmt, va_list args)
-{
-	event_callback_t *const *callbackp;
-
-	array_foreach(&event_handlers, callbackp) {
-		bool ret;
-
-		T_BEGIN {
-			ret = (*callbackp)(event, type, ctx, fmt, args);
-		} T_END;
-		if (!ret) {
-			/* event sending was stopped */
-			return FALSE;
-		}
-	}
-	return TRUE;
-}
-
 struct event *event_ref(struct event *event)
 {
 	i_assert(event->refcount > 0);
 
 	event->refcount++;
 	return event;
-}
-
-static void event_send_free(struct event *event, ...)
-{
-	va_list args;
-
-	/* the args are empty and not used for anything, but there doesn't seem
-	   to be any nice and standard way of passing an initialized va_list
-	   as a parameter without va_start(). */
-	va_start(args, event);
-	(void)event_send_callbacks(event, EVENT_CALLBACK_TYPE_FREE,
-				   NULL, NULL, args);
-	va_end(args);
 }
 
 void event_unref(struct event **_event)
@@ -381,8 +432,7 @@ void event_unref(struct event **_event)
 		return;
 	i_assert(event != current_global_event);
 
-	if (event->call_free)
-		event_send_free(event);
+	event_call_callbacks_noargs(event, EVENT_CALLBACK_TYPE_FREE);
 
 	if (last_passthrough_event() == event)
 		event_last_passthrough = NULL;
@@ -468,6 +518,13 @@ struct event *event_replace_log_prefix(struct event *event, const char *prefix)
 	return event_set_log_prefix(event, prefix, FALSE);
 }
 
+struct event *
+event_drop_parent_log_prefixes(struct event *event, unsigned int count)
+{
+	event->log_prefixes_dropped = count;
+	return event;
+}
+
 #undef event_set_log_prefix_callback
 struct event *
 event_set_log_prefix_callback(struct event *event,
@@ -485,6 +542,17 @@ event_set_log_prefix_callback(struct event *event,
 	return event;
 }
 
+#undef event_set_log_message_callback
+struct event *
+event_set_log_message_callback(struct event *event,
+			       event_log_message_callback_t *callback,
+			       void *context)
+{
+	event->log_message_callback = callback;
+	event->log_message_callback_context = context;
+	return event;
+}
+
 struct event *
 event_set_name(struct event *event, const char *name)
 {
@@ -497,8 +565,10 @@ struct event *
 event_set_source(struct event *event, const char *filename,
 		 unsigned int linenum, bool literal_fname)
 {
-	event->source_filename = literal_fname ? filename :
-		p_strdup(event->pool, filename);
+	if (strcmp(event->source_filename, filename) != 0) {
+		event->source_filename = literal_fname ? filename :
+			p_strdup(event->pool, filename);
+	}
 	event->source_linenum = linenum;
 	return event;
 }
@@ -512,6 +582,7 @@ struct event *event_set_always_log_source(struct event *event)
 struct event *event_set_min_log_level(struct event *event, enum log_type level)
 {
 	event->min_log_level = level;
+	event->debug_level_checked = FALSE;
 	return event;
 }
 
@@ -520,43 +591,144 @@ enum log_type event_get_min_log_level(const struct event *event)
 	return event->min_log_level;
 }
 
+struct event *event_set_ptr(struct event *event, const char *key, void *value)
+{
+	struct event_pointer *p;
+
+	if (!array_is_created(&event->pointers))
+		p_array_init(&event->pointers, event->pool, 4);
+	else {
+		/* replace existing pointer if the key already exists */
+		array_foreach_modifiable(&event->pointers, p) {
+			if (strcmp(p->key, key) == 0) {
+				p->value = value;
+				return event;
+			}
+		}
+	}
+	p = array_append_space(&event->pointers);
+	p->key = p_strdup(event->pool, key);
+	p->value = value;
+	return event;
+}
+
+void *event_get_ptr(struct event *event, const char *key)
+{
+	const struct event_pointer *p;
+
+	if (!array_is_created(&event->pointers))
+		return NULL;
+	array_foreach(&event->pointers, p) {
+		if (strcmp(p->key, key) == 0)
+			return p->value;
+	}
+	return NULL;
+}
+
 struct event_category *event_category_find_registered(const char *name)
 {
 	struct event_category *const *catp;
 
-	array_foreach(&event_registered_categories, catp) {
+	array_foreach(&event_registered_categories_representative, catp) {
 		if (strcmp((*catp)->name, name) == 0)
 			return *catp;
 	}
 	return NULL;
 }
 
+static struct event_internal_category *event_category_find_internal(const char *name)
+{
+	struct event_internal_category *const *internal;
+
+	array_foreach(&event_registered_categories_internal, internal) {
+		if (strcmp((*internal)->name, name) == 0)
+			return *internal;
+	}
+
+	return NULL;
+}
+
 struct event_category *const *
 event_get_registered_categories(unsigned int *count_r)
 {
-	return array_get(&event_registered_categories, count_r);
+	return array_get(&event_registered_categories_representative, count_r);
 }
 
-static void event_category_register(struct event_category *category)
+static void event_category_add_to_array(struct event_internal_category *internal)
 {
-	event_category_callback_t *const *callbackp;
+	struct event_category *representative = &internal->representative;
 
-	if (category->registered)
-		return;
+	array_push_back(&event_registered_categories_internal, &internal);
+	array_push_back(&event_registered_categories_representative, &representative);
+}
+
+static struct event_category *event_category_register(struct event_category *category)
+{
+	struct event_internal_category *internal = category->internal;
+	event_category_callback_t *const *callbackp;
+	bool allocated;
+
+	if (internal != NULL)
+		return &internal->representative; /* case 2 - see below */
 
 	/* register parent categories first */
 	if (category->parent != NULL)
-		event_category_register(category->parent);
+		(void) event_category_register(category->parent);
 
-	/* Don't allow duplicate category structs with the same name.
-	   Event filtering uses pointer comparisons for efficiency. */
-	i_assert(event_category_find_registered(category->name) == NULL);
-	category->registered = TRUE;
-	array_push_back(&event_registered_categories, &category);
+	/* There are four cases we need to handle:
+
+	   1) a new category is registered
+	   2) same category struct is re-registered - already handled above
+	      internal NULL check
+	   3) different category struct is registered, but it is identical
+	      to the previously registered one
+	   4) different category struct is registered, and it is different
+	      from the previously registered one - a programming error */
+	internal = event_category_find_internal(category->name);
+	if (internal == NULL) {
+		/* case 1: first time we saw this name - allocate new */
+		internal = i_new(struct event_internal_category, 1);
+		if (category->parent != NULL)
+			internal->parent = category->parent->internal;
+		internal->name = i_strdup(category->name);
+		internal->refcount = 1;
+		internal->representative.name = internal->name;
+		internal->representative.parent = category->parent;
+		internal->representative.internal = internal;
+
+		event_category_add_to_array(internal);
+
+		allocated = TRUE;
+	} else {
+		/* case 3 or 4: someone registered this name before - share */
+		if ((category->parent != NULL) &&
+		    (internal->parent != category->parent->internal)) {
+			/* case 4 */
+			struct event_internal_category *other = category->parent->internal;
+
+			i_panic("event category parent mismatch detected: "
+				"category %p internal %p (%s), "
+				"internal parent %p (%s), public parent %p (%s)",
+				category, internal, internal->name,
+				internal->parent, internal->parent->name,
+				other, other->name);
+		}
+
+		internal->refcount++;
+
+		allocated = FALSE;
+	}
+
+	category->internal = internal;
+
+	if (!allocated)
+		return &internal->representative; /* not the first registration of this category */
 
 	array_foreach(&event_category_callbacks, callbackp) T_BEGIN {
-		(*callbackp)(category);
+		(*callbackp)(&internal->representative);
 	} T_END;
+
+	return &internal->representative;
 }
 
 static bool
@@ -575,14 +747,17 @@ struct event *
 event_add_categories(struct event *event,
 		     struct event_category *const *categories)
 {
+	struct event_category *representative;
+
 	if (!array_is_created(&event->categories))
 		p_array_init(&event->categories, event->pool, 4);
 
 	for (unsigned int i = 0; categories[i] != NULL; i++) {
-		event_category_register(categories[i]);
+		representative = event_category_register(categories[i]);
 		if (!event_find_category(event, categories[i]))
-			array_push_back(&event->categories, &categories[i]);
+			array_push_back(&event->categories, &representative);
 	}
+	event->debug_level_checked = FALSE;
 	return event;
 }
 
@@ -787,9 +962,8 @@ void event_send(struct event *event, struct failure_context *ctx,
 void event_vsend(struct event *event, struct failure_context *ctx,
 		 const char *fmt, va_list args)
 {
-	if (gettimeofday(&event->tv_last_sent, NULL) < 0)
-		i_panic("gettimeofday() failed: %m");
-	if (event_send_callbacks(event, EVENT_CALLBACK_TYPE_EVENT,
+	i_gettimeofday(&event->tv_last_sent);
+	if (event_call_callbacks(event, EVENT_CALLBACK_TYPE_SEND,
 				 ctx, fmt, args)) {
 		if (ctx->type != LOG_TYPE_DEBUG ||
 		    event->sending_debug_log)
@@ -911,6 +1085,12 @@ bool event_import_unescaped(struct event *event, const char *const *args,
 {
 	const char *error;
 
+	/* Event's create callback has already added service:<name> category.
+	   This imported event may be coming from another service process
+	   though, so clear it out. */
+	if (array_is_created(&event->categories))
+		array_clear(&event->categories);
+
 	/* required fields: */
 	if (args[0] == NULL) {
 		*error_r = "Missing required fields";
@@ -955,18 +1135,21 @@ bool event_import_unescaped(struct event *event, const char *const *args,
 			i_free(event->sending_name);
 			event->sending_name = i_strdup(arg);
 			break;
-		case EVENT_CODE_SOURCE:
-			event->source_filename = p_strdup(event->pool, arg);
+		case EVENT_CODE_SOURCE: {
+			unsigned int linenum;
+
 			if (args[1] == NULL) {
 				*error_r = "Source line number missing";
 				return FALSE;
 			}
-			if (str_to_uint(args[1], &event->source_linenum) < 0) {
+			if (str_to_uint(args[1], &linenum) < 0) {
 				*error_r = "Invalid Source line number";
 				return FALSE;
 			}
+			event_set_source(event, arg, linenum, FALSE);
 			args++;
 			break;
+		}
 
 		case EVENT_CODE_FIELD_INTMAX:
 		case EVENT_CODE_FIELD_STR:
@@ -1051,37 +1234,6 @@ void event_category_unregister_callback(event_category_callback_t *callback)
 		}
 	}
 	i_unreached();
-}
-
-static void event_category_remove_from_array(struct event_category *category)
-{
-	struct event_category *const *catp;
-
-	array_foreach(&event_registered_categories, catp) {
-		if (*catp == category) {
-			array_delete(&event_registered_categories,
-				array_foreach_idx(&event_registered_categories, catp), 1);
-			return;
-		}
-	}
-	i_unreached();
-}
-
-void event_category_unregister(struct event_category *category)
-{
-	event_category_callback_t *const *callbackp;
-
-	if (!category->registered) {
-		/* it was never registered in the first place - ignore */
-		return;
-	}
-
-	category->registered = FALSE;
-	event_category_remove_from_array(category);
-
-	array_foreach(&event_category_callbacks, callbackp) T_BEGIN {
-		(*callbackp)(category);
-	} T_END;
 }
 
 static struct event_passthrough *
@@ -1170,6 +1322,13 @@ event_passthrough_inc_int(const char *key, intmax_t num)
 	return event_last_passthrough;
 }
 
+static struct event_passthrough *
+event_passthrough_clear_field(const char *key)
+{
+	event_field_clear(last_passthrough_event(), key);
+	return event_last_passthrough;
+}
+
 static struct event *event_passthrough_event(void)
 {
 	struct event *event = last_passthrough_event();
@@ -1190,6 +1349,7 @@ const struct event_passthrough event_passthrough_vfuncs = {
 	event_passthrough_add_int,
 	event_passthrough_add_timeval,
 	event_passthrough_inc_int,
+	event_passthrough_clear_field,
 	event_passthrough_event,
 };
 
@@ -1197,11 +1357,14 @@ void lib_event_init(void)
 {
 	i_array_init(&event_handlers, 4);
 	i_array_init(&event_category_callbacks, 4);
-	i_array_init(&event_registered_categories, 16);
+	i_array_init(&event_registered_categories_internal, 16);
+	i_array_init(&event_registered_categories_representative, 16);
 }
 
 void lib_event_deinit(void)
 {
+	struct event_internal_category **internal;
+
 	event_unset_global_debug_log_filter();
 	event_unset_global_debug_send_filter();
 	event_unset_global_core_log_filter();
@@ -1210,8 +1373,16 @@ void lib_event_deinit(void)
 			  event, event->parent,
 			  event->source_filename, event->source_linenum);
 	}
+	/* categories cannot be unregistered, so just free them here */
+	array_foreach_modifiable(&event_registered_categories_internal, internal) {
+		struct event_internal_category *cur = *internal;
+
+		i_free(cur->name);
+		i_free(cur);
+	}
 	array_free(&event_handlers);
 	array_free(&event_category_callbacks);
-	array_free(&event_registered_categories);
+	array_free(&event_registered_categories_internal);
+	array_free(&event_registered_categories_representative);
 	array_free(&global_event_stack);
 }

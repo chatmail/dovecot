@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Pigeonhole], [0.5.7.2], [dovecot@dovecot.org], [dovecot-2.3-pigeonhole])
-AC_DEFINE_UNQUOTED([PIGEONHOLE_ABI_VERSION], "0.5.ABIv7($PACKAGE_VERSION)", [Pigeonhole ABI version])
+AC_INIT([Pigeonhole], [0.5.10], [dovecot@dovecot.org], [dovecot-2.3-pigeonhole])
+AC_DEFINE_UNQUOTED([PIGEONHOLE_ABI_VERSION], "0.5.ABIv10($PACKAGE_VERSION)", [Pigeonhole ABI version])
 
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_SRCDIR([src])
@@ -176,6 +176,7 @@ doc/Makefile
 doc/man/Makefile
 doc/example-config/Makefile
 doc/example-config/conf.d/Makefile
+doc/rfc/Makefile
 doc/extensions/Makefile
 doc/locations/Makefile
 doc/plugins/Makefile
@@ -211,6 +212,7 @@ src/lib-sieve/plugins/metadata/Makefile
 src/lib-sieve/plugins/duplicate/Makefile
 src/lib-sieve/plugins/index/Makefile
 src/lib-sieve/plugins/mime/Makefile
+src/lib-sieve/plugins/special-use/Makefile
 src/lib-sieve/plugins/vnd.dovecot/Makefile
 src/lib-sieve/plugins/vnd.dovecot/debug/Makefile
 src/lib-sieve/plugins/vnd.dovecot/environment/Makefile

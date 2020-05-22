@@ -224,6 +224,12 @@ void mail_user_unref(struct mail_user **_user)
 	pool_unref(&user->pool);
 }
 
+void mail_user_deinit(struct mail_user **user)
+{
+	i_assert((*user)->refcount == 1);
+	mail_user_unref(user);
+}
+
 struct mail_user *mail_user_find(struct mail_user *user, const char *name)
 {
 	struct mail_namespace *ns;
@@ -257,15 +263,7 @@ void mail_user_set_vars(struct mail_user *user, const char *service,
 	i_assert(service != NULL);
 
 	user->service = p_strdup(user->pool, service);
-	event_add_str(user->event, "service", service);
-
 	mail_user_connection_init_from(&user->conn, user->pool, conn);
-	if (user->conn.local_ip != NULL)
-		event_add_str(user->event, "local_ip",
-			      net_ip2addr(user->conn.local_ip));
-	if (user->conn.remote_ip != NULL)
-		event_add_str(user->event, "remote_ip",
-			      net_ip2addr(user->conn.remote_ip));
 }
 
 const struct var_expand_table *
@@ -679,6 +677,7 @@ struct mail_user *mail_user_dup(struct mail_user *user)
 	user2->gid = user->gid;
 	user2->anonymous = user->anonymous;
 	user2->admin = user->admin;
+	user2->auth_mech = p_strdup(user2->pool, user->auth_mech);
 	user2->auth_token = p_strdup(user2->pool, user->auth_token);
 	user2->auth_user = p_strdup(user2->pool, user->auth_user);
 	user2->session_id = p_strdup(user2->pool, user->session_id);

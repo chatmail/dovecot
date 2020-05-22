@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cassandra.h>
+#include <pthread.h>
 
 #define IS_CONNECTED(db) \
 	((db)->api.state != SQL_DB_STATE_DISCONNECTED && \
@@ -188,7 +189,6 @@ struct cassandra_sql_statement {
 
 struct cassandra_sql_prepared_statement {
 	struct sql_prepared_statement prep_stmt;
-	char *query_template;
 
 	/* NULL, until the prepare is asynchronously finished */
 	const CassPrepared *prepared;
@@ -237,6 +237,9 @@ static struct event_category event_category_cassandra = {
 	.parent = &event_category_sql,
 	.name = "cassandra"
 };
+
+static pthread_t main_thread_id;
+static bool main_thread_id_set;
 
 static void driver_cassandra_prepare_pending(struct cassandra_db *db);
 static void
@@ -383,6 +386,24 @@ static void driver_cassandra_log_error(struct cassandra_db *db,
 	e_error(db->api.event, "%s: %.*s", str, (int)size, message);
 }
 
+static struct cassandra_callback *
+cassandra_callback_detach(struct cassandra_db *db, unsigned int id)
+{
+	struct cassandra_callback *cb, *const *cbp;
+
+	/* usually there are only a few callbacks, so don't bother with using
+	   a hash table */
+	array_foreach(&db->callbacks, cbp) {
+		cb = *cbp;
+		if (cb->id == id) {
+			array_delete(&db->callbacks,
+				     array_foreach_idx(&db->callbacks, cbp), 1);
+			return cb;
+		}
+	}
+	return NULL;
+}
+
 static void cassandra_callback_run(struct cassandra_callback *cb)
 {
 	timeout_remove(&cb->to);
@@ -396,8 +417,9 @@ static void driver_cassandra_future_callback(CassFuture *future ATTR_UNUSED,
 {
 	struct cassandra_callback *cb = context;
 
-	if (cb->id == 0) {
+	if (pthread_equal(pthread_self(), main_thread_id) != 0) {
 		/* called immediately from the main thread. */
+		cassandra_callback_detach(cb->db, cb->id);
 		cb->to = timeout_add_short(0, cassandra_callback_run, cb);
 		return;
 	}
@@ -417,20 +439,12 @@ static void driver_cassandra_future_callback(CassFuture *future ATTR_UNUSED,
 
 static void driver_cassandra_input_id(struct cassandra_db *db, unsigned int id)
 {
-	struct cassandra_callback *cb, *const *cbp;
+	struct cassandra_callback *cb;
 
-	/* usually there are only a few callbacks, so don't bother with using
-	   a hash table */
-	array_foreach(&db->callbacks, cbp) {
-		cb = *cbp;
-		if (cb->id == id) {
-			array_delete(&db->callbacks,
-				     array_foreach_idx(&db->callbacks, cbp), 1);
-			cassandra_callback_run(cb);
-			return;
-		}
-	}
-	i_panic("cassandra: Received unknown ID %u", id);
+	cb = cassandra_callback_detach(db, id);
+	if (cb == NULL)
+		i_panic("cassandra: Received unknown ID %u", id);
+	cassandra_callback_run(cb);
 }
 
 static void driver_cassandra_input(struct cassandra_db *db)
@@ -471,17 +485,16 @@ driver_cassandra_set_callback(CassFuture *future, struct cassandra_db *db,
 	cb->context = context;
 	cb->db = db;
 
-	/* NOTE: The callback may be called immediately. This is checked by
-	   seeing whether cb->id==0, so set it only after this call. */
-	cass_future_set_callback(future, driver_cassandra_future_callback, cb);
-
-	if (cb->to == NULL) {
-		/* callback will be called later */
-		array_push_back(&db->callbacks, &cb);
+	array_push_back(&db->callbacks, &cb);
+	cb->id = ++db->callback_ids;
+	if (cb->id == 0)
 		cb->id = ++db->callback_ids;
-		if (cb->id == 0)
-			cb->id = ++db->callback_ids;
-	}
+
+	/* NOTE: The callback may be called immediately by this same thread.
+	   This is checked within the callback. It may also be called at any
+	   time after this call by another thread. So we must not access "cb"
+	   again after this call. */
+	cass_future_set_callback(future, driver_cassandra_future_callback, cb);
 }
 
 static void connect_callback(CassFuture *future, void *context)
@@ -887,6 +900,11 @@ static int driver_cassandra_init_full_v(const struct sql_settings *set,
 	i_array_init(&db->results, 16);
 	i_array_init(&db->callbacks, 16);
 	i_array_init(&db->pending_prepares, 16);
+	if (!main_thread_id_set) {
+		main_thread_id = pthread_self();
+		main_thread_id_set = TRUE;
+	}
+
 	*db_r = &db->api;
 	return 0;
 }
@@ -935,8 +953,7 @@ static void driver_cassandra_log_result(struct cassandra_result *result,
 	struct timeval now;
 	unsigned int row_count;
 
-	if (gettimeofday(&now, NULL) < 0)
-		i_fatal("cassandra: gettimeofday() failed: %m");
+	i_gettimeofday(&now);
 
 	string_t *str = t_str_new(128);
 	str_printfa(str, "Finished %squery '%s' (",
@@ -1139,6 +1156,7 @@ static void query_callback(CassFuture *future, void *context)
 		   not. Also _SERVER_UNAVAILABLE could have actually written
 		   enough copies of the data for the query to succeed. */
 		result->api.error_type = error == CASS_ERROR_SERVER_WRITE_TIMEOUT ||
+			error == CASS_ERROR_SERVER_WRITE_FAILURE ||
 			error == CASS_ERROR_SERVER_UNAVAILABLE ||
 			error == CASS_ERROR_LIB_REQUEST_TIMED_OUT ?
 			SQL_RESULT_ERROR_TYPE_WRITE_UNCERTAIN :
@@ -2006,7 +2024,7 @@ static void prepare_start(struct cassandra_sql_prepared_statement *prep_stmt)
 	/* clear the current error in case we're retrying */
 	i_free_and_null(prep_stmt->error);
 
-	future = cass_session_prepare(db->session, prep_stmt->query_template);
+	future = cass_session_prepare(db->session, prep_stmt->prep_stmt.query_template);
 	driver_cassandra_set_callback(future, db, prepare_callback, prep_stmt);
 }
 
@@ -2030,7 +2048,8 @@ driver_cassandra_prepared_statement_init(struct sql_db *db,
 	struct cassandra_sql_prepared_statement *prep_stmt =
 		i_new(struct cassandra_sql_prepared_statement, 1);
 	prep_stmt->prep_stmt.db = db;
-	prep_stmt->query_template = i_strdup(query_template);
+	prep_stmt->prep_stmt.refcount = 1;
+	prep_stmt->prep_stmt.query_template = i_strdup(query_template);
 	i_array_init(&prep_stmt->pending_statements, 4);
 	prepare_start(prep_stmt);
 	return &prep_stmt->prep_stmt;
@@ -2046,8 +2065,8 @@ driver_cassandra_prepared_statement_deinit(struct sql_prepared_statement *_prep_
 	if (prep_stmt->prepared != NULL)
 		cass_prepared_free(prep_stmt->prepared);
 	array_free(&prep_stmt->pending_statements);
-	i_free(prep_stmt->query_template);
 	i_free(prep_stmt->error);
+	i_free(prep_stmt->prep_stmt.query_template);
 	i_free(prep_stmt);
 }
 
@@ -2073,7 +2092,7 @@ driver_cassandra_statement_init_prepared(struct sql_prepared_statement *_prep_st
 
 	stmt->stmt.pool = pool;
 	stmt->stmt.query_template =
-		p_strdup(stmt->stmt.pool, prep_stmt->query_template);
+		p_strdup(stmt->stmt.pool, prep_stmt->prep_stmt.query_template);
 	stmt->prep = prep_stmt;
 
 	if (prep_stmt->prepared != NULL) {

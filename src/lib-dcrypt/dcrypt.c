@@ -3,6 +3,8 @@
 #include "lib.h"
 #include "module-dir.h"
 #include "dcrypt.h"
+#include "istream.h"
+#include "json-tree.h"
 #include "dcrypt-private.h"
 
 static struct module *dcrypt_module = NULL;
@@ -240,6 +242,20 @@ bool dcrypt_ctx_hmac_final(struct dcrypt_context_hmac *ctx, buffer_t *result,
 	return dcrypt_vfs->ctx_hmac_final(ctx, result, error_r);
 }
 
+bool dcrypt_ecdh_derive_secret(struct dcrypt_private_key *local_key,
+			       struct dcrypt_public_key *pub_key,
+			       buffer_t *shared_secret,
+			       const char **error_r)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->ecdh_derive_secret == NULL) {
+		*error_r = "Not implemented";
+		return FALSE;
+	}
+	return dcrypt_vfs->ecdh_derive_secret(local_key, pub_key, shared_secret,
+					      error_r);
+}
+
 bool dcrypt_ecdh_derive_secret_local(struct dcrypt_private_key *local_key,
 				     buffer_t *R, buffer_t *S,
 				     const char **error_r)
@@ -406,18 +422,22 @@ void dcrypt_key_unref_private(struct dcrypt_private_key **key)
 
 bool dcrypt_rsa_encrypt(struct dcrypt_public_key *key,
 			const unsigned char *data, size_t data_len,
-			buffer_t *result, const char **error_r)
+			buffer_t *result, enum dcrypt_padding padding,
+			const char **error_r)
 {
 	i_assert(dcrypt_vfs != NULL);
-	return dcrypt_vfs->rsa_encrypt(key, data, data_len, result, error_r);
+	return dcrypt_vfs->rsa_encrypt(key, data, data_len, result,
+				       padding, error_r);
 }
 
 bool dcrypt_rsa_decrypt(struct dcrypt_private_key *key,
 			const unsigned char *data, size_t data_len,
-			buffer_t *result, const char **error_r)
+			buffer_t *result, enum dcrypt_padding padding,
+			const char **error_r)
 {
 	i_assert(dcrypt_vfs != NULL);
-	return dcrypt_vfs->rsa_decrypt(key, data, data_len, result, error_r);
+	return dcrypt_vfs->rsa_decrypt(key, data, data_len, result,
+				       padding, error_r);
 }
 
 const char *dcrypt_oid2name(const unsigned char *oid, size_t oid_len,
@@ -433,3 +453,203 @@ bool dcrypt_name2oid(const char *name, buffer_t *oid, const char **error_r)
 	return dcrypt_vfs->name2oid(name, oid, error_r);
 }
 
+bool dcrypt_key_store_private_raw(struct dcrypt_private_key *key,
+				  pool_t pool,
+				  enum dcrypt_key_type *key_type_r,
+				  ARRAY_TYPE(dcrypt_raw_key) *keys_r,
+				  const char **error_r)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_store_private_raw == NULL) {
+		*error_r = "Not implemented";
+		return FALSE;
+	}
+	return dcrypt_vfs->key_store_private_raw(key, pool, key_type_r, keys_r,
+						 error_r);
+}
+
+bool dcrypt_key_store_public_raw(struct dcrypt_public_key *key,
+				 pool_t pool,
+				 enum dcrypt_key_type *key_type_r,
+				 ARRAY_TYPE(dcrypt_raw_key) *keys_r,
+				 const char **error_r)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_store_public_raw == NULL) {
+		*error_r = "Not implemented";
+		return FALSE;
+	}
+	return dcrypt_vfs->key_store_public_raw(key, pool, key_type_r, keys_r,
+						error_r);
+}
+
+bool dcrypt_key_load_private_raw(struct dcrypt_private_key **key_r,
+				 enum dcrypt_key_type key_type,
+				 const ARRAY_TYPE(dcrypt_raw_key) *keys,
+				 const char **error_r)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_load_private_raw == NULL) {
+		*error_r = "Not implemented";
+		return FALSE;
+	}
+	return dcrypt_vfs->key_load_private_raw(key_r, key_type, keys,
+						error_r);
+}
+
+bool dcrypt_key_load_public_raw(struct dcrypt_public_key **key_r,
+				enum dcrypt_key_type key_type,
+				const ARRAY_TYPE(dcrypt_raw_key) *keys,
+				const char **error_r)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_load_public_raw == NULL) {
+		*error_r = "Not implemented";
+		return FALSE;
+	}
+	return dcrypt_vfs->key_load_public_raw(key_r, key_type, keys,
+					       error_r);
+}
+
+bool dcrypt_key_get_curve_public(struct dcrypt_public_key *key,
+				 const char **curve_r, const char **error_r)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_get_curve_public == NULL) {
+		*error_r = "Not implemented";
+		return FALSE;
+	}
+	return dcrypt_vfs->key_get_curve_public(key, curve_r, error_r);
+}
+
+const char *dcrypt_key_get_id_public(struct dcrypt_public_key *key)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_get_id_public == NULL)
+		return NULL;
+	return dcrypt_vfs->key_get_id_public(key);
+}
+
+const char *dcrypt_key_get_id_private(struct dcrypt_private_key *key)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_get_id_private == NULL)
+		return NULL;
+	return dcrypt_vfs->key_get_id_private(key);
+}
+
+void dcrypt_key_set_id_public(struct dcrypt_public_key *key, const char *id)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_set_id_public == NULL)
+		return;
+	dcrypt_vfs->key_set_id_public(key, id);
+}
+
+void dcrypt_key_set_id_private(struct dcrypt_private_key *key, const char *id)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_set_id_private == NULL)
+		return;
+	dcrypt_vfs->key_set_id_private(key, id);
+}
+
+enum dcrypt_key_usage dcrypt_key_get_usage_public(struct dcrypt_public_key *key)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_get_usage_public == NULL)
+		return DCRYPT_KEY_USAGE_NONE;
+	return dcrypt_vfs->key_get_usage_public(key);
+}
+
+enum dcrypt_key_usage dcrypt_key_get_usage_private(struct dcrypt_private_key *key)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_get_usage_private == NULL)
+		return DCRYPT_KEY_USAGE_NONE;
+	return dcrypt_vfs->key_get_usage_private(key);
+}
+
+void dcrypt_key_set_usage_public(struct dcrypt_public_key *key,
+				 enum dcrypt_key_usage usage)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_set_usage_public == NULL)
+		return;
+	dcrypt_vfs->key_set_usage_public(key, usage);
+}
+
+void dcrypt_key_set_usage_private(struct dcrypt_private_key *key,
+				  enum dcrypt_key_usage usage)
+{
+	i_assert(dcrypt_vfs != NULL);
+	if (dcrypt_vfs->key_set_usage_private == NULL)
+		return;
+	dcrypt_vfs->key_set_usage_private(key, usage);
+}
+
+bool dcrypt_sign(struct dcrypt_private_key *key, const char *algorithm,
+		 enum dcrypt_signature_format format,
+		 const void *data, size_t data_len, buffer_t *signature_r,
+		 enum dcrypt_padding padding, const char **error_r)
+{
+	i_assert(dcrypt_vfs != NULL);
+
+	if (dcrypt_vfs->sign == NULL) {
+		*error_r = "Not implemented";
+		return FALSE;
+	}
+
+	return dcrypt_vfs->sign(key, algorithm, format, data, data_len,
+				signature_r, padding, error_r);
+}
+
+bool dcrypt_verify(struct dcrypt_public_key *key, const char *algorithm,
+		   enum dcrypt_signature_format format,
+		   const void *data, size_t data_len,
+		   const unsigned char *signature, size_t signature_len,
+		   bool *valid_r, enum dcrypt_padding padding,
+		   const char **error_r)
+{
+	i_assert(dcrypt_vfs != NULL);
+
+	if (dcrypt_vfs->verify == NULL) {
+		*error_r = "Not implemented";
+		return FALSE;
+	}
+
+	return dcrypt_vfs->verify(key, algorithm, format, data, data_len,
+				  signature, signature_len,
+				  valid_r, padding, error_r);
+}
+
+int parse_jwk_key(const char *key_data, struct json_tree **tree_r,
+		  const char **error_r)
+{
+	struct istream *is = i_stream_create_from_data(key_data, strlen(key_data));
+	struct json_parser *parser = json_parser_init(is);
+	struct json_tree *tree = json_tree_init();
+	const char *error;
+	enum json_type type;
+	const char *value;
+	int ret;
+
+	i_stream_unref(&is);
+
+	while ((ret = json_parse_next(parser, &type, &value)) == 1)
+		json_tree_append(tree, type, value);
+
+	i_assert(ret == -1);
+
+	if (json_parser_deinit(&parser, &error) != 0) {
+		json_tree_deinit(&tree);
+		*error_r = error;
+		if (error == NULL)
+			*error_r = "Truncated JSON";
+		return -1;
+	}
+
+	*tree_r = tree;
+
+	return 0;
+}

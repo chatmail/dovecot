@@ -34,9 +34,9 @@ static bool client_is_writer(const char *path)
 static void client_connected(struct master_service_connection *conn)
 {
 	if (client_is_writer(conn->name))
-		(void)client_writer_create(conn->fd, metrics);
+		client_writer_create(conn->fd, metrics);
 	else
-		(void)client_reader_create(conn->fd, metrics);
+		client_reader_create(conn->fd, metrics);
 	master_service_client_connection_accept(conn);
 }
 
@@ -77,6 +77,8 @@ int main(int argc, char *argv[])
 		NULL
 	};
 	const enum master_service_flags service_flags =
+		MASTER_SERVICE_FLAG_USE_SSL_SETTINGS |
+		MASTER_SERVICE_FLAG_NO_SSL_INIT |
 		MASTER_SERVICE_FLAG_DONT_SEND_STATS |
 		MASTER_SERVICE_FLAG_NO_IDLE_DIE |
 		MASTER_SERVICE_FLAG_UPDATE_PROCTITLE;
@@ -94,8 +96,8 @@ int main(int argc, char *argv[])
 
 	main_preinit();
 
-	master_service_init_finish(master_service);
 	main_init();
+	master_service_init_finish(master_service);
 	master_service_run(master_service, client_connected);
 	main_deinit();
 	master_service_deinit(&master_service);
