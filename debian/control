@@ -4,7 +4,8 @@ Priority: optional
 Maintainer: Dovecot Maintainers <dovecot@packages.debian.org>
 Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>,
            Jelmer Vernooij <jelmer@debian.org>,
-           Apollon Oikonomopoulos <apoikos@debian.org>
+           Apollon Oikonomopoulos <apoikos@debian.org>,
+           Noah Meyerhans <noahm@debian.org>
 Build-Depends: debhelper-compat (= 12),
                default-libmysqlclient-dev,
                dh-exec,
