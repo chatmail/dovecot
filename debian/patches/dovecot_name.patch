@@ -12,9 +12,11 @@ Last-Update: 2018-07-04
  src/login-common/login-settings.c |    2 +-
  4 files changed, 10 insertions(+), 5 deletions(-)
 
---- a/configure.ac
-+++ b/configure.ac
-@@ -295,7 +295,12 @@
+Index: dovecot/configure.ac
+===================================================================
+--- dovecot.orig/configure.ac
++++ dovecot/configure.ac
+@@ -300,7 +300,12 @@ AM_ICONV
  # SIZE_MAX is missing without this
  CXXFLAGS="$CXXFLAGS -D__STDC_LIMIT_MACROS"
  
@@ -28,20 +30,24 @@ Last-Update: 2018-07-04
  AC_DEFINE_UNQUOTED(DOVECOT_STRING, "$PACKAGE_STRING", [Dovecot string])
  AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", [Dovecot version])
  
---- a/src/lmtp/lmtp-settings.c
-+++ b/src/lmtp/lmtp-settings.c
-@@ -85,7 +85,7 @@
- 	.lmtp_rawlog_dir = "",
- 	.lmtp_proxy_rawlog_dir = "",
+Index: dovecot/src/lmtp/lmtp-settings.c
+===================================================================
+--- dovecot.orig/src/lmtp/lmtp-settings.c
++++ dovecot/src/lmtp/lmtp-settings.c
+@@ -91,7 +91,7 @@ static const struct lmtp_settings lmtp_d
+ 
+ 	.lmtp_client_workarounds = "",
  
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
  	.login_trusted_networks = "",
  
  	.mail_plugins = "",
---- a/src/login-common/login-settings.c
-+++ b/src/login-common/login-settings.c
-@@ -48,7 +48,7 @@
+Index: dovecot/src/login-common/login-settings.c
+===================================================================
+--- dovecot.orig/src/login-common/login-settings.c
++++ dovecot/src/login-common/login-settings.c
+@@ -48,7 +48,7 @@ static const struct setting_define login
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
@@ -50,9 +56,11 @@ Last-Update: 2018-07-04
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
---- a/src/lib-smtp/smtp-server.c
-+++ b/src/lib-smtp/smtp-server.c
-@@ -47,7 +47,7 @@
+Index: dovecot/src/lib-smtp/smtp-server.c
+===================================================================
+--- dovecot.orig/src/lib-smtp/smtp-server.c
++++ dovecot/src/lib-smtp/smtp-server.c
+@@ -47,7 +47,7 @@ struct smtp_server *smtp_server_init(con
  	if (set->login_greeting != NULL && *set->login_greeting != '\0')
  		server->set.login_greeting = p_strdup(pool, set->login_greeting);
  	else
@@ -61,9 +69,11 @@ Last-Update: 2018-07-04
  	if (set->capabilities == 0) {
  		server->set.capabilities = SMTP_SERVER_DEFAULT_CAPABILITIES;
  	} else  {
---- a/src/submission/submission-settings.c
-+++ b/src/submission/submission-settings.c
-@@ -101,7 +101,7 @@
+Index: dovecot/src/submission/submission-settings.c
+===================================================================
+--- dovecot.orig/src/submission/submission-settings.c
++++ dovecot/src/submission/submission-settings.c
+@@ -103,7 +103,7 @@ static const struct submission_settings
  
  	.hostname = "",
  
@@ -71,4 +81,4 @@ Last-Update: 2018-07-04
 +	.login_greeting = DOVECOT_NAME" ready.",
  	.login_trusted_networks = "",
  
- 	.submission_max_mail_size = 40*1024*1024,
+ 	.recipient_delimiter = "+",
