@@ -192,7 +192,7 @@ static char *get_apop_challenge(struct pop3_client *client)
 	unsigned char buffer_base64[MAX_BASE64_ENCODED_SIZE(sizeof(buffer)) + 1];
 	buffer_t buf;
 
-	if (auth_client_find_mech(auth_client, "APOP") == NULL) {
+	if (sasl_server_find_available_mech(&client->common, "APOP") == NULL) {
 		/* disabled, no need to present the challenge */
 		return NULL;
 	}
@@ -315,25 +315,22 @@ static void pop3_login_deinit(void)
 }
 
 static struct client_vfuncs pop3_client_vfuncs = {
-	pop3_client_alloc,
-	pop3_client_create,
-	pop3_client_destroy,
-	pop3_client_notify_auth_ready,
-	pop3_client_notify_disconnect,
-	NULL,
-	pop3_client_notify_starttls,
-	pop3_client_starttls,
-	pop3_client_input,
-	NULL,
-	NULL,
-	pop3_client_auth_result,
-	pop3_proxy_reset,
-	pop3_proxy_parse_line,
-	pop3_proxy_error,
-	pop3_proxy_get_state,
-	client_common_send_raw_data,
-	pop3_client_input_next_cmd,
-	client_common_default_free,
+	.alloc = pop3_client_alloc,
+	.create = pop3_client_create,
+	.destroy = pop3_client_destroy,
+	.notify_auth_ready = pop3_client_notify_auth_ready,
+	.notify_disconnect = pop3_client_notify_disconnect,
+	.notify_starttls = pop3_client_notify_starttls,
+	.starttls = pop3_client_starttls,
+	.input = pop3_client_input,
+	.auth_result = pop3_client_auth_result,
+	.proxy_reset = pop3_proxy_reset,
+	.proxy_parse_line = pop3_proxy_parse_line,
+	.proxy_error = pop3_proxy_error,
+	.proxy_get_state = pop3_proxy_get_state,
+	.send_raw_data = client_common_send_raw_data,
+	.input_next_cmd  = pop3_client_input_next_cmd,
+	.free = client_common_default_free,
 };
 
 static const struct login_binary pop3_login_binary = {
@@ -347,7 +344,8 @@ static const struct login_binary pop3_login_binary = {
 	.init = pop3_login_init,
 	.deinit = pop3_login_deinit,
 
-	.sasl_support_final_reply = FALSE
+	.sasl_support_final_reply = FALSE,
+	.anonymous_login_acceptable = TRUE,
 };
 
 int main(int argc, char *argv[])

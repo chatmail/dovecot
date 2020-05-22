@@ -195,6 +195,16 @@ static bool fts_args_have_fuzzy(const struct mail_search_arg *args)
 	return FALSE;
 }
 
+static enum fts_enforced fts_enforced_parse(const char *str)
+{
+	if (str == NULL || strcmp(str, "no") == 0)
+		return FTS_ENFORCED_NO;
+	else if (strcmp(str, "body") == 0)
+		return FTS_ENFORCED_BODY;
+	else
+		return FTS_ENFORCED_YES;
+}
+
 static struct mail_search_context *
 fts_mailbox_search_init(struct mailbox_transaction_context *t,
 			struct mail_search_args *args,
@@ -222,9 +232,8 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	fctx->result_pool = pool_alloconly_create("fts results", 1024*64);
 	fctx->orig_matches = buffer_create_dynamic(default_pool, 64);
 	fctx->virtual_mailbox = t->box->virtual_vfuncs != NULL;
-	fctx->enforced =
-		mail_user_plugin_getenv_bool(t->box->storage->user,
-					"fts_enforced");
+	fctx->enforced = fts_enforced_parse(
+		mail_user_plugin_getenv(t->box->storage->user, "fts_enforced"));
 	i_array_init(&fctx->levels, 8);
 	fctx->scores = i_new(struct fts_scores, 1);
 	fctx->scores->refcount = 1;
@@ -244,7 +253,8 @@ fts_mailbox_search_init(struct mailbox_transaction_context *t,
 	ft->scores = fctx->scores;
 	ft->scores->refcount++;
 
-	if (fctx->enforced || fts_want_build_args(args->args))
+	if (fctx->enforced == FTS_ENFORCED_YES ||
+	    fts_want_build_args(args->args))
 		fts_try_build_init(ctx, fctx);
 	else
 		fts_search_lookup(fctx);
@@ -305,7 +315,8 @@ fts_mailbox_search_next_nonblock(struct mail_search_context *ctx,
 			return FALSE;
 		}
 	}
-	if (fctx != NULL && !fctx->fts_lookup_success && fctx->enforced)
+	if (fctx != NULL && !fctx->fts_lookup_success &&
+	    fctx->enforced != FTS_ENFORCED_NO)
 		return FALSE;
 
 	return fbox->module_ctx.super.
@@ -381,7 +392,8 @@ static int fts_mailbox_search_deinit(struct mail_search_context *ctx)
 		}
 		if (fctx->indexing_timed_out)
 			ret = -1;
-		if (!fctx->fts_lookup_success && fctx->enforced) {
+		if (!fctx->fts_lookup_success &&
+		    fctx->enforced != FTS_ENFORCED_NO) {
 			/* FTS lookup failed and we didn't want to fallback to
 			   opening all the mails and searching manually */
 			mail_storage_set_internal_error(ctx->transaction->box->storage);
@@ -790,7 +802,7 @@ static const char *const *fts_exclude_get_patterns(struct mail_user *user)
 {
 	ARRAY_TYPE(const_string) patterns;
 	const char *str;
-	char set_name[21+MAX_INT_STRLEN+1];
+	char set_name[21 + MAX_INT_STRLEN];
 	unsigned int i;
 
 	str = mail_user_plugin_getenv(user, "fts_autoindex_exclude");
@@ -799,7 +811,7 @@ static const char *const *fts_exclude_get_patterns(struct mail_user *user)
 
 	t_array_init(&patterns, 16);
 	for (i = 2; str != NULL; i++) {
-		array_append(&patterns, &str, 1);
+		array_push_back(&patterns, &str);
 
 		if (i_snprintf(set_name, sizeof(set_name),
 			       "fts_autoindex_exclude%u", i) < 0)
@@ -807,7 +819,7 @@ static const char *const *fts_exclude_get_patterns(struct mail_user *user)
 		str = mail_user_plugin_getenv(user, set_name);
 	}
 	array_append_zero(&patterns);
-	return array_idx(&patterns, 0);
+	return array_front(&patterns);
 }
 
 static bool fts_autoindex_exclude_match(struct mailbox *box)

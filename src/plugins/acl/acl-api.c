@@ -349,9 +349,9 @@ int acl_rights_update_import(struct acl_rights_update *update,
 			if (*right == ':') {
 				/* non-standard right */
 				right++;
-				array_append(dest, &right, 1);
+				array_push_back(dest, &right);
 			} else if (is_standard_right(right)) {
-				array_append(dest, &right, 1);
+				array_push_back(dest, &right);
 			} else {
 				*error_r = t_strdup_printf("Invalid right '%s'",
 							   right);
@@ -359,18 +359,18 @@ int acl_rights_update_import(struct acl_rights_update *update,
 			}
 		} else {
 			for (j = 0; all_mailbox_rights[j] != NULL; j++)
-				array_append(dest, &all_mailbox_rights[j], 1);
+				array_push_back(dest, &all_mailbox_rights[j]);
 		}
 	}
 	if (array_count(&dest_rights) > 0) {
 		array_append_zero(&dest_rights);
-		update->rights.rights = array_idx(&dest_rights, 0);
+		update->rights.rights = array_front(&dest_rights);
 	} else if (update->modify_mode == ACL_MODIFY_MODE_REPLACE) {
 		update->modify_mode = ACL_MODIFY_MODE_CLEAR;
 	}
 	if (array_count(&dest_neg_rights) > 0) {
 		array_append_zero(&dest_neg_rights);
-		update->rights.neg_rights = array_idx(&dest_neg_rights, 0);
+		update->rights.neg_rights = array_front(&dest_neg_rights);
 	} else if (update->neg_modify_mode == ACL_MODIFY_MODE_REPLACE) {
 		update->neg_modify_mode = ACL_MODIFY_MODE_CLEAR;
 	}
@@ -591,7 +591,7 @@ acl_right_names_parse(pool_t pool, const char *acl, const char **error_r)
 			return NULL;
 		}
 
-		array_append(&rights, &acl_letter_map[i].name, 1);
+		array_push_back(&rights, &acl_letter_map[i].name);
 		acl++;
 	}
 	while (*acl == ' ' || *acl == '\t') acl++;
@@ -606,7 +606,7 @@ acl_right_names_parse(pool_t pool, const char *acl, const char **error_r)
 		names = t_strsplit_spaces(acl + 1, ", \t");
 		for (; *names != NULL; names++) {
 			const char *name = p_strdup(pool, *names);
-			array_append(&rights, &name, 1);
+			array_push_back(&rights, &name);
 		}
 	}
 
@@ -652,11 +652,11 @@ void acl_right_names_merge(pool_t pool, const char *const **destp,
 	t_array_init(&rights, 64);
 	if (dest != NULL) {
 		for (i = 0; dest[i] != NULL; i++)
-			array_append(&rights, &dest[i], 1);
+			array_push_back(&rights, &dest[i]);
 	}
 	if (src != NULL) {
 		for (i = 0; src[i] != NULL; i++)
-			array_append(&rights, &src[i], 1);
+			array_push_back(&rights, &src[i]);
 	}
 
 	*destp = acl_right_names_alloc(pool, &rights, dup_strings);
@@ -691,11 +691,11 @@ bool acl_right_names_modify(pool_t pool,
 					break;
 			}
 			if (modify_rights[j] == NULL)
-				array_append(&rights, &old_rights[i], 1);
+				array_push_back(&rights, &old_rights[i]);
 		}
 		new_rights = &null;
 		modify_rights = array_count(&rights) == 0 ? NULL :
-			array_idx(&rights, 0);
+			array_front(&rights);
 		acl_right_names_merge(pool, &new_rights, modify_rights, TRUE);
 		break;
 	case ACL_MODIFY_MODE_ADD:
@@ -825,11 +825,11 @@ void acl_object_remove_all_access(struct acl_object *aclobj)
 	i_zero(&rights);
 	rights.id_type = ACL_ID_ANYONE;
 	rights.rights = &null;
-	array_append(&aclobj->rights, &rights, 1);
+	array_push_back(&aclobj->rights, &rights);
 
 	rights.id_type = ACL_ID_OWNER;
 	rights.rights = &null;
-	array_append(&aclobj->rights, &rights, 1);
+	array_push_back(&aclobj->rights, &rights);
 }
 
 void acl_object_add_global_acls(struct acl_object *aclobj)

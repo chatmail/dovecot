@@ -11,7 +11,7 @@
 
 #include <unistd.h>
 
-#define IPC_SERVER_RECONNECT_MSECS (60*1000)
+#define IPC_SERVER_RECONNECT_MSECS (10*1000)
 #define IPC_SERVER_PROTOCOL_MAJOR_VERSION 1
 #define IPC_SERVER_PROTOCOL_MINOR_VERSION 0
 #define IPC_SERVER_HANDSHAKE "VERSION\tipc-server\t1\t0\nHANDSHAKE\t%s\t%s\n"
@@ -37,6 +37,7 @@ struct ipc_server {
 };
 
 static void ipc_server_disconnect(struct ipc_server *server);
+static void ipc_server_connect(struct ipc_server *server);
 
 static void ipc_server_input_line(struct ipc_server *server, char *line)
 {
@@ -72,6 +73,7 @@ static void ipc_server_input(struct ipc_server *server)
 
 	if (i_stream_read(server->input) < 0) {
 		ipc_server_disconnect(server);
+		ipc_server_connect(server);
 		return;
 	}
 

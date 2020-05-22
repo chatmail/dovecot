@@ -56,6 +56,7 @@ enum client_auth_fail_code {
 	CLIENT_AUTH_FAIL_CODE_LOGIN_DISABLED,
 	CLIENT_AUTH_FAIL_CODE_MECH_INVALID,
 	CLIENT_AUTH_FAIL_CODE_MECH_SSL_REQUIRED,
+	CLIENT_AUTH_FAIL_CODE_ANONYMOUS_DENIED,
 };
 
 enum client_auth_result {
@@ -72,7 +73,8 @@ enum client_auth_result {
 	CLIENT_AUTH_RESULT_INVALID_BASE64,
 	CLIENT_AUTH_RESULT_LOGIN_DISABLED,
 	CLIENT_AUTH_RESULT_MECH_INVALID,
-	CLIENT_AUTH_RESULT_MECH_SSL_REQUIRED
+	CLIENT_AUTH_RESULT_MECH_SSL_REQUIRED,
+	CLIENT_AUTH_RESULT_ANONYMOUS_DENIED
 };
 
 struct client_auth_reply {
@@ -110,6 +112,9 @@ struct client_vfuncs {
 				bool success, const char *text);
 	void (*starttls)(struct client *client);
 	void (*input)(struct client *client);
+	bool (*sasl_filter_mech)(struct client *client,
+				 struct auth_mech_desc *mech);
+	bool (*sasl_check_login)(struct client *client);
 	void (*auth_send_challenge)(struct client *client, const char *data);
 	void (*auth_parse_response)(struct client *client);
 	void (*auth_result)(struct client *client,
@@ -220,6 +225,7 @@ struct client {
 	bool auth_try_aborted:1;
 	bool auth_initializing:1;
 	bool auth_process_comm_fail:1;
+	bool auth_anonymous:1;
 	bool proxy_auth_failed:1;
 	bool proxy_nopipelining:1;
 	bool proxy_not_trusted:1;
@@ -312,6 +318,8 @@ void client_auth_send_challenge(struct client *client, const char *data);
 void client_auth_parse_response(struct client *client);
 int client_auth_begin(struct client *client, const char *mech_name,
 		      const char *init_resp);
+int client_auth_begin_private(struct client *client, const char *mech_name,
+			      const char *init_resp);
 bool client_check_plaintext_auth(struct client *client, bool pass_sent);
 int client_auth_read_line(struct client *client);
 

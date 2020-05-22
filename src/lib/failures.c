@@ -10,6 +10,7 @@
 #include "backtrace-string.h"
 #include "printf-format-fix.h"
 #include "write-full.h"
+#include "time-util.h"
 #include "failures-private.h"
 
 #include <unistd.h>
@@ -320,8 +321,7 @@ static void log_timestamp_add(const struct failure_context *ctx, string_t *str)
 
 	if (log_stamp_format != NULL) {
 		if (tm == NULL) {
-			if (gettimeofday(&now, NULL) < 0)
-				i_panic("gettimeofday() failed: %m");
+			i_gettimeofday(&now);
 			tm = localtime(&now.tv_sec);
 		} else {
 			now.tv_usec = ctx->timestamp_usecs;
@@ -346,8 +346,7 @@ static void log_prefix_add(const struct failure_context *ctx, string_t *str)
 	} else {
 		i_assert(ctx->log_prefix_type_pos <= strlen(ctx->log_prefix));
 		str_append_data(str, ctx->log_prefix, ctx->log_prefix_type_pos);
-		str_insert(str, ctx->log_prefix_type_pos,
-			   failure_log_type_prefixes[ctx->type]);
+		str_append(str, failure_log_type_prefixes[ctx->type]);
 		str_append(str, ctx->log_prefix + ctx->log_prefix_type_pos);
 	}
 }

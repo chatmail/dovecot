@@ -41,6 +41,7 @@
 #include "str.h"
 #include "read-full.h"
 #include "write-full.h"
+#include "sleep.h"
 #include "message-date.h"
 #include "istream-raw-mbox.h"
 #include "mbox-storage.h"
@@ -729,7 +730,7 @@ static int mbox_sync_handle_header(struct mbox_sync_mail_context *mail_ctx)
 			i_assert(sync_ctx->space_diff < -mail_ctx->mail.space);
 
 			sync_ctx->need_space_seq--;
-			array_append(&sync_ctx->mails, &mail, 1);
+			array_push_back(&sync_ctx->mails, &mail);
 		}
 	}
 	return 0;
@@ -755,7 +756,7 @@ mbox_sync_handle_missing_space(struct mbox_sync_mail_context *mail_ctx)
 		array_append_array(&keywords_copy, &mail_ctx->mail.keywords);
 		mail_ctx->mail.keywords = keywords_copy;
 	}
-	array_append(&sync_ctx->mails, &mail_ctx->mail, 1);
+	array_push_back(&sync_ctx->mails, &mail_ctx->mail);
 
 	sync_ctx->space_diff += mail_ctx->mail.space;
 	if (sync_ctx->space_diff < 0) {
@@ -788,8 +789,7 @@ mbox_sync_handle_missing_space(struct mbox_sync_mail_context *mail_ctx)
 			sync_ctx->expunged_space = 0;
 		}
 		last_seq = sync_ctx->seq - 1;
-		array_delete(&sync_ctx->mails,
-			     array_count(&sync_ctx->mails) - 1, 1);
+		array_pop_back(&sync_ctx->mails);
 		end_offset = mail_ctx->mail.from_offset;
 	} else {
 		/* this message gave enough space from headers. rewriting stops
@@ -1219,7 +1219,7 @@ static int mbox_sync_loop(struct mbox_sync_context *sync_ctx,
 	return 1;
 }
 
-static int mbox_write_pseudo(struct mbox_sync_context *sync_ctx)
+static int mbox_write_pseudo(struct mbox_sync_context *sync_ctx, bool force)
 {
 	string_t *str;
 	unsigned int uid_validity;
@@ -1229,11 +1229,18 @@ static int mbox_write_pseudo(struct mbox_sync_context *sync_ctx)
 	if (sync_ctx->mbox->sync_hdr_update != NULL) {
 		const struct mailbox_update *update =
 			sync_ctx->mbox->sync_hdr_update;
+		bool change = FALSE;
 
-		if (update->uid_validity != 0)
+		if (update->uid_validity != 0) {
 			sync_ctx->base_uid_validity = update->uid_validity;
-		if (update->min_next_uid != 0)
+			change = TRUE;
+		}
+		if (update->min_next_uid != 0) {
 			sync_ctx->base_uid_last = update->min_next_uid-1;
+			change = TRUE;
+		}
+		if (!change && !force)
+			return 0;
 	}
 
 	uid_validity = sync_ctx->base_uid_validity != 0 ?
@@ -1401,7 +1408,7 @@ static int mbox_sync_handle_eof_updates(struct mbox_sync_context *sync_ctx,
 		}
 
 		if (offset == 0) {
-			if (mbox_write_pseudo(sync_ctx) < 0)
+			if (mbox_write_pseudo(sync_ctx, TRUE) < 0)
 				return -1;
 		}
 
@@ -1409,7 +1416,7 @@ static int mbox_sync_handle_eof_updates(struct mbox_sync_context *sync_ctx,
 		mbox_sync_file_updated(sync_ctx, FALSE);
 	} else {
 		if (file_size == 0 && sync_ctx->mbox->sync_hdr_update != NULL) {
-			if (mbox_write_pseudo(sync_ctx) < 0)
+			if (mbox_write_pseudo(sync_ctx, FALSE) < 0)
 				return -1;
 		}
 	}
@@ -1484,7 +1491,7 @@ static int mbox_sync_update_index_header(struct mbox_sync_context *sync_ctx)
 		   performance problem and the consequences of being wrong are
 		   quite minimal (an extra logged error message). */
 		while (sync_ctx->orig_mtime == st->st_mtime) {
-			usleep(500000);
+			i_sleep_msecs(500);
 			if (utime(mailbox_get_path(&sync_ctx->mbox->box), NULL) < 0) {
 				mbox_set_syscall_error(sync_ctx->mbox,
 						       "utime()");

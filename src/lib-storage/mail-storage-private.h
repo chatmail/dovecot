@@ -136,6 +136,7 @@ struct mail_storage {
 	   MAIL_FETCH_IMAP_BODYSTRUCTURE from the remote server. Adding fields
 	   here avoids adding them to index_mail_data.access_part. */
 	enum mail_fetch_field nonbody_access_fields;
+	struct event_category *event_category;
 
         struct mail_storage_vfuncs v, *vlast;
 
@@ -233,14 +234,16 @@ struct mailbox_vfuncs {
 	int (*set_subscribed)(struct mailbox *box, bool set);
 
 	int (*attribute_set)(struct mailbox_transaction_context *t,
-			     enum mail_attribute_type type, const char *key,
+			     enum mail_attribute_type type_flags,
+			     const char *key,
 			     const struct mail_attribute_value *value);
 	int (*attribute_get)(struct mailbox *box,
-			     enum mail_attribute_type type, const char *key,
+			     enum mail_attribute_type type_flags,
+			     const char *key,
 			     struct mail_attribute_value *value_r);
 	struct mailbox_attribute_iter *
 		(*attribute_iter_init)(struct mailbox *box,
-				       enum mail_attribute_type type,
+				       enum mail_attribute_type type_flags,
 				       const char *prefix);
 	const char *(*attribute_iter_next)(struct mailbox_attribute_iter *iter);
 	int (*attribute_iter_deinit)(struct mailbox_attribute_iter *iter);
@@ -355,7 +358,7 @@ struct mailbox {
 	/* virtual mailboxes: */
 	const struct virtual_mailbox_vfuncs *virtual_vfuncs;
 /* private: */
-	pool_t pool, metadata_pool;
+	pool_t pool;
 	/* Linked list of all mailboxes in this storage */
 	struct mailbox *prev, *next;
 
@@ -464,6 +467,9 @@ struct mailbox {
 	/* Using LAYOUT=index and mailbox is being opened with a corrupted
 	   mailbox name. Try to revert to the previously known good name. */
 	bool corrupted_mailbox_name:1;
+	/* mailbox_open() returned MAIL_ERROR_NOTFOUND because the mailbox
+	   doesn't have the LOOKUP ACL right. */
+	bool acl_no_lookup_right:1;
 };
 
 struct mail_vfuncs {
@@ -555,6 +561,8 @@ struct mail_private {
 	const char *get_stream_reason;
 
 	bool autoexpunged:1;
+	/* mail created by mailbox_search_*() */
+	bool search_mail:1;
 };
 
 struct mailbox_list_context {
@@ -649,6 +657,10 @@ struct mail_search_context {
 
 	uint32_t seq;
 	uint32_t progress_cur, progress_max;
+
+	ARRAY(struct mail *) mails;
+	unsigned int unused_mail_idx;
+	unsigned int max_mails;
 
 	ARRAY(union mail_search_module_context *) module_contexts;
 
@@ -841,5 +853,8 @@ void mail_storage_free_binary_cache(struct mail_storage *storage);
 enum mail_index_open_flags
 mail_storage_settings_to_index_flags(const struct mail_storage_settings *set);
 void mailbox_save_context_deinit(struct mail_save_context *ctx);
+
+/* for unit testing */
+int mailbox_verify_name(struct mailbox *box);
 
 #endif

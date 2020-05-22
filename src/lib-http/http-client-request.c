@@ -53,8 +53,8 @@ static void
 http_client_request_update_event(struct http_client_request *req)
 {
 	event_add_str(req->event, "method", req->method);
-	event_add_str(req->event, "host", req->origin_url.host.name);
-	event_add_int(req->event, "port", http_url_get_port(&req->origin_url));
+	event_add_str(req->event, "dest_host", req->origin_url.host.name);
+	event_add_int(req->event, "dest_port", http_url_get_port(&req->origin_url));
 	if (req->target != NULL)
 		event_add_str(req->event, "target", req->target);
 	event_set_append_log_prefix(req->event, t_strdup_printf(
@@ -87,8 +87,12 @@ http_client_request_result_event(struct http_client_request *req)
 		}
 	}
 
-	return event_create_passthrough(req->event)->
-		add_int("status_code", req->last_status)->
+	struct event_passthrough *e = event_create_passthrough(req->event);
+	if (req->queue != NULL &&
+	    req->queue->addr.type != HTTP_CLIENT_PEER_ADDR_UNIX)
+		e->add_str("dest_ip", net_ip2addr(&req->queue->addr.a.tcp.ip));
+
+	return e->add_int("status_code", req->last_status)->
 		add_int("attempts", req->attempts)->
 		add_int("redirects", req->redirects)->
 		add_int("bytes_in", req->bytes_in)->
@@ -389,9 +393,44 @@ void http_client_request_set_preserve_exact_reason(struct http_client_request *r
 	req->preserve_exact_reason = TRUE;
 }
 
-void http_client_request_add_header(struct http_client_request *req,
-				    const char *key, const char *value)
+static bool
+http_client_request_lookup_header_pos(struct http_client_request *req,
+				      const char *key,
+				      size_t *key_pos_r, size_t *value_pos_r,
+				      size_t *next_pos_r)
 {
+	const unsigned char *data, *p;
+	size_t size, line_len;
+	size_t key_len = strlen(key);
+
+	if (req->headers == NULL)
+		return FALSE;
+
+	data = str_data(req->headers);
+	size = str_len(req->headers);
+	while ((p = memchr(data, '\n', size)) != NULL) {
+		line_len = (p+1) - data;
+		if (size > key_len && i_memcasecmp(data, key, key_len) == 0 &&
+		    data[key_len] == ':' && data[key_len+1] == ' ') {
+			/* key was found from header, replace its value */
+			*key_pos_r = str_len(req->headers) - size;
+			*value_pos_r = *key_pos_r + key_len + 2;
+			*next_pos_r = *key_pos_r + line_len;
+			return TRUE;
+		}
+		size -= line_len;
+		data += line_len;
+	}
+	return FALSE;
+}
+
+static void
+http_client_request_add_header_full(struct http_client_request *req,
+				    const char *key, const char *value,
+				    bool replace_existing)
+{
+	size_t key_pos, value_pos, next_pos;
+
 	i_assert(req->state == HTTP_REQUEST_STATE_NEW ||
 		 /* allow calling for retries */
 		 req->state == HTTP_REQUEST_STATE_GOT_RESPONSE ||
@@ -438,35 +477,55 @@ void http_client_request_add_header(struct http_client_request *req,
 	}
 	if (req->headers == NULL)
 		req->headers = str_new(default_pool, 256);
-	str_printfa(req->headers, "%s: %s\r\n", key, value);
+	if (!http_client_request_lookup_header_pos(req, key, &key_pos,
+						   &value_pos, &next_pos))
+		str_printfa(req->headers, "%s: %s\r\n", key, value);
+	else if (replace_existing) {
+		/* don't delete CRLF */
+		size_t old_value_len = next_pos - value_pos - 2;
+		str_replace(req->headers, value_pos, old_value_len, value);
+	}
+}
+
+void http_client_request_add_header(struct http_client_request *req,
+				    const char *key, const char *value)
+{
+	http_client_request_add_header_full(req, key, value, TRUE);
+}
+
+void http_client_request_add_missing_header(struct http_client_request *req,
+					    const char *key, const char *value)
+{
+	http_client_request_add_header_full(req, key, value, FALSE);
 }
 
 void http_client_request_remove_header(struct http_client_request *req,
 				       const char *key)
 {
-	const unsigned char *data, *p;
-	size_t size, line_len, line_start_pos;
-	size_t key_len = strlen(key);
+	size_t key_pos, value_pos, next_pos;
 
 	i_assert(req->state == HTTP_REQUEST_STATE_NEW ||
 		 /* allow calling for retries */
 		 req->state == HTTP_REQUEST_STATE_GOT_RESPONSE ||
 		 req->state == HTTP_REQUEST_STATE_ABORTED);
 
-	data = str_data(req->headers);
-	size = str_len(req->headers);
-	while ((p = memchr(data, '\n', size)) != NULL) {
-		line_len = (p+1) - data;
-		if (size > key_len && i_memcasecmp(data, key, key_len) == 0 &&
-		    data[key_len] == ':' && data[key_len+1] == ' ') {
-			/* key was found from header, replace its value */
-			line_start_pos = str_len(req->headers) - size;
-			str_delete(req->headers, line_start_pos, line_len);
-			break;
-		}
-		size -= line_len;
-		data += line_len;
-	}
+	if (http_client_request_lookup_header_pos(req, key, &key_pos,
+						  &value_pos, &next_pos))
+		str_delete(req->headers, key_pos, next_pos - key_pos);
+}
+
+const char *http_client_request_lookup_header(struct http_client_request *req,
+					      const char *key)
+{
+	size_t key_pos, value_pos, next_pos;
+
+	if (!http_client_request_lookup_header_pos(req, key, &key_pos,
+						   &value_pos, &next_pos))
+		return NULL;
+
+	/* don't return CRLF */
+	return t_strndup(str_data(req->headers) + value_pos,
+			 next_pos - value_pos - 2);
 }
 
 void http_client_request_set_date(struct http_client_request *req,
@@ -561,6 +620,12 @@ void http_client_request_set_max_attempts(struct http_client_request *req,
 	req->max_attempts = max_attempts;
 }
 
+void http_client_request_set_event_headers(struct http_client_request *req,
+					   const char *const *headers)
+{
+	req->event_headers = p_strarray_dup(req->pool, headers);
+}
+
 void http_client_request_set_auth_simple(struct http_client_request *req,
 	const char *username, const char *password)
 {
@@ -643,10 +708,22 @@ http_client_request_get_target(const struct http_client_request *req)
 	return req->target;
 }
 
+const struct http_url *
+http_client_request_get_origin_url(const struct http_client_request *req)
+{
+	return &req->origin_url;
+}
+
 enum http_request_state
 http_client_request_get_state(const struct http_client_request *req)
 {
 	return req->state;
+}
+
+unsigned int
+http_client_request_get_attempts(const struct http_client_request *req)
+{
+	return req->attempts;
 }
 
 void http_client_request_get_stats(struct http_client_request *req,
@@ -864,6 +941,7 @@ void http_client_request_submit(struct http_client_request *req)
 
 	req->submit_time = ioloop_timeval;
 
+	http_client_request_update_event(req);
 	http_client_request_do_submit(req);
 
 	req->submitted = TRUE;
@@ -1665,7 +1743,8 @@ void http_client_request_resubmit(struct http_client_request *req)
 void http_client_request_retry(struct http_client_request *req,
 	unsigned int status, const char *error)
 {
-	if (!http_client_request_try_retry(req))
+	if (req->client == NULL || req->client->set.no_auto_retry ||
+	    !http_client_request_try_retry(req))
 		http_client_request_error(&req, status, error);
 }
 

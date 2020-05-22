@@ -47,7 +47,9 @@ void smtp_server_cmd_auth_success(struct smtp_server_cmd_ctx *cmd,
 		(success_msg == NULL ? "Logged in." : success_msg));
 }
 
-static void cmd_auth_completed(struct smtp_server_cmd_ctx *cmd)
+static void
+cmd_auth_completed(struct smtp_server_cmd_ctx *cmd,
+		   struct smtp_server_cmd_auth *data ATTR_UNUSED)
 {
 	struct smtp_server_connection *conn = cmd->conn;
 	struct smtp_server_command *command = cmd->cmd;
@@ -82,7 +84,7 @@ static void cmd_auth_input(struct smtp_server_cmd_ctx *cmd)
 					"Remote closed connection unexpectedly during AUTH");
 				break;
 			default:
-				smtp_server_connection_error(conn,
+				e_error(conn->event,
 					"Connection lost during AUTH: "
 					"read(%s) failed: %s",
 					i_stream_get_name(conn->conn.input),
@@ -94,9 +96,10 @@ static void cmd_auth_input(struct smtp_server_cmd_ctx *cmd)
 		}
 		/* handle syntax error */
 		if (ret < 0) {
-			smtp_server_connection_debug(conn,
+			e_debug(conn->event,
 				"Client sent invalid AUTH response: %s", error);
 
+			smtp_server_command_input_lock(cmd);
 			switch (error_code) {
 			case SMTP_COMMAND_PARSE_ERROR_BROKEN_COMMAND:
 				conn->input_broken = TRUE;
@@ -118,8 +121,7 @@ static void cmd_auth_input(struct smtp_server_cmd_ctx *cmd)
 		return;
 	}
 
-	smtp_server_connection_debug(conn,
-		"Received AUTH response: %s", auth_response);
+	e_debug(conn->event, "Received AUTH response: %s", auth_response);
 
 	smtp_server_command_input_lock(cmd);
 
@@ -158,7 +160,9 @@ void smtp_server_cmd_auth_send_challenge(struct smtp_server_cmd_ctx *cmd,
 	smtp_server_command_input_capture(cmd, cmd_auth_input);
 }
 
-static void cmd_auth_start(struct smtp_server_cmd_ctx *cmd)
+static void
+cmd_auth_start(struct smtp_server_cmd_ctx *cmd,
+	       struct smtp_server_cmd_auth *data)
 {
 	struct smtp_server_connection *conn = cmd->conn;
 	struct smtp_server_command *command = cmd->cmd;
@@ -178,8 +182,7 @@ static void cmd_auth_start(struct smtp_server_cmd_ctx *cmd)
 	i_assert(callbacks != NULL && callbacks->conn_cmd_auth != NULL);
 
 	/* specific implementation of AUTH command */
-	ret = callbacks->conn_cmd_auth(conn->context, cmd,
-		(struct smtp_server_cmd_auth *)command->data);
+	ret = callbacks->conn_cmd_auth(conn->context, cmd, data);
 	i_assert(ret == 0 || smtp_server_command_is_replied(command));
 
 	if (ret == 0)
@@ -245,8 +248,9 @@ void smtp_server_cmd_auth(struct smtp_server_cmd_ctx *cmd,
 	auth_data = p_new(cmd->pool, struct smtp_server_cmd_auth, 1);
 	auth_data->sasl_mech = p_strdup(cmd->pool, sasl_mech);
 	auth_data->initial_response = p_strdup(cmd->pool, initial_response);
-	command->data = (void*)auth_data;
 
-	command->hook_next = cmd_auth_start;
-	command->hook_completed = cmd_auth_completed;
+	smtp_server_command_add_hook(command, SMTP_SERVER_COMMAND_HOOK_NEXT,
+				     cmd_auth_start, auth_data);
+	smtp_server_command_add_hook(command, SMTP_SERVER_COMMAND_HOOK_COMPLETED,
+				     cmd_auth_completed, auth_data);
 }

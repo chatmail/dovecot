@@ -130,8 +130,11 @@ openssl_iostream_verify_client_cert(int preverify_ok, X509_STORE_CTX *ctx)
 		certname[sizeof(certname)-1] = '\0'; /* just in case.. */
 	if (preverify_ok == 0) {
 		openssl_iostream_set_error(ssl_io, t_strdup_printf(
-			"Received invalid SSL certificate: %s: %s",
-			X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx)), certname));
+			"Received invalid SSL certificate: %s: %s (check %s)",
+			X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx)), certname,
+			ssl_io->ctx->client_ctx ?
+				"ssl_client_ca_* settings?" :
+				"ssl_ca setting?"));
 		if (ssl_io->verbose_invalid_cert)
 			i_info("%s", ssl_io->last_error);
 	} else if (ssl_io->verbose) {
@@ -174,6 +177,17 @@ openssl_iostream_set(struct ssl_iostream *ssl_io,
 			*error_r = t_strdup_printf(
 					"Failed to set curve list to '%s'",
 					set->curve_list);
+			return -1;
+		}
+	}
+#endif
+#ifdef HAVE_SSL_CTX_SET_CIPHERSUITES
+        if (set->ciphersuites != NULL &&
+	    strcmp(ctx_set->ciphersuites, set->ciphersuites) != 0) {
+		if (SSL_set_ciphersuites(ssl_io->ssl, set->ciphersuites) == 0) {
+			*error_r = t_strdup_printf(
+				"Can't set ciphersuites to '%s': %s",
+				set->ciphersuites, openssl_iostream_error());
 			return -1;
 		}
 	}
@@ -406,8 +420,7 @@ static bool openssl_iostream_bio_output(struct ssl_iostream *ssl_io)
 		   fully succeed or completely fail due to some error. */
 		sent = o_stream_send(ssl_io->plain_output, buffer, bytes);
 		if (sent < 0) {
-			i_assert(ssl_io->plain_output->closed ||
-				 ssl_io->plain_output->stream_errno != 0);
+			i_assert(ssl_io->plain_output->stream_errno != 0);
 			i_free(ssl_io->plain_stream_errstr);
 			ssl_io->plain_stream_errstr =
 				i_strdup(o_stream_get_error(ssl_io->plain_output));
@@ -670,10 +683,8 @@ static int openssl_iostream_handshake(struct ssl_iostream *ssl_io)
 		}
        } else if (ssl_io->connected_host != NULL && !ssl_io->handshake_failed &&
 		  !ssl_io->allow_invalid_cert) {
-		if (!ssl_iostream_cert_match_name(ssl_io, ssl_io->connected_host, &reason)) {
-			openssl_iostream_set_error(ssl_io, t_strdup_printf(
-				"SSL certificate doesn't match expected host name %s: %s",
-				ssl_io->connected_host, reason));
+		if (ssl_iostream_check_cert_validity(ssl_io, ssl_io->connected_host, &reason) < 0) {
+			openssl_iostream_set_error(ssl_io, reason);
 			ssl_io->handshake_failed = TRUE;
 		}
 	}

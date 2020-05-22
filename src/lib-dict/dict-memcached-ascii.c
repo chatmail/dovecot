@@ -213,14 +213,14 @@ static int memcached_ascii_input_reply(struct memcached_ascii_dict *dict,
 	if ((ret = memcached_ascii_input_reply_read(dict, error_r)) <= 0)
 		return ret;
 	/* finished a reply */
-	array_delete(&dict->input_states, 0, 1);
+	array_pop_front(&dict->input_states);
 
 	replies = array_get_modifiable(&dict->replies, &count);
 	i_assert(count > 0);
 	i_assert(replies[0].reply_count > 0);
 	if (--replies[0].reply_count == 0) {
 		memcached_ascii_callback(dict, &replies[0], &result);
-		array_delete(&dict->replies, 0, 1);
+		array_pop_front(&dict->replies);
 	}
 	return 1;
 }
@@ -432,7 +432,7 @@ memcached_ascii_dict_init(struct dict *driver, const char *uri,
 	}
 
 	connection_init_client_ip(memcached_ascii_connections, &dict->conn.conn,
-				  &dict->ip, dict->port);
+				  NULL, &dict->ip, dict->port);
 	dict->dict = *driver;
 	dict->conn.reply_str = str_new(default_pool, 256);
 	dict->conn.dict = dict;
@@ -529,7 +529,7 @@ memcached_ascii_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
 	key = memcached_ascii_dict_get_full_key(dict, key);
 	o_stream_nsend_str(dict->conn.conn.output,
 			   t_strdup_printf("get %s\r\n", key));
-	array_append(&dict->input_states, &state, 1);
+	array_push_back(&dict->input_states, &state);
 
 	reply = array_append_space(&dict->replies);
 	reply->reply_count = 1;
@@ -578,7 +578,7 @@ memcached_send_change(struct dict_memcached_ascii_commit_ctx *ctx,
 		if (change->value.diff > 0) {
 			str_printfa(ctx->str, "incr %s %lld\r\n",
 				    key, change->value.diff);
-			array_append(&ctx->dict->input_states, &state, 1);
+			array_push_back(&ctx->dict->input_states, &state);
 			/* same kludge as with append */
 			value = t_strdup_printf("%lld", change->value.diff);
 			str_printfa(ctx->str, "add %s 0 0 %u\r\n%s\r\n",
@@ -589,7 +589,7 @@ memcached_send_change(struct dict_memcached_ascii_commit_ctx *ctx,
 		}
 		break;
 	}
-	array_append(&ctx->dict->input_states, &state, 1);
+	array_push_back(&ctx->dict->input_states, &state);
 	o_stream_nsend(ctx->dict->conn.conn.output,
 		       str_data(ctx->str), str_len(ctx->str));
 }

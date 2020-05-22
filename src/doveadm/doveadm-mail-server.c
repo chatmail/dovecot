@@ -119,12 +119,12 @@ static void doveadm_cmd_callback(int exit_code, const char *error,
 
 	if (array_count(&server->queue) > 0) {
 		struct server_connection *conn;
-		char *const *usernamep = array_idx(&server->queue, 0);
+		char *const *usernamep = array_front(&server->queue);
 		char *username = *usernamep;
 
 		conn = doveadm_server_find_unused_conn(server);
 		if (conn != NULL) {
-			array_delete(&server->queue, 0, 1);
+			array_pop_front(&server->queue);
 			doveadm_mail_server_handle(conn, username);
 			i_free(username);
 		}
@@ -179,6 +179,8 @@ static int
 doveadm_mail_server_user_get_host(struct doveadm_mail_cmd_context *ctx,
 				  const struct mail_storage_service_input *input,
 				  const char **user_r, const char **host_r,
+				  struct ip_addr *hostip_r, in_port_t *port_r,
+				  enum doveadm_proxy_ssl_flags *ssl_flags_r,
 				  const char **error_r)
 {
 	struct auth_master_connection *auth_conn;
@@ -192,9 +194,15 @@ doveadm_mail_server_user_get_host(struct doveadm_mail_cmd_context *ctx,
 
 	*user_r = input->username;
 	*host_r = ctx->set->doveadm_socket_path;
+	*port_r = ctx->set->doveadm_port;
 
 	if (ctx->set->doveadm_port == 0)
 		return 0;
+
+	if (strcmp(ctx->set->doveadm_ssl, "ssl") == 0)
+		*ssl_flags_r |= PROXY_SSL_FLAG_YES;
+	else if (strcmp(ctx->set->doveadm_ssl, "starttls") == 0)
+		*ssl_flags_r |= PROXY_SSL_FLAG_YES | PROXY_SSL_FLAG_STARTTLS;
 
 	/* make sure we have an auth connection */
 	mail_storage_service_init_settings(ctx->storage_service, input);
@@ -238,10 +246,23 @@ doveadm_mail_server_user_get_host(struct doveadm_mail_cmd_context *ctx,
 			else if (str_begins(fields[i], "port=")) {
 				if (net_str2port(fields[i]+5, &proxy_port) < 0)
 					proxy_port = 0;
+	                } else if (str_begins(fields[i], "ssl=")) {
+	                        *ssl_flags_r |= PROXY_SSL_FLAG_YES;
+	                        if (strcmp(fields[i]+4, "any-cert") == 0)
+	                               *ssl_flags_r |= PROXY_SSL_FLAG_ANY_CERT;
+	                } else if (str_begins(fields[i], "starttls=")) {
+	                        *ssl_flags_r |= PROXY_SSL_FLAG_YES |
+	                                PROXY_SSL_FLAG_STARTTLS;
+	                        if (strcmp(fields[i]+9, "any-cert") == 0)
+	                                *ssl_flags_r |= PROXY_SSL_FLAG_ANY_CERT;
 			}
 		}
-		if (proxy_hostip != NULL)
-			proxy_host = proxy_hostip;
+		if (proxy_hostip != NULL &&
+		    net_addr2ip(proxy_hostip, hostip_r) < 0) {
+			*error_r = t_strdup_printf("%s Invalid hostip value '%s'",
+						   auth_socket_path, proxy_hostip);
+			ret = -1;
+		}
 		if (!proxying)
 			ret = 0;
 		else if (proxy_host == NULL) {
@@ -254,6 +275,7 @@ doveadm_mail_server_user_get_host(struct doveadm_mail_cmd_context *ctx,
 			}
 			ret = -1;
 		} else {
+			*port_r = proxy_port;
 			*host_r = t_strdup_printf("%s:%u", proxy_host, proxy_port);
 		}
 	}
@@ -268,13 +290,18 @@ int doveadm_mail_server_user(struct doveadm_mail_cmd_context *ctx,
 	struct doveadm_server *server;
 	struct server_connection *conn;
 	const char *user, *host;
+	struct ip_addr hostip;
+	enum doveadm_proxy_ssl_flags ssl_flags = 0;
 	char *username_dup;
 	int ret;
+	in_port_t port;
 
 	i_assert(cmd_ctx == ctx || cmd_ctx == NULL);
 	cmd_ctx = ctx;
 
-	ret = doveadm_mail_server_user_get_host(ctx, input, &user, &host, error_r);
+	i_zero(&hostip);
+	ret = doveadm_mail_server_user_get_host(ctx, input, &user, &host, &hostip,
+						&port, &ssl_flags, error_r);
 	if (ret < 0)
 		return ret;
 	if (ret == 0 &&
@@ -288,21 +315,26 @@ int doveadm_mail_server_user(struct doveadm_mail_cmd_context *ctx,
 	doveadm_print_unstick_headers();
 
 	server = doveadm_server_get(ctx, host);
+	server->ip = hostip;
+	server->ssl_flags = ssl_flags;
+	server->port = port;
 	conn = doveadm_server_find_unused_conn(server);
 	if (conn != NULL)
 		doveadm_mail_server_handle(conn, user);
 	else if (array_count(&server->connections) <
 		 	I_MAX(ctx->set->doveadm_worker_count, 1)) {
-		if (server_connection_create(server, &conn) < 0)
+		if (server_connection_create(server, &conn, error_r) < 0) {
 			internal_failure = TRUE;
-		else
+			return -1;
+		} else {
 			doveadm_mail_server_handle(conn, user);
+		}
 	} else {
 		if (array_count(&server->queue) >= DOVEADM_SERVER_QUEUE_MAX)
 			doveadm_server_flush_one(server);
 
 		username_dup = i_strdup(user);
-		array_append(&server->queue, &username_dup, 1);
+		array_push_back(&server->queue, &username_dup);
 	}
 	*error_r = "doveadm server failure";
 	return DOVEADM_MAIL_SERVER_FAILED() ? -1 : 1;
@@ -337,7 +369,7 @@ static void doveadm_servers_destroy_all_connections(void)
 		while (array_count(&server->connections) > 0) {
 			struct server_connection *const *connp, *conn;
 
-			connp = array_idx(&server->connections, 0);
+			connp = array_front(&server->connections);
 			conn = *connp;
 			server_connection_destroy(&conn);
 		}

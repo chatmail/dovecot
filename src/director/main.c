@@ -245,7 +245,7 @@ static void director_state_changed(struct director *dir)
 		if (!ret) {
 			/* a) request for a user being killed
 			   b) user is weak */
-			array_append(&new_requests, requestp, 1);
+			array_push_back(&new_requests, requestp);
 		}
 	}
 	array_clear(&dir->pending_requests);
@@ -270,7 +270,7 @@ static void main_preinit(void)
 	if (master_service_settings_get(master_service)->verbose_proctitle) {
 		to_proctitle_refresh =
 			timeout_add(1000, director_refresh_proctitle_timeout,
-				    (void *)NULL);
+				    NULL);
 	}
 	set = master_service_settings_get_others(master_service)[0];
 

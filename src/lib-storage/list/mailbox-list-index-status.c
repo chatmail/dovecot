@@ -27,63 +27,6 @@ struct index_list_changes {
 struct index_list_storage_module index_list_storage_module =
 	MODULE_CONTEXT_INIT(&mail_storage_module_register);
 
-/* Should the STATUS information for this mailbox not be written to the
-   mailbox list index? */
-#define MAILBOX_IS_NEVER_IN_INDEX(box) \
-	((box)->inbox_any && !(box)->storage->set->mailbox_list_index_include_inbox)
-
-static int
-index_list_open_view(struct mailbox *box, bool status_check,
-		     struct mail_index_view **view_r, uint32_t *seq_r)
-{
-	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT_REQUIRE(box->list);
-	struct mailbox_list_index_node *node;
-	struct mail_index_view *view;
-	uint32_t seq;
-	int ret;
-
-	if (MAILBOX_IS_NEVER_IN_INDEX(box) && status_check)
-		return 0;
-	if (mailbox_list_index_refresh(box->list) < 0)
-		return -1;
-
-	node = mailbox_list_index_lookup(box->list, box->name);
-	if (node == NULL) {
-		/* mailbox not found */
-		return 0;
-	}
-
-	view = mail_index_view_open(ilist->index);
-	if (mailbox_list_index_need_refresh(ilist, view)) {
-		/* mailbox_list_index_refresh_later() was called.
-		   Can't trust the index's contents. */
-		ret = 1;
-	} else if (!mail_index_lookup_seq(view, node->uid, &seq)) {
-		/* our in-memory tree is out of sync */
-		ret = 1;
-	} else if (!status_check) {
-		/* this operation doesn't need the index to be up-to-date */
-		ret = 0;
-	} else T_BEGIN {
-		ret = box->v.list_index_has_changed == NULL ? 0 :
-			box->v.list_index_has_changed(box, view, seq, FALSE);
-	} T_END;
-
-	if (ret != 0) {
-		/* error / mailbox has changed. we'll need to sync it. */
-		if (ret < 0)
-			mailbox_list_index_refresh_later(box->list);
-		else
-			ilist->index_last_check_changed = TRUE;
-		mail_index_view_close(&view);
-		return ret < 0 ? -1 : 0;
-	}
-
-	*view_r = view;
-	*seq_r = seq;
-	return 1;
-}
-
 static int
 index_list_exists(struct mailbox *box, bool auto_boxes,
 		  enum mailbox_existence *existence_r)
@@ -95,7 +38,7 @@ index_list_exists(struct mailbox *box, bool auto_boxes,
 	uint32_t seq;
 	int ret;
 
-	if ((ret = index_list_open_view(box, FALSE, &view, &seq)) <= 0) {
+	if ((ret = mailbox_list_index_view_open(box, FALSE, &view, &seq)) <= 0) {
 		/* failure / not found. fallback to the real storage check
 		   just in case to see if the mailbox was just created. */
 		return ibox->module_ctx.super.
@@ -202,7 +145,7 @@ index_list_get_cached_status(struct mailbox *box,
 		return 0;
 	}
 
-	if ((ret = index_list_open_view(box, TRUE, &view, &seq)) <= 0)
+	if ((ret = mailbox_list_index_view_open(box, TRUE, &view, &seq)) <= 0)
 		return ret;
 
 	ret = mailbox_list_index_status(box->list, view, seq, items,
@@ -239,7 +182,7 @@ index_list_get_cached_guid(struct mailbox *box, guid_128_t guid_r)
 		return 0;
 	}
 
-	if ((ret = index_list_open_view(box, FALSE, &view, &seq)) <= 0)
+	if ((ret = mailbox_list_index_view_open(box, FALSE, &view, &seq)) <= 0)
 		return ret;
 
 	ret = mailbox_list_index_status(box->list, view, seq, 0,
@@ -261,7 +204,7 @@ static int index_list_get_cached_vsize(struct mailbox *box, uoff_t *vsize_r)
 
 	i_assert(!ilist->syncing);
 
-	if ((ret = index_list_open_view(box, TRUE, &view, &seq)) <= 0)
+	if ((ret = mailbox_list_index_view_open(box, TRUE, &view, &seq)) <= 0)
 		return ret;
 
 	ret = mailbox_list_index_status(box->list, view, seq,
@@ -296,7 +239,7 @@ index_list_get_cached_first_saved(struct mailbox *box,
 
 	i_zero(first_saved_r);
 
-	if ((ret = index_list_open_view(box, TRUE, &view, &seq)) <= 0)
+	if ((ret = mailbox_list_index_view_open(box, TRUE, &view, &seq)) <= 0)
 		return ret;
 
 	mail_index_lookup_ext(view, seq, ilist->first_saved_ext_id,
@@ -714,7 +657,7 @@ void mailbox_list_index_update_mailbox_index(struct mailbox *box,
 	i_zero(&changes);
 	/* update the mailbox list index even if it has some other pending
 	   changes. */
-	if ((ret = index_list_open_view(box, FALSE, &list_view, &changes.seq)) <= 0)
+	if ((ret = mailbox_list_index_view_open(box, FALSE, &list_view, &changes.seq)) <= 0)
 		return;
 
 	guid_128_empty(mailbox_guid);

@@ -7,6 +7,17 @@ outright rejected. While dovecot can do tarpitting and refusal on its own, this
 adds support for making cluster-wide decisions to make it easier to deter and
 defeat bruteforce attacks.
 
+Known issues
+------------
+
+Prior v2.2.27 request policy was mostly broken.
+
+Prior v2.2.34, the request attributes contained *orig_username* which was not
+correct in all cases, especially with master login.
+
+Prior v2.3.5.2 / 2.2.36.3, invalid UTF-8 would crash auth server if auth policy
+is used.
+
 Configuration
 -------------
 
@@ -125,6 +136,44 @@ imap_id_retain=yes
 
 for this to work.
 
+Default values for auth_policy_request_attributes
+-------------------------------------------------
+
+Since v2.2.25
+
+---%<-------------------------------------------------------------------------
+login=%{orig_username} pwhash=%{hashed_password} remote=%{real_rip}
+---%<-------------------------------------------------------------------------
+
+Since v2.2.30
+
+---%<-------------------------------------------------------------------------
+login=%{orig_username} pwhash=%{hashed_password} remote=%{real_rip}
+device_id=%{client_id} protocol=%s
+---%<-------------------------------------------------------------------------
+
+Since v2.2.34
+
+---%<-------------------------------------------------------------------------
+login=%{requested_username} pwhash=%{hashed_password} remote=%{rip}
+device_id=%{client_id} protocol=%s
+---%<-------------------------------------------------------------------------
+
+Since v2.3.0 (note that 2.2 and 2.3 branches have been developed in parallel
+for a while)
+
+---%<-------------------------------------------------------------------------
+login=%{orig_username} pwhash=%{hashed_password} remote=%{real_rip}
+device_id=%{client_id} protocol=%s
+---%<-------------------------------------------------------------------------
+
+Since v2.3.1
+
+---%<-------------------------------------------------------------------------
+login=%{requested_username} pwhash=%{hashed_password} remote=%{rip}
+device_id=%{client_id} protocol=%s
+---%<-------------------------------------------------------------------------
+
 Since v2.3.2 the request contains 'tls' attribute when TLS has been used. TLS
 is also detected if it's offloaded by a load balancer that can provide this
 information using HAProxy v2 protocol to dovecot.
@@ -188,4 +237,4 @@ External Auth Policy Servers
 
  * http://oxpedia.org/wiki/index.php?title=AppSuite:Dovecot_Antiabuse_Shield
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

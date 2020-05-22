@@ -26,7 +26,9 @@ static const struct auth_userdb_settings userdb_dummy_set = {
 	.skip = "never",
 	.result_success = "return-ok",
 	.result_failure = "continue",
-	.result_internalfail = "continue"
+	.result_internalfail = "continue",
+
+	.auth_verbose = "default",
 };
 
 static ARRAY(struct auth *) auths;
@@ -382,7 +384,7 @@ void auths_preinit(const struct auth_settings *set, pool_t pool,
 	i_array_init(&auths, 8);
 
 	auth = auth_preinit(set, NULL, pool, reg);
-	array_append(&auths, &auth, 1);
+	array_push_back(&auths, &auth);
 
 	for (i = 0; services[i] != NULL; i++) {
 		if (services[i][0] == '!') {
@@ -396,7 +398,7 @@ void auths_preinit(const struct auth_settings *set, pool_t pool,
 		service_set = auth_settings_read(services[i], pool,
 						 &set_output);
 		auth = auth_preinit(service_set, services[i], pool, reg);
-		array_append(&auths, &auth, 1);
+		array_push_back(&auths, &auth);
 	}
 
 	if (not_service != NULL && str_array_find(services, not_service+1))

@@ -125,9 +125,10 @@ struct http_client_settings {
 	size_t socket_send_buffer_size;
 	size_t socket_recv_buffer_size;
 
-	/* Event to use for the http client. For specific requests this can be
-	   overridden with http_client_request_set_event(). */
-	struct event *event;
+	/* Event to use as parent for the http client event. For specific
+	   requests this can be overridden with http_client_request_set_event().
+	 */
+	struct event *event_parent;
 
 	/* enable logging debug messages */
 	bool debug;
@@ -222,19 +223,19 @@ http_client_request(struct http_client *client,
 		    const char *method, const char *host, const char *target,
 		    http_client_request_callback_t *callback, void *context);
 #define http_client_request(client, method, host, target, callback, context) \
-	http_client_request(client, method, host, target + \
+	http_client_request(client, method, host, target - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
 
-/* create net HTTP request using provided URL. This implicitly sets
+/* create new HTTP request using provided URL. This implicitly sets
    port, ssl, and username:password if provided. */
 struct http_client_request *
 http_client_request_url(struct http_client *client,
 		    const char *method, const struct http_url *target_url,
 		    http_client_request_callback_t *callback, void *context);
 #define http_client_request_url(client, method, target_url, callback, context) \
-	http_client_request_url(client, method, target_url + \
+	http_client_request_url(client, method, target_url - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
@@ -243,7 +244,7 @@ http_client_request_url_str(struct http_client *client,
 		    const char *method, const char *url_str,
 		    http_client_request_callback_t *callback, void *context);
 #define http_client_request_url_str(client, method, url_str, callback, context) \
-	http_client_request_url_str(client, method, url_str + \
+	http_client_request_url_str(client, method, url_str - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
@@ -259,7 +260,7 @@ http_client_request_connect(struct http_client *client,
 		    http_client_request_callback_t *callback,
 		    void *context);
 #define http_client_request_connect(client, host, port, callback, context) \
-	http_client_request_connect(client, host, port + \
+	http_client_request_connect(client, host, port - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
@@ -272,7 +273,7 @@ http_client_request_connect_ip(struct http_client *client,
 		    http_client_request_callback_t *callback,
 		    void *context);
 #define http_client_request_connect_ip(client, ip, port, callback, context) \
-	http_client_request_connect_ip(client, ip, port + \
+	http_client_request_connect_ip(client, ip, port - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct http_response *response, typeof(context))), \
 		(http_client_request_callback_t *)callback, context)
@@ -292,13 +293,20 @@ void http_client_request_set_urgent(struct http_client_request *req);
 void http_client_request_set_preserve_exact_reason(struct http_client_request *req);
 
 /* add a custom header to the request. This can override headers that are
-   otherwise created implicitly. */
+   otherwise created implicitly. If the same header key was already added,
+   the value is replaced. */
 void http_client_request_add_header(struct http_client_request *req,
 				    const char *key, const char *value);
+/* add a custom header to the request. Do nothing if it was already added. */
+void http_client_request_add_missing_header(struct http_client_request *req,
+					    const char *key, const char *value);
 /* remove a header added earlier. This has no influence on implicitly created
    headers. */
 void http_client_request_remove_header(struct http_client_request *req,
 				       const char *key);
+/* lookup the value for a header added earlier. Returns NULL if not found. */
+const char *http_client_request_lookup_header(struct http_client_request *req,
+					      const char *key);
 
 /* set the value of the "Date" header for the request using a time_t value.
    Use this instead of setting it directly using
@@ -343,6 +351,11 @@ void http_client_request_set_attempt_timeout_msecs(struct http_client_request *r
 void http_client_request_set_max_attempts(struct http_client_request *req,
 	unsigned int max_attempts);
 
+/* Include the specified HTTP response headers in the http_request_finished
+   event parameters with "http_hdr_" prefix. */
+void http_client_request_set_event_headers(struct http_client_request *req,
+					   const char *const *headers);
+
 /* set the username:password credentials for this request for simple
    authentication. This function is meant for simple schemes that use a
    password. More complex schemes will need to be handled manually.
@@ -370,6 +383,12 @@ void http_client_request_delay(struct http_client_request *req,
 void http_client_request_delay_msecs(struct http_client_request *req,
 	unsigned int msecs);
 
+/* Try to set request delay based on the Retry-After header. Returns 1 if
+   successful, 0 if it doesn't exist or is already expired, -1 if the delay
+   would be too long. */
+int http_client_request_delay_from_response(struct http_client_request *req,
+	const struct http_response *response);
+
 /* return the HTTP method for the request */
 const char *
 http_client_request_get_method(const struct http_client_request *req)
@@ -381,6 +400,14 @@ http_client_request_get_target(const struct http_client_request *req)
 /* return the request state */
 enum http_request_state
 http_client_request_get_state(const struct http_client_request *req)
+	ATTR_PURE;
+/* return number of retry attempts */
+unsigned int
+http_client_request_get_attempts(const struct http_client_request *req)
+	ATTR_PURE;
+/* return origin_url */
+const struct http_url *
+http_client_request_get_origin_url(const struct http_client_request *req)
 	ATTR_PURE;
 
 /* get statistics for the request */
@@ -406,7 +433,8 @@ void http_client_request_set_destroy_callback(struct http_client_request *req,
 					      void (*callback)(void *),
 					      void *context);
 #define http_client_request_set_destroy_callback(req, callback, context) \
-        http_client_request_set_destroy_callback(req, (void(*)(void*))callback, context + \
+        http_client_request_set_destroy_callback(req, (void(*)(void*))callback, \
+		TRUE ? context : \
                 CALLBACK_TYPECHECK(callback, void (*)(typeof(context))))
 
 /* submits request and blocks until the provided payload is sent. Multiple

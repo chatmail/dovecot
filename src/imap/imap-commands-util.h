@@ -15,7 +15,7 @@ struct mail_namespace *
 client_find_namespace(struct client_command_context *cmd, const char **mailbox);
 struct mail_namespace *
 client_find_namespace_full(struct client *client,
-			   const char **mailbox, const char **error_r);
+			   const char **mailbox, const char **client_error_r);
 
 /* Returns TRUE if mailbox is selected. If not, sends "No mailbox selected"
    error message to client. */
@@ -38,6 +38,9 @@ imap_get_error_string(struct client_command_context *cmd,
 
 void client_disconnect_if_inconsistent(struct client *client);
 
+/* Send an explicit error message to client. */
+void client_send_error(struct client_command_context *cmd,
+		       const char *error_string, enum mail_error error);
 /* Send last mailbox list error message to client. */
 void client_send_list_error(struct client_command_context *cmd,
 			    struct mailbox_list *list);

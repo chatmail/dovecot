@@ -16,6 +16,10 @@
 
 #include "smtp-server-private.h"
 
+static struct event_category event_category_smtp_server = {
+	.name = "smtp-server"
+};
+
 /*
  * Server
  */
@@ -30,6 +34,12 @@ struct smtp_server *smtp_server_init(const struct smtp_server_settings *set)
 	server->pool = pool;
 	server->set.protocol = set->protocol;
 	server->set.rawlog_dir = p_strdup_empty(pool, set->rawlog_dir);
+
+	if (set->ssl != NULL) {
+		server->set.ssl =
+			ssl_iostream_settings_dup(server->pool, set->ssl);
+	}
+
 	if (set->hostname != NULL && *set->hostname != '\0')
 		server->set.hostname = p_strdup(pool, set->hostname);
 	else
@@ -53,6 +63,14 @@ struct smtp_server *smtp_server_init(const struct smtp_server_settings *set)
 	server->set.command_limits = set->command_limits;
 	server->set.max_message_size = set->max_message_size;
 
+	if (set->mail_param_extensions != NULL) {
+		server->set.mail_param_extensions =
+			p_strarray_dup(pool, set->mail_param_extensions);
+	}
+	if (set->rcpt_param_extensions != NULL) {
+		server->set.rcpt_param_extensions =
+			p_strarray_dup(pool, set->rcpt_param_extensions);
+	}
 	if (set->xclient_extensions != NULL) {
 		server->set.xclient_extensions =
 			p_strarray_dup(pool, set->xclient_extensions);
@@ -64,8 +82,16 @@ struct smtp_server *smtp_server_init(const struct smtp_server_settings *set)
 	server->set.tls_required = set->tls_required;
 	server->set.auth_optional = set->auth_optional;
 	server->set.rcpt_domain_optional = set->rcpt_domain_optional;
-	server->set.param_extensions = set->param_extensions;
+	server->set.mail_path_allow_broken = set->mail_path_allow_broken;
 	server->set.debug = set->debug;
+
+	/* There is no event log prefix added here, since the server itself does
+	   not log anything. */
+	server->event = event_create(set->event_parent);
+	event_add_category(server->event, &event_category_smtp_server);
+	event_add_str(server->event, "protocol",
+		      smtp_protocol_name(server->set.protocol));
+	event_set_forced_debug(server->event, set->debug);
 
 	server->conn_list = smtp_server_connection_list_init();
 	smtp_server_commands_init(server);
@@ -78,6 +104,9 @@ void smtp_server_deinit(struct smtp_server **_server)
 
 	connection_list_deinit(&server->conn_list);
 
+	if (server->ssl_ctx != NULL)
+		ssl_iostream_context_unref(&server->ssl_ctx);
+	event_unref(&server->event);
 	pool_unref(&server->pool);
 	*_server = NULL;
 }
@@ -96,4 +125,20 @@ void smtp_server_switch_ioloop(struct smtp_server *server)
 
 		smtp_server_connection_switch_ioloop(conn);
 	}
+}
+
+int smtp_server_init_ssl_ctx(struct smtp_server *server, const char **error_r)
+{
+	const char *error;
+
+	if (server->ssl_ctx != NULL || server->set.ssl == NULL)
+		return 0;
+
+	if (ssl_iostream_server_context_cache_get(server->set.ssl,
+		&server->ssl_ctx, &error) < 0) {
+		*error_r = t_strdup_printf("Couldn't initialize SSL context: %s",
+					   error);
+		return -1;
+	}
+	return 0;
 }

@@ -38,7 +38,7 @@ void userdb_register_module(struct userdb_module_interface *iface)
 		i_panic("userdb_register_module(%s): Already registered",
 			iface->name);
 	}
-	array_append(&userdb_interfaces, &iface, 1);
+	array_push_back(&userdb_interfaces, &iface);
 }
 
 void userdb_unregister_module(struct userdb_module_interface *iface)
@@ -73,8 +73,8 @@ uid_t userdb_parse_uid(struct auth_request *request, const char *str)
 		return (uid_t)-1;
 	case 0:
 		if (request != NULL) {
-			auth_request_log_error(request, AUTH_SUBSYS_DB,
-					       "Invalid UID value '%s'", str);
+			e_error(authdb_event(request),
+				"Invalid UID value '%s'", str);
 		}
 		return (uid_t)-1;
 	default:
@@ -99,8 +99,8 @@ gid_t userdb_parse_gid(struct auth_request *request, const char *str)
 		return (gid_t)-1;
 	case 0:
 		if (request != NULL) {
-			auth_request_log_error(request, AUTH_SUBSYS_DB,
-					       "Invalid GID value '%s'", str);
+			e_error(authdb_event(request),
+				"Invalid GID value '%s'", str);
 		}
 		return (gid_t)-1;
 	default:
@@ -163,7 +163,7 @@ userdb_preinit(pool_t pool, const struct auth_userdb_settings *set)
 	userdb->iface = iface;
 	userdb->args = p_strdup(pool, set->args);
 
-	array_append(&userdb_modules, &userdb, 1);
+	array_push_back(&userdb_modules, &userdb);
 	return userdb;
 }
 
@@ -209,6 +209,19 @@ void userdbs_generate_md5(unsigned char md5[STATIC_ARRAY MD5_RESULTLEN])
 		md5_update(&ctx, userdbs[i]->args, strlen(userdbs[i]->args));
 	}
 	md5_final(&ctx, md5);
+}
+
+const char *userdb_result_to_string(enum userdb_result result)
+{
+	switch (result) {
+	case USERDB_RESULT_INTERNAL_FAILURE:
+		return "internal_failure";
+	case USERDB_RESULT_USER_UNKNOWN:
+		return "user_unknown";
+	case USERDB_RESULT_OK:
+		return "ok";
+	}
+	i_unreached();
 }
 
 extern struct userdb_module_interface userdb_prefetch;

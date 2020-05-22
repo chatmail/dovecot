@@ -24,6 +24,7 @@ struct dbox_save_mail {
 	struct dbox_file_append_context *file_append;
 	uint32_t seq;
 	uint32_t append_offset;
+	time_t save_date;
 	bool written_to_disk;
 };
 
@@ -185,6 +186,7 @@ static int mdbox_save_mail_write_metadata(struct mdbox_save_context *ctx,
 		return -1;
 	}
 	mail->written_to_disk = TRUE;
+	mail->save_date = ctx->ctx.ctx.data.save_date;
 	return 0;
 }
 
@@ -199,7 +201,7 @@ static int mdbox_save_finish_write(struct mail_save_context *_ctx)
 
 	dbox_save_end(&ctx->ctx);
 
-	mail = array_idx_modifiable(&ctx->mails, array_count(&ctx->mails) - 1);
+	mail = array_back_modifiable(&ctx->mails);
 	if (!ctx->ctx.failed) T_BEGIN {
 		if (mdbox_save_mail_write_metadata(ctx, mail) < 0)
 			ctx->ctx.failed = TRUE;
@@ -217,7 +219,7 @@ static int mdbox_save_finish_write(struct mail_save_context *_ctx)
 	if (ctx->ctx.failed) {
 		index_storage_save_abort_last(&ctx->ctx.ctx, ctx->ctx.seq);
 		mdbox_map_append_abort(ctx->append_ctx);
-		array_delete(&ctx->mails, array_count(&ctx->mails) - 1, 1);
+		array_pop_back(&ctx->mails);
 		return -1;
 	}
 	return 0;
@@ -256,7 +258,6 @@ mdbox_save_set_map_uids(struct mdbox_save_context *ctx,
 	mdbox_update_header(mbox, ctx->ctx.trans, NULL);
 
 	i_zero(&rec);
-	rec.save_date = ioloop_time;
 	mails = array_get(&ctx->mails, &count);
 	for (i = 0; i < count; i++) {
 		mail_index_lookup_ext(view, mails[i].seq, mbox->ext_id,
@@ -267,6 +268,10 @@ mdbox_save_set_map_uids(struct mdbox_save_context *ctx,
 			continue;
 		}
 
+		if (mails[i].save_date > 0)
+			rec.save_date = mails[i].save_date;
+		else
+			rec.save_date = ioloop_time;
 		rec.map_uid = next_map_uid++;
 		mail_index_update_ext(ctx->ctx.trans, mails[i].seq,
 				      mbox->ext_id, &rec, NULL);
@@ -331,7 +336,7 @@ int mdbox_transaction_save_commit_pre(struct mail_save_context *_ctx)
 		unsigned int highest_pop3_uidl_idx;
 		uint32_t uid;
 
-		mails = array_idx(&ctx->mails, 0);
+		mails = array_front(&ctx->mails);
 		highest_pop3_uidl_idx =
 			ctx->ctx.highest_pop3_uidl_seq - mails[0].seq;
 		i_assert(mails[highest_pop3_uidl_idx].seq == ctx->ctx.highest_pop3_uidl_seq);
@@ -464,7 +469,7 @@ int mdbox_copy(struct mail_save_context *_ctx, struct mail *mail)
 	/* remember the map_uid so we can later increase its refcount */
 	if (!array_is_created(&ctx->copy_map_uids))
 		i_array_init(&ctx->copy_map_uids, 32);
-	array_append(&ctx->copy_map_uids, &rec.map_uid, 1);
+	array_push_back(&ctx->copy_map_uids, &rec.map_uid);
 
 	/* add message to mailbox index */
 	dbox_save_add_to_index(&ctx->ctx);

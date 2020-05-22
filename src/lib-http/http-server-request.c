@@ -190,8 +190,9 @@ void http_server_request_abort(struct http_server_request **_req,
 						"Content-Length: 0\r\n"
 						"\r\n";
 
-					(void)o_stream_send(conn->conn.output,
+					o_stream_nsend(conn->conn.output,
 						response, strlen(response));
+					(void)o_stream_flush(conn->conn.output);
 				}
 
 				/* close the connection */
@@ -869,4 +870,13 @@ void http_server_request_handle_payload(struct http_server_request *req,
 	rhandler->io = io_add_istream(conn->incoming_payload,
 		payload_handler_raw_input, rhandler);
 	i_stream_set_input_pending(conn->incoming_payload, TRUE);
+}
+
+void http_server_request_add_response_header(struct http_server_request *req,
+					     const char *key, const char *value)
+{
+	struct http_server_response *resp;
+
+	resp = http_server_response_create(req, 0, "");
+	http_server_response_add_permanent_header(resp, key, value);
 }

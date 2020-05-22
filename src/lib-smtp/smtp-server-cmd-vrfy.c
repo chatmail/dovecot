@@ -17,15 +17,13 @@ void smtp_server_cmd_vrfy(struct smtp_server_cmd_ctx *cmd,
 	int ret;
 
 	/* vrfy = "VRFY" SP String CRLF */
-	if ((ret=smtp_string_parse(params, &param, &error)) <= 0) {
-		if (ret < 0) {
-			smtp_server_reply(cmd,
-				501, "5.5.4",
-				"Invalid string parameter: %s", error);
-		} else {
-			smtp_server_reply(cmd,
-				501, "5.5.4", "Invalid parameters");
-		}
+	ret = smtp_string_parse(params, &param, &error);
+	if (ret < 0) {
+		smtp_server_reply(cmd, 501, "5.5.4",
+				  "Invalid string parameter: %s", error);
+		return;
+	} else if (ret == 0) {
+		smtp_server_reply(cmd, 501, "5.5.4", "Invalid parameters");
 		return;
 	}
 
@@ -63,6 +61,13 @@ void smtp_server_cmd_vrfy(struct smtp_server_cmd_ctx *cmd,
 	   mail. In these situations, reply code 252 SHOULD be returned.
 	 */
 	if (!smtp_server_command_is_replied(command))
-		smtp_server_reply(cmd, 252, "2.3.3", "Try RCPT instead");
+		smtp_server_cmd_vrfy_reply_default(cmd);
 	smtp_server_command_unref(&command);
+}
+
+void smtp_server_cmd_vrfy_reply_default(struct smtp_server_cmd_ctx *cmd)
+{
+	i_assert(cmd->cmd->reg->func == smtp_server_cmd_vrfy);
+
+	smtp_server_reply(cmd, 252, "2.3.3", "Try RCPT instead");
 }

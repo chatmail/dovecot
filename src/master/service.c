@@ -169,7 +169,7 @@ service_create_inet_listeners(struct service *service,
 		for (i = 0; i < ips_count; i++) {
 			l = service_create_one_inet_listener(service, set,
 							     address, &ips[i]);
-			array_append(&service->listeners, &l, 1);
+			array_push_back(&service->listeners, &l);
 		}
 		service->have_inet_listeners = TRUE;
 	}
@@ -210,7 +210,7 @@ service_create(pool_t pool, const struct service_settings *set,
 	service = p_new(pool, struct service, 1);
 	service->list = service_list;
 	service->set = set;
-	service->throttle_secs = SERVICE_STARTUP_FAILURE_THROTTLE_MIN_SECS;
+	service->throttle_msecs = SERVICE_STARTUP_FAILURE_THROTTLE_MIN_MSECS;
 
 	service->client_limit = set->client_limit != 0 ? set->client_limit :
 		set->master_set->default_client_limit;
@@ -330,7 +330,7 @@ service_create(pool_t pool, const struct service_settings *set,
 						 unix_listeners[i], error_r);
 		if (l == NULL)
 			return NULL;
-		array_append(&service->listeners, &l, 1);
+		array_push_back(&service->listeners, &l);
 	}
 	for (i = 0; i < fifo_count; i++) {
 		if (fifo_listeners[i]->mode == 0) {
@@ -342,7 +342,7 @@ service_create(pool_t pool, const struct service_settings *set,
 						 fifo_listeners[i], error_r);
 		if (l == NULL)
 			return NULL;
-		array_append(&service->listeners, &l, 1);
+		array_push_back(&service->listeners, &l);
 	}
 	for (i = 0; i < inet_count; i++) {
 		if (service_create_inet_listeners(service, inet_listeners[i],
@@ -468,7 +468,7 @@ services_create_real(const struct master_settings *set, pool_t pool,
 			break;
 		}
 
-		array_append(&service_list->services, &service, 1);
+		array_push_back(&service_list->services, &service);
 	}
 
 	if (service_list->log == NULL) {
@@ -522,7 +522,7 @@ unsigned int service_signal(struct service *service, int signo,
 				      dec2str(process->pid), signo);
 		}
 	}
-	if (count > 0) {
+	if (count > 0 && signo != SIGUSR1) {
 		i_warning("Sent %s to %u %s processes",
 			  signo == SIGTERM ? "SIGTERM" : "SIGKILL",
 			  count, service->set->name);
@@ -655,9 +655,18 @@ void service_list_ref(struct service_list *service_list)
 
 void service_list_unref(struct service_list *service_list)
 {
+	struct service *const *servicep;
+	struct service_listener *const *listenerp;
+
 	i_assert(service_list->refcount > 0);
 	if (--service_list->refcount > 0)
 		return;
+
+	array_foreach(&service_list->services, servicep) {
+		array_foreach(&(*servicep)->listeners, listenerp)
+			i_close_fd(&(*listenerp)->fd);
+	}
+	i_close_fd(&service_list->master_fd);
 
 	timeout_remove(&service_list->to_kill);
 	pool_unref(&service_list->set_pool);
@@ -703,7 +712,7 @@ static void service_drop_listener_connections(struct service *service)
 	}
 }
 
-void service_throttle(struct service *service, unsigned int secs)
+void service_throttle(struct service *service, unsigned int msecs)
 {
 	if (service->to_throttle != NULL || service->list->destroyed)
 		return;
@@ -712,12 +721,12 @@ void service_throttle(struct service *service, unsigned int secs)
 		service_drop_listener_connections(service);
 
 	service_monitor_listen_stop(service);
-	service->to_throttle = timeout_add(secs * 1000,
-					   service_throttle_timeout, service);
+	service->to_throttle = timeout_add(msecs, service_throttle_timeout,
+					   service);
 }
 
 void services_throttle_time_sensitives(struct service_list *list,
-				       unsigned int secs)
+				       unsigned int msecs)
 {
 	struct service *const *services;
 
@@ -725,7 +734,7 @@ void services_throttle_time_sensitives(struct service_list *list,
 		struct service *service = *services;
 
 		if (service->type == SERVICE_TYPE_UNKNOWN)
-			service_throttle(service, secs);
+			service_throttle(service, msecs);
 	}
 }
 

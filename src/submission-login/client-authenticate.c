@@ -22,11 +22,13 @@ static void cmd_helo_reply(struct submission_client *subm_client,
 			   struct smtp_server_cmd_helo *data)
 {
 	struct client *client = &subm_client->common;
+	enum smtp_capability backend_caps = subm_client->backend_capabilities;
 	struct smtp_server_reply *reply;
 
 	reply = smtp_server_reply_create_ehlo(cmd->cmd);
 	if (!data->helo.old_smtp) {
-		smtp_server_reply_ehlo_add(reply, "8BITMIME");
+		if ((backend_caps & SMTP_CAPABILITY_8BITMIME) != 0)
+			smtp_server_reply_ehlo_add(reply, "8BITMIME");
 
 		if (client->secured ||
 			strcmp(client->ssl_set->ssl, "required") != 0) {
@@ -45,10 +47,15 @@ static void cmd_helo_reply(struct submission_client *subm_client,
 				"AUTH", "%s", str_c(param));
 		}
 
+		if ((backend_caps & SMTP_CAPABILITY_BINARYMIME) != 0 &&
+		    (backend_caps & SMTP_CAPABILITY_CHUNKING) != 0)
+			smtp_server_reply_ehlo_add(reply, "BINARYMIME");
 		smtp_server_reply_ehlo_add_param(reply,
 			"BURL", "imap");
 		smtp_server_reply_ehlo_add(reply,
 			"CHUNKING");
+		if ((backend_caps & SMTP_CAPABILITY_DSN) != 0)
+			smtp_server_reply_ehlo_add(reply, "DSN");
 		smtp_server_reply_ehlo_add(reply,
 			"ENHANCEDSTATUSCODES");
 
@@ -63,6 +70,8 @@ static void cmd_helo_reply(struct submission_client *subm_client,
 		if (client_is_tls_enabled(client) && !client->tls)
 			smtp_server_reply_ehlo_add(reply, "STARTTLS");
 		smtp_server_reply_ehlo_add(reply, "PIPELINING");
+		if ((backend_caps & SMTP_CAPABILITY_VRFY) != 0)
+			smtp_server_reply_ehlo_add(reply, "VRFY");
 		smtp_server_reply_ehlo_add_xclient(reply);
 	}
 	smtp_server_reply_submit(reply);
@@ -88,6 +97,9 @@ void submission_client_auth_result(struct client *client,
 	struct submission_client *subm_client =
 		container_of(client, struct submission_client, common);
 	struct smtp_server_cmd_ctx *cmd = subm_client->pending_auth;
+
+	if (subm_client->conn == NULL)
+		return;
 
 	subm_client->pending_auth = NULL;
 	i_assert(cmd != NULL);
@@ -165,6 +177,7 @@ void submission_client_auth_result(struct client *client,
 		smtp_server_reply(cmd, 504, "5.5.4", "%s", text);
 		break;
 	case CLIENT_AUTH_RESULT_LOGIN_DISABLED:
+	case CLIENT_AUTH_RESULT_ANONYMOUS_DENIED:
 		/* RFC5248, Section 2.4:
 
 		   525 X.7.13 User Account Disabled

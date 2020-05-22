@@ -45,14 +45,16 @@ struct smtp_address_parser {
 	struct smtp_parser parser;
 
 	struct smtp_address address;
+	const unsigned char *address_end;
 
 	bool parse:1;
 	bool path:1;
+	bool parsed_any:1;
+	bool totally_broken:1;
 };
 
 static int
-smtp_parser_parse_dot_string(struct smtp_parser *parser,
-	const char **value_r)
+smtp_parser_parse_dot_string(struct smtp_parser *parser, const char **value_r)
 {
 	const unsigned char *pbegin = parser->cur;
 
@@ -63,12 +65,12 @@ smtp_parser_parse_dot_string(struct smtp_parser *parser,
 	   mail addresses with dots at non-standard places to be accepted. */
 
 	if (parser->cur >= parser->end ||
-		(!smtp_char_is_atext(*parser->cur) && *parser->cur != '.'))
+	    (!smtp_char_is_atext(*parser->cur) && *parser->cur != '.'))
 		return 0;
 	parser->cur++;
 
 	while (parser->cur < parser->end &&
-		(smtp_char_is_atext(*parser->cur) || *parser->cur == '.'))
+	       (smtp_char_is_atext(*parser->cur) || *parser->cur == '.'))
 		parser->cur++;
 
 	if (value_r != NULL)
@@ -77,36 +79,93 @@ smtp_parser_parse_dot_string(struct smtp_parser *parser,
 }
 
 static int
-smtp_parse_localpart(struct smtp_parser *parser,
-		const char **localpart_r)
+smtp_parse_localpart(struct smtp_parser *parser, const char **localpart_r)
 {
 	int ret;
 
-	if ((ret=smtp_parser_parse_quoted_string(parser, localpart_r)) != 0)
+	if ((ret = smtp_parser_parse_quoted_string(parser, localpart_r)) != 0)
 		return ret;
 
 	return smtp_parser_parse_dot_string(parser, localpart_r);
 }
 
 static int
+smtp_address_parser_find_end(struct smtp_address_parser *aparser,
+			     enum smtp_address_parse_flags flags)
+{
+	struct smtp_parser *parser = &aparser->parser;
+	const char *begin = (const char *)parser->begin, *end;
+	const char **address_p = NULL;
+
+	if (aparser->address_end != NULL)
+		return 0;
+
+	if (aparser->parse &&
+	    HAS_ALL_BITS(flags, SMTP_ADDRESS_PARSE_FLAG_PRESERVE_RAW))
+		address_p = &aparser->address.raw;
+	if (smtp_address_parse_any(begin, address_p, &end) < 0) {
+		parser->error = "Invalid character";
+		aparser->totally_broken = TRUE;
+		return -1;
+	}
+	aparser->parsed_any = TRUE;
+	aparser->address_end = (const unsigned char *)end;
+	if (aparser->path) {
+		i_assert(aparser->address_end > parser->begin);
+		aparser->address_end--;
+	}
+	return 0;
+}
+
+static int
 smtp_parse_mailbox(struct smtp_address_parser *aparser,
-	enum smtp_address_parse_flags flags)
+		   enum smtp_address_parse_flags flags)
 {
 	struct smtp_parser *parser = &aparser->parser;
 	const char **value = NULL;
+	const unsigned char *p, *dp;
 	int ret;
 
 	/* Mailbox = Local-part "@" ( Domain / address-literal )
 	 */
 
 	value = (aparser->parse ? &aparser->address.localpart : NULL);
-	if ((ret=smtp_parse_localpart(parser, value)) <= 0)
-		return ret;
+	if ((flags & SMTP_ADDRESS_PARSE_FLAG_STRICT) != 0 ||
+	    (flags & SMTP_ADDRESS_PARSE_FLAG_ALLOW_BAD_LOCALPART) == 0 ||
+	    aparser->path || *parser->cur == '\"') {
+		if ((ret = smtp_parse_localpart(parser, value)) <= 0)
+			return ret;
+	} else {
+		/* find the end of the address */
+		if (smtp_address_parser_find_end(aparser, flags) < 0)
+			return -1;
+		/* use the right-most '@' as separator */
+		dp = aparser->address_end - 1;
+		while (dp > parser->cur && *dp != '@')
+			dp--;
+		if (dp == parser->cur)
+			dp = aparser->address_end;
+		/* check whether the resulting localpart could be encoded as
+		   quoted string */
+		for (p = parser->cur; p < dp; p++) {
+			if (!smtp_char_is_qtext(*p) &&
+			    !smtp_char_is_qpair(*p)) {
+				parser->error =
+					"Invalid character in localpart";
+				return -1;
+			}
+		}
+		if (aparser->parse) {
+			aparser->address.localpart =
+				p_strdup_until(parser->pool, parser->cur, dp);
+		}
+		parser->cur = dp;
+	}
 
 	if ((parser->cur >= parser->end || *parser->cur != '@') &&
-		(flags & SMTP_ADDRESS_PARSE_FLAG_ALLOW_LOCALPART) == 0) {
+	    (flags & SMTP_ADDRESS_PARSE_FLAG_ALLOW_LOCALPART) == 0) {
 		if (parser->cur >= parser->end ||
-			(aparser->path && *parser->cur == '>'))
+		    (aparser->path && *parser->cur == '>'))
 			parser->error = "Missing domain";
 		else
 			parser->error = "Invalid character in localpart";
@@ -118,11 +177,11 @@ smtp_parse_mailbox(struct smtp_address_parser *aparser,
 	parser->cur++;
 
 	value = (aparser->parse ? &aparser->address.domain : NULL);
-	if ((ret=smtp_parser_parse_domain(parser, value)) == 0 &&
-		(ret=smtp_parser_parse_address_literal(parser,
-			value, NULL)) == 0) {
+	if ((ret = smtp_parser_parse_domain(parser, value)) == 0 &&
+	    (ret = smtp_parser_parse_address_literal(
+		parser, value, NULL)) == 0) {
 		if (parser->cur >= parser->end ||
-			(aparser->path && *parser->cur == '>')) {
+		    (aparser->path && *parser->cur == '>')) {
 			parser->error = "Missing domain after '@'";
 			return -1;
 		} else {
@@ -133,8 +192,7 @@ smtp_parse_mailbox(struct smtp_address_parser *aparser,
 	return ret;
 }
 
-static int
-smtp_parse_source_route(struct smtp_parser *parser)
+static int smtp_parse_source_route(struct smtp_parser *parser)
 {
 	/* Source-route = [ A-d-l ":" ]
 	   A-d-l        = At-domain *( "," At-domain )
@@ -178,7 +236,7 @@ smtp_parse_source_route(struct smtp_parser *parser)
 
 static int
 smtp_parse_path(struct smtp_address_parser *aparser,
-	enum smtp_address_parse_flags flags)
+		enum smtp_address_parse_flags flags)
 {
 	struct smtp_parser *parser = &aparser->parser;
 	int ret, sret = 0;
@@ -195,11 +253,11 @@ smtp_parse_path(struct smtp_address_parser *aparser,
 	}
 
 	/* [ A-d-l ":" ] */
-	if (aparser->path && (sret=smtp_parse_source_route(parser)) < 0)
+	if (aparser->path && (sret = smtp_parse_source_route(parser)) < 0)
 		return -1;
 
 	/* Mailbox */
-	if ((ret=smtp_parse_mailbox(aparser, flags)) < 0)
+	if ((ret = smtp_parse_mailbox(aparser, flags)) < 0)
 		return -1;
 	if (ret == 0) {
 		if (parser->cur < parser->end && *parser->cur == '>') {
@@ -233,73 +291,10 @@ smtp_parse_path(struct smtp_address_parser *aparser,
 	return 1;
 }
 
-static int
-smtp_parse_username(struct smtp_address_parser *aparser)
-{
-	struct smtp_parser *parser = &aparser->parser;
-	const char **value = NULL;
-	const unsigned char *p, *dp;
-	int ret;
-
-	/* Best-effort extraction of SMTP address from a user name.
-	 */
-
-	value = (aparser->parse ? &aparser->address.localpart : NULL);
-	if (*parser->cur == '\"') {
-		/* if the local part is a quoted string, parse it as any other
-		   SMTP address */
-		if ((ret=smtp_parse_localpart(parser, value)) <= 0)
-			return ret;
-	} else {
-		/* use the right-most '@' as separator */
-		dp = parser->end - 1;
-		while (dp > parser->cur && *dp != '@')
-			dp--;
-		if (dp == parser->cur)
-			dp = parser->end;
-		/* check whether the resulting localpart could be encoded as
-		   quoted string */
-		for (p = parser->cur; p < dp; p++) {
-			if (!smtp_char_is_qtext(*p) || *p == ' ') {
-				parser->error =
-					"Invalid character in user name";
-				return -1;
-			}
-		}
-		if (aparser->parse) {
-			aparser->address.localpart =
-				p_strdup_until(parser->pool, parser->cur, dp);
-		}
-		parser->cur = dp;
-	}
-
-	if (parser->cur < parser->end && *parser->cur != '@') {
-		parser->error = "Invalid character in user name";
-		return -1;
-	}
-
-	if (parser->cur >= parser->end || *parser->cur != '@')
-		return 1;
-	parser->cur++;
-
-	value = (aparser->parse ? &aparser->address.domain : NULL);
-	if ((ret=smtp_parser_parse_domain(parser, value)) == 0 &&
-		(ret=smtp_parser_parse_address_literal(parser,
-			value, NULL)) == 0) {
-		if (parser->cur >= parser->end) {
-			parser->error = "Missing domain after '@'";
-			return -1;
-		} else {
-			parser->error = "Invalid domain";
-			return -1;
-		}
-	}
-	return ret;
-}
-
-int smtp_address_parse_mailbox(pool_t pool,
-	const char *mailbox, enum smtp_address_parse_flags flags,
-	struct smtp_address **address_r, const char **error_r)
+int smtp_address_parse_mailbox(pool_t pool, const char *mailbox,
+			       enum smtp_address_parse_flags flags,
+			       struct smtp_address **address_r,
+			       const char **error_r)
 {
 	struct smtp_address_parser aparser;
 	int ret;
@@ -321,17 +316,19 @@ int smtp_address_parse_mailbox(pool_t pool,
 
 		if (address_r != NULL)
 			*address_r = p_new(pool, struct smtp_address, 1);
-		return 1;
+		return 0;
 	}
 
 	i_zero(&aparser);
 	smtp_parser_init(&aparser.parser, pool_datastack_create(), mailbox);
+	aparser.address_end = aparser.parser.end;
 	aparser.parse = (address_r != NULL);
 
-	if ((ret=smtp_parse_mailbox(&aparser, flags)) <= 0) {
-		if (error_r != NULL)
+	if ((ret = smtp_parse_mailbox(&aparser, flags)) <= 0) {
+		if (error_r != NULL) {
 			*error_r = (ret < 0 ? aparser.parser.error :
 				"Invalid character in localpart");
+		}
 		return -1;
 	}
 	if (aparser.parser.cur != aparser.parser.end) {
@@ -342,13 +339,52 @@ int smtp_address_parse_mailbox(pool_t pool,
 
 	if (address_r != NULL)
 		*address_r = smtp_address_clone(pool, &aparser.address);
-	return 1;
+	return 0;
+}
+
+static int
+smtp_address_parse_path_broken(struct smtp_address_parser *aparser,
+			       enum smtp_address_parse_flags flags,
+			       const char **endp_r) ATTR_NULL(3)
+{
+	struct smtp_parser *parser = &aparser->parser;
+	const char *begin = (const char *)parser->begin, *end;
+	const char *raw = aparser->address.raw;
+	const char **address_p = NULL;
+
+	i_zero(&aparser->address);
+	aparser->address.raw = raw;
+
+	if (aparser->totally_broken ||
+	    HAS_NO_BITS(flags, SMTP_ADDRESS_PARSE_FLAG_IGNORE_BROKEN))
+		return -1;
+	if (*begin != '<' &&
+	    HAS_NO_BITS(flags, SMTP_ADDRESS_PARSE_FLAG_BRACKETS_OPTIONAL)) {
+		/* brackets missing; totally broken */
+		return -1;
+	}
+	i_assert(aparser->parse);
+	if (aparser->parsed_any) {
+		if (endp_r != NULL)
+			*endp_r = (const char *)aparser->address_end;
+		return 0;
+	}
+
+	if (HAS_ALL_BITS(flags, SMTP_ADDRESS_PARSE_FLAG_PRESERVE_RAW))
+		address_p = &aparser->address.raw;
+	if (smtp_address_parse_any(begin, address_p, &end) < 0) {
+		/* totally broken */
+		return -1;
+	}
+	if (endp_r != NULL)
+		*endp_r = end;
+	return 0;
 }
 
 int smtp_address_parse_path_full(pool_t pool, const char *path,
-	enum smtp_address_parse_flags flags,
-	struct smtp_address **address_r, const char **error_r,
-	const char **endp_r)
+				 enum smtp_address_parse_flags flags,
+				 struct smtp_address **address_r,
+				 const char **error_r, const char **endp_r)
 {
 	struct smtp_address_parser aparser;
 	int ret;
@@ -357,6 +393,8 @@ int smtp_address_parse_path_full(pool_t pool, const char *path,
 		*address_r = NULL;
 	if (error_r != NULL)
 		*error_r = NULL;
+	if (endp_r != NULL)
+		*endp_r = NULL;
 
 	if (path == NULL || *path == '\0') {
 		if ((flags & SMTP_ADDRESS_PARSE_FLAG_ALLOW_EMPTY) == 0 ||
@@ -367,44 +405,83 @@ int smtp_address_parse_path_full(pool_t pool, const char *path,
 		}
 		if (address_r != NULL)
 			*address_r = p_new(pool, struct smtp_address, 1);
-		return 1;
+		if (endp_r != NULL)
+			*endp_r = path;
+		return 0;
 	}
 
 	i_zero(&aparser);
 	smtp_parser_init(&aparser.parser, pool_datastack_create(), path);
+	aparser.address_end = (endp_r != NULL ? NULL : aparser.parser.end);
 	aparser.parse = (address_r != NULL);
 
-	if ((ret=smtp_parse_path(&aparser, flags)) <= 0) {
+	if ((ret = smtp_parse_path(&aparser, flags)) <= 0) {
 		if (error_r != NULL) {
 			*error_r = (ret < 0 ? aparser.parser.error :
 				"Missing '<' at beginning of path");
 		}
-		return -1;
-	}
-	if (endp_r != NULL)
-		*endp_r = (const char *)aparser.parser.cur;
-	else if (aparser.parser.cur != aparser.parser.end) {
+		ret = -1;
+	} else if (endp_r != NULL) {
+		if (aparser.parser.cur == aparser.parser.end ||
+		    *aparser.parser.cur == ' ' ||
+		    HAS_NO_BITS(flags, SMTP_ADDRESS_PARSE_FLAG_IGNORE_BROKEN)) {
+			*endp_r = (const char *)aparser.parser.cur;
+			ret = 0;
+		} else {
+			if (error_r != NULL)
+				*error_r = "Invalid character in path";
+			ret = -1;
+		}
+	} else if (aparser.parser.cur == aparser.parser.end) {
+		ret = 0;
+	} else {
 		if (error_r != NULL)
 			*error_r = "Invalid character in path";
-		return -1;
+		ret = -1;
+	}
+
+	if (ret < 0) {
+		/* normal parsing failed */
+		if (smtp_address_parse_path_broken(&aparser, flags,
+						   endp_r) < 0) {
+			/* failed to parse it as a broken address as well */
+			return -1;
+		}
+		/* broken address */
+	} else if (HAS_ALL_BITS(flags, SMTP_ADDRESS_PARSE_FLAG_PRESERVE_RAW) &&
+		   aparser.address.localpart != NULL) {
+		if (aparser.path &&
+		    ((const unsigned char *)(path + 1) < aparser.parser.cur)) {
+			aparser.address.raw = t_strdup_until(
+				path + 1, aparser.parser.cur - 1);
+		} else {
+			aparser.address.raw = t_strdup_until(
+				path, aparser.parser.cur);
+		}
 	}
 
 	if (address_r != NULL)
 		*address_r = smtp_address_clone(pool, &aparser.address);
-	return 1;
+	return ret;
 }
 
 int smtp_address_parse_path(pool_t pool, const char *path,
-	enum smtp_address_parse_flags flags,
-	struct smtp_address **address_r, const char **error_r)
+			    enum smtp_address_parse_flags flags,
+			    struct smtp_address **address_r,
+			    const char **error_r)
 {
 	return smtp_address_parse_path_full(pool, path, flags,
-		address_r, error_r, NULL);
+					    address_r, error_r, NULL);
 }
 
 int smtp_address_parse_username(pool_t pool, const char *username,
-	struct smtp_address **address_r, const char **error_r)
+				struct smtp_address **address_r,
+				const char **error_r)
 {
+	enum smtp_address_parse_flags flags =
+		SMTP_ADDRESS_PARSE_FLAG_ALLOW_LOCALPART |
+		SMTP_ADDRESS_PARSE_FLAG_ALLOW_BAD_LOCALPART;
+
 	struct smtp_address_parser aparser;
 	int ret;
 
@@ -421,9 +498,10 @@ int smtp_address_parse_username(pool_t pool, const char *username,
 
 	i_zero(&aparser);
 	smtp_parser_init(&aparser.parser, pool_datastack_create(), username);
+	aparser.address_end = aparser.parser.end;
 	aparser.parse = (address_r != NULL);
 
-	if ((ret=smtp_parse_username(&aparser)) <= 0) {
+	if ((ret = smtp_parse_mailbox(&aparser, flags)) <= 0) {
 		if (error_r != NULL) {
 			*error_r = (ret < 0 ? aparser.parser.error :
 				"Invalid character in user name");
@@ -438,12 +516,13 @@ int smtp_address_parse_username(pool_t pool, const char *username,
 
 	if (address_r != NULL)
 		*address_r = smtp_address_clone(pool, &aparser.address);
-	return 1;
+	return 0;
 }
 
 void smtp_address_detail_parse(pool_t pool, const char *delimiters,
-	struct smtp_address *address, const char **username_r,
-	char *delim_r, const char **detail_r)
+			       struct smtp_address *address,
+			       const char **username_r, char *delim_r,
+			       const char **detail_r)
 {
 	const char *localpart;
 	const char *user, *p;
@@ -467,12 +546,12 @@ void smtp_address_detail_parse(pool_t pool, const char *delimiters,
 		*detail_r = p+1;
 	}
 
-	if (address->domain == NULL)
+	if (address->domain == NULL || *address->domain == '\0')
 		*username_r = user;
-	else if (strchr(user, '@') == NULL ) {
+	else if (strchr(user, '@') == NULL) {
 		/* username is just glued to the domain... no SMTP escaping */
-		*username_r = p_strconcat(pool,
-			user, "@", address->domain, NULL);
+		*username_r = p_strconcat(pool,	user, "@", address->domain,
+					  NULL);
 	} else {
 		struct smtp_address uaddr;
 
@@ -480,25 +559,99 @@ void smtp_address_detail_parse(pool_t pool, const char *delimiters,
 		smtp_address_init(&uaddr, user, address->domain);
 		if (pool->datastack_pool)
 			*username_r = smtp_address_encode(&uaddr);
-		else
-			*username_r = p_strdup(pool, smtp_address_encode(&uaddr));
+		else {
+			*username_r =
+				p_strdup(pool, smtp_address_encode(&uaddr));
+		}
 	}
 }
 
 void smtp_address_detail_parse_temp(const char *delimiters,
-	struct smtp_address *address, const char **username_r,
-	char *delim_r, const char **detail_r)
+				    struct smtp_address *address,
+				    const char **username_r, char *delim_r,
+				    const char **detail_r)
 {
 	smtp_address_detail_parse(pool_datastack_create(), delimiters,
 				  address, username_r, delim_r, detail_r);
+}
+
+int smtp_address_parse_any(const char *in, const char **address_r,
+			   const char **endp_r)
+{
+	const unsigned char *p, *pend, *poffset;
+	bool path = FALSE;
+	bool quoted = FALSE;
+
+	if (endp_r != NULL)
+		*endp_r = in;
+
+	poffset = p = (const unsigned char *)in;
+	pend = p + strlen(in);
+	if (*p  == '<') {
+		path = TRUE;
+		p++;
+		poffset = p;
+	}
+	if (*p == '"') {
+		quoted = TRUE;
+		p++;
+	}
+
+	while (p < pend) {
+		if (quoted && *p == '\\') {
+			p++;
+			if (p == pend || *p < 0x20)
+				return -1;
+			p++;
+			if (p == pend)
+				break;
+		}
+		switch (*p) {
+		case '"':
+			quoted = FALSE;
+			break;
+		case ' ':
+			if (!quoted) {
+				if (path)
+					return -1;
+				if (address_r != NULL)
+					*address_r = t_strdup_until(poffset, p);
+				if (endp_r != NULL)
+					*endp_r = (const char *)p;
+				return 0;
+			}
+			break;
+		case '>':
+			if (!quoted) {
+				if (address_r != NULL)
+					*address_r = t_strdup_until(poffset, p);
+				if (endp_r != NULL)
+					*endp_r = (const char *)(p + 1);
+				return 0;
+			}
+			break;
+		default:
+			if (*p < 0x20)
+				return -1;
+			break;
+		}
+		p++;
+	}
+	if (quoted || path)
+		return -1;
+	if (address_r != NULL)
+		*address_r = t_strdup_until(poffset, p);
+	if (endp_r != NULL)
+		*endp_r = (const char *)p;
+	return 0;
 }
 
 /*
  * SMTP address construction
  */
 
-void smtp_address_write(string_t *out,
-	const struct smtp_address *address) ATTR_NULL(2)
+void smtp_address_write(string_t *out, const struct smtp_address *address)
+			ATTR_NULL(2)
 {
 	bool quoted = FALSE;
 	const unsigned char *p, *pend, *pblock;
@@ -509,8 +662,6 @@ void smtp_address_write(string_t *out,
 	begin = str_len(out);
 
 	/* encode localpart */
-	if (address->localpart == NULL)
-		return;
 	p = (const unsigned char *)address->localpart;
 	pend = p + strlen(address->localpart);
 	pblock = p;
@@ -540,7 +691,7 @@ void smtp_address_write(string_t *out,
 		pblock = p;
 	}
 
-	if (p == pblock) {
+	if (p == pblock && !quoted) {
 		quoted = TRUE;
 		str_insert(out, begin, "\"");
 	}
@@ -548,35 +699,48 @@ void smtp_address_write(string_t *out,
 	if (quoted)
 		str_append_c(out, '\"');
 
-	if (address->domain == NULL)
+	if (address->domain == NULL || *address->domain == '\0')
 		return;
 
 	str_append_c(out, '@');
 	str_append(out, address->domain);
 }
 
-void smtp_address_write_path(string_t *out,
-	const struct smtp_address *address)
+void smtp_address_write_path(string_t *out, const struct smtp_address *address)
 {
 	str_append_c(out, '<');
 	smtp_address_write(out, address);
 	str_append_c(out, '>');
 }
 
-const char *
-smtp_address_encode(const struct smtp_address *address)
+const char *smtp_address_encode(const struct smtp_address *address)
 {
 	string_t *str = t_str_new(256);
 	smtp_address_write(str, address);
 	return str_c(str);
 }
 
-const char *
-smtp_address_encode_path(const struct smtp_address *address)
+const char *smtp_address_encode_path(const struct smtp_address *address)
 {
 	string_t *str = t_str_new(256);
 	smtp_address_write_path(str, address);
 	return str_c(str);
+}
+
+const char *smtp_address_encode_raw(const struct smtp_address *address)
+{
+	if (address != NULL && address->raw != NULL && *address->raw != '\0')
+		return address->raw;
+
+	return smtp_address_encode(address);
+}
+
+const char *smtp_address_encode_raw_path(const struct smtp_address *address)
+{
+	if (address != NULL && address->raw != NULL && *address->raw != '\0')
+		return t_strconcat("<", address->raw, ">", NULL);
+
+	return smtp_address_encode_path(address);
 }
 
 /*
@@ -584,11 +748,15 @@ smtp_address_encode_path(const struct smtp_address *address)
  */
 
 void smtp_address_init(struct smtp_address *address,
-	const char *localpart, const char *domain)
+		       const char *localpart, const char *domain)
 {
 	i_zero(address);
+	if (localpart == NULL || *localpart == '\0')
+		return;
+
 	address->localpart = localpart;
-	address->domain = (localpart == NULL ? NULL : domain);
+	if (domain != NULL && *domain != '\0')
+		address->domain = domain;
 }
 
 int smtp_address_init_from_msg(struct smtp_address *address,
@@ -597,7 +765,7 @@ int smtp_address_init_from_msg(struct smtp_address *address,
 	const char *p;
 
 	i_zero(address);
-	if (msg_addr->mailbox == NULL)
+	if (msg_addr->mailbox == NULL || *msg_addr->mailbox == '\0')
 		return 0;
 
 	/* The message_address_parse() function allows UTF-8 codepoints in
@@ -609,7 +777,8 @@ int smtp_address_init_from_msg(struct smtp_address *address,
 	}
 
 	address->localpart = msg_addr->mailbox;
-	address->domain = msg_addr->domain;
+	if (msg_addr->domain != NULL && *msg_addr->domain != '\0')
+		address->domain = msg_addr->domain;
 	return 0;
 }
 
@@ -617,39 +786,51 @@ struct smtp_address *
 smtp_address_clone(pool_t pool, const struct smtp_address *src)
 {
 	struct smtp_address *new;
-	size_t size, lpsize, dsize = 0;
-	char *data, *localpart, *domain = NULL;
+	size_t size, lpsize = 0, dsize = 0, rsize = 0;
+	char *data, *localpart = NULL, *domain = NULL, *raw = NULL;
 
-	if (smtp_address_isnull(src))
+	if (src == NULL)
 		return NULL;
 
 	/* @UNSAFE */
 
 	size = sizeof(struct smtp_address);
-	lpsize = strlen(src->localpart) + 1;
-	size = MALLOC_ADD(size, lpsize);
-	if (src->domain != NULL) {
+	if (!smtp_address_isnull(src)) {
+		lpsize = strlen(src->localpart) + 1;
+		size = MALLOC_ADD(size, lpsize);
+	}
+	if (src->domain != NULL && *src->domain != '\0') {
 		dsize = strlen(src->domain) + 1;
 		size = MALLOC_ADD(size, dsize);
+	}
+	if (src->raw != NULL && *src->raw != '\0') {
+		rsize = strlen(src->raw) + 1;
+		size = MALLOC_ADD(size, rsize);
 	}
 
 	data = p_malloc(pool, size);
 	new = (struct smtp_address *)data;
-	localpart = PTR_OFFSET(data, sizeof(*new));
-	memcpy(localpart, src->localpart, lpsize);
+	if (lpsize > 0) {
+		localpart = PTR_OFFSET(data, sizeof(*new));
+		memcpy(localpart, src->localpart, lpsize);
+	}
 	if (dsize > 0) {
 		domain = PTR_OFFSET(data, sizeof(*new) + lpsize);
 		memcpy(domain, src->domain, dsize);
 	}
+	if (rsize > 0) {
+		raw = PTR_OFFSET(data, sizeof(*new) + lpsize + dsize);
+		memcpy(raw, src->raw, rsize);
+	}
 	new->localpart = localpart;
 	new->domain = domain;
+	new->raw = raw;
 
 	return new;
 }
 
 struct smtp_address *
-smtp_address_create(pool_t pool,
-	const char *localpart, const char *domain)
+smtp_address_create(pool_t pool, const char *localpart, const char *domain)
 {
 	struct smtp_address addr;
 
@@ -672,17 +853,17 @@ int smtp_address_create_from_msg(pool_t pool,
 	return 0;
 }
 
-struct smtp_address *
-smtp_address_clone_temp(const struct smtp_address *src)
+struct smtp_address *smtp_address_clone_temp(const struct smtp_address *src)
 {
 	struct smtp_address *new;
 
-	if (smtp_address_isnull(src))
+	if (src == NULL)
 		return NULL;
 
 	new = t_new(struct smtp_address, 1);
-	new->localpart = t_strdup(src->localpart);
-	new->domain = t_strdup(src->domain);
+	new->localpart = t_strdup_empty(src->localpart);
+	new->domain = t_strdup_empty(src->domain);
+	new->raw = t_strdup_empty(src->raw);
 	return new;
 }
 
@@ -710,7 +891,7 @@ int  smtp_address_create_from_msg_temp(const struct message_address *msg_addr,
 
 struct smtp_address *
 smtp_address_add_detail(pool_t pool, const struct smtp_address *address,
-	const char *detail, char delim_c)
+			const char *detail, char delim_c)
 {
 	struct smtp_address *new_addr;
 	const char delim[] = {delim_c, '\0'};
@@ -718,16 +899,16 @@ smtp_address_add_detail(pool_t pool, const struct smtp_address *address,
 	i_assert(!smtp_address_isnull(address));
 
 	new_addr = p_new(pool, struct smtp_address, 1);
-	new_addr->localpart = p_strconcat(pool,
-		address->localpart, delim, detail, NULL);
-	new_addr->domain = p_strdup(pool, address->domain);
+	new_addr->localpart = p_strconcat(pool,	address->localpart, delim,
+					  detail, NULL);
+	new_addr->domain = p_strdup_empty(pool, address->domain);
 
 	return new_addr;
 }
 
 struct smtp_address *
 smtp_address_add_detail_temp(const struct smtp_address *address,
-	const char *detail, char delim_c)
+			     const char *detail, char delim_c)
 {
 	struct smtp_address *new_addr;
 	const char delim[] = {delim_c, '\0'};
@@ -735,15 +916,15 @@ smtp_address_add_detail_temp(const struct smtp_address *address,
 	i_assert(!smtp_address_isnull(address));
 
 	new_addr = t_new(struct smtp_address, 1);
-	new_addr->localpart = t_strconcat(
-		address->localpart, delim, detail, NULL);
-	new_addr->domain = t_strdup(address->domain);
+	new_addr->localpart = t_strconcat(address->localpart, delim, detail,
+					  NULL);
+	new_addr->domain = t_strdup_empty(address->domain);
 
 	return new_addr;
 }
 
 int smtp_address_cmp(const struct smtp_address *address1,
-	const struct smtp_address *address2)
+		     const struct smtp_address *address2)
 {
 	bool null1, null2;
 	int ret;
@@ -754,7 +935,24 @@ int smtp_address_cmp(const struct smtp_address *address1,
 		return (null2 ? 0 : -1);
 	else if (null2)
 		return 1;
-	if ((ret=null_strcasecmp(address1->domain, address2->domain)) != 0)
+	if ((ret = null_strcasecmp(address1->domain, address2->domain)) != 0)
 		return ret;
 	return null_strcmp(address1->localpart, address2->localpart);
+}
+
+int smtp_address_cmp_icase(const struct smtp_address *address1,
+			  const struct smtp_address *address2)
+{
+	bool null1, null2;
+	int ret;
+
+	null1 = smtp_address_isnull(address1);
+	null2 = smtp_address_isnull(address2);
+	if (null1)
+		return (null2 ? 0 : -1);
+	else if (null2)
+		return 1;
+	if ((ret = null_strcasecmp(address1->domain, address2->domain)) != 0)
+		return ret;
+	return null_strcasecmp(address1->localpart, address2->localpart);
 }

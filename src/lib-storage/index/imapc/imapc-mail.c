@@ -419,7 +419,7 @@ static void imapc_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
 
 	/* searching code handles prefetching internally,
 	   elsewhere we want to do it immediately */
-	if (!mail->search_mail && !_mail->saving)
+	if (!mail->mail.search_mail && !_mail->saving)
 		(void)imapc_mail_prefetch(_mail);
 }
 
@@ -509,7 +509,7 @@ static bool imapc_mail_get_cached_guid(struct mail *_mail)
 					     _mail->seq, cache_idx)) {
 			/* GUID was prefetched - add to cache */
 			index_mail_cache_add_idx(imail, cache_idx,
-				imail->data.guid, strlen(imail->data.guid)+1);
+				imail->data.guid, strlen(imail->data.guid));
 		}
 		return TRUE;
 	}
@@ -550,7 +550,7 @@ static int imapc_mail_get_guid(struct mail *_mail, const char **value_r)
 	}
 
 	index_mail_cache_add_idx(imail, cache_idx,
-				 imail->data.guid, strlen(imail->data.guid)+1);
+				 imail->data.guid, strlen(imail->data.guid));
 	*value_r = imail->data.guid;
 	return 0;
 }

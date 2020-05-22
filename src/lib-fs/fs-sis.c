@@ -37,13 +37,14 @@ static struct fs *fs_sis_alloc(void)
 }
 
 static int
-fs_sis_init(struct fs *_fs, const char *args, const struct fs_settings *set)
+fs_sis_init(struct fs *_fs, const char *args, const struct fs_settings *set,
+	    const char **error_r)
 {
 	enum fs_properties props;
-	const char *parent_name, *parent_args, *error;
+	const char *parent_name, *parent_args;
 
 	if (*args == '\0') {
-		fs_set_error(_fs, "Parent filesystem not given as parameter");
+		*error_r = "Parent filesystem not given as parameter";
 		return -1;
 	}
 
@@ -55,14 +56,12 @@ fs_sis_init(struct fs *_fs, const char *args, const struct fs_settings *set)
 		parent_name = t_strdup_until(args, parent_args);
 		parent_args++;
 	}
-	if (fs_init(parent_name, parent_args, set, &_fs->parent, &error) < 0) {
-		fs_set_error(_fs, "%s", error);
+	if (fs_init(parent_name, parent_args, set, &_fs->parent, error_r) < 0)
 		return -1;
-	}
 	props = fs_get_properties(_fs->parent);
 	if ((props & FS_SIS_REQUIRED_PROPS) != FS_SIS_REQUIRED_PROPS) {
-		fs_set_error(_fs, "%s backend can't be used with SIS",
-			     parent_name);
+		*error_r = t_strdup_printf("%s backend can't be used with SIS",
+					   parent_name);
 		return -1;
 	}
 	return 0;
@@ -94,14 +93,12 @@ fs_sis_file_init(struct fs_file *_file, const char *path,
 	file->fs = fs;
 	file->open_mode = mode;
 	if (mode == FS_OPEN_MODE_APPEND) {
-		fs_set_error(_file->fs, "APPEND mode not supported");
+		fs_set_error(_file->event, ENOTSUP, "APPEND mode not supported");
 		return;
 	}
 
-	if (fs_sis_path_parse(_file->fs, path, &dir, &hash) < 0) {
-		fs_set_error(_file->fs, "Invalid path");
+	if (fs_sis_path_parse(_file, path, &dir, &hash) < 0)
 		return;
-	}
 
 	/* if hashes/<hash> already exists, open it */
 	file->hash_path = i_strdup_printf("%s/"HASH_DIR_NAME"/%s", dir, hash);
@@ -126,7 +123,7 @@ static void fs_sis_file_deinit(struct fs_file *_file)
 	struct sis_fs_file *file = (struct sis_fs_file *)_file;
 
 	fs_file_deinit(&file->hash_file);
-	fs_file_deinit(&_file->parent);
+	fs_file_free(_file);
 	i_free(file->hash);
 	i_free(file->hash_path);
 	i_free(file->file.path);
@@ -197,7 +194,7 @@ static void fs_sis_replace_hash_file(struct sis_fs_file *file)
 				   trying to deduplicate it anymore */
 			} else {
 				e_error(file->file.event, "%s",
-					fs_last_error(super_fs));
+					fs_file_last_error(file->hash_file));
 			}
 		}
 		return;
@@ -224,11 +221,11 @@ static void fs_sis_replace_hash_file(struct sis_fs_file *file)
 		   try to continue. */
 		if (fs_delete(temp_file) < 0 &&
 		    errno != ENOENT)
-			e_error(file->file.event, "%s", fs_last_error(super_fs));
+			e_error(file->file.event, "%s", fs_file_last_error(temp_file));
 		ret = fs_copy(file->file.parent, temp_file);
 	}
 	if (ret < 0) {
-		e_error(file->file.event, "%s", fs_last_error(super_fs));
+		e_error(file->file.event, "%s", fs_file_last_error(temp_file));
 		fs_file_deinit(&temp_file);
 		return;
 	}
@@ -237,7 +234,8 @@ static void fs_sis_replace_hash_file(struct sis_fs_file *file)
 		if (errno == ENOENT) {
 			/* apparently someone else just renamed it. ignore. */
 		} else {
-			e_error(file->file.event, "%s", fs_last_error(super_fs));
+			e_error(file->file.event, "%s",
+				fs_file_last_error(file->hash_file));
 		}
 		(void)fs_delete(temp_file);
 	}
@@ -324,7 +322,7 @@ static int fs_sis_write_stream_finish(struct fs_file *_file, bool success)
 static int fs_sis_delete(struct fs_file *_file)
 {
 	T_BEGIN {
-		fs_sis_try_unlink_hash_file(_file->fs, _file->parent);
+		fs_sis_try_unlink_hash_file(_file, _file->parent);
 	} T_END;
 	return fs_delete(_file->parent);
 }

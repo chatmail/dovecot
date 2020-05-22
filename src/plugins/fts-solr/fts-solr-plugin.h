@@ -11,9 +11,11 @@
 	MODULE_CONTEXT_REQUIRE(obj, fts_solr_user_module)
 
 struct fts_solr_settings {
-	const char *url, *default_ns_prefix;
+	const char *url, *default_ns_prefix, *rawlog_dir;
+	unsigned int batch_size;
 	bool use_libfts;
 	bool debug;
+	bool soft_commit;
 };
 
 struct fts_solr_user {

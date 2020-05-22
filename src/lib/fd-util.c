@@ -99,6 +99,8 @@ void fd_set_nonblock(int fd, bool nonblock)
 {
 	int flags;
 
+	i_assert(fd > -1);
+
 	flags = fcntl(fd, F_GETFL, 0);
 	if (flags < 0)
 		i_fatal("fcntl(%d, F_GETFL) failed: %m", fd);
@@ -140,7 +142,13 @@ void i_close_fd_path(int *fd, const char *path, const char *arg,
 	if (*fd == -1)
 		return;
 
-	i_assert(*fd > 0);
+	if (unlikely(*fd <= 0)) {
+		i_panic("%s: close(%s%s%s) @ %s:%d attempted with fd=%d",
+			func, arg,
+			(path == NULL) ? "" : " = ",
+			(path == NULL) ? "" : path,
+			file, line, *fd);
+	}
 
 	saved_errno = errno;
 	if (unlikely(close(*fd) < 0))

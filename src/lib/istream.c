@@ -384,11 +384,7 @@ ssize_t i_stream_read_copy_from_parent(struct istream *istream)
 	if (pos > stream->pos)
 		ret = 0;
 	else do {
-		if ((ret = i_stream_read_memarea(stream->parent)) == -2) {
-			i_stream_update(stream);
-			return -2;
-		}
-
+		ret = i_stream_read_memarea(stream->parent);
 		stream->istream.stream_errno = stream->parent->stream_errno;
 		stream->istream.eof = stream->parent->eof;
 		stream->buffer = i_stream_get_data(stream->parent, &pos);
@@ -396,6 +392,10 @@ ssize_t i_stream_read_copy_from_parent(struct istream *istream)
 		   backwards and the previous read() didn't get us far
 		   enough. */
 	} while (pos <= stream->pos && ret > 0);
+	if (ret == -2) {
+		i_stream_update(stream);
+		return -2;
+	}
 
 	ret = pos > stream->pos ? (ssize_t)(pos - stream->pos) :
 		(ret == 0 ? 0 : -1);
@@ -679,7 +679,7 @@ i_stream_get_data(struct istream *stream, size_t *size_r)
 		return uchar_empty_ptr;
 	}
 
-	if (i_stream_is_buffer_invalid(_stream)) {
+	if (unlikely(i_stream_is_buffer_invalid(_stream))) {
 		/* This stream may be using parent's buffer directly as
 		   _stream->buffer, but the parent stream has already been
 		   modified indirectly. This means that the buffer might no
@@ -931,6 +931,8 @@ void i_stream_set_input_pending(struct istream *stream, bool pending)
 	stream = i_stream_get_root_io(stream);
 	if (stream->real_stream->io != NULL)
 		io_set_pending(stream->real_stream->io);
+	else
+		stream->real_stream->io_pending = TRUE;
 }
 
 void i_stream_switch_ioloop_to(struct istream *stream, struct ioloop *ioloop)
@@ -957,6 +959,10 @@ void i_stream_set_io(struct istream *stream, struct io *io)
 
 	i_assert(stream->real_stream->io == NULL);
 	stream->real_stream->io = io;
+	if (stream->real_stream->io_pending) {
+		io_set_pending(io);
+		stream->real_stream->io_pending = FALSE;
+	}
 }
 
 void i_stream_unset_io(struct istream *stream, struct io *io)
@@ -964,6 +970,8 @@ void i_stream_unset_io(struct istream *stream, struct io *io)
 	stream = i_stream_get_root_io(stream);
 
 	i_assert(stream->real_stream->io == io);
+	if (io_is_pending(io))
+		stream->real_stream->io_pending = TRUE;
 	stream->real_stream->io = NULL;
 }
 
@@ -1057,7 +1065,8 @@ bool i_stream_nonseekable_try_seek(struct istream_private *stream,
 		/* seeking backwards within what's already cached */
 		stream->skip = v_offset - start_offset;
 		stream->istream.v_offset = v_offset;
-		stream->high_pos = stream->pos;
+		if (stream->high_pos == 0)
+			stream->high_pos = stream->pos;
 		stream->pos = stream->skip;
 	} else {
 		/* read forward */

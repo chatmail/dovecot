@@ -15,6 +15,7 @@
 @SET_MAKE@
 
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -89,32 +90,28 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+noinst_PROGRAMS = test-solr-response$(EXEEXT)
 subdir = src/plugins/fts-solr
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ac_typeof.m4 $(top_srcdir)/m4/arc4random.m4 \
 	$(top_srcdir)/m4/blockdev.m4 $(top_srcdir)/m4/c99_vsnprintf.m4 \
-	$(top_srcdir)/m4/cc_clang.m4 $(top_srcdir)/m4/cc_fortify.m4 \
-	$(top_srcdir)/m4/cc_pie.m4 $(top_srcdir)/m4/cc_retpoline.m4 \
-	$(top_srcdir)/m4/cc_stack_protector.m4 \
-	$(top_srcdir)/m4/cflags.m4 $(top_srcdir)/m4/clock_gettime.m4 \
-	$(top_srcdir)/m4/crypt.m4 $(top_srcdir)/m4/crypt_xpg6.m4 \
-	$(top_srcdir)/m4/dbqlk.m4 $(top_srcdir)/m4/dirent_dtype.m4 \
-	$(top_srcdir)/m4/dovecot.m4 $(top_srcdir)/m4/fd_passing.m4 \
-	$(top_srcdir)/m4/fdatasync.m4 \
+	$(top_srcdir)/m4/clock_gettime.m4 $(top_srcdir)/m4/crypt.m4 \
+	$(top_srcdir)/m4/crypt_xpg6.m4 $(top_srcdir)/m4/dbqlk.m4 \
+	$(top_srcdir)/m4/dirent_dtype.m4 $(top_srcdir)/m4/dovecot.m4 \
+	$(top_srcdir)/m4/fd_passing.m4 $(top_srcdir)/m4/fdatasync.m4 \
 	$(top_srcdir)/m4/flexible_array_member.m4 \
 	$(top_srcdir)/m4/glibc.m4 $(top_srcdir)/m4/gmtime_max.m4 \
 	$(top_srcdir)/m4/gmtime_tm_gmtoff.m4 \
 	$(top_srcdir)/m4/ioloop.m4 $(top_srcdir)/m4/iovec.m4 \
-	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/ld_relro.m4 \
-	$(top_srcdir)/m4/ld_whole_archive.m4 \
-	$(top_srcdir)/m4/libcap.m4 $(top_srcdir)/m4/libtool.m4 \
-	$(top_srcdir)/m4/libwrap.m4 $(top_srcdir)/m4/linux_mremap.m4 \
-	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
-	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
-	$(top_srcdir)/m4/mmap_write.m4 $(top_srcdir)/m4/mntctl.m4 \
-	$(top_srcdir)/m4/modules.m4 $(top_srcdir)/m4/notify.m4 \
-	$(top_srcdir)/m4/nsl.m4 $(top_srcdir)/m4/off_t_max.m4 \
+	$(top_srcdir)/m4/ipv6.m4 $(top_srcdir)/m4/libcap.m4 \
+	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/libwrap.m4 \
+	$(top_srcdir)/m4/linux_mremap.m4 $(top_srcdir)/m4/ltoptions.m4 \
+	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/mmap_write.m4 \
+	$(top_srcdir)/m4/mntctl.m4 $(top_srcdir)/m4/modules.m4 \
+	$(top_srcdir)/m4/notify.m4 $(top_srcdir)/m4/nsl.m4 \
+	$(top_srcdir)/m4/off_t_max.m4 \
 	$(top_srcdir)/m4/pr_set_dumpable.m4 \
 	$(top_srcdir)/m4/q_quotactl.m4 $(top_srcdir)/m4/quota.m4 \
 	$(top_srcdir)/m4/random.m4 $(top_srcdir)/m4/rlimit.m4 \
@@ -143,13 +140,13 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/warnings.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
-	$(am__DIST_COMMON)
+	$(pkginc_lib_HEADERS) $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
@@ -181,11 +178,13 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-am__installdirs = "$(DESTDIR)$(moduledir)"
+am__installdirs = "$(DESTDIR)$(moduledir)" \
+	"$(DESTDIR)$(pkginc_libdir)"
 LTLIBRARIES = $(module_LTLIBRARIES)
 lib21_fts_solr_plugin_la_DEPENDENCIES = $(fts_plugin_dep)
 am_lib21_fts_solr_plugin_la_OBJECTS = fts-backend-solr.lo \
-	fts-backend-solr-old.lo fts-solr-plugin.lo solr-connection.lo
+	fts-backend-solr-old.lo fts-solr-plugin.lo solr-response.lo \
+	solr-connection.lo
 lib21_fts_solr_plugin_la_OBJECTS =  \
 	$(am_lib21_fts_solr_plugin_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -196,6 +195,16 @@ lib21_fts_solr_plugin_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(lib21_fts_solr_plugin_la_LDFLAGS) \
 	$(LDFLAGS) -o $@
+PROGRAMS = $(noinst_PROGRAMS)
+am_test_solr_response_OBJECTS =  \
+	test_solr_response-solr-response.$(OBJEXT) \
+	test_solr_response-test-solr-response.$(OBJEXT)
+test_solr_response_OBJECTS = $(am_test_solr_response_OBJECTS)
+am__DEPENDENCIES_1 =
+am__DEPENDENCIES_2 = ../../lib-test/libtest.la \
+	../../lib-charset/libcharset.la ../../lib/liblib.la \
+	$(am__DEPENDENCIES_1)
+test_solr_response_DEPENDENCIES = $(am__DEPENDENCIES_2)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -230,14 +239,16 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(lib21_fts_solr_plugin_la_SOURCES)
-DIST_SOURCES = $(lib21_fts_solr_plugin_la_SOURCES)
+SOURCES = $(lib21_fts_solr_plugin_la_SOURCES) \
+	$(test_solr_response_SOURCES)
+DIST_SOURCES = $(lib21_fts_solr_plugin_la_SOURCES) \
+	$(test_solr_response_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-HEADERS = $(noinst_HEADERS)
+HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -293,6 +304,7 @@ CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DICT_LIBS = @DICT_LIBS@
+DLLIB = @DLLIB@
 DLLTOOL = @DLLTOOL@
 DSYMUTIL = @DSYMUTIL@
 DUMPBIN = @DUMPBIN@
@@ -342,6 +354,8 @@ LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
 LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
 LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
+LIBUNWIND_CFLAGS = @LIBUNWIND_CFLAGS@
+LIBUNWIND_LIBS = @LIBUNWIND_LIBS@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LIPO = @LIPO@
@@ -486,12 +500,36 @@ lib21_fts_solr_plugin_la_SOURCES = \
 	fts-backend-solr.c \
 	fts-backend-solr-old.c \
 	fts-solr-plugin.c \
+	solr-response.c \
 	solr-connection.c
 
 noinst_HEADERS = \
 	fts-solr-plugin.h \
+	solr-response.h \
 	solr-connection.h
 
+test_programs = \
+	test-solr-response
+
+test_libs = \
+	../../lib-test/libtest.la \
+	../../lib-charset/libcharset.la \
+	../../lib/liblib.la \
+	$(MODULE_LIBS)
+
+test_solr_response_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	-I$(top_srcdir)/src/lib-test
+
+test_solr_response_SOURCES = \
+	solr-response.c \
+	test-solr-response.c
+
+test_solr_response_LDADD = \
+	$(test_libs) -lexpat
+
+pkginc_libdir = $(pkgincludedir)
+pkginc_lib_HEADERS = $(headers)
 all: all-am
 
 .SUFFIXES:
@@ -564,6 +602,19 @@ clean-moduleLTLIBRARIES:
 lib21_fts_solr_plugin.la: $(lib21_fts_solr_plugin_la_OBJECTS) $(lib21_fts_solr_plugin_la_DEPENDENCIES) $(EXTRA_lib21_fts_solr_plugin_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(lib21_fts_solr_plugin_la_LINK) -rpath $(moduledir) $(lib21_fts_solr_plugin_la_OBJECTS) $(lib21_fts_solr_plugin_la_LIBADD) $(LIBS)
 
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
+test-solr-response$(EXEEXT): $(test_solr_response_OBJECTS) $(test_solr_response_DEPENDENCIES) $(EXTRA_test_solr_response_DEPENDENCIES) 
+	@rm -f test-solr-response$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_solr_response_OBJECTS) $(test_solr_response_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -574,6 +625,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-backend-solr.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fts-solr-plugin.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/solr-connection.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/solr-response.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_solr_response-solr-response.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_solr_response-test-solr-response.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -596,11 +650,60 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
 
+test_solr_response-solr-response.o: solr-response.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_solr_response_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_solr_response-solr-response.o -MD -MP -MF $(DEPDIR)/test_solr_response-solr-response.Tpo -c -o test_solr_response-solr-response.o `test -f 'solr-response.c' || echo '$(srcdir)/'`solr-response.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_solr_response-solr-response.Tpo $(DEPDIR)/test_solr_response-solr-response.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='solr-response.c' object='test_solr_response-solr-response.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_solr_response_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_solr_response-solr-response.o `test -f 'solr-response.c' || echo '$(srcdir)/'`solr-response.c
+
+test_solr_response-solr-response.obj: solr-response.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_solr_response_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_solr_response-solr-response.obj -MD -MP -MF $(DEPDIR)/test_solr_response-solr-response.Tpo -c -o test_solr_response-solr-response.obj `if test -f 'solr-response.c'; then $(CYGPATH_W) 'solr-response.c'; else $(CYGPATH_W) '$(srcdir)/solr-response.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_solr_response-solr-response.Tpo $(DEPDIR)/test_solr_response-solr-response.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='solr-response.c' object='test_solr_response-solr-response.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_solr_response_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_solr_response-solr-response.obj `if test -f 'solr-response.c'; then $(CYGPATH_W) 'solr-response.c'; else $(CYGPATH_W) '$(srcdir)/solr-response.c'; fi`
+
+test_solr_response-test-solr-response.o: test-solr-response.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_solr_response_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_solr_response-test-solr-response.o -MD -MP -MF $(DEPDIR)/test_solr_response-test-solr-response.Tpo -c -o test_solr_response-test-solr-response.o `test -f 'test-solr-response.c' || echo '$(srcdir)/'`test-solr-response.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_solr_response-test-solr-response.Tpo $(DEPDIR)/test_solr_response-test-solr-response.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-solr-response.c' object='test_solr_response-test-solr-response.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_solr_response_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_solr_response-test-solr-response.o `test -f 'test-solr-response.c' || echo '$(srcdir)/'`test-solr-response.c
+
+test_solr_response-test-solr-response.obj: test-solr-response.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_solr_response_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_solr_response-test-solr-response.obj -MD -MP -MF $(DEPDIR)/test_solr_response-test-solr-response.Tpo -c -o test_solr_response-test-solr-response.obj `if test -f 'test-solr-response.c'; then $(CYGPATH_W) 'test-solr-response.c'; else $(CYGPATH_W) '$(srcdir)/test-solr-response.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_solr_response-test-solr-response.Tpo $(DEPDIR)/test_solr_response-test-solr-response.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-solr-response.c' object='test_solr_response-test-solr-response.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_solr_response_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_solr_response-test-solr-response.obj `if test -f 'test-solr-response.c'; then $(CYGPATH_W) 'test-solr-response.c'; else $(CYGPATH_W) '$(srcdir)/test-solr-response.c'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
 clean-libtool:
 	-rm -rf .libs _libs
+install-pkginc_libHEADERS: $(pkginc_lib_HEADERS)
+	@$(NORMAL_INSTALL)
+	@list='$(pkginc_lib_HEADERS)'; test -n "$(pkginc_libdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(pkginc_libdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(pkginc_libdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(pkginc_libdir)'"; \
+	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(pkginc_libdir)" || exit $$?; \
+	done
+
+uninstall-pkginc_libHEADERS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkginc_lib_HEADERS)'; test -n "$(pkginc_libdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(pkginc_libdir)'; $(am__uninstall_files_from_dir)
 
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
@@ -686,9 +789,9 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(LTLIBRARIES) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
-	for dir in "$(DESTDIR)$(moduledir)"; do \
+	for dir in "$(DESTDIR)$(moduledir)" "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -724,7 +827,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-moduleLTLIBRARIES \
-	mostlyclean-am
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -744,7 +847,7 @@ info: info-am
 
 info-am:
 
-install-data-am: install-moduleLTLIBRARIES
+install-data-am: install-moduleLTLIBRARIES install-pkginc_libHEADERS
 
 install-dvi: install-dvi-am
 
@@ -790,27 +893,34 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-moduleLTLIBRARIES
+uninstall-am: uninstall-moduleLTLIBRARIES uninstall-pkginc_libHEADERS
 
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-moduleLTLIBRARIES cscopelist-am ctags \
-	ctags-am distclean distclean-compile distclean-generic \
-	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-moduleLTLIBRARIES \
-	install-pdf install-pdf-am install-ps install-ps-am \
+	clean-libtool clean-moduleLTLIBRARIES clean-noinstPROGRAMS \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-am \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man \
+	install-moduleLTLIBRARIES install-pdf install-pdf-am \
+	install-pkginc_libHEADERS install-ps install-ps-am \
 	install-strip installcheck installcheck-am installdirs \
 	maintainer-clean maintainer-clean-generic mostlyclean \
 	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
 	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-moduleLTLIBRARIES
+	uninstall-moduleLTLIBRARIES uninstall-pkginc_libHEADERS
 
 .PRECIOUS: Makefile
 
+
+check: check-am check-test
+check-test: all-am
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

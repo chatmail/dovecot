@@ -318,8 +318,7 @@ int net_connect_unix_with_retries(const char *path, unsigned int msecs)
 	struct timeval start, now;
 	int fd;
 
-	if (gettimeofday(&start, NULL) < 0)
-		i_panic("gettimeofday() failed: %m");
+	i_gettimeofday(&start);
 
 	do {
 		fd = net_connect_unix(path);
@@ -328,8 +327,7 @@ int net_connect_unix_with_retries(const char *path, unsigned int msecs)
 
 		/* busy. wait for a while. */
 		usleep(i_rand_minmax(1, 10) * 10000);
-		if (gettimeofday(&now, NULL) < 0)
-			i_panic("gettimeofday() failed: %m");
+		i_gettimeofday(&now);
 	} while (timeval_diff_msecs(&now, &start) < (int)msecs);
 	return fd;
 }
@@ -364,6 +362,18 @@ int net_set_tcp_nodelay(int fd, bool nodelay)
 	int val = nodelay;
 
 	return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
+}
+
+int net_set_tcp_quickack(int fd ATTR_UNUSED, bool quickack ATTR_UNUSED)
+{
+#ifdef TCP_QUICKACK
+	int val = quickack;
+
+	return setsockopt(fd, IPPROTO_TCP, TCP_QUICKACK, &val, sizeof(val));
+#else
+	errno = ENOPROTOOPT;
+	return -1;
+#endif
 }
 
 int net_set_send_buffer_size(int fd, size_t size)
@@ -575,6 +585,7 @@ int net_accept(int fd, struct ip_addr *addr_r, in_port_t *port_r)
 
 	i_assert(fd >= 0);
 
+	i_zero(&so);
 	addrlen = sizeof(so);
 	ret = accept(fd, &so.sa, &addrlen);
 
@@ -695,6 +706,7 @@ int net_getsockname(int fd, struct ip_addr *addr, in_port_t *port)
 
 	i_assert(fd >= 0);
 
+	i_zero(&so);
 	addrlen = sizeof(so);
 	if (getsockname(fd, &so.sa, &addrlen) == -1)
 		return -1;
@@ -716,6 +728,7 @@ int net_getpeername(int fd, struct ip_addr *addr, in_port_t *port)
 
 	i_assert(fd >= 0);
 
+	i_zero(&so);
 	addrlen = sizeof(so);
 	if (getpeername(fd, &so.sa, &addrlen) == -1)
 		return -1;
@@ -735,6 +748,7 @@ int net_getunixname(int fd, const char **name_r)
 	union sockaddr_union_unix so;
 	socklen_t addrlen = sizeof(so);
 
+	i_zero(&so);
 	if (getsockname(fd, &so.sa, &addrlen) < 0)
 		return -1;
 	if (so.un.sun_family != AF_UNIX) {
@@ -1030,6 +1044,7 @@ int net_ipv6_mapped_ipv4_convert(const struct ip_addr *src,
 	if (memcmp(src->u.ip6.s6_addr, v4_prefix, sizeof(v4_prefix)) != 0)
 		return -1;
 
+	i_zero(dest);
 	dest->family = AF_INET;
 	memcpy(&dest->u.ip6, &src->u.ip6.s6_addr[3*4], 4);
 	return 0;
@@ -1055,6 +1070,37 @@ const char *net_gethosterror(int error)
 	i_assert(error != 0);
 
 	return gai_strerror(error);
+}
+
+enum net_hosterror_type net_get_hosterror_type(int error)
+{
+	const struct {
+		int error;
+		enum net_hosterror_type type;
+	} error_map[] = {
+#ifdef EAI_ADDRFAMILY /* Obsoleted by RFC 2553bis-02 */
+		{ EAI_ADDRFAMILY, NET_HOSTERROR_TYPE_NOT_FOUND },
+#endif
+		{ EAI_AGAIN, NET_HOSTERROR_TYPE_NAMESERVER },
+		{ EAI_BADFLAGS, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+		{ EAI_FAIL, NET_HOSTERROR_TYPE_NAMESERVER },
+		{ EAI_FAMILY, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+		{ EAI_MEMORY, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+#ifdef EAI_NODATA /* Obsoleted by RFC 2553bis-02 */
+		{ EAI_NODATA, NET_HOSTERROR_TYPE_NOT_FOUND },
+#endif
+		{ EAI_NONAME, NET_HOSTERROR_TYPE_NOT_FOUND },
+		{ EAI_SERVICE, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+		{ EAI_SOCKTYPE, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+		{ EAI_SYSTEM, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+	};
+	for (unsigned int i = 0; i < N_ELEMENTS(error_map); i++) {
+		if (error_map[i].error == error)
+			return error_map[i].type;
+	}
+
+	/* shouldn't happen? assume internal error */
+	return NET_HOSTERROR_TYPE_INTERNAL_ERROR;
 }
 
 int net_hosterror_notfound(int error)

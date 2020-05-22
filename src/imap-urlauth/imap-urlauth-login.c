@@ -107,8 +107,8 @@ static void imap_urlauth_client_handle_input(struct client *client)
 		base64_encode(str_data(auth_data),
 			      str_len(auth_data), init_resp);
 
-		(void)client_auth_begin(client, "DOVECOT-TOKEN",
-					str_c(init_resp));
+		(void)client_auth_begin_private(client, "DOVECOT-TOKEN",
+						str_c(init_resp));
 	} T_END;
 }
 
@@ -164,25 +164,12 @@ static void imap_urlauth_login_deinit(void)
 }
 
 static struct client_vfuncs imap_urlauth_vfuncs = {
-	imap_urlauth_client_alloc,
-	imap_urlauth_client_create,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	imap_urlauth_client_input,
-	NULL,
-	NULL,
-	imap_urlauth_client_auth_result,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	client_common_send_raw_data,
-	NULL,
-	client_common_default_free,
+	.alloc = imap_urlauth_client_alloc,
+	.create = imap_urlauth_client_create,
+	.input = imap_urlauth_client_input,
+	.auth_result = imap_urlauth_client_auth_result,
+	.send_raw_data = client_common_send_raw_data,
+	.free = client_common_default_free,
 };
 
 static const struct login_binary imap_urlauth_login_binary = {
@@ -194,6 +181,8 @@ static const struct login_binary imap_urlauth_login_binary = {
 	.preinit = imap_urlauth_login_preinit,
 	.init = imap_urlauth_login_init,
 	.deinit = imap_urlauth_login_deinit,
+
+	.anonymous_login_acceptable = TRUE,
 };
 
 int main(int argc, char *argv[])

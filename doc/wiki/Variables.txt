@@ -224,6 +224,18 @@ These variables work only in 'deliver_log_format' setting:
 |            |               | total, including network waits (v2.2.18+)      |
 +------------+---------------+------------------------------------------------+
 
+These variables work only in 'auth_policy_request_attributes' setting:
+
+ *
++------------+--------------------+-------------------------------------------+
+| *Variable* | *Long name*        | *Description*                             |
++------------+--------------------+-------------------------------------------+
+|            | hashed_password    | Truncated auth policy hash of username and|
+|            |                    | password                                  |
++------------+--------------------+-------------------------------------------+
+|            | requested_username | Since v2.2.34, contains correct username  |
++------------+--------------------+-------------------------------------------+
+
  * Long variable names can be used like '%{long_name} ' or with L modifier:
    '%L{long_name}'.
  * Environment variables can be accessed with '%{env:ENVIRONMENT_VARIABLE} '.
@@ -340,4 +352,4 @@ Following operators are supported
 | !~         | String inequality (pattern on value2, extended POSIX)        |
 +------------+--------------------------------------------------------------+
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

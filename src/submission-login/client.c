@@ -26,6 +26,39 @@ static const struct smtp_server_callbacks smtp_callbacks;
 
 static struct smtp_server *smtp_server = NULL;
 
+static void
+client_parse_backend_capabilities(struct submission_client *subm_client )
+{
+	const struct submission_login_settings *set = subm_client->set;
+	const char *const *str;
+
+	if (set->submission_backend_capabilities == NULL) {
+		subm_client->backend_capabilities = SMTP_CAPABILITY_8BITMIME;
+		return;
+	}
+
+	subm_client->backend_capabilities = SMTP_CAPABILITY_NONE;
+	str = t_strsplit_spaces(set->submission_backend_capabilities, " ,");
+	for (; *str != NULL; str++) {
+		enum smtp_capability cap = smtp_capability_find_by_name(*str);
+
+		if (cap == SMTP_CAPABILITY_NONE) {
+			i_warning("Unknown SMTP capability in submission_backend_capabilities: "
+				  "%s", *str);
+			continue;
+		}
+
+		subm_client->backend_capabilities |= cap;
+	}
+
+	/* Make sure CHUNKING support is always enabled when BINARYMIME is
+	   enabled by explicit configuration. */
+	if (HAS_ALL_BITS(subm_client->backend_capabilities,
+			 SMTP_CAPABILITY_BINARYMIME)) {
+		subm_client->backend_capabilities |= SMTP_CAPABILITY_CHUNKING;
+	}
+}
+
 static int submission_login_start_tls(void *conn_ctx,
 	struct istream **input, struct ostream **output)
 {
@@ -66,6 +99,7 @@ static void submission_client_create(struct client *client,
 	struct smtp_server_settings smtp_set;
 
 	subm_client->set = other_sets[0];
+	client_parse_backend_capabilities(subm_client);
 
 	i_zero(&smtp_set);
 	smtp_set.capabilities = SMTP_CAPABILITY_SIZE |
@@ -140,10 +174,12 @@ client_connection_cmd_xclient(void *context,
 
 	struct submission_client *client = context;
 
-	client->common.ip = data->source_ip;
-	client->common.remote_port = data->source_port;
-
-	client->common.proxy_ttl = data->ttl_plus_1;
+	if (data->source_ip.family != 0)
+		client->common.ip = data->source_ip;
+	if (data->source_port != 0)
+		client->common.remote_port = data->source_port;
+	if (data->ttl_plus_1 > 0)
+		client->common.proxy_ttl = data->ttl_plus_1 - 1;
 
 	for (i = 0; i < data->extra_fields_count; i++) {
 		const char *name = data->extra_fields[i].name;
@@ -176,6 +212,7 @@ static void client_connection_disconnect(void *context, const char *reason)
 {
 	struct submission_client *client = context;
 
+	client->pending_auth = NULL;
 	client_disconnect(&client->common, reason);
 }
 
@@ -246,25 +283,17 @@ static const struct smtp_server_callbacks smtp_callbacks = {
 };
 
 static struct client_vfuncs submission_client_vfuncs = {
-	submission_client_alloc,
-	submission_client_create,
-	submission_client_destroy,
-	submission_client_notify_auth_ready,
-	submission_client_notify_disconnect,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	submission_client_auth_send_challenge,
-	NULL,
-	submission_client_auth_result,
-	submission_proxy_reset,
-	submission_proxy_parse_line,
-	submission_proxy_error,
-	submission_proxy_get_state,
-	NULL,
-	NULL,
-	NULL
+	.alloc = submission_client_alloc,
+	.create = submission_client_create,
+	.destroy = submission_client_destroy,
+	.notify_auth_ready = submission_client_notify_auth_ready,
+	.notify_disconnect = submission_client_notify_disconnect,
+	.auth_send_challenge = submission_client_auth_send_challenge,
+	.auth_result = submission_client_auth_result,
+	.proxy_reset = submission_proxy_reset,
+	.proxy_parse_line = submission_proxy_parse_line,
+	.proxy_error = submission_proxy_error,
+	.proxy_get_state = submission_proxy_get_state,
 };
 
 static const struct login_binary submission_login_binary = {
@@ -277,7 +306,8 @@ static const struct login_binary submission_login_binary = {
 	.init = submission_login_init,
 	.deinit = submission_login_deinit,
 
-	.sasl_support_final_reply = FALSE
+	.sasl_support_final_reply = FALSE,
+	.anonymous_login_acceptable = FALSE,
 };
 
 int main(int argc, char *argv[])

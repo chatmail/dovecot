@@ -8,6 +8,7 @@
 #include "ostream.h"
 #include "ioloop.h"
 #include "unlink-directory.h"
+#include "sleep.h"
 #include "test-common.h"
 #include "imapc-client-private.h"
 
@@ -152,7 +153,7 @@ static void test_run_client_server(
 	}
 	/* parent: client */
 
-	usleep(100000); /* wait a little for server setup */
+	i_sleep_msecs(100); /* wait a little for server setup */
 
 	ioloop = io_loop_create();
 	imapc_client = imapc_client_init(&client_set_copy);
@@ -179,7 +180,7 @@ static enum imapc_command_state test_imapc_cmd_last_reply_pop(void)
 	if (count == 0)
 		return IMAPC_COMMAND_STATE_INVALID;
 	reply = replies[0];
-	array_delete(&imapc_cmd_last_replies, 0, 1);
+	array_pop_front(&imapc_cmd_last_replies);
 	return reply;
 }
 
@@ -227,7 +228,7 @@ static void imapc_command_callback(const struct imapc_command_reply *reply,
 			imapc_command_state_names[reply->state],
 			reply->text_full);
 	}
-	array_append(&imapc_cmd_last_replies, &reply->state, 1);
+	array_push_back(&imapc_cmd_last_replies, &reply->state);
 	imapc_client_stop(imapc_client);
 }
 

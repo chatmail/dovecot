@@ -29,7 +29,7 @@ void test_begin(const char *name);
  * in strcmp().
  */
 #define test_assert_strcmp(s1, s2) STMT_START { \
-		if ((strcmp(s1,s2) != 0)) test_assert_failed_strcmp("strcmp(" #s1 ","  #s2 ")", __FILE__, __LINE__, s1, s2); \
+		if ((null_strcmp(s1,s2) != 0)) test_assert_failed_strcmp("strcmp(" #s1 ","  #s2 ")", __FILE__, __LINE__, s1, s2); \
 	} STMT_END
 
 void test_assert_failed(const char *code, const char *file, unsigned int line);
@@ -40,6 +40,7 @@ bool test_has_failed(void);
 /* If you're testing nasty cases which you want to warn, surround the noisy op with these */
 void test_expect_errors(unsigned int expected);
 void test_expect_error_string(const char *substr); /* expect just 1 message matching the printf format */
+void test_expect_error_string_n_times(const char *substr, unsigned int times); /* expect just n messages matching the printf format */
 void test_expect_no_more_errors(void);
 /* Note that test_expect_error{s,_string}() effectively begin with a check equivalent
    to test_expect_no_more_errors(), so you don't need the latter explicitly if following
@@ -52,12 +53,12 @@ void test_out_quiet(const char *name, bool success); /* only prints failures */
 void test_out_reason(const char *name, bool success, const char *reason)
 	ATTR_NULL(3);
 
-int test_run(void (*const test_functions[])(void));
+int test_run(void (*const test_functions[])(void)) ATTR_WARN_UNUSED_RESULT;
 struct named_test {
 	const char *name;
 	void (*func)(void);
 };
-int test_run_named(const struct named_test tests[], const char *match);
+int test_run_named(const struct named_test tests[], const char *match) ATTR_WARN_UNUSED_RESULT;
 
 #define TEST_DECL(x) void x(void);
 #define TEST_NAMELESS(x) x, /* Were you to want to use the X trick but not name the tests */

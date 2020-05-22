@@ -50,7 +50,7 @@ static DH *ssl_tmp_dh_callback(SSL *ssl ATTR_UNUSED,
 			       int is_export ATTR_UNUSED, int keylength ATTR_UNUSED)
 {
 	i_error("Diffie-Hellman key exchange requested, "
-		"but no DH parameters provided. Set ssh_dh=</path/to/dh.pem");
+		"but no DH parameters provided. Set ssl_dh=</path/to/dh.pem");
 	return NULL;
 }
 
@@ -354,11 +354,15 @@ ssl_iostream_context_load_ca(struct ssl_iostream_context *ctx,
 		}
 		have_ca = TRUE;
 	}
-
-	if (!have_ca && !set->allow_invalid_cert) {
-		*error_r = !ctx->client_ctx ?
-			"Can't verify remote client certs without CA (ssl_ca setting)" :
-			"Can't verify remote server certs without trusted CAs (ssl_client_ca_* settings)";
+	if (!have_ca && ctx->client_ctx) {
+		if (SSL_CTX_set_default_verify_paths(ctx->ssl_ctx) != 1) {
+			*error_r = t_strdup_printf(
+				"Can't load default CA locations: %s (ssl_client_ca_* settings missing)",
+				openssl_iostream_error());
+			return -1;
+		}
+	} else if (!have_ca) {
+		*error_r = "Can't verify remote client certs without CA (ssl_ca setting)";
 		return -1;
 	}
 	return 0;
@@ -381,6 +385,14 @@ ssl_iostream_context_set(struct ssl_iostream_context *ctx,
 		SSL_CTX_set1_curves_list(ctx->ssl_ctx, set->curve_list) == 0) {
 		*error_r = t_strdup_printf("Failed to set curve list to '%s'",
 					   set->curve_list);
+		return -1;
+	}
+#endif
+#ifdef HAVE_SSL_CTX_SET_CIPHERSUITES
+	if (set->ciphersuites != NULL &&
+	    SSL_CTX_set_ciphersuites(ctx->ssl_ctx, set->ciphersuites) == 0) {
+		*error_r = t_strdup_printf("Can't set ciphersuites to '%s': %s",
+			set->cipher_list, openssl_iostream_error());
 		return -1;
 	}
 #endif

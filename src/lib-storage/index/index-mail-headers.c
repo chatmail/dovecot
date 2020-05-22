@@ -269,6 +269,7 @@ static void index_mail_parse_finish_imap_envelope(struct index_mail *mail)
 	str = str_new(mail->mail.data_pool, 256);
 	imap_envelope_write(mail->data.envelope_data, str);
 	mail->data.envelope = str_c(str);
+	mail->data.save_envelope = FALSE;
 
 	if (mail_cache_field_can_add(_mail->transaction->cache_trans,
 				     _mail->seq, cache_field_envelope)) {
@@ -351,7 +352,7 @@ void index_mail_parse_header(struct message_part *part,
 		str_append(mail->header_data, "\n");
 	if (!hdr->continues) {
 		data->parse_line.end_pos = str_len(mail->header_data);
-		array_append(&mail->header_lines, &data->parse_line, 1);
+		array_push_back(&mail->header_lines, &data->parse_line);
 	}
 }
 
@@ -509,7 +510,10 @@ int index_mail_headers_get_envelope(struct index_mail *mail)
 	old_offset = mail->data.stream == NULL ? 0 :
 		mail->data.stream->v_offset;
 
-	mail->data.save_envelope = TRUE;
+	/* Make sure header_cache_callback() isn't also parsing the ENVELOPE.
+	   Otherwise two callbacks are doing it and mixing up results. */
+	mail->data.save_envelope = FALSE;
+
 	header_ctx = mailbox_header_lookup_init(mail->mail.mail.box,
 						message_part_envelope_headers);
 	if (mail_get_header_stream(&mail->mail.mail, header_ctx, &stream) < 0) {
@@ -518,7 +522,7 @@ int index_mail_headers_get_envelope(struct index_mail *mail)
 	}
 	mailbox_header_lookup_unref(&header_ctx);
 
-	if (mail->data.envelope == NULL && stream != NULL) {
+	if (mail->data.envelope == NULL) {
 		/* we got the headers from cache - parse them to get the
 		   envelope */
 		message_parse_header(stream, NULL, hdr_parser_flags,
@@ -527,7 +531,7 @@ int index_mail_headers_get_envelope(struct index_mail *mail)
 			index_mail_stream_log_failure_for(mail, stream);
 			return -1;
 		}
-		mail->data.save_envelope = FALSE;
+		i_assert(mail->data.envelope != NULL);
 	}
 
 	if (mail->data.stream != NULL)
@@ -616,12 +620,12 @@ index_mail_get_parsed_header(struct index_mail *mail, unsigned int field_idx)
 			value = message_header_strdup(mail->mail.data_pool,
 						      value_start,
 						      value_end - value_start);
-			array_append(&header_values, &value, 1);
+			array_push_back(&header_values, &value);
 		}
 	}
 
 	array_append_zero(&header_values);
-	return array_idx(&header_values, 0);
+	return array_front(&header_values);
 }
 
 static int
@@ -652,7 +656,7 @@ index_mail_get_raw_headers(struct index_mail *mail, const char *field,
 			/* don't try to parse headers recursively. we're here
 			   because message size was wrong and istream-mail
 			   wants to log some cached headers. */
-			i_assert(mail->mail.mail.lookup_abort == MAIL_LOOKUP_ABORT_NOT_IN_CACHE);
+			i_assert(mail->mail.mail.lookup_abort >= MAIL_LOOKUP_ABORT_NOT_IN_CACHE);
 			mail_set_aborted(&mail->mail.mail);
 			return -1;
 		}
@@ -702,12 +706,12 @@ index_mail_get_raw_headers(struct index_mail *mail, const char *field,
 						     data + i, len2);
 			i += len2 + 1;
 
-			array_append(&header_values, &value, 1);
+			array_push_back(&header_values, &value);
 		}
 	}
 
 	array_append_zero(&header_values);
-	*value_r = array_idx(&header_values, 0);
+	*value_r = array_front(&header_values);
 	return 0;
 }
 

@@ -234,6 +234,17 @@ imapc_mailbox_fetch_state_callback(const struct imapc_command_reply *reply,
 	}
 }
 
+void imap_mailbox_select_finish(struct imapc_mailbox *mbox)
+{
+	if (mbox->exists_count == 0) {
+		/* no mails. expunge everything. */
+		mbox->sync_next_lseq = 1;
+		imapc_mailbox_init_delayed_trans(mbox);
+		imapc_mailbox_fetch_state_finish(mbox);
+	}
+	mbox->selected = TRUE;
+}
+
 static void
 imapc_mailbox_fetch_state(struct imapc_mailbox *mbox, uint32_t first_uid)
 {
@@ -241,10 +252,9 @@ imapc_mailbox_fetch_state(struct imapc_mailbox *mbox, uint32_t first_uid)
 
 	if (mbox->exists_count == 0) {
 		/* empty mailbox - no point in fetching anything.
-		   just make sure everything is expunged in local index. */
-		mbox->sync_next_lseq = 1;
-		imapc_mailbox_init_delayed_trans(mbox);
-		imapc_mailbox_fetch_state_finish(mbox);
+		   just make sure everything is expunged in local index.
+		   Delay calling imapc_mailbox_fetch_state_finish() until
+		   SELECT finishes, so we see the updated UIDNEXT. */
 		return;
 	}
 	if (mbox->state_fetching_uid1) {
@@ -489,7 +499,7 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 					flags |= imap_parse_system_flag(atom);
 				else {
 					/* keyword */
-					array_append(&keywords, &atom, 1);
+					array_push_back(&keywords, &atom);
 				}
 			}
 		} else if (strcasecmp(atom, "MODSEQ") == 0 &&
@@ -588,12 +598,12 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 			   this can be used for "All Mail" mailbox migrations
 			   with dsync */
 			atom = "$GMailHaveLabels";
-			array_append(&keywords, &atom, 1);
+			array_push_back(&keywords, &atom);
 		}
 
 		array_append_zero(&keywords);
 		kw = mail_index_keywords_create(mbox->box.index,
-						array_idx(&keywords, 0));
+						array_front(&keywords));
 		if (!keywords_are_equal(kw, &old_kws)) {
 			mail_index_update_keywords(mbox->delayed_sync_trans,
 						   lseq, MODIFY_REPLACE, kw);
@@ -613,7 +623,7 @@ static void imapc_untagged_fetch(const struct imapc_untagged_reply *reply,
 		if (mail_cache_field_can_add(mbox->delayed_sync_cache_trans,
 					     lseq, guid_cache_idx)) {
 			mail_cache_add(mbox->delayed_sync_cache_trans, lseq,
-				       guid_cache_idx, guid, strlen(guid)+1);
+				       guid_cache_idx, guid, strlen(guid));
 		}
 	}
 	imapc_mailbox_idle_notify(mbox);
@@ -685,7 +695,7 @@ imapc_untagged_esearch_gmail_pop3(const struct imap_arg *args,
 		mbox->storage->set->pop3_deleted_flag, &pop3_deleted_kw_idx);
 
 	t_array_init(&keywords, 1);
-	array_append(&keywords, &pop3_deleted_kw_idx, 1);
+	array_push_back(&keywords, &pop3_deleted_kw_idx);
 	kw = mail_index_keywords_create_from_indexes(mbox->box.index, &keywords);
 
 	msgmap = imapc_client_mailbox_get_msgmap(mbox->client_box);

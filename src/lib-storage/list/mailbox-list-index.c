@@ -327,17 +327,6 @@ static int mailbox_list_index_parse_records(struct mailbox_list_index *ilist,
 		}
 		irec = data;
 
-		if (!ilist->has_backing_store && guid_128_is_empty(irec->guid) &&
-		    (rec->flags & (MAILBOX_LIST_INDEX_FLAG_NONEXISTENT |
-				   MAILBOX_LIST_INDEX_FLAG_NOSELECT)) == 0) {
-			/* no backing store and mailbox has no GUID.
-			   it can't be selectable, but the flag is missing. */
-			node->flags |= MAILBOX_LIST_INDEX_FLAG_NOSELECT;
-			*error_r = "mailbox is missing guid - "
-				"setting it non-selectable";
-			node->corrupted_flags = TRUE;
-		}
-
 		node->name_id = irec->name_id;
 		if (node->name_id == 0) {
 			/* invalid name_id - assign a new one */
@@ -354,6 +343,29 @@ static int mailbox_list_index_parse_records(struct mailbox_list_index *ilist,
 			/* generate a new name and use it */
 			mailbox_list_index_generate_name(ilist, node, "unknown-");
 		}
+
+		if (!ilist->has_backing_store && guid_128_is_empty(irec->guid) &&
+		    (rec->flags & (MAILBOX_LIST_INDEX_FLAG_NONEXISTENT |
+				   MAILBOX_LIST_INDEX_FLAG_NOSELECT)) == 0) {
+			/* no backing store and mailbox has no GUID.
+			   it can't be selectable, but the flag is missing. */
+			node->flags |= MAILBOX_LIST_INDEX_FLAG_NOSELECT;
+			*error_r = t_strdup_printf(
+				"mailbox '%s' (uid=%u) is missing GUID - "
+				"marking it non-selectable", node->name, node->uid);
+			node->corrupted_flags = TRUE;
+		}
+		if (!ilist->has_backing_store && !guid_128_is_empty(irec->guid) &&
+		    (rec->flags & (MAILBOX_LIST_INDEX_FLAG_NONEXISTENT |
+				   MAILBOX_LIST_INDEX_FLAG_NOSELECT)) != 0) {
+			node->flags &= ~(MAILBOX_LIST_INDEX_FLAG_NONEXISTENT |
+					 MAILBOX_LIST_INDEX_FLAG_NOSELECT);
+			*error_r = t_strdup_printf(
+				"non-selectable mailbox '%s' (uid=%u) already has GUID - "
+				"marking it selectable", node->name, node->uid);
+			node->corrupted_flags = TRUE;
+		}
+
 		hash_table_insert(ilist->mailbox_hash,
 				  POINTER_CAST(node->uid), node);
 	}
@@ -655,6 +667,79 @@ int mailbox_list_index_set_uncorrupted(struct mailbox_list *list)
 
 	mail_index_unset_fscked(sync_ctx->trans);
 	return mailbox_list_index_sync_end(&sync_ctx, TRUE);
+}
+
+bool mailbox_list_index_get_index(struct mailbox_list *list,
+				  struct mail_index **index_r)
+{
+	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(list);
+
+	if (ilist == NULL)
+		return FALSE;
+	*index_r = ilist->index;
+	return TRUE;
+}
+
+int mailbox_list_index_view_open(struct mailbox *box, bool require_refreshed,
+				 struct mail_index_view **view_r,
+				 uint32_t *seq_r)
+{
+	struct mailbox_list_index *ilist = INDEX_LIST_CONTEXT(box->list);
+	struct mailbox_list_index_node *node;
+	struct mail_index_view *view;
+	uint32_t seq;
+	int ret;
+
+	if (ilist == NULL) {
+		/* mailbox list indexes aren't enabled */
+		return 0;
+	}
+	if (MAILBOX_IS_NEVER_IN_INDEX(box) && require_refreshed) {
+		/* Optimization: Caller wants the list index to be up-to-date
+		   for this mailbox, but this mailbox isn't updated to the list
+		   index at all. */
+		return 0;
+	}
+	if (mailbox_list_index_refresh(box->list) < 0) {
+		mail_storage_copy_list_error(box->storage, box->list);
+		return -1;
+	}
+
+	node = mailbox_list_index_lookup(box->list, box->name);
+	if (node == NULL) {
+		/* mailbox not found */
+		return 0;
+	}
+
+	view = mail_index_view_open(ilist->index);
+	if (mailbox_list_index_need_refresh(ilist, view)) {
+		/* mailbox_list_index_refresh_later() was called.
+		   Can't trust the index's contents. */
+		ret = 1;
+	} else if (!mail_index_lookup_seq(view, node->uid, &seq)) {
+		/* our in-memory tree is out of sync */
+		ret = 1;
+	} else if (!require_refreshed) {
+		/* this operation doesn't need the index to be up-to-date */
+		ret = 0;
+	} else T_BEGIN {
+		ret = box->v.list_index_has_changed == NULL ? 0 :
+			box->v.list_index_has_changed(box, view, seq, FALSE);
+	} T_END;
+
+	if (ret != 0) {
+		/* error / mailbox has changed. we'll need to sync it. */
+		if (ret < 0)
+			mailbox_list_index_refresh_later(box->list);
+		else
+			ilist->index_last_check_changed = TRUE;
+		mail_index_view_close(&view);
+		return ret < 0 ? -1 : 0;
+	}
+
+	*view_r = view;
+	*seq_r = seq;
+	return 1;
 }
 
 static void mailbox_list_index_deinit(struct mailbox_list *list)
@@ -959,7 +1044,7 @@ mailbox_list_index_sync_init(struct mailbox *box,
 	struct index_list_mailbox *ibox = INDEX_LIST_STORAGE_CONTEXT(box);
 
 	mailbox_list_index_status_sync_init(box);
-	if (ibox->have_backend)
+	if (!ibox->have_backend)
 		mailbox_list_index_backend_sync_init(box, flags);
 	return ibox->module_ctx.super.sync_init(box, flags);
 }
