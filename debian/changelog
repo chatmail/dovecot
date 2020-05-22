@@ -1,4 +1,4 @@
-dovecot (1:2.3.10.1-1) UNRELEASED; urgency=medium
+dovecot (1:2.3.10.1+dfsg-1) UNRELEASED; urgency=medium
 
   * New upstream release
   * Refresh patches
