@@ -10,6 +10,7 @@ dovecot (1:2.3.10.1+dfsg1-1) UNRELEASED; urgency=medium
   * Incorporate a number of improvements to debian/ metadata contributed by
     Christian Göttsche <cgzones@googlemail.com>
   * Add noahm@debian.org to Uploaders
+  * Work around flakiness in autopkgtest suite
 
  -- Noah Meyerhans <noahm@debian.org>  Thu, 21 May 2020 19:20:58 -0700
 
