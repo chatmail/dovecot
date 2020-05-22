@@ -10,6 +10,8 @@
 #include "eacces-error.h"
 #include "ipwd.h"
 #include "str.h"
+#include "time-util.h"
+#include "sleep.h"
 #include "var-expand.h"
 #include "dict.h"
 #include "settings-parser.h"
@@ -23,6 +25,7 @@
 #include "mail-storage-service.h"
 
 #include <sys/stat.h>
+#include <time.h>
 
 #ifdef HAVE_SYS_TIME_H
 #  include <sys/time.h>
@@ -32,8 +35,8 @@
 #endif
 
 /* If time moves backwards more than this, kill ourself instead of sleeping. */
-#define MAX_TIME_BACKWARDS_SLEEP 5
-#define MAX_NOWARN_FORWARD_SECS 10
+#define MAX_TIME_BACKWARDS_SLEEP_MSECS  (5*1000)
+#define MAX_NOWARN_FORWARD_MSECS        (10*1000)
 
 #define ERRSTR_INVALID_USER_SETTINGS \
 	"Invalid user settings. Refer to server log for more information."
@@ -79,7 +82,7 @@ struct mail_storage_service_user {
 	struct event *event;
 	ARRAY(struct event *) event_stack;
 	struct ioloop_context *ioloop_ctx;
-	const char *log_prefix, *auth_token, *auth_user;
+	const char *log_prefix, *auth_mech, *auth_token, *auth_user;
 
 	const char *system_groups_user, *uid_source, *gid_source;
 	const char *chdir_path;
@@ -94,6 +97,7 @@ struct mail_storage_service_user {
 };
 
 struct module *mail_storage_service_modules = NULL;
+static struct mail_storage_service_ctx *storage_service_global = NULL;
 
 static int
 mail_storage_service_var_expand(struct mail_storage_service_ctx *ctx,
@@ -286,6 +290,8 @@ user_reply_handle(struct mail_storage_service_ctx *ctx,
 					i_error("setpriority(%d) failed: %m", n);
 			}
 #endif
+		} else if (str_begins(line, "auth_mech=")) {
+			user->auth_mech = p_strdup(user->pool, line+10);
 		} else if (str_begins(line, "auth_token=")) {
 			user->auth_token = p_strdup(user->pool, line+11);
 		} else if (str_begins(line, "auth_user=")) {
@@ -678,6 +684,7 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	mail_user->gid = priv->gid == (gid_t)-1 ? getegid() : priv->gid;
 	mail_user->anonymous = user->anonymous;
 	mail_user->admin = user->admin;
+	mail_user->auth_mech = p_strdup(mail_user->pool, user->auth_mech);
 	mail_user->auth_token = p_strdup(mail_user->pool, user->auth_token);
 	mail_user->auth_user = p_strdup(mail_user->pool, user->auth_user);
 	if (user->input.session_create_time != 0) {
@@ -753,7 +760,7 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	}
 	if ((user->flags & MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES) == 0) {
 		if (mail_namespaces_init(mail_user, error_r) < 0) {
-			mail_user_unref(&mail_user);
+			mail_user_deinit(&mail_user);
 			return -1;
 		}
 	}
@@ -805,7 +812,7 @@ mail_storage_service_io_deactivate_user_cb(struct mail_storage_service_user *use
 		i_assert(event != NULL);
 		if (!array_is_created(&user->event_stack))
 			i_array_init(&user->event_stack, 4);
-		array_append(&user->event_stack, &event, 1);
+		array_push_back(&user->event_stack, &event);
 		event_pop_global(event);
 	}
 	event_pop_global(user->event);
@@ -900,35 +907,33 @@ mail_storage_service_init_log(struct mail_storage_service_ctx *ctx,
 		i_set_failure_send_prefix(user->log_prefix);
 }
 
-static void mail_storage_service_time_moved(time_t old_time, time_t new_time)
+static void
+mail_storage_service_time_moved(const struct timeval *old_time,
+				const struct timeval *new_time)
 {
-	long diff = new_time - old_time;
+	long long diff = timeval_diff_usecs(new_time, old_time);
 
 	if (diff > 0) {
-		if (diff > MAX_NOWARN_FORWARD_SECS)
-			i_warning("Time jumped forwards %ld seconds", diff);
+		if ((diff / 1000) > MAX_NOWARN_FORWARD_MSECS)
+			i_warning("Time jumped forwards %lld.%06lld seconds",
+				  diff / 1000000, diff % 1000000);
 		return;
 	}
 	diff = -diff;
 
-	if (diff > MAX_TIME_BACKWARDS_SLEEP) {
-		i_fatal("Time just moved backwards by %ld seconds. "
+	if ((diff / 1000) > MAX_TIME_BACKWARDS_SLEEP_MSECS) {
+		i_fatal("Time just moved backwards by %lld.%06lld seconds. "
 			"This might cause a lot of problems, "
 			"so I'll just kill myself now. "
-			"http://wiki2.dovecot.org/TimeMovedBackwards", diff);
+			"http://wiki2.dovecot.org/TimeMovedBackwards",
+			diff / 1000000, diff % 1000000);
 	} else {
-		i_error("Time just moved backwards by %ld seconds. "
+		i_error("Time just moved backwards by %lld.%06lld seconds. "
 			"I'll sleep now until we're back in present. "
-			"http://wiki2.dovecot.org/TimeMovedBackwards", diff);
-		/* Sleep extra second to make sure usecs also grows. */
-		diff++;
+			"http://wiki2.dovecot.org/TimeMovedBackwards",
+			diff / 1000000, diff % 1000000);
 
-		while (diff > 0 && sleep(diff) != 0) {
-			/* don't use sleep()'s return value, because
-			   it could get us to a long loop in case
-			   interrupts just keep coming */
-			diff = old_time - time(NULL) + 1;
-		}
+		i_sleep_usecs(diff);
 	}
 }
 
@@ -991,6 +996,8 @@ mail_storage_service_init(struct master_service *service,
 		master_service_init_log(service, ctx->default_log_prefix);
 	}
 	dict_drivers_register_builtin();
+	if (storage_service_global == NULL)
+		storage_service_global = ctx;
 	return ctx;
 }
 
@@ -1326,26 +1333,9 @@ mail_storage_service_lookup_real(struct mail_storage_service_ctx *ctx,
 			       user->service_ctx->debug || (flags & MAIL_STORAGE_SERVICE_FLAG_DEBUG) != 0);
 	event_add_fields(user->event, (const struct event_add_field []){
 		{ .key = "user", .value = user->input.username },
-		{ .key = "service", .value = ctx->service->name },
 		{ .key = "session", .value = user->input.session_id },
 		{ .key = NULL }
 	});
-	if (user->input.local_ip.family != 0) {
-		event_add_str(user->event, "local_ip",
-			      net_ip2addr(&user->input.local_ip));
-	}
-	if (user->input.local_port != 0) {
-		event_add_int(user->event, "local_port",
-			      user->input.local_port);
-	}
-	if (user->input.remote_ip.family != 0) {
-		event_add_str(user->event, "remote_ip",
-			      net_ip2addr(&user->input.remote_ip));
-	}
-	if (user->input.remote_port != 0) {
-		event_add_int(user->event, "remote_port",
-			      user->input.remote_port);
-	}
 
 	if ((flags & MAIL_STORAGE_SERVICE_FLAG_DEBUG) != 0)
 		(void)settings_parse_line(user->set_parser, "mail_debug=yes");
@@ -1415,7 +1405,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 			input->session_id != NULL ? input->session_id :
 			(input->session_id_prefix != NULL ?
 			 input->session_id_prefix : NULL);
-		i_set_failure_prefix("%s(%s%s,%s)",
+		i_set_failure_prefix("%s(%s%s%s): ",
 			master_service_get_name(ctx->service), input->username,
 			session_id == NULL ? "" : t_strdup_printf(",%s", session_id),
 			input->remote_ip.family == 0 ? "" :
@@ -1425,7 +1415,7 @@ int mail_storage_service_lookup(struct mail_storage_service_ctx *ctx,
 		/* we might be here because we're doing a user lookup for a
 		   shared user. the log prefix is likely already usable, so
 		   just append our own without replacing the whole thing. */
-		i_set_failure_prefix("%suser-lookup(%s)",
+		i_set_failure_prefix("%suser-lookup(%s): ",
 				     old_log_prefix, input->username);
 		update_log_prefix = FALSE;
 	}
@@ -1725,11 +1715,19 @@ void mail_storage_service_deinit(struct mail_storage_service_ctx **_ctx)
 	}
 	if (ctx->set_cache != NULL)
 		master_service_settings_cache_deinit(&ctx->set_cache);
+
+	if (storage_service_global == ctx)
+		storage_service_global = NULL;
 	pool_unref(&ctx->pool);
 
 	module_dir_unload(&mail_storage_service_modules);
 	mail_storage_deinit();
 	dict_drivers_unregister_builtin();
+}
+
+struct mail_storage_service_ctx *mail_storage_service_get_global(void)
+{
+	return storage_service_global;
 }
 
 void **mail_storage_service_user_get_set(struct mail_storage_service_user *user)

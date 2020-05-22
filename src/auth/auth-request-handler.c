@@ -182,7 +182,13 @@ auth_str_append_extra_fields(struct auth_request *request, string_t *dest)
 	if (request->master_user != NULL &&
 	    !auth_fields_exists(request->extra_fields, "auth_user"))
 		auth_str_add_keyvalue(dest, "auth_user", request->master_user);
-
+	if (*request->set->anonymous_username != '\0' &&
+	    null_strcmp(request->user, request->set->anonymous_username) == 0) {
+		/* this is an anonymous login, either via ANONYMOUS
+		   SASL mechanism or simply logging in as the anonymous
+		   user via another mechanism */
+		str_append(dest, "\tanonymous");
+	}
 	if (!request->auth_only &&
 	    auth_fields_exists(request->extra_fields, "proxy")) {
 		/* we're proxying */
@@ -206,6 +212,9 @@ static void
 auth_request_handle_failure(struct auth_request *request, const char *reply)
 {
         struct auth_request_handler *handler = request->handler;
+
+	/* handle failure here */
+	auth_request_log_finished(request);
 
 	if (request->in_delayed_failure_queue) {
 		/* we came here from flush_failures() */
@@ -242,7 +251,7 @@ auth_request_handle_failure(struct auth_request *request, const char *reply)
 	if (to_auth_failures == NULL) {
 		to_auth_failures =
 			timeout_add_short(AUTH_FAILURE_DELAY_CHECK_MSECS,
-					  auth_failure_timeout, (void *)NULL);
+					  auth_failure_timeout, NULL);
 	}
 }
 
@@ -251,6 +260,8 @@ auth_request_handler_reply_success_finish(struct auth_request *request)
 {
         struct auth_request_handler *handler = request->handler;
 	string_t *str = t_str_new(128);
+
+	auth_request_log_finished(request);
 
 	if (request->last_penalty != 0 && auth_penalty != NULL) {
 		/* reset penalty */
@@ -413,7 +424,7 @@ auth_request_handler_auth_fail_code(struct auth_request_handler *handler,
 {
 	string_t *str = t_str_new(128);
 
-	auth_request_log_info(request, AUTH_SUBSYS_MECH, "%s", reason);
+	e_info(request->mech_event, "%s", reason);
 
 	str_printfa(str, "FAIL\t%u", request->id);
 	if (*fail_code != '\0') {
@@ -440,14 +451,14 @@ static void auth_request_timeout(struct auth_request *request)
 
 	if (request->state != AUTH_REQUEST_STATE_MECH_CONTINUE) {
 		/* client's fault */
-		auth_request_log_error(request, AUTH_SUBSYS_MECH,
+		e_error(request->mech_event,
 			"Request %u.%u timed out after %u secs, state=%d",
 			request->handler->client_pid, request->id,
 			secs, request->state);
 	} else if (request->set->verbose) {
-		auth_request_log_info(request, AUTH_SUBSYS_MECH,
-			"Request timed out waiting for client to continue authentication "
-			"(%u secs)", secs);
+		e_info(request->mech_event,
+		       "Request timed out waiting for client to continue authentication "
+		       "(%u secs)", secs);
 	}
 	auth_request_handler_remove(request->handler, request);
 }
@@ -698,6 +709,7 @@ static void auth_str_append_userdb_extra_fields(struct auth_request *request,
 		auth_str_add_keyvalue(dest, "master_user",
 				      request->master_user);
 	}
+	auth_str_add_keyvalue(dest, "auth_mech", request->mech->mech_name);
 	if (*request->set->anonymous_username != '\0' &&
 	    strcmp(request->user, request->set->anonymous_username) == 0) {
 		/* this is an anonymous login, either via ANONYMOUS
@@ -867,7 +879,7 @@ void auth_request_handler_flush_failures(bool flush_all)
 		return;
 	}
 
-	auth_requests = array_idx_modifiable(&auth_failures_arr, 0);
+	auth_requests = array_front_modifiable(&auth_failures_arr);
 	/* count the number of requests that we need to flush */
 	for (i = 0; i < count; i++) {
 		auth_request = auth_requests[aqueue_idx(auth_failures, i)];

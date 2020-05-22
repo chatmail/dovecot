@@ -77,26 +77,152 @@ void e_debug(struct event *event,
 	va_end(args);
 }
 
-static bool event_get_log_prefix(struct event *event, string_t *log_prefix,
-				 bool *replace_prefix, unsigned int *type_pos)
+#undef e_log
+void e_log(struct event *event, enum log_type level,
+	   const char *source_filename, unsigned int source_linenum,
+	   const char *fmt, ...)
 {
+	struct event_log_params params = {
+		.log_type = level,
+		.source_filename = source_filename,
+		.source_linenum = source_linenum,
+	};
+	va_list args;
+
+	va_start(args, fmt);
+	event_logv(event, &params, fmt, args);
+	va_end(args);
+}
+
+struct event_get_log_message_context {
+	const struct event_log_params *params;
+
+	string_t *log_prefix;
+	const char *message;
+	unsigned int type_pos;
+
+	bool replace_prefix:1;
+	bool str_out_done:1;
+};
+
+static inline void ATTR_FORMAT(2, 0)
+event_get_log_message_str_out(struct event_get_log_message_context *glmctx,
+			      const char *fmt, va_list args)
+{
+	const struct event_log_params *params = glmctx->params;
+	string_t *str_out = params->base_str_out;
+
+	/* The message is appended once in full, rather than incremental during
+	   the recursion. */
+
+	if (glmctx->str_out_done || str_out == NULL)
+		return;
+
+	/* append the current log prefix to the string buffer */
+	if (params->base_str_prefix != NULL && !glmctx->replace_prefix)
+		str_append(str_out, params->base_str_prefix);
+	str_append_str(str_out, glmctx->log_prefix);
+
+	if (glmctx->message != NULL) {
+		/* a child event already constructed a message */
+		str_append(str_out, glmctx->message);
+	} else {
+		va_list args_copy;
+
+		/* construct message from format and arguments */
+		VA_COPY(args_copy, args);
+		str_vprintfa(str_out, fmt, args_copy);
+		va_end(args_copy);
+	}
+
+	/* finished with the string buffer */
+	glmctx->str_out_done = TRUE;
+}
+
+static bool ATTR_FORMAT(4, 0)
+event_get_log_message(struct event *event,
+		      struct event_get_log_message_context *glmctx,
+		      unsigned int prefixes_dropped,
+		      const char *fmt, va_list args)
+{
+	const struct event_log_params *params = glmctx->params;
+	const char *prefix = event->log_prefix;
 	bool ret = FALSE;
 
+	/* Reached the base event? */
+	if (event == params->base_event) {
+		/* Append the message to the provided string buffer. */
+		event_get_log_message_str_out(glmctx, fmt, args);
+		/* Insert the base send prefix */
+		if (params->base_send_prefix != NULL) {
+			str_insert(glmctx->log_prefix, 0,
+				   params->base_send_prefix);
+			ret = TRUE;
+		}
+	}
+
+	/* Call the message amendment callback for this event if there is one.
+	 */
+	if (event->log_message_callback != NULL) {
+		const char *in_message;
+
+		/* construct the log message composed by children and arguments
+		 */
+		if (glmctx->message == NULL) {
+			str_vprintfa(glmctx->log_prefix, fmt, args);
+			in_message = str_c(glmctx->log_prefix);
+		} else if (str_len(glmctx->log_prefix) == 0) {
+			in_message = glmctx->message;
+		} else {
+			str_append(glmctx->log_prefix, glmctx->message);
+			in_message = str_c(glmctx->log_prefix);
+		}
+
+		/* reformat the log message */
+		glmctx->message = event->log_message_callback(
+			event->log_message_callback_context,
+			glmctx->params->log_type, in_message);
+
+		/* continue with a cleared prefix buffer (as prefix is now part
+		   of *message_r). */
+		str_truncate(glmctx->log_prefix, 0);
+		ret = TRUE;
+	}
+
+	if (event->log_prefix_callback != NULL) {
+		prefix = event->log_prefix_callback(
+			event->log_prefix_callback_context);
+	}
 	if (event->log_prefix_replace) {
 		/* this event replaces all parent log prefixes */
-		*replace_prefix = TRUE;
-		*type_pos = event->log_prefix == NULL ? 0 :
-			strlen(event->log_prefix);
-	} else if (event->parent == NULL) {
-		/* append to default log prefix, don't replace it */
-	} else {
-		if (event_get_log_prefix(event->parent, log_prefix,
-					 replace_prefix, type_pos))
-			ret = TRUE;
+		glmctx->replace_prefix = TRUE;
+		glmctx->type_pos = (prefix == NULL ? 0 : strlen(prefix));
+		event_get_log_message_str_out(glmctx, fmt, args);
 	}
-	if (event->log_prefix != NULL) {
-		str_append(log_prefix, event->log_prefix);
-		ret = TRUE;
+	if (prefix != NULL) {
+		if (event->log_prefix_replace || prefixes_dropped == 0) {
+			str_insert(glmctx->log_prefix, 0, prefix);
+			ret = TRUE;
+		} else if (prefixes_dropped > 0) {
+			prefixes_dropped--;
+		}
+	}
+	if (event->parent == NULL) {
+		event_get_log_message_str_out(glmctx, fmt, args);
+		if (params->base_event == NULL &&
+		    params->base_send_prefix != NULL &&
+		    !glmctx->replace_prefix) {
+			str_insert(glmctx->log_prefix, 0,
+				   params->base_send_prefix);
+			ret = TRUE;
+		}
+	} else if (!event->log_prefix_replace &&
+		   (!params->no_send || !glmctx->str_out_done)) {
+		if (event->log_prefixes_dropped > prefixes_dropped)
+			prefixes_dropped = event->log_prefixes_dropped;
+		if (event_get_log_message(event->parent, glmctx,
+					  prefixes_dropped, fmt, args))
+			ret = TRUE;
 	}
 	return ret;
 }
@@ -111,11 +237,19 @@ void event_log(struct event *event, const struct event_log_params *params,
 	va_end(args);
 }
 
-#undef event_want_debug_log
-bool event_want_debug_log(struct event *event, const char *source_filename,
-		     unsigned int source_linenum)
+#undef event_want_log_level
+bool event_want_log_level(struct event *event, enum log_type level,
+			  const char *source_filename,
+			  unsigned int source_linenum)
 {
 	struct failure_context ctx = { .type = LOG_TYPE_DEBUG };
+
+	if (event->min_log_level <= level)
+		return TRUE;
+
+	if (event->debug_level_checked)
+		return event->sending_debug_log;
+	event->debug_level_checked = TRUE;
 
 	if (event->forced_debug)
 		event->sending_debug_log = TRUE;
@@ -133,12 +267,16 @@ bool event_want_debug_log(struct event *event, const char *source_filename,
 	return event->sending_debug_log;
 }
 
-#undef event_want_debug
-bool event_want_debug(struct event *event, const char *source_filename,
+#undef event_want_level
+bool event_want_level(struct event *event, enum log_type level,
+		      const char *source_filename,
 		      unsigned int source_linenum)
 {
-	(void)event_want_debug_log(event, source_filename, source_linenum);
+	(void)event_want_log_level(event, level, source_filename, source_linenum);
 	if (event->sending_debug_log)
+		return TRUE;
+
+	if (event->min_log_level <= level)
 		return TRUE;
 
 	/* see if debug send filtering matches */
@@ -154,18 +292,18 @@ bool event_want_debug(struct event *event, const char *source_filename,
 }
 
 static void ATTR_FORMAT(3, 0)
-event_logv_type(struct event *event, enum log_type log_type,
-		const char *fmt, va_list args)
+event_logv_params(struct event *event, const struct event_log_params *params,
+		  const char *fmt, va_list args)
 {
-	string_t *log_prefix_str = t_str_new(64);
-	bool replace_prefix = FALSE;
-	unsigned int type_pos = 0;
+	struct event_get_log_message_context glmctx;
 
 	struct failure_context ctx = {
-		.type = log_type,
+		.type = params->log_type,
 	};
 	bool abort_after_event = FALSE;
 	int old_errno = errno;
+
+	i_assert(!params->no_send || params->base_str_out != NULL);
 
 	if (global_core_log_filter != NULL &&
 	    event_filter_match_source(global_core_log_filter, event,
@@ -173,19 +311,37 @@ event_logv_type(struct event *event, enum log_type log_type,
 				      event->source_linenum, &ctx))
 		abort_after_event = TRUE;
 
-	if (!event_get_log_prefix(event, log_prefix_str,
-				  &replace_prefix, &type_pos)) {
+	i_zero(&glmctx);
+	glmctx.params = params;
+	glmctx.log_prefix = t_str_new(64);
+	if (!event_get_log_message(event, &glmctx, 0, fmt, args)) {
 		/* keep log prefix as it is */
-		event_vsend(event, &ctx, fmt, args);
-	} else if (replace_prefix) {
+		if (params->base_str_out != NULL && !glmctx.str_out_done) {
+			va_list args_copy;
+
+			VA_COPY(args_copy, args);
+			str_vprintfa(params->base_str_out, fmt, args_copy);
+			va_end(args_copy);
+		}
+		if (!params->no_send)
+			event_vsend(event, &ctx, fmt, args);
+	} else if (params->no_send) {
+		/* don't send the event */
+	} else if (glmctx.replace_prefix) {
 		/* event overrides the log prefix (even if it's "") */
-		ctx.log_prefix = str_c(log_prefix_str);
-		ctx.log_prefix_type_pos = type_pos;
-		event_vsend(event, &ctx, fmt, args);
+		ctx.log_prefix = str_c(glmctx.log_prefix);
+		ctx.log_prefix_type_pos = glmctx.type_pos;
+		if (glmctx.message != NULL)
+			event_send(event, &ctx, "%s", glmctx.message);
+		else
+			event_vsend(event, &ctx, fmt, args);
 	} else {
 		/* append to log prefix, but don't fully replace it */
-		str_vprintfa(log_prefix_str, fmt, args);
-		event_send(event, &ctx, "%s", str_c(log_prefix_str));
+		if (glmctx.message != NULL)
+			str_append(glmctx.log_prefix, glmctx.message);
+		else
+			str_vprintfa(glmctx.log_prefix, fmt, args);
+		event_send(event, &ctx, "%s", str_c(glmctx.log_prefix));
 	}
 	if (abort_after_event)
 		abort();
@@ -203,8 +359,12 @@ void event_logv(struct event *event, const struct event_log_params *params,
 				 params->source_linenum, TRUE);
 	}
 
+	(void)event_want_log_level(event, params->log_type,
+				   event->source_filename,
+				   event->source_linenum);
+
 	event_ref(event);
-	event_logv_type(event, params->log_type, fmt, args);
+	event_logv_params(event, params, fmt, args);
 	event_set_source(event, orig_source_filename,
 			 orig_source_linenum, TRUE);
 	event_unref(&event);
@@ -214,12 +374,14 @@ struct event *event_set_forced_debug(struct event *event, bool force)
 {
 	if (force)
 		event->forced_debug = TRUE;
+	event->debug_level_checked = FALSE;
 	return event;
 }
 
 struct event *event_unset_forced_debug(struct event *event)
 {
 	event->forced_debug = FALSE;
+	event->debug_level_checked = FALSE;
 	return event;
 }
 
@@ -237,8 +399,7 @@ struct event_filter *event_get_global_debug_log_filter(void)
 
 void event_unset_global_debug_log_filter(void)
 {
-	if (global_debug_log_filter != NULL)
-		event_filter_unref(&global_debug_log_filter);
+	event_filter_unref(&global_debug_log_filter);
 }
 
 void event_set_global_debug_send_filter(struct event_filter *filter)
@@ -255,8 +416,7 @@ struct event_filter *event_get_global_debug_send_filter(void)
 
 void event_unset_global_debug_send_filter(void)
 {
-	if (global_debug_send_filter != NULL)
-		event_filter_unref(&global_debug_send_filter);
+	event_filter_unref(&global_debug_send_filter);
 }
 
 void event_set_global_core_log_filter(struct event_filter *filter)
@@ -273,6 +433,5 @@ struct event_filter *event_get_global_core_log_filter(void)
 
 void event_unset_global_core_log_filter(void)
 {
-	if (global_core_log_filter != NULL)
-		event_filter_unref(&global_core_log_filter);
+	event_filter_unref(&global_core_log_filter);
 }

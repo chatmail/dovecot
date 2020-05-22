@@ -182,7 +182,8 @@ static int cmd_mailbox_cache_decision_run_box(struct mailbox_cache_cmd_context *
 					      struct mailbox *box)
 {
 	struct mailbox_transaction_context *t =
-		mailbox_transaction_begin(box, 0, "mailbox cache decision");
+		mailbox_transaction_begin(box, ctx->ctx.transaction_flags,
+					  "mailbox cache decision");
 	struct mail_cache *cache = t->box->cache;
 	struct mail_cache_view *view;
 
@@ -314,6 +315,9 @@ static void cmd_mailbox_cache_remove_init(struct doveadm_mail_cmd_context *_ctx,
 	struct mailbox_cache_cmd_context *ctx =
 		container_of(_ctx, struct mailbox_cache_cmd_context, ctx);
 
+	if (args[0] == NULL)
+		doveadm_mail_help_name("mailbox cache remove");
+
 	doveadm_print_header_simple("mailbox");
 	doveadm_print_header_simple("uid");
 	doveadm_print_header_simple("result");
@@ -326,7 +330,8 @@ static int cmd_mailbox_cache_purge_run_box(struct mailbox_cache_cmd_context *ctx
 {
 	struct mailbox_transaction_context *t =
 		mailbox_transaction_begin(box,
-					  MAILBOX_TRANSACTION_FLAG_EXTERNAL,
+					  MAILBOX_TRANSACTION_FLAG_EXTERNAL |
+					  ctx->ctx.transaction_flags,
 					  "mailbox cache purge");
 	struct mail_cache *cache = t->box->cache;
 	struct mail_cache_compress_lock *lock;

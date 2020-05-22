@@ -19,7 +19,7 @@ bool str_equals(const string_t *str1, const string_t *str2) ATTR_PURE;
 
 static inline const unsigned char *str_data(const string_t *str)
 {
-	return str->data;
+	return (const unsigned char*)str->data;
 }
 static inline size_t str_len(const string_t *str)
 {
@@ -70,6 +70,12 @@ static inline void str_delete(string_t *str, size_t pos, size_t len)
 	buffer_delete(str, pos, len);
 }
 
+static inline void str_replace(string_t *str, size_t pos, size_t len,
+			       const char *cstr)
+{
+	buffer_replace(str, pos, len, cstr, strlen(cstr));
+}
+
 /* Truncate the string to specified length. If it's already smaller,
    do nothing. */
 static inline void str_truncate(string_t *str, size_t len)
@@ -77,5 +83,11 @@ static inline void str_truncate(string_t *str, size_t len)
 	if (str_len(str) > len)
 		buffer_set_used_size(str, len);
 }
+
+/* Truncate the string to specified length, but also make sure the truncation
+   doesn't happen in the middle of an UTF-8 character sequence. In that case,
+   the string will end up being up to a few bytes smaller than len. If it's
+   already smaller to begin with, do nothing. */
+void str_truncate_utf8(string_t *str, size_t len);
 
 #endif

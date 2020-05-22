@@ -136,6 +136,8 @@ static bool dcrypt_key_dump_metadata(const char *filename, bool print)
 	case DCRYPT_FORMAT_DOVECOT:
 		printf("format: DCRYPT_FORMAT_DOVECOT\n");
 		break;
+	case DCRYPT_FORMAT_JWK:
+		printf("format: DCRYPT_FORMAT_JWK\n");
 	}
 
 	switch (version) {
@@ -194,7 +196,6 @@ static bool test_dump_dcrypt_key(const char *path)
 	if (!dcrypt_initialize("openssl", NULL, NULL))
 		return FALSE;
 	bool ret = dcrypt_key_dump_metadata(path, FALSE);
-	dcrypt_deinitialize();
 	return ret;
 }
 
@@ -204,7 +205,6 @@ static void cmd_dump_dcrypt_key(int argc ATTR_UNUSED, char *argv[])
 	if (!dcrypt_initialize("openssl", NULL, &error))
 		i_fatal("dcrypt_initialize: %s", error);
 	(void)dcrypt_key_dump_metadata(argv[1], TRUE);
-	dcrypt_deinitialize();
 }
 
 struct doveadm_cmd_dump doveadm_cmd_dump_dcrypt_key = {

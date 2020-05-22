@@ -1,12 +1,16 @@
 Rawlog
 ======
 
-Dovecot supports logging IMAP/POP3 traffic (also TLS/SSL encrypted). There are
-several possibilities for this:
+Dovecot supports logging IMAP/POP3/LMTP/SMTP(submission) traffic (also TLS/SSL
+encrypted). There are several possibilities for this:
 
  1. rawlog_dir setting (v2.2.26+)
  2. Using 'rawlog' binary, which is executed as post-login script.
  3. Pre-login imap/pop3-login process via -R parameter.
+ 4. For <lmtp> [LMTP.txt], you need to use lmtp_rawlog_dir and
+    lmtp_proxy_rawlog_dir settings (since v2.3.2)
+ 5. For <submission> [Submission.txt], you can use rawlog_dir setting and
+    submission_relay_rawlog_dir (since v2.3.2)
 
 rawlog_dir setting (v2.2.26+)
 -----------------------------
@@ -21,6 +25,24 @@ protocol imap {
   #rawlog_dir = %h/rawlog
 }
 ---%<-------------------------------------------------------------------------
+
+lmtp_rawlog_dir (v2.3.2+)
+-------------------------
+
+You can use lmtp_rawlog_dir to generate rawlogs on lmtp backend server. Unlike
+the rawlog_dir setting, this does not accept variables.
+
+lmtp_proxy_rawlog_dir (v2.3.2+)
+-------------------------------
+
+You can use lmtp_proxy_rawlog_dir to generate rawlogs on lmtp proxy server.
+Unlike the rawlog_dir setting, this does not accept variables.
+
+submission_relay_rawlog_dir (v2.3.2+)
+-------------------------------------
+
+You can use submission_relay_rawlog_dir to generate relay rawlogs on the
+dovecot submission server.
 
 rawlog binary
 -------------
@@ -123,4 +145,4 @@ chown dovenull /var/run/dovecot/login/rawlogs
 chmod 0700 /var/run/dovecot/login/rawlogs
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

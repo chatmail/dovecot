@@ -91,7 +91,7 @@ void i_stream_add_destroy_callback(struct istream *stream,
 				   istream_callback_t *callback, void *context)
 	ATTR_NULL(3);
 #define i_stream_add_destroy_callback(stream, callback, context) \
-	i_stream_add_destroy_callback(stream + \
+	i_stream_add_destroy_callback(stream - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(istream_callback_t *)callback, context)
 /* Remove the destroy callback. */
@@ -221,7 +221,9 @@ static inline int
 i_stream_read_more(struct istream *stream, const unsigned char **data_r,
 		   size_t *size_r)
 {
-	return i_stream_read_bytes(stream, data_r, size_r, 1);
+	int ret = i_stream_read_bytes(stream, data_r, size_r, 1);
+	i_assert(ret != -2); /* stream must have space for at least 1 byte */
+	return ret;
 }
 /* Return the timestamp when istream last successfully read something.
    The timestamp is 0 if nothing has ever been read. */

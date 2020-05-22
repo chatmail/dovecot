@@ -4,6 +4,7 @@
 #include "llist.h"
 #include "array.h"
 #include "str.h"
+#include "hostpid.h"
 #include "ioloop.h"
 #include "istream.h"
 #include "istream-timeout.h"
@@ -14,6 +15,7 @@
 #include "master-service.h"
 #include "master-service-ssl.h"
 #include "http-date.h"
+#include "http-url.h"
 #include "http-request-parser.h"
 
 #include "http-server-private.h"
@@ -160,6 +162,8 @@ bool http_server_connection_shut_down(struct http_server_connection *conn)
 
 static void http_server_connection_ready(struct http_server_connection *conn)
 {
+	const struct http_server_settings *set = &conn->server->set;
+	struct http_url base_url;
 	struct stat st;
 
 	if (conn->server->set.rawlog_dir != NULL &&
@@ -168,9 +172,16 @@ static void http_server_connection_ready(struct http_server_connection *conn)
 				       &conn->conn.input, &conn->conn.output);
 	}
 
-	conn->http_parser = http_request_parser_init
-		(conn->conn.input, &conn->server->set.request_limits,
-			HTTP_REQUEST_PARSE_FLAG_STRICT);
+	i_zero(&base_url);
+	if (set->default_host != NULL)
+		base_url.host.name = set->default_host;
+	else
+		base_url.host.name = my_hostname;
+	base_url.have_ssl = conn->ssl;
+
+	conn->http_parser = http_request_parser_init(
+		conn->conn.input, &base_url, &conn->server->set.request_limits,
+		HTTP_REQUEST_PARSE_FLAG_STRICT);
 	o_stream_set_flush_callback(conn->conn.output,
     http_server_connection_output, conn);
 }
@@ -396,17 +407,33 @@ http_server_connection_handle_request(struct http_server_connection *conn,
 static int 
 http_server_connection_ssl_init(struct http_server_connection *conn)
 {
+	struct http_server *server = conn->server;
 	const char *error;
+	int ret;
 
-	if (conn->server->set.debug)
+	if (http_server_init_ssl_ctx(server, &error) < 0) {
+		http_server_connection_error(conn,
+			"Couldn't initialize SSL: %s", error);
+		return -1;
+	}
+
+	if (server->set.debug)
 		http_server_connection_debug(conn, "Starting SSL handshake");
 
 	http_server_connection_input_halt(conn);
-	if (master_service_ssl_init(master_service,
-				&conn->conn.input, &conn->conn.output,
-				&conn->ssl_iostream, &error) < 0) {
+	if (server->ssl_ctx == NULL) {
+		ret = master_service_ssl_init(master_service,
+			&conn->conn.input, &conn->conn.output,
+			&conn->ssl_iostream, &error);
+	} else {
+		ret = io_stream_create_ssl_server(server->ssl_ctx,
+			server->set.ssl, &conn->conn.input, &conn->conn.output,
+			&conn->ssl_iostream, &error);
+	}
+	if (ret < 0) {
 		http_server_connection_error(conn,
-			"Couldn't initialize SSL server for %s: %s", conn->conn.name, error);
+			"Couldn't initialize SSL server for %s: %s",
+			conn->conn.name, error);
 		return -1;
 	}
 	http_server_connection_input_resume(conn);
@@ -1028,7 +1055,8 @@ http_server_connection_pending_payload(struct http_server_connection *conn)
 static struct connection_settings http_server_connection_set = {
 	.input_max_size = (size_t)-1,
 	.output_max_size = (size_t)-1,
-	.client = FALSE
+	.client = FALSE,
+	.log_connection_id = TRUE,
 };
 
 static const struct connection_vfuncs http_server_connection_vfuncs = {
@@ -1050,16 +1078,11 @@ http_server_connection_create(struct http_server *server,
 {
 	const struct http_server_settings *set = &server->set;
 	struct http_server_connection *conn;
-	static unsigned int id = 0;
-	struct ip_addr addr;
-	in_port_t port;
-	const char *name;
 
 	i_assert(!server->shutting_down);
 
 	conn = i_new(struct http_server_connection, 1);
 	conn->refcount = 1;
-	conn->id = id++;
 	conn->server = server;
 	conn->ssl = ssl;
 	conn->callbacks = callbacks;
@@ -1083,30 +1106,8 @@ http_server_connection_create(struct http_server *server,
 				set->socket_recv_buffer_size);
 	}
 
-	/* get a name for this connection */
-	if (fd_in != fd_out || net_getpeername(fd_in, &addr, &port) < 0) {
-		name = t_strdup_printf("[%u]", id);
-	} else {
-		if (addr.family == 0) {
-			struct net_unix_cred cred;
-
-			if (net_getunixcred(fd_in, &cred) < 0) {
-				name = t_strdup_printf("[%u]", id);
-			} else if (cred.pid == (pid_t)-1) {
-				name = t_strdup_printf("unix:uid=%ld [%u]", (long)cred.uid, id);
-			} else {
-				name = t_strdup_printf
-					("unix:pid=%ld,uid=%ld [%u]", (long)cred.pid, (long)cred.uid, id);
-			}
-		} else if (addr.family == AF_INET6) {
-			name = t_strdup_printf("[%s]:%u [%u]", net_ip2addr(&addr), port, id);
-		} else {
-			name = t_strdup_printf("%s:%u [%u]", net_ip2addr(&addr), port, id);
-		}
-	}
-
-	connection_init_server
-		(server->conn_list, &conn->conn, name, fd_in, fd_out);
+	connection_init_server(server->conn_list, &conn->conn, NULL,
+			       fd_in, fd_out);
 
 	if (!ssl)
 		http_server_connection_ready(conn);

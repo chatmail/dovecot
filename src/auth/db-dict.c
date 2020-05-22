@@ -122,7 +122,7 @@ parse_obsolete_setting(const char *key, const char *value,
 		ctx->cur_key->key = p_strdup(ctx->conn->pool, value);
 
 		dbkey = ctx->cur_key;
-		array_append(&ctx->conn->set.parsed_passdb_objects, &dbkey, 1);
+		array_push_back(&ctx->conn->set.parsed_passdb_objects, &dbkey);
 		return TRUE;
 	}
 	if (strcmp(key, "user_key") == 0) {
@@ -136,7 +136,7 @@ parse_obsolete_setting(const char *key, const char *value,
 		ctx->cur_key->key = p_strdup(ctx->conn->pool, value);
 
 		dbkey = ctx->cur_key;
-		array_append(&ctx->conn->set.parsed_userdb_objects, &dbkey, 1);
+		array_push_back(&ctx->conn->set.parsed_userdb_objects, &dbkey);
 		return TRUE;
 	}
 	if (strcmp(key, "value_format") == 0) {
@@ -249,7 +249,7 @@ db_dict_settings_parse(struct db_dict_settings *set)
 			i_fatal("dict: passdb_objects refers to key %s, "
 				"but it's in value-only format", *tmp);
 		}
-		array_append(&set->parsed_passdb_objects, &key, 1);
+		array_push_back(&set->parsed_passdb_objects, &key);
 	}
 
 	tmp = t_strsplit_spaces(set->userdb_objects, " ");
@@ -263,7 +263,7 @@ db_dict_settings_parse(struct db_dict_settings *set)
 			i_fatal("dict: userdb_objects refers to key %s, "
 				"but it's in value-only format", *tmp);
 		}
-		array_append(&set->parsed_userdb_objects, &key, 1);
+		array_push_back(&set->parsed_userdb_objects, &key);
 	}
 }
 
@@ -417,15 +417,15 @@ static int db_dict_iter_lookup_key_values(struct db_dict_value_iter *iter)
 		ret = dict_lookup(iter->conn->dict, iter->pool,
 				  str_c(path), &key->value, &error);
 		if (ret > 0) {
-			auth_request_log_debug(iter->auth_request, AUTH_SUBSYS_DB,
-					       "Lookup: %s = %s", str_c(path),
-					       key->value);
+			e_debug(authdb_event(iter->auth_request),
+				"Lookup: %s = %s", str_c(path),
+				key->value);
 		} else if (ret < 0) {
-			auth_request_log_error(iter->auth_request, AUTH_SUBSYS_DB,
+			e_error(authdb_event(iter->auth_request),
 				"Failed to lookup key %s: %s", str_c(path), error);
 			return -1;
 		} else if (key->key->default_value != NULL) {
-			auth_request_log_debug(iter->auth_request, AUTH_SUBSYS_DB,
+			e_debug(authdb_event(iter->auth_request),
 				"Lookup: %s not found, using default value %s",
 				str_c(path), key->key->default_value);
 			key->value = key->key->default_value;
@@ -469,7 +469,7 @@ int db_dict_value_iter_init(struct dict_connection *conn,
 		if (auth_request_var_expand_with_table(expanded_key, key->key, auth_request,
 						       iter->var_expand_table,
 						       NULL, &error) <= 0) {
-			auth_request_log_error(iter->auth_request, AUTH_SUBSYS_DB,
+			e_error(authdb_event(iter->auth_request),
 				"Failed to expand key %s: %s", key->key, error);
 			pool_unref(&pool);
 			return -1;

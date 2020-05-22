@@ -467,7 +467,7 @@ static void json_parser_object_open(struct json_parser *parser)
 {
 	parser->data++;
 	parser->state = JSON_STATE_OBJECT_OPEN;
-	array_append(&parser->nesting, &parser->state, 1);
+	array_push_back(&parser->nesting, &parser->state);
 	json_parser_update_input_pos(parser);
 }
 
@@ -504,7 +504,7 @@ json_try_parse_next(struct json_parser *parser, enum json_type *type_r,
 		} else if (*parser->data == '[') {
 			parser->data++;
 			parser->state = JSON_STATE_ARRAY_OPEN;
-			array_append(&parser->nesting, &parser->state, 1);
+			array_push_back(&parser->nesting, &parser->state);
 			json_parser_update_input_pos(parser);
 
 			if (parser->skipping) {
@@ -672,6 +672,24 @@ void json_parse_skip_next(struct json_parser *parser)
 		parser->state = JSON_STATE_ARRAY_NEXT_SKIP;
 }
 
+void json_parse_skip(struct json_parser *parser)
+{
+	i_assert(!parser->skipping);
+	i_assert(parser->strinput == NULL);
+	i_assert(parser->state == JSON_STATE_OBJECT_NEXT ||
+		 parser->state == JSON_STATE_OBJECT_OPEN ||
+		 parser->state == JSON_STATE_ARRAY_NEXT ||
+		 parser->state == JSON_STATE_ARRAY_OPEN);
+
+	if (parser->state == JSON_STATE_OBJECT_OPEN ||
+	    parser->state == JSON_STATE_ARRAY_OPEN)
+		parser->nested_skip_count++;
+
+	parser->skipping = TRUE;
+	if (parser->state == JSON_STATE_ARRAY_NEXT)
+		parser->state = JSON_STATE_ARRAY_NEXT_SKIP;
+}
+
 static void json_strinput_destroyed(struct json_parser *parser)
 {
 	i_assert(parser->strinput != NULL);
@@ -774,15 +792,12 @@ static void json_append_escaped_char(string_t *dest, unsigned char src)
 
 void json_append_escaped_ucs4(string_t *dest, unichar_t chr)
 {
-	unichar_t high,low;
 	if (chr < 0x80)
 		json_append_escaped_char(dest, (unsigned char)chr);
-	else if (chr >= UTF16_SURROGATE_BASE) {
-		uni_split_surrogate(chr, &high, &low);
-		str_printfa(dest, "\\u%04x\\u%04x", high, low);
-	} else {
+	else if (chr == 0x2028 || chr == 0x2029)
 		str_printfa(dest, "\\u%04x", chr);
-	}
+	else
+		uni_ucs4_to_utf8_c(chr, dest);
 }
 
 void ostream_escaped_json_format(string_t *dest, unsigned char src)
@@ -803,9 +818,13 @@ void json_append_escaped_data(string_t *dest, const unsigned char *src, size_t s
 
 	for (i = 0; i < size;) {
 		bytes = uni_utf8_get_char_n(src+i, size-i, &chr);
-		/* refuse to add invalid data */
-		i_assert(bytes > 0 && uni_is_valid_ucs4(chr));
-		json_append_escaped_ucs4(dest, chr);
-		i += bytes;
+		if (bytes > 0 && uni_is_valid_ucs4(chr)) {
+			json_append_escaped_ucs4(dest, chr);
+			i += bytes;
+		} else {
+			str_append_data(dest, UNICODE_REPLACEMENT_CHAR_UTF8,
+					      UTF8_REPLACEMENT_CHAR_LEN);
+			i++;
+		}
 	}
 }

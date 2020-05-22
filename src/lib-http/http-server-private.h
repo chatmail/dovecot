@@ -69,6 +69,7 @@ struct http_server_response {
 	const char *reason;
 
 	string_t *headers;
+	ARRAY_TYPE(string) perm_headers;
 	time_t date;
 	ARRAY_TYPE(http_auth_challenge) auth_challenges;
 
@@ -128,8 +129,6 @@ struct http_server_connection {
 
 	const struct http_server_callbacks *callbacks;
 	void *context;
-
-	unsigned int id; // DEBUG
 
 	struct timeout *to_input, *to_idle;
 	struct ssl_iostream *ssl_iostream;
@@ -236,7 +235,7 @@ void http_server_payload_handler_switch_ioloop(
 static inline const char *
 http_server_connection_label(struct http_server_connection *conn)
 {
-	return conn->conn.name;
+	return conn->conn.label;
 }
 
 static inline void
@@ -275,5 +274,11 @@ int http_server_connection_discard_payload(
 	struct http_server_connection *conn);
 bool http_server_connection_pending_payload(
 	struct http_server_connection *conn);
+
+/*
+ * Server
+ */
+
+int http_server_init_ssl_ctx(struct http_server *server, const char **error_r);
 
 #endif

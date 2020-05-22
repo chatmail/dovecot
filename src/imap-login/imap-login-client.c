@@ -76,7 +76,7 @@ bool client_handle_parser_error(struct imap_client *client,
 static bool is_login_cmd_disabled(struct client *client)
 {
 	if (client->secured) {
-		if (auth_client_find_mech(auth_client, "PLAIN") == NULL) {
+		if (sasl_server_find_available_mech(client, "PLAIN") == NULL) {
 			/* no PLAIN authentication, can't use LOGIN command */
 			return TRUE;
 		}
@@ -534,25 +534,23 @@ static void imap_login_deinit(void)
 }
 
 static struct client_vfuncs imap_client_vfuncs = {
-	imap_client_alloc,
-	imap_client_create,
-	imap_client_destroy,
-	imap_client_notify_auth_ready,
-	imap_client_notify_disconnect,
-	imap_client_notify_status,
-	imap_client_notify_starttls,
-	imap_client_starttls,
-	imap_client_input,
-	NULL,
-	NULL,
-	imap_client_auth_result,
-	imap_proxy_reset,
-	imap_proxy_parse_line,
-	imap_proxy_error,
-	imap_proxy_get_state,
-	client_common_send_raw_data,
-	imap_client_input_next_cmd,
-	client_common_default_free,
+	.alloc = imap_client_alloc,
+	.create = imap_client_create,
+	.destroy = imap_client_destroy,
+	.notify_auth_ready = imap_client_notify_auth_ready,
+	.notify_disconnect = imap_client_notify_disconnect,
+	.notify_status = imap_client_notify_status,
+	.notify_starttls = imap_client_notify_starttls,
+	.starttls = imap_client_starttls,
+	.input = imap_client_input,
+	.auth_result = imap_client_auth_result,
+	.proxy_reset = imap_proxy_reset,
+	.proxy_parse_line = imap_proxy_parse_line,
+	.proxy_error = imap_proxy_error,
+	.proxy_get_state = imap_proxy_get_state,
+	.send_raw_data = client_common_send_raw_data,
+	.input_next_cmd = imap_client_input_next_cmd,
+	.free = client_common_default_free,
 };
 
 static const struct login_binary imap_login_binary = {
@@ -566,7 +564,8 @@ static const struct login_binary imap_login_binary = {
 	.init = imap_login_init,
 	.deinit = imap_login_deinit,
 
-	.sasl_support_final_reply = FALSE
+	.sasl_support_final_reply = FALSE,
+	.anonymous_login_acceptable = TRUE,
 };
 
 int main(int argc, char *argv[])

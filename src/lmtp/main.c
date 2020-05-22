@@ -1,7 +1,6 @@
 /* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file */
 
-#include "lib.h"
-#include "array.h"
+#include "lmtp-common.h"
 #include "ioloop.h"
 #include "hostpid.h"
 #include "path-util.h"
@@ -14,9 +13,6 @@
 #include "mail-storage-service.h"
 #include "smtp-submit-settings.h"
 #include "lda-settings.h"
-#include "lmtp-settings.h"
-#include "client.h"
-#include "main.h"
 
 #include <unistd.h>
 
@@ -26,11 +22,26 @@
 #define IS_STANDALONE() \
         (getenv(MASTER_IS_PARENT_ENV) == NULL)
 
+struct smtp_server *lmtp_server = NULL;
+
 char *dns_client_socket_path, *base_dir;
 struct mail_storage_service_ctx *storage_service;
 struct anvil_client *anvil;
 
-struct smtp_server *lmtp_server;
+lmtp_client_created_func_t *hook_client_created = NULL;
+
+struct event_category event_category_lmtp = {
+	.name = "lmtp",
+};
+
+lmtp_client_created_func_t *
+lmtp_client_created_hook_set(lmtp_client_created_func_t *new_hook)
+{
+	lmtp_client_created_func_t *old_hook = hook_client_created;
+
+	hook_client_created = new_hook;
+	return old_hook;
+}
 
 void lmtp_anvil_init(void)
 {
@@ -75,6 +86,7 @@ static void main_init(void)
 	lmtp_set.protocol = SMTP_PROTOCOL_LMTP;
 	lmtp_set.auth_optional = TRUE;
 	lmtp_set.rcpt_domain_optional = TRUE;
+	lmtp_set.mail_path_allow_broken = TRUE;
 
 	lmtp_server = smtp_server_init(&lmtp_set);
 

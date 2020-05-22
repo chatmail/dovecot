@@ -91,9 +91,10 @@ xml_encode_data(string_t *dest, const unsigned char *data, size_t len)
 			} else if (data[i] >= 0x80) {
 				/* make sure the character is valid for XML
 				   so we don't get XML parser errors */
-				unsigned int char_len =
+				int char_len =
 					uni_utf8_get_char_n(data + i, len - i, &chr);
-				if (char_len > 0 && is_valid_xml_char(chr))
+				i_assert(char_len > 0); /* input is valid UTF8 */
+				if (is_valid_xml_char(chr))
 					str_append_data(dest, data + i, char_len);
 				else {
 					str_append_data(dest, utf8_replacement_char,
@@ -255,9 +256,8 @@ fts_backend_solr_init(struct fts_backend *_backend, const char **error_r)
 	i_zero(&ssl_set);
 	mail_user_init_ssl_client_settings(_backend->ns->user, &ssl_set);
 
-	if (solr_connection_init(fuser->set.url, &ssl_set,
-				 fuser->set.debug, &backend->solr_conn,
-				 error_r) < 0)
+	if (solr_connection_init(&fuser->set, &ssl_set,
+				 &backend->solr_conn, error_r) < 0)
 		return -1;
 
 	str = solr_escape_id_str(_backend->ns->user->username);
@@ -822,7 +822,7 @@ solr_search_multi(struct solr_fts_backend *backend, string_t *str,
 		fts_result->scores_sorted = TRUE;
 	}
 	array_append_zero(&fts_results);
-	result->box_results = array_idx_modifiable(&fts_results, 0);
+	result->box_results = array_front_modifiable(&fts_results);
 	hash_table_destroy(&mailboxes);
 	return 0;
 }

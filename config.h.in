@@ -84,6 +84,9 @@
 /* Define to 1 if you have the `backtrace_symbols' function. */
 #undef HAVE_BACKTRACE_SYMBOLS
 
+/* Build with BN_secure_new support */
+#undef HAVE_BN_SECURE_NEW
+
 /* Define if you have bzlib library */
 #undef HAVE_BZLIB
 
@@ -117,6 +120,12 @@
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
+
+/* Build with ECDSA_SIG_get0 support */
+#undef HAVE_ECDSA_SIG_GET0
+
+/* Build with ECDSA_SIG_set0 support */
+#undef HAVE_ECDSA_SIG_SET0
 
 /* Build with EVP_MD_CTX_new() support */
 #undef HAVE_EVP_MD_CTX_NEW
@@ -230,6 +239,9 @@
 /* Define to 1 if you have the `kqueue' function. */
 #undef HAVE_KQUEUE
 
+/* Define to 1 if you have the `krb5_free_context' function. */
+#undef HAVE_KRB5_FREE_CONTEXT
+
 /* Define to 1 if you have the `krb5_gss_register_acceptor_identity' function.
    */
 #undef HAVE_KRB5_GSS_REGISTER_ACCEPTOR_IDENTITY
@@ -254,6 +266,9 @@
 
 /* Define to 1 if you have the <libtextcat/textcat.h> header file. */
 #undef HAVE_LIBTEXTCAT_TEXTCAT_H
+
+/* Define this if you have libunwind */
+#undef HAVE_LIBUNWIND
 
 /* Define if you have libwrap */
 #undef HAVE_LIBWRAP
@@ -397,6 +412,15 @@
 /* Build with RSA_generate_key_ex() support */
 #undef HAVE_RSA_GENERATE_KEY_EX
 
+/* Build with RSA_set0_crt_params support */
+#undef HAVE_RSA_SET0_CRT_PARAMS
+
+/* Build with RSA_set0_factors support */
+#undef HAVE_RSA_SET0_FACTORS
+
+/* Build with RSA_set0_key support */
+#undef HAVE_RSA_SET0_KEY
+
 /* Define to 1 if you have the <sasl.h> header file. */
 #undef HAVE_SASL_H
 
@@ -459,6 +483,9 @@
 
 /* Define if you have SSL_CTX_set1_curves_list */
 #undef HAVE_SSL_CTX_SET1_CURVES_LIST
+
+/* Build with SSL_CTX_set_ciphersuites() support */
+#undef HAVE_SSL_CTX_SET_CIPHERSUITES
 
 /* Define if you have SSL_CTX_set_current_cert */
 #undef HAVE_SSL_CTX_SET_CURRENT_CERT

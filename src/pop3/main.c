@@ -124,14 +124,12 @@ client_create_from_input(const struct mail_storage_service_input *input,
 				mail_user->pool, mail_user_var_expand_table(mail_user),
 				&errstr) <= 0) {
 		*error_r = t_strdup_printf("Failed to expand settings: %s", errstr);
-		mail_user_unref(&mail_user);
+		mail_user_deinit(&mail_user);
 		mail_storage_service_user_unref(&user);
 		return -1;
 	}
 
-	*client_r = client_create(fd_in, fd_out, input->session_id,
-				  mail_user, user, set);
-
+	*client_r = client_create(fd_in, fd_out, mail_user, user, set);
 	return 0;
 }
 

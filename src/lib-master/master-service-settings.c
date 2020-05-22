@@ -39,6 +39,7 @@ master_service_settings_check(void *_set, pool_t pool, const char **error_r);
 static const struct setting_define master_service_setting_defines[] = {
 	DEF(SET_STR, base_dir),
 	DEF(SET_STR, state_dir),
+	DEF(SET_STR, instance_name),
 	DEF(SET_STR, log_path),
 	DEF(SET_STR, info_log_path),
 	DEF(SET_STR, debug_log_path),
@@ -75,6 +76,7 @@ static const struct setting_define master_service_setting_defines[] = {
 static const struct master_service_settings master_service_default_settings = {
 	.base_dir = PKG_RUNDIR,
 	.state_dir = PKG_STATEDIR,
+	.instance_name = PACKAGE,
 	.log_path = "syslog",
 	.info_log_path = "",
 	.debug_log_path = "",
@@ -106,6 +108,13 @@ const struct setting_parser_info master_service_setting_parser_info = {
 };
 
 /* <settings checks> */
+static void add_category(ARRAY_TYPE(const_string) *categories, const char *name)
+{
+	if (!array_is_created(categories))
+		t_array_init(categories, 4);
+	array_push_back(categories, &name);
+}
+
 static int parse_query(const char *str, struct event_filter_query *query_r,
 		       const char **error_r)
 {
@@ -148,14 +157,13 @@ static int parse_query(const char *str, struct event_filter_query *query_r,
 				array_append_space(&fields);
 			field->key = t_strdup_until(str+6, value);
 			field->value = value+1;
-		} else if (strncmp(str, "cat:", 4) == 0 ||
-			   strncmp(str, "category:", 9) == 0) {
-			if (!array_is_created(&categories))
-				t_array_init(&categories, 4);
-			str = strchr(str, ':');
-			i_assert(str != NULL);
-			str++;
-			array_append(&categories, &str, 1);
+		} else if (str_begins(str, "cat:"))
+			add_category(&categories, str+4);
+		else if (str_begins(str, "category:"))
+			add_category(&categories, str+9);
+		else if (str_begins(str, "service:")) {
+			/* service:name is short for category:service:name */
+			add_category(&categories, str);
 		} else {
 			*error_r = t_strdup_printf("Unknown event '%s'", str);
 			return -1;
@@ -165,11 +173,11 @@ static int parse_query(const char *str, struct event_filter_query *query_r,
 
 	if (array_is_created(&categories)) {
 		array_append_zero(&categories);
-		query_r->categories = array_idx(&categories, 0);
+		query_r->categories = array_front(&categories);
 	}
 	if (array_is_created(&fields)) {
 		array_append_zero(&fields);
-		query_r->fields = array_idx(&fields, 0);
+		query_r->fields = array_front(&fields);
 	}
 	return 0;
 }
@@ -537,12 +545,12 @@ config_read_reply_header(struct istream *istream, const char *path, pool_t pool,
 				output_r->used_remote = TRUE;
 			else if (str_begins(*arg, "service=")) {
 				const char *name = p_strdup(pool, *arg + 8);
-				array_append(&services, &name, 1);
+				array_push_back(&services, &name);
 			 }
 		}
 		if (input->service == NULL) {
 			array_append_zero(&services);
-			output_r->specific_services = array_idx(&services, 0);
+			output_r->specific_services = array_front(&services);
 		}
 	} T_END;
 	return 0;
@@ -608,14 +616,14 @@ int master_service_settings_get_filters(struct master_service *service,
 				break;
 			if (str_begins(line, "FILTER\t")) {
 				line = t_strdup(line+7);
-				array_append(&filters_tmp, &line, 1);
+				array_push_back(&filters_tmp, &line);
 			}
 		}
 		i_stream_unref(&is);
 	}
 
 	array_append_zero(&filters_tmp);
-	*filters = array_idx(&filters_tmp, 0);
+	*filters = array_front(&filters_tmp);
 	return 0;
 }
 
@@ -673,18 +681,18 @@ int master_service_settings_read(struct master_service *service,
 
 	p_array_init(&all_roots, service->set_pool, 8);
 	tmp_root = &master_service_setting_parser_info;
-	array_append(&all_roots, &tmp_root, 1);
+	array_push_back(&all_roots, &tmp_root);
 	if (service->want_ssl_settings) {
 		tmp_root = &master_service_ssl_setting_parser_info;
-		array_append(&all_roots, &tmp_root, 1);
+		array_push_back(&all_roots, &tmp_root);
 	}
 	if (input->roots != NULL) {
 		for (i = 0; input->roots[i] != NULL; i++)
-			array_append(&all_roots, &input->roots[i], 1);
+			array_push_back(&all_roots, &input->roots[i]);
 	}
 
 	parser = settings_parser_init_list(service->set_pool,
-			array_idx(&all_roots, 0), array_count(&all_roots),
+			array_front(&all_roots), array_count(&all_roots),
 			SETTINGS_PARSER_FLAG_IGNORE_UNKNOWN_KEYS);
 
 	if (fd != -1) {

@@ -10,6 +10,7 @@
 #include "dict.h"
 #include "master-service-private.h"
 #include "master-service-settings.h"
+#include "master-service-ssl-settings.h"
 #include "settings-parser.h"
 #include "doveadm-print-private.h"
 #include "doveadm-dump.h"
@@ -32,6 +33,8 @@ const struct doveadm_print_vfuncs *doveadm_print_vfuncs_all[] = {
 
 bool doveadm_verbose_proctitle;
 int doveadm_exit_code = 0;
+
+static pool_t doveadm_settings_pool = NULL;
 
 static void failure_exit_callback(int *status)
 {
@@ -247,6 +250,7 @@ static bool doveadm_has_subcommands(const char *cmd_name)
 static void doveadm_read_settings(void)
 {
 	static const struct setting_parser_info *set_roots[] = {
+		&master_service_ssl_setting_parser_info,
 		&doveadm_setting_parser_info,
 		NULL
 	};
@@ -265,15 +269,19 @@ static void doveadm_read_settings(void)
 					 &output, &error) < 0)
 		i_fatal("Error reading configuration: %s", error);
 
+	doveadm_settings_pool = pool_alloconly_create("doveadm settings", 1024);
 	service_set = master_service_settings_get(master_service);
 	service_set = settings_dup(&master_service_setting_parser_info,
-				   service_set, pool_datastack_create());
+				   service_set, doveadm_settings_pool);
 	doveadm_verbose_proctitle = service_set->verbose_proctitle;
 
-	set = master_service_settings_get_others(master_service)[0];
+	set = master_service_settings_get_others(master_service)[1];
 	doveadm_settings = settings_dup(&doveadm_setting_parser_info, set,
-					pool_datastack_create());
-
+					doveadm_settings_pool);
+	doveadm_ssl_set = settings_dup(&master_service_ssl_setting_parser_info,
+				       master_service_ssl_settings_get(master_service),
+				       doveadm_settings_pool);
+	doveadm_settings_expand(doveadm_settings, doveadm_settings_pool);
 	doveadm_settings->parsed_features = set->parsed_features; /* copy this value by hand */
 }
 
@@ -291,6 +299,8 @@ int main(int argc, char *argv[])
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_STANDALONE |
 		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN |
+		MASTER_SERVICE_FLAG_USE_SSL_SETTINGS |
+		MASTER_SERVICE_FLAG_NO_SSL_INIT |
 		MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME;
 	struct doveadm_cmd_context cctx;
 	const char *cmd_name;
@@ -404,6 +414,7 @@ int main(int argc, char *argv[])
 		o_stream_unref(&doveadm_print_ostream);
 	}
 	doveadm_cmds_deinit();
+	pool_unref(&doveadm_settings_pool);
 	master_service_deinit(&master_service);
 	return doveadm_exit_code;
 }

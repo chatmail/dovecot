@@ -43,14 +43,11 @@ cmd_fs_init(int *argc, char **argv[], int own_arg_count, doveadm_command_t *cmd)
 			fs_cmd_help(cmd);
 	}
 
-	i_zero(&ssl_set);
-	ssl_set.ca_dir = doveadm_settings->ssl_client_ca_dir;
-	ssl_set.ca_file = doveadm_settings->ssl_client_ca_file;
+	doveadm_get_ssl_settings(&ssl_set, pool_datastack_create());
 	ssl_set.verbose = doveadm_debug;
-
 	i_zero(&fs_set);
 	fs_set.ssl_client_set = &ssl_set;
-	fs_set.temp_dir = "/tmp";
+	fs_set.temp_dir = doveadm_settings->mail_temp_dir;
 	fs_set.base_dir = doveadm_settings->base_dir;
 	fs_set.debug = doveadm_debug;
 
@@ -172,11 +169,11 @@ static void cmd_fs_copy(int argc, char *argv[])
 	if (fs_copy(src_file, dest_file) == 0) ;
 	else if (errno == ENOENT) {
 		i_error("%s doesn't exist: %s", src_path,
-			fs_last_error(fs));
+			fs_file_last_error(dest_file));
 		doveadm_exit_code = DOVEADM_EX_NOTFOUND;
 	} else {
 		i_error("fs_copy(%s, %s) failed: %s",
-			src_path, dest_path, fs_last_error(fs));
+			src_path, dest_path, fs_file_last_error(dest_file));
 		doveadm_exit_code = EX_TEMPFAIL;
 	}
 	fs_file_deinit(&src_file);
@@ -334,7 +331,7 @@ cmd_fs_delete_dir_recursive(struct fs *fs, unsigned int async_count,
 	struct fs_iter *iter;
 	ARRAY_TYPE(const_string) fnames;
 	struct fs_delete_ctx ctx;
-	const char *fname, *const *fnamep;
+	const char *fname, *const *fnamep, *error;
 	int ret;
 
 	i_zero(&ctx);
@@ -352,11 +349,11 @@ cmd_fs_delete_dir_recursive(struct fs *fs, unsigned int async_count,
 		   we'll include the "/" suffix in the filename when deleting
 		   it. */
 		fname = t_strconcat(fname, "/", NULL);
-		array_append(&fnames, &fname, 1);
+		array_push_back(&fnames, &fname);
 	}
-	if (fs_iter_deinit(&iter) < 0) {
+	if (fs_iter_deinit(&iter, &error) < 0) {
 		i_error("fs_iter_deinit(%s) failed: %s",
-			path_prefix, fs_last_error(fs));
+			path_prefix, error);
 		doveadm_exit_code = EX_TEMPFAIL;
 	}
 	array_foreach(&fnames, fnamep) T_BEGIN {
@@ -374,11 +371,11 @@ cmd_fs_delete_dir_recursive(struct fs *fs, unsigned int async_count,
 	iter = fs_iter_init(fs, path_prefix, 0);
 	while ((fname = fs_iter_next(iter)) != NULL) {
 		fname = t_strdup(fname);
-		array_append(&fnames, &fname, 1);
+		array_push_back(&fnames, &fname);
 	}
-	if (fs_iter_deinit(&iter) < 0) {
+	if (fs_iter_deinit(&iter, &error) < 0) {
 		i_error("fs_iter_deinit(%s) failed: %s",
-			path_prefix, fs_last_error(fs));
+			path_prefix, error);
 		doveadm_exit_code = EX_TEMPFAIL;
 	}
 
@@ -486,9 +483,23 @@ static void cmd_fs_iter_full(int argc, char *argv[], enum fs_iter_flags flags,
 {
 	struct fs *fs;
 	struct fs_iter *iter;
-	const char *fname;
+	const char *fname, *error;
+	int c;
 
-	cmd_fs_getopt(&argc, &argv);
+	while ((c = getopt(argc, argv, "CO")) > 0) {
+		switch (c) {
+		case 'C':
+			flags |= FS_ITER_FLAG_NOCACHE;
+			break;
+		case 'O':
+			flags |= FS_ITER_FLAG_OBJECTIDS;
+			break;
+		default:
+			fs_cmd_help(cmd);
+		}
+	}
+	argc -= optind; argv += optind;
+
 	fs = cmd_fs_init(&argc, &argv, 1, cmd);
 
 	doveadm_print_init(DOVEADM_PRINT_TYPE_FORMATTED);
@@ -499,9 +510,9 @@ static void cmd_fs_iter_full(int argc, char *argv[], enum fs_iter_flags flags,
 	while ((fname = fs_iter_next(iter)) != NULL) {
 		doveadm_print(fname);
 	}
-	if (fs_iter_deinit(&iter) < 0) {
+	if (fs_iter_deinit(&iter, &error) < 0) {
 		i_error("fs_iter_deinit(%s) failed: %s",
-			argv[0], fs_last_error(fs));
+			argv[0], error);
 		doveadm_exit_code = EX_TEMPFAIL;
 	}
 	fs_deinit(&fs);
@@ -586,8 +597,10 @@ DOVEADM_CMD_PARAMS_END
 {
 	.name = "fs iter",
 	.old_cmd = cmd_fs_iter,
-	.usage = "<fs-driver> <fs-args> <path>",
+	.usage = "[--no-cache] [--object-ids] <fs-driver> <fs-args> <path>",
 DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_PARAM('C', "no-cache", CMD_PARAM_BOOL, 0)
+DOVEADM_CMD_PARAM('O', "object-ids", CMD_PARAM_BOOL, 0)
 DOVEADM_CMD_PARAM('\0', "fs-driver", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
 DOVEADM_CMD_PARAM('\0', "fs-args", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
 DOVEADM_CMD_PARAM('\0', "path", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)

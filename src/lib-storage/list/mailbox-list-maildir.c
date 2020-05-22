@@ -348,7 +348,7 @@ maildir_rename_children(struct mailbox_list *oldlist, const char *oldname,
 		if (strncmp(info->vname, old_vname, old_vnamelen) == 0 &&
 		    info->vname[old_vnamelen] == old_ns_sep) {
 			name = p_strdup(pool, info->vname + old_vnamelen);
-			array_append(&names_arr, &name, 1);
+			array_push_back(&names_arr, &name);
 		}
 	}
 	if (mailbox_list_iter_deinit(&iter) < 0) {
@@ -491,7 +491,8 @@ struct mailbox_list maildir_mailbox_list = {
 	.name = MAILBOX_LIST_NAME_MAILDIRPLUSPLUS,
 	.props = MAILBOX_LIST_PROP_NO_MAILDIR_NAME |
 		MAILBOX_LIST_PROP_NO_ALT_DIR |
-		MAILBOX_LIST_PROP_NO_NOSELECT,
+		MAILBOX_LIST_PROP_NO_NOSELECT |
+		MAILBOX_LIST_PROP_NO_INTERNAL_NAMES,
 	.mailbox_name_max_length = MAILBOX_LIST_NAME_MAX_LENGTH,
 
 	.v = {
@@ -519,7 +520,8 @@ struct mailbox_list imapdir_mailbox_list = {
 	.name = MAILBOX_LIST_NAME_IMAPDIR,
 	.props = MAILBOX_LIST_PROP_NO_MAILDIR_NAME |
 		MAILBOX_LIST_PROP_NO_ALT_DIR |
-		MAILBOX_LIST_PROP_NO_NOSELECT,
+		MAILBOX_LIST_PROP_NO_NOSELECT |
+		MAILBOX_LIST_PROP_NO_INTERNAL_NAMES,
 	.mailbox_name_max_length = MAILBOX_LIST_NAME_MAX_LENGTH,
 
 	.v = {

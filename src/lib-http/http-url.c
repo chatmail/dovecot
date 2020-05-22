@@ -27,6 +27,87 @@ struct http_url_parser {
 	bool request_target:1;
 };
 
+static bool http_url_parse_authority_form(struct http_url_parser *url_parser);
+
+static bool
+http_url_parse_scheme(struct http_url_parser *url_parser, const char **scheme_r)
+{
+	struct uri_parser *parser = &url_parser->parser;
+	int ret;
+
+	*scheme_r = NULL;
+	if ((url_parser->flags & HTTP_URL_PARSE_SCHEME_EXTERNAL) != 0)
+		return TRUE;
+
+	if ((ret = uri_parse_scheme(parser, scheme_r)) <= 0) {
+		parser->cur = parser->begin;
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool http_url_parse_unknown_scheme(struct http_url_parser *url_parser)
+{
+	struct uri_parser *parser = &url_parser->parser;
+
+	if (url_parser->request_target) {
+		/* Valid as non-HTTP scheme, but also try to parse as authority
+		 */
+		parser->cur = parser->begin;
+		if (!http_url_parse_authority_form(url_parser)) {
+			/* indicate non-http-url */
+			url_parser->url = NULL;
+			url_parser->req_format =
+				HTTP_REQUEST_TARGET_FORMAT_ABSOLUTE;
+		}
+		return TRUE;
+	}
+	parser->error = "Not an HTTP URL";
+	return FALSE;
+}
+
+static bool
+http_url_parse_userinfo(struct http_url_parser *url_parser,
+			struct uri_authority *auth,
+			const char **user_r, const char **password_r)
+{
+	struct uri_parser *parser = &url_parser->parser;
+	const char *p;
+
+	*user_r = *password_r = NULL;
+
+	if (auth->enc_userinfo == NULL)
+		return TRUE;
+
+	if ((url_parser->flags & HTTP_URL_ALLOW_USERINFO_PART) == 0) {
+		/* RFC 7230, Section 2.7.1: http URI Scheme
+
+		   A sender MUST NOT generate the userinfo subcomponent (and its
+		   "@" delimiter) when an "http" URI reference is generated
+		   within a message as a request target or header field value.
+		   Before making use of an "http" URI reference received from an
+		   untrusted source, a recipient SHOULD parse for userinfo and
+		   treat its presence as an error; it is likely being used to
+		   obscure the authority for the sake of phishing attacks.
+		 */
+		parser->error = "HTTP URL does not allow `userinfo@' part";
+		return FALSE;
+	}
+
+	p = strchr(auth->enc_userinfo, ':');
+	if (p == NULL) {
+		if (!uri_data_decode(parser, auth->enc_userinfo, NULL, user_r))
+			return FALSE;
+	} else {
+		if (!uri_data_decode(parser, auth->enc_userinfo, p, user_r))
+			return FALSE;
+		if (!uri_data_decode(parser, p + 1, NULL, password_r))
+			return FALSE;
+	}
+	return TRUE;
+}
+
 static bool http_url_parse_authority(struct http_url_parser *url_parser)
 {
 	struct uri_parser *parser = &url_parser->parser;
@@ -41,42 +122,16 @@ static bool http_url_parse_authority(struct http_url_parser *url_parser)
 		/* RFC 7230, Section 2.7.1: http URI Scheme
 
 		   A sender MUST NOT generate an "http" URI with an empty host
-		   identifier.  A recipient that processes such a URI reference MUST
-		   reject it as invalid.
+		   identifier.  A recipient that processes such a URI reference
+		   MUST reject it as invalid.
 		 */
 		parser->error = "HTTP URL does not allow empty host identifier";
 		return FALSE;
 	}
 	if (ret > 0) {
-		if (auth.enc_userinfo != NULL) {
-			const char *p;
-
-			if ((url_parser->flags & HTTP_URL_ALLOW_USERINFO_PART) == 0) {
-				/* RFC 7230, Section 2.7.1: http URI Scheme
-
-				   A sender MUST NOT generate the userinfo subcomponent (and its "@"
-				   delimiter) when an "http" URI reference is generated within a
-				   message as a request target or header field value.  Before making
-				   use of an "http" URI reference received from an untrusted source,
-				   a recipient SHOULD parse for userinfo and treat its presence as
-				   an error; it is likely being used to obscure the authority for
-				   the sake of phishing attacks.
-				 */
-				parser->error = "HTTP URL does not allow `userinfo@' part";
-				return FALSE;
-			}
-
-			p = strchr(auth.enc_userinfo, ':');
-			if (p == NULL) {
-				if (!uri_data_decode(parser, auth.enc_userinfo, NULL, &user))
-					return FALSE;
-			} else {
-				if (!uri_data_decode(parser, auth.enc_userinfo, p, &user))
-					return FALSE;
-				if (!uri_data_decode(parser, p+1, NULL, &password))
-					return FALSE;
-			}
-		}
+		if (!http_url_parse_userinfo(url_parser, &auth,
+					     &user, &password))
+			return FALSE;
 	}
 	if (url != NULL) {
 		uri_host_copy(parser->pool, &url->host, &auth.host);
@@ -99,15 +154,126 @@ static bool http_url_parse_authority_form(struct http_url_parser *url_parser)
 	return TRUE;
 }
 
-static bool http_url_do_parse(struct http_url_parser *url_parser)
+static int
+http_url_parse_path(struct http_url_parser *url_parser)
 {
 	struct uri_parser *parser = &url_parser->parser;
 	struct http_url *url = url_parser->url, *base = url_parser->base;
 	const char *const *path;
+	int path_relative;
+	string_t *fullpath = NULL;
+	int ret;
+
+	/* path-abempty / path-absolute / path-noscheme / path-empty */
+	if ((ret = uri_parse_path(parser, &path_relative, &path)) < 0)
+		return -1;
+
+	/* Resolve path */
+	if (ret == 0) {
+		if (url_parser->relative && url != NULL)
+			url->path = p_strdup(parser->pool, base->path);
+		return 0;
+	}
+
+	if (url != NULL)
+		fullpath = t_str_new(256);
+
+	if (url_parser->relative && path_relative > 0 && base->path != NULL) {
+		const char *pbegin = base->path;
+		const char *pend = base->path + strlen(base->path);
+		const char *p = pend - 1;
+
+		i_assert(*pbegin == '/');
+
+		/* Discard trailing segments of base path based on how many
+		   effective leading '..' segments were found in the relative
+		   path.
+		 */
+		while (path_relative > 0 && p > pbegin) {
+			while (p > pbegin && *p != '/') p--;
+			if (p >= pbegin) {
+				pend = p;
+				path_relative--;
+			}
+			if (p > pbegin) p--;
+		}
+
+		if (url != NULL && pend > pbegin)
+			str_append_data(fullpath, pbegin, pend - pbegin);
+	}
+
+	/* Append relative path */
+	while (*path != NULL) {
+		const char *part;
+
+		if (!uri_data_decode(parser, *path, NULL, &part))
+			return -1;
+
+		if (url != NULL) {
+			str_append_c(fullpath, '/');
+			str_append(fullpath, part);
+		}
+		path++;
+	}
+
+	if (url != NULL)
+		url->path = p_strdup(parser->pool, str_c(fullpath));
+	return 1;
+}
+
+static bool
+http_url_parse_query(struct http_url_parser *url_parser, bool have_path)
+{
+	struct uri_parser *parser = &url_parser->parser;
+	struct http_url *url = url_parser->url, *base = url_parser->base;
+	const char *query;
+	int ret;
+
+	if ((ret = uri_parse_query(parser, &query)) < 0)
+		return FALSE;
+	if (url == NULL)
+		return TRUE;
+
+	if (ret > 0)
+		url->enc_query = p_strdup(parser->pool, query);
+	else if (url_parser->relative && !have_path)
+		url->enc_query = p_strdup(parser->pool, base->enc_query);
+	return TRUE;
+}
+
+static bool
+http_url_parse_fragment(struct http_url_parser *url_parser, bool have_path)
+{
+	struct uri_parser *parser = &url_parser->parser;
+	struct http_url *url = url_parser->url, *base = url_parser->base;
+	const char *fragment;
+	int ret;
+
+	if ((ret = uri_parse_fragment(parser, &fragment)) < 0)
+		return FALSE;
+	if (ret > 0 &&
+	    (url_parser->flags & HTTP_URL_ALLOW_FRAGMENT_PART) == 0) {
+		parser->error =
+			"URL fragment not allowed for HTTP URL in this context";
+		return FALSE;
+	}
+	if (url == NULL)
+		return TRUE;
+
+	if (ret > 0)
+		url->enc_fragment =  p_strdup(parser->pool, fragment);
+	else if (url_parser->relative && !have_path)
+		url->enc_fragment = p_strdup(parser->pool, base->enc_fragment);
+	return TRUE;
+}
+
+static bool http_url_do_parse(struct http_url_parser *url_parser)
+{
+	struct uri_parser *parser = &url_parser->parser;
+	struct http_url *url = url_parser->url, *base = url_parser->base;
 	bool relative = TRUE, have_scheme = FALSE, have_authority = FALSE,
 		have_path = FALSE;
-	int path_relative;
-	const char *part;
+	const char *scheme;
 	int ret;
 
 	/* RFC 7230, Appendix B:
@@ -161,32 +327,16 @@ static bool http_url_do_parse(struct http_url_parser *url_parser)
 	 */
 
 	/* "http:" / "https:" */
-	if ((url_parser->flags & HTTP_URL_PARSE_SCHEME_EXTERNAL) == 0) {
-		const char *scheme;
-
-		if ((ret = uri_parse_scheme(parser, &scheme)) <= 0) {
-			parser->cur = parser->begin;
-		} else {
-			if (strcasecmp(scheme, "https") == 0) {
-				if (url != NULL)
-					url->have_ssl = TRUE;
-			} else if (strcasecmp(scheme, "http") != 0) {
-				if (url_parser->request_target) {
-					/* valid as non-HTTP scheme, but also try to parse as authority */
-					parser->cur = parser->begin;
-					if (!http_url_parse_authority_form(url_parser)) {
-						url_parser->url = NULL; /* indicate non-http-url */
-						url_parser->req_format = HTTP_REQUEST_TARGET_FORMAT_ABSOLUTE;
-					}
-					return TRUE;
-				}
-				parser->error = "Not an HTTP URL";
-				return FALSE;
-			}
-			relative = FALSE;
-			have_scheme = TRUE;
+	if (http_url_parse_scheme(url_parser, &scheme)) {
+		if (scheme == NULL) {
+			/* Scheme externally parsed */
+		} else if (strcasecmp(scheme, "https") == 0) {
+			if (url != NULL)
+				url->have_ssl = TRUE;
+		} else if (strcasecmp(scheme, "http") != 0) {
+			return http_url_parse_unknown_scheme(url_parser);
 		}
-	} else {
+
 		relative = FALSE;
 		have_scheme = TRUE;
 	}
@@ -195,7 +345,8 @@ static bool http_url_do_parse(struct http_url_parser *url_parser)
 	 * ["//"] authority ; when parsing a request target
 	 */
 	if (parser->cur < parser->end && parser->cur[0] == '/') {
-		if (parser->cur+1 < parser->end && parser->cur[1] == '/') {
+		if ((have_scheme || !url_parser->request_target) &&
+		    (parser->cur + 1) < parser->end && parser->cur[1] == '/') {
 			parser->cur += 2;
 			relative = FALSE;
 			have_authority = TRUE;
@@ -221,10 +372,6 @@ static bool http_url_do_parse(struct http_url_parser *url_parser)
 			return FALSE;
 	}
 
-	/* path-abempty / path-absolute / path-noscheme / path-empty */
-	if ((ret = uri_parse_path(parser, &path_relative, &path)) < 0)
-		return FALSE;
-
 	/* Relative URLs are only valid when we have a base URL */
 	if (relative) {
 		if (base == NULL) {
@@ -235,85 +382,26 @@ static bool http_url_do_parse(struct http_url_parser *url_parser)
 			url->port = base->port;
 			url->have_ssl = base->have_ssl;
 			url->user = p_strdup_empty(parser->pool, base->user);
-			url->password = p_strdup_empty(parser->pool, base->password);
+			url->password = p_strdup_empty(parser->pool,
+						       base->password);
 		}
 
 		url_parser->relative = TRUE;
 	}
 
-	/* Resolve path */
-	if (ret > 0) {
-		string_t *fullpath = NULL;
-
-		have_path = TRUE;
-
-		if (url != NULL)
-			fullpath = t_str_new(256);
-
-		if (relative && path_relative > 0 && base->path != NULL) {
-			const char *pbegin = base->path;
-			const char *pend = base->path + strlen(base->path);
-			const char *p = pend - 1;
-
-			i_assert(*pbegin == '/');
-
-			/* discard trailing segments of base path based on how many effective
-			   leading '..' segments were found in the relative path.
-			 */
-			while (path_relative > 0 && p > pbegin) {
-				while (p > pbegin && *p != '/') p--;
-				if (p >= pbegin) {
-					pend = p;
-					path_relative--;
-				}
-				if (p > pbegin) p--;
-			}
-
-			if (url != NULL && pend > pbegin)
-				str_append_data(fullpath, pbegin, pend-pbegin);
-		}
-
-		/* append relative path */
-		while (*path != NULL) {
-			if (!uri_data_decode(parser, *path, NULL, &part))
-				return FALSE;
-
-			if (url != NULL) {
-				str_append_c(fullpath, '/');
-				str_append(fullpath, part);
-			}
-			path++;
-		}
-
-		if (url != NULL)
-			url->path = p_strdup(parser->pool, str_c(fullpath));
-	} else if (relative && url != NULL) {
-		url->path = p_strdup(parser->pool, base->path);
-	}
+	/* path-abempty / path-absolute / path-noscheme / path-empty */
+	ret = http_url_parse_path(url_parser);
+	if (ret < 0)
+		return FALSE;
+	have_path = (ret > 0);
 
 	/* [ "?" query ] */
-	if ((ret = uri_parse_query(parser, &part)) < 0)
+	if (!http_url_parse_query(url_parser, have_path))
 		return FALSE;
-	if (ret > 0) {
-		if (url != NULL)
-			url->enc_query = p_strdup(parser->pool, part);
-	} else if (relative && !have_path && url != NULL) {
-		url->enc_query = p_strdup(parser->pool, base->enc_query);
-	}
 
 	/* [ "#" fragment ] */
-	if ((ret = uri_parse_fragment(parser, &part)) < 0)
+	if (!http_url_parse_fragment(url_parser, have_path))
 		return FALSE;
-	if (ret > 0) {
-		if ((url_parser->flags & HTTP_URL_ALLOW_FRAGMENT_PART) == 0) {
-			parser->error = "URL fragment not allowed for HTTP URL in this context";
-			return FALSE;
-		}
-		if (url != NULL)
-			url->enc_fragment =  p_strdup(parser->pool, part);
-	} else if (relative && !have_path && url != NULL) {
-		url->enc_fragment = p_strdup(parser->pool, base->enc_fragment);
-	}
 
 	/* must be at end of URL now */
 	i_assert(parser->cur == parser->end);
@@ -331,8 +419,9 @@ int http_url_parse(const char *url, struct http_url *base,
 {
 	struct http_url_parser url_parser;
 
-	/* base != NULL indicates whether relative URLs are allowed. However, certain
-	   flags may also dictate whether relative URLs are allowed/required. */
+	/* base != NULL indicates whether relative URLs are allowed. However,
+	   certain flags may also dictate whether relative URLs are
+	   allowed/required. */
 	i_assert((flags & HTTP_URL_PARSE_SCHEME_EXTERNAL) == 0 || base == NULL);
 
 	i_zero(&url_parser);
@@ -352,43 +441,58 @@ int http_url_parse(const char *url, struct http_url *base,
 }
 
 int http_url_request_target_parse(const char *request_target,
-	const char *host_header, pool_t pool, struct http_request_target *target,
-	const char **error_r)
+				  const char *host_header,
+				  const struct http_url *default_base,
+				  pool_t pool,
+				  struct http_request_target *target,
+				  const char **error_r)
 {
 	struct http_url_parser url_parser;
-	struct uri_parser *parser;
 	struct uri_authority auth;
 	struct http_url base;
 
-	i_zero(&url_parser);
-	parser = &url_parser.parser;
-	uri_parser_init(parser, pool, host_header);
+	i_zero(&base);
+	if (host_header != NULL && *host_header != '\0') {
+		struct uri_parser *parser;
+		
+		i_zero(&url_parser);
+		parser = &url_parser.parser;
+		uri_parser_init(parser, pool, host_header);
 
-	if (uri_parse_host_authority(parser, &auth) <= 0) {
-		*error_r = t_strdup_printf("Invalid Host header: %s", parser->error);
-		return -1;
-	}
+		if (uri_parse_host_authority(parser, &auth) <= 0) {
+			*error_r = t_strdup_printf("Invalid Host header: %s",
+						   parser->error);
+			return -1;
+		}
 
-	if (parser->cur != parser->end || auth.enc_userinfo != NULL) {
-		*error_r = "Invalid Host header: Contains invalid character";
+		if (parser->cur != parser->end || auth.enc_userinfo != NULL) {
+			*error_r = "Invalid Host header: "
+				   "Contains invalid character";
+			return -1;
+		}
+
+		base.host = auth.host;
+		base.port = auth.port;
+	} else if (default_base == NULL) {
+		*error_r = "Empty Host header";
 		return -1;
+	} else {
+		i_assert(default_base != NULL);
+		base = *default_base;
 	}
 
 	if (request_target[0] == '*' && request_target[1] == '\0') {
 		struct http_url *url = p_new(pool, struct http_url, 1);
-		uri_host_copy(pool, &url->host, &auth.host);
-		url->port = auth.port;
+
+		uri_host_copy(pool, &url->host, &base.host);
+		url->port = base.port;
 		target->url = url;
 		target->format = HTTP_REQUEST_TARGET_FORMAT_ASTERISK;
 		return 0;
 	}
 
-	i_zero(&base);
-	base.host = auth.host;
-	base.port = auth.port;
-
-	i_zero(parser);
-	uri_parser_init(parser, pool, request_target);
+	i_zero(&url_parser);
+	uri_parser_init(&url_parser.parser, pool, request_target);
 
 	url_parser.url = p_new(pool, struct http_url, 1);
 	url_parser.request_target = TRUE;
@@ -411,7 +515,7 @@ int http_url_request_target_parse(const char *request_target,
  */
 
 void http_url_copy_authority(pool_t pool, struct http_url *dest,
-	const struct http_url *src)
+			     const struct http_url *src)
 {
 	i_zero(dest);
 	uri_host_copy(pool, &dest->host, &src->host);
@@ -419,8 +523,8 @@ void http_url_copy_authority(pool_t pool, struct http_url *dest,
 	dest->have_ssl = src->have_ssl;
 }
 
-struct http_url *http_url_clone_authority(pool_t pool,
-	const struct http_url *src)
+struct http_url *
+http_url_clone_authority(pool_t pool, const struct http_url *src)
 {
 	struct http_url *new_url;
 
@@ -431,7 +535,7 @@ struct http_url *http_url_clone_authority(pool_t pool,
 }
 
 void http_url_copy(pool_t pool, struct http_url *dest,
-	const struct http_url *src)
+		   const struct http_url *src)
 {
 	http_url_copy_authority(pool, dest, src);
 	dest->path = p_strdup(pool, src->path);
@@ -440,7 +544,7 @@ void http_url_copy(pool_t pool, struct http_url *dest,
 }
 
 void http_url_copy_with_userinfo(pool_t pool, struct http_url *dest,
-	const struct http_url *src)
+				 const struct http_url *src)
 {
 	http_url_copy(pool, dest, src);
 	dest->user = p_strdup(pool, src->user);
@@ -457,8 +561,8 @@ struct http_url *http_url_clone(pool_t pool, const struct http_url *src)
 	return new_url;
 }
 
-struct http_url *http_url_clone_with_userinfo(pool_t pool,
-	const struct http_url *src)
+struct http_url *
+http_url_clone_with_userinfo(pool_t pool, const struct http_url *src)
 {
 	struct http_url *new_url;
 
@@ -467,7 +571,6 @@ struct http_url *http_url_clone_with_userinfo(pool_t pool,
 
 	return new_url;
 }
-
 
 /*
  * HTTP URL construction
@@ -497,9 +600,8 @@ static void
 http_url_add_target(string_t *urlstr, const struct http_url *url)
 {
 	if (url->path == NULL || *url->path == '\0') {
-		/* Older syntax of RFC 2616 requires this slash at all times for an
-			 absolute URL
-		 */
+		/* Older syntax of RFC 2616 requires this slash at all times for
+		   an absolute URL. */
 		str_append_c(urlstr, '/');
 	} else {
 		uri_append_path_data(urlstr, "", url->path);

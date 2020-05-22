@@ -56,10 +56,40 @@ void test_assert_failed_strcmp(const char *code, const char *file, unsigned int 
 				const char * src, const char * dst)
 {
 	printf("%s: Assert(#%u) failed: %s\n", file, line, code);
-	printf("        \"%s\" != \"%s\"\n", src, dst);
+	if (src != NULL)
+		printf("        \"%s\" != ", src);
+	else
+		printf("        NULL != ");
+	if (dst != NULL)
+		printf("\"%s\"\n", dst);
+	else
+		printf("NULL\n");
 	fflush(stdout);
 	test_success = FALSE;
 }
+
+#ifdef DEBUG
+#include "randgen.h"
+static void
+test_dump_rand_state(void)
+{
+	static int64_t seen_seed = -1;
+	unsigned int seed;
+	if (rand_get_last_seed(&seed) < 0) {
+		if (seen_seed == -1) {
+			printf("test: random sequence not reproduceable, use DOVECOT_SRAND=kiss\n");
+			seen_seed = -2;
+		}
+		return;
+	}
+	if (seed == seen_seed)
+		return;
+	seen_seed = seed;
+	printf("test: DOVECOT_SRAND random seed was %u\n", seed);
+}
+#else
+static inline void test_dump_rand_state(void) { }
+#endif
 
 void test_end(void)
 {
@@ -69,6 +99,8 @@ void test_end(void)
 		test_assert(test_prefix != NULL);
 
 	test_out("", test_success);
+	if (!test_success)
+		test_dump_rand_state();
 	i_free_and_null(test_prefix);
 	test_success = FALSE;
 }
@@ -124,11 +156,16 @@ void test_out_reason(const char *name, bool success, const char *reason)
 }
 
 void
-test_expect_error_string(const char *substr)
+test_expect_error_string_n_times(const char *substr, unsigned int times)
 {
 	i_assert(expected_errors == 0);
-	expected_errors = 1;
+	expected_errors = times;
 	expected_error_str = i_strdup(substr);
+}
+void
+test_expect_error_string(const char *substr)
+{
+	test_expect_error_string_n_times(substr, 1);
 }
 void
 test_expect_errors(unsigned int expected)
@@ -178,6 +215,7 @@ test_error_handler(const struct failure_context *ctx,
 	}
 
 	if (!suppress) {
+		test_dump_rand_state();
 		default_error_handler(ctx, format, args);
 	}
 }

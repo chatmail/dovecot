@@ -87,7 +87,7 @@ static const struct quota_backend *quota_backend_find(const char *name)
 void quota_backend_register(const struct quota_backend *backend)
 {
 	i_assert(quota_backend_find(backend->name) == NULL);
-	array_append(&quota_backends, &backend, 1);
+	array_push_back(&quota_backends, &backend);
 }
 
 void quota_backend_unregister(const struct quota_backend *backend)
@@ -245,7 +245,7 @@ quota_root_settings_init(struct quota_settings *quota_set, const char *root_def,
 
 	p_array_init(&root_set->rules, quota_set->pool, 4);
 	p_array_init(&root_set->warning_rules, quota_set->pool, 4);
-	array_append(&quota_set->root_sets, &root_set, 1);
+	array_push_back(&quota_set->root_sets, &root_set);
 	*set_r = root_set;
 	return 0;
 }
@@ -302,7 +302,7 @@ int quota_user_read_settings(struct mail_user *user,
 			     const char **error_r)
 {
 	struct quota_settings *quota_set;
-	char root_name[5 + MAX_INT_STRLEN + 1];
+	char root_name[5 + MAX_INT_STRLEN];
 	const char *env, *error;
 	unsigned int i;
 	pool_t pool;
@@ -454,7 +454,7 @@ int quota_init(struct quota_settings *quota_set, struct mail_user *user,
 			return -1;
 		}
 		if (ret > 0)
-			array_append(&quota->roots, &root, 1);
+			array_push_back(&quota->roots, &root);
 	}
 	*quota_r = quota;
 	return 0;
@@ -592,7 +592,7 @@ void quota_add_user_namespace(struct quota *quota, struct mail_namespace *ns)
 	if (quota_is_duplicate_namespace(quota, ns))
 		return;
 
-	array_append(&quota->namespaces, &ns, 1);
+	array_push_back(&quota->namespaces, &ns);
 
 	roots = array_get(&quota->roots, &count);
 	/* @UNSAFE: get different backends into one array */
@@ -816,13 +816,13 @@ quota_get_resource(struct quota_root *root, const char *mailbox_name,
 }
 
 int quota_set_resource(struct quota_root *root, const char *name,
-		       uint64_t value, const char **error_r)
+		       uint64_t value, const char **client_error_r)
 {
 	struct dict_transaction_context *trans;
 	const char *key, *error;
 
 	if (root->set->limit_set == NULL) {
-		*error_r = MAIL_ERRSTR_NO_PERMISSION;
+		*client_error_r = MAIL_ERRSTR_NO_PERMISSION;
 		return -1;
 	}
 	if (strcasecmp(name, QUOTA_NAME_STORAGE_KILOBYTES) == 0)
@@ -832,7 +832,8 @@ int quota_set_resource(struct quota_root *root, const char *name,
 	else if (strcasecmp(name, QUOTA_NAME_MESSAGES) == 0)
 		key = "messages";
 	else {
-		*error_r = t_strdup_printf("Unsupported resource name: %s", name);
+		*client_error_r = t_strdup_printf(
+			"Unsupported resource name: %s", name);
 		return -1;
 	}
 
@@ -845,8 +846,11 @@ int quota_set_resource(struct quota_root *root, const char *name,
 		if (mail_user_get_home(root->quota->user, &set.home_dir) <= 0)
 			set.home_dir = NULL;
 		if (dict_init(root->set->limit_set, &set,
-			      &root->limit_set_dict, error_r) < 0)
+			      &root->limit_set_dict, &error) < 0) {
+			i_error("dict_init() failed: %s", error);
+			*client_error_r = "Internal quota limit update error";
 			return -1;
+		}
 	}
 
 	trans = dict_transaction_begin(root->limit_set_dict);
@@ -854,7 +858,7 @@ int quota_set_resource(struct quota_root *root, const char *name,
 	dict_set(trans, key, dec2str(value));
 	if (dict_transaction_commit(&trans, &error) < 0) {
 		i_error("dict_transaction_commit() failed: %s", error);
-		*error_r = "Internal quota limit update error";
+		*client_error_r = "Internal quota limit update error";
 		return -1;
 	}
 	return 0;
@@ -934,12 +938,11 @@ int quota_transaction_set_limits(struct quota_transaction_context *ctx,
 	/* find the lowest quota limits from all roots and use them */
 	roots = array_get(&ctx->quota->roots, &count);
 	for (i = 0; i < count; i++) {
-		if (!quota_root_is_visible(roots[i], ctx->box) ||
-		    (roots[i]->no_enforcing && ctx->auto_updating))
+		/* make sure variables get initialized */
+		bytes_limit = count_limit = 0;
+		if (!quota_root_is_visible(roots[i], ctx->box))
 			continue;
 		else if (roots[i]->no_enforcing) {
-			bytes_limit = (uint64_t)-1;
-			count_limit = (uint64_t)-1;
 			ignored = FALSE;
 		} else if (quota_root_get_rule_limits(roots[i], mailbox_name,
 						      &bytes_limit, &count_limit,
@@ -958,10 +961,7 @@ int quota_transaction_set_limits(struct quota_transaction_context *ctx,
 			ret = quota_get_resource(roots[i], mailbox_name,
 						 QUOTA_NAME_STORAGE_BYTES,
 						 &current, &limit, &error);
-			if (roots[i]->no_enforcing) {
-				ctx->bytes_ceil = (uint64_t)-1;
-				ctx->bytes_ceil2 = (uint64_t)-1;
-			} else if (ret == QUOTA_GET_RESULT_LIMITED) {
+			if (ret == QUOTA_GET_RESULT_LIMITED) {
 				if (limit <= current) {
 					/* over quota */
 					ctx->bytes_ceil = 0;
@@ -993,9 +993,7 @@ int quota_transaction_set_limits(struct quota_transaction_context *ctx,
 			ret = quota_get_resource(roots[i], mailbox_name,
 						 QUOTA_NAME_MESSAGES,
 						 &current, &limit, &error);
-			if (roots[i]->no_enforcing) {
-				ctx->count_ceil = (uint64_t)-1;
-			} else if (ret == QUOTA_GET_RESULT_LIMITED) {
+			if (ret == QUOTA_GET_RESULT_LIMITED) {
 				if (limit <= current) {
 					/* over quota */
 					ctx->count_ceil = 0;
@@ -1028,6 +1026,7 @@ static void quota_warning_execute(struct quota_root *root, const char *cmd,
 
 	struct program_client_settings set = {
 		.client_connect_timeout_msecs = 1000,
+		.debug = root->quota->user->mail_debug,
 	};
 	struct program_client *pc;
 
@@ -1164,7 +1163,7 @@ int quota_transaction_commit(struct quota_transaction_context **_ctx)
 				ret = -1;
 			}
 			else if (!ctx->sync_transaction)
-				array_append(&warn_roots, &roots[i], 1);
+				array_push_back(&warn_roots, &roots[i]);
 		}
 		/* execute quota warnings after all updates. this makes it
 		   work correctly regardless of whether backend.get_resource()

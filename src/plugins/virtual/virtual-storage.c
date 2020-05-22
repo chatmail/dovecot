@@ -493,10 +493,9 @@ static int virtual_mailbox_open(struct mailbox *box)
 	if (!array_is_created(&mbox->backend_boxes))
 		ret = virtual_config_read(mbox);
 	if (ret == 0) {
-		array_append(&mbox->storage->open_stack, &box->name, 1);
+		array_push_back(&mbox->storage->open_stack, &box->name);
 		ret = virtual_mailboxes_open(mbox, box->flags);
-		array_delete(&mbox->storage->open_stack,
-			     array_count(&mbox->storage->open_stack)-1, 1);
+		array_pop_back(&mbox->storage->open_stack);
 	}
 	if (ret < 0) {
 		virtual_mailbox_close_internal(mbox);
@@ -820,10 +819,10 @@ virtual_get_virtual_uid_map(struct mailbox *box,
 		if (i == count || uids[i].real_uid > uid) {
 			uint32_t zero = 0;
 
-			array_append(virtual_uids_r, &zero, 1);
+			array_push_back(virtual_uids_r, &zero);
 		} else {
 			i_assert(uids[i].virtual_uid > 0);
-			array_append(virtual_uids_r, &uids[i].virtual_uid, 1);
+			array_push_back(virtual_uids_r, &uids[i].virtual_uid);
 			i++;
 		}
 	}
@@ -841,7 +840,7 @@ virtual_get_virtual_backend_boxes(struct mailbox *box,
 	bboxes = array_get(&mbox->backend_boxes, &count);
 	for (i = 0; i < count; i++) {
 		if (!only_with_msgs || array_count(&bboxes[i]->uids) > 0)
-			array_append(mailboxes, &bboxes[i]->box, 1);
+			array_push_back(mailboxes, &bboxes[i]->box);
 	}
 }
 

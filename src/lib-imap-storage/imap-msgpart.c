@@ -164,7 +164,7 @@ imap_msgpart_get_header_fields(pool_t pool, const char *header_list,
 			}
 
 			value = p_strdup(pool, t_str_ucase(value));
-			array_append(fields, &value, 1);
+			array_push_back(fields, &value);
 		}
 		/* istream-header-filter requires headers to be sorted */
 		array_sort(fields, i_strcasecmp_p);
@@ -192,7 +192,7 @@ imap_msgpart_parse_header_fields(struct imap_msgpart *msgpart,
 		return -1;
 
 	array_append_zero(&fields);
-	msgpart->headers = array_idx(&fields, 0);
+	msgpart->headers = array_front(&fields);
 	return 0;
 }
 
@@ -360,7 +360,7 @@ void imap_msgpart_get_wanted_headers(struct imap_msgpart *msgpart,
 		return;
 
 	for (i = 0; msgpart->headers[i] != NULL; i++)
-		array_append(headers, &msgpart->headers[i], 1);
+		array_push_back(headers, &msgpart->headers[i]);
 }
 
 static int
@@ -382,7 +382,7 @@ imap_msgpart_get_partial_header(struct mail *mail, struct istream *mail_input,
 						      HEADER_FILTER_HIDE_BODY,
 						      hdr_fields, hdr_count,
 						      *null_header_filter_callback,
-						      (void *)NULL);
+						      NULL);
 	} else if (msgpart->section_number[0] != '\0') {
 		/* fetching partial headers for a message/rfc822 part. */
 		input = i_stream_create_header_filter(mail_input,
@@ -390,7 +390,7 @@ imap_msgpart_get_partial_header(struct mail *mail, struct istream *mail_input,
 						      HEADER_FILTER_HIDE_BODY,
 						      hdr_fields, hdr_count,
 						      *null_header_filter_callback,
-						      (void *)NULL);
+						      NULL);
 	} else {
 		/* mail_get_header_stream() already filtered out the
 		   unwanted headers. */
@@ -579,6 +579,8 @@ imap_msgpart_open_normal(struct mail *mail, struct imap_msgpart *msgpart,
 
 	if (*msgpart->section_number != '\0') {
 		/* find the MIME part */
+		i_assert(part != NULL);
+
 		if (mail_get_stream_because(mail, NULL, NULL, "MIME part", &input) < 0)
 			return -1;
 

@@ -67,7 +67,8 @@ static int
 cmd_dict_init(struct doveadm_cmd_context *cctx,
 	      doveadm_command_ver2_t *cmd, struct dict **dict_r)
 {
-	return cmd_dict_init_full(cctx, cmd, NULL, dict_r);
+	enum dict_iterate_flags iter_flags = 0;
+	return cmd_dict_init_full(cctx, cmd, &iter_flags, dict_r);
 }
 
 struct doveadm_dict_ctx {
@@ -139,6 +140,7 @@ static void cmd_dict_set(struct doveadm_cmd_context *cctx)
 	(void)doveadm_cmd_param_str(cctx, "key", &key);
 	if (!doveadm_cmd_param_str(cctx, "value", &value)) {
 		i_error("dict set: Missing value");
+		dict_deinit(&dict);
 		return;
 	}
 

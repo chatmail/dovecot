@@ -8,10 +8,10 @@ Courier v0.43 and later to Dovecot v1.1+
 ----------------------------------------
 
 courier-dovecot-migrate.pl
-[http://www.dovecot.org/tools/courier-dovecot-migrate.pl] does a perfect
-migration from Courier IMAP and POP3, preserving IMAP UIDs and POP3 UIDLs. It
-reads Courier's 'courierimapuiddb' and 'courierpop3dsizelist' files and
-produces 'dovecot-uidlist' file from it.
+[https://dovecot.org/tools/courier-dovecot-migrate.pl] does a perfect migration
+from Courier IMAP and POP3, preserving IMAP UIDs and POP3 UIDLs. It reads
+Courier's 'courierimapuiddb' and 'courierpop3dsizelist' files and produces
+'dovecot-uidlist' file from it.
 
 Before doing the actual conversion you can run the script and see if it
 complains about any errors and such, for example:
@@ -84,4 +84,4 @@ Manual conversion
  * Courier's message keywords implementation isn't Dovecot compatible. There
    doesn't exist a simple way to convert the keywords manually.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

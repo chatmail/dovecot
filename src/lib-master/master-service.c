@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "lib-signals.h"
+#include "lib-event-private.h"
 #include "event-filter.h"
 #include "ioloop.h"
 #include "path-util.h"
@@ -43,6 +44,11 @@
 #define MASTER_SERVICE_DIE_TIMEOUT_MSECS (30*1000)
 
 struct master_service *master_service;
+
+static struct event_category master_service_category = {
+	.name = NULL, /* set dynamically later */
+};
+static char *master_service_category_name;
 
 static void master_service_io_listeners_close(struct master_service *service);
 static void master_service_refresh_login_state(struct master_service *service);
@@ -118,6 +124,22 @@ sig_state_changed(const siginfo_t *si ATTR_UNUSED, void *context)
 	struct master_service *service = context;
 
 	master_service_refresh_login_state(service);
+}
+
+static bool
+master_service_event_callback(struct event *event,
+			      enum event_callback_type type,
+			      struct failure_context *ctx ATTR_UNUSED,
+			      const char *fmt ATTR_UNUSED,
+			      va_list args ATTR_UNUSED)
+{
+	if (type == EVENT_CALLBACK_TYPE_CREATE && event->parent == NULL) {
+		/* Add service:<name> category for all events. It's enough
+		   to do it only for root events, because all other events
+		   inherit the category from them. */
+		event_add_category(event, &master_service_category);
+	}
+	return TRUE;
 }
 
 static void master_service_verify_version_string(struct master_service *service)
@@ -279,6 +301,11 @@ master_service_init(const char *name, enum master_service_flags flags,
 	else
 		i_set_failure_prefix("%s: ", name);
 
+	master_service_category_name =
+		i_strdup_printf("service:%s", service->name);
+	master_service_category.name = master_service_category_name;
+	event_register_callback(master_service_event_callback);
+
 	/* Initialize debug logging */
 	value = getenv(DOVECOT_LOG_DEBUG_ENV);
 	if (value != NULL) {
@@ -423,7 +450,8 @@ master_service_try_init_log(struct master_service *service,
 		if (!syslog_facility_find(service->set->syslog_facility,
 					  &facility))
 			facility = LOG_MAIL;
-		i_set_failure_syslog("dovecot", LOG_NDELAY, facility);
+		i_set_failure_syslog(service->set->instance_name, LOG_NDELAY,
+		                     facility);
 		i_set_failure_prefix("%s", prefix);
 
 		if (strcmp(service->set->log_path, "syslog") != 0) {
@@ -538,7 +566,7 @@ bool master_service_parse_option(struct master_service *service,
 	case 'o':
 		if (!array_is_created(&service->config_overrides))
 			i_array_init(&service->config_overrides, 16);
-		array_append(&service->config_overrides, &arg, 1);
+		array_push_back(&service->config_overrides, &arg);
 		break;
 	case 'O':
 		service->flags |= MASTER_SERVICE_FLAG_NO_CONFIG_SETTINGS;
@@ -640,7 +668,7 @@ static void master_service_import_environment_real(const char *import_environmen
 	/* preserve existing DOVECOT_PRESERVE_ENVS */
 	value = getenv(DOVECOT_PRESERVE_ENVS_ENV);
 	if (value != NULL)
-		array_append(&keys, &value, 1);
+		array_push_back(&keys, &value);
 	/* add new environments */
 	envs = t_strsplit_spaces(import_environment, " ");
 	for (; *envs != NULL; envs++) {
@@ -651,11 +679,11 @@ static void master_service_import_environment_real(const char *import_environmen
 			key = t_strdup_until(*envs, value);
 			env_put(*envs);
 		}
-		array_append(&keys, &key, 1);
+		array_push_back(&keys, &key);
 	}
 	array_append_zero(&keys);
 
-	value = t_strarray_join(array_idx(&keys, 0), " ");
+	value = t_strarray_join(array_front(&keys), " ");
 	env_put(t_strconcat(DOVECOT_PRESERVE_ENVS_ENV"=", value, NULL));
 }
 
@@ -1029,6 +1057,9 @@ void master_service_deinit(struct master_service **_service)
 		settings_parser_deinit(&service->set_parser);
 		pool_unref(&service->set_pool);
 	}
+	i_free(master_service_category_name);
+	master_service_category.name = NULL;
+	event_unregister_callback(master_service_event_callback);
 	lib_signals_deinit();
 	/* run atexit callbacks before destroying ioloop */
 	lib_atexit_run();

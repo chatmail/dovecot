@@ -54,14 +54,31 @@ int imap_master_connection_init(const char *path,
 	return 1;
 }
 
+static void
+imap_master_read_callback(struct imap_master_connection **_conn,
+			  const char *line)
+{
+	struct imap_master_connection *conn = *_conn;
+	imap_master_connection_read_callback_t *read_callback =
+		conn->read_callback;
+
+	*_conn = NULL;
+	conn->read_callback = NULL;
+	read_callback(conn->context, line);
+	/* connection is destroyed now */
+}
+
 void imap_master_connection_deinit(struct imap_master_connection **_conn)
+{
+	imap_master_read_callback(_conn, t_strdup_printf(
+		"-%s", connection_disconnect_reason(&(*_conn)->conn)));
+}
+
+void imap_master_connection_free(struct imap_master_connection **_conn)
 {
 	struct imap_master_connection *conn = *_conn;
 
 	*_conn = NULL;
-
-	if (conn->read_callback != NULL)
-		conn->read_callback(conn->context, "-");
 
 	timeout_remove(&conn->to);
 	connection_deinit(&conn->conn);
@@ -89,11 +106,7 @@ imap_master_client_input_line(struct connection *_conn, const char *line)
 		conn->send_callback(conn->context, _conn->output);
 		return 1;
 	} else {
-		imap_master_connection_read_callback_t *read_callback =
-			conn->read_callback;
-
-		conn->read_callback = NULL;
-		read_callback(conn->context, line);
+		imap_master_read_callback(&conn, line);
 		/* we're finished now with this connection - disconnect it */
 		return -1;
 	}

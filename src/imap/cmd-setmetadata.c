@@ -45,7 +45,7 @@ cmd_setmetadata_parse_entryvalue(struct imap_setmetadata_context *ctx,
 				 const struct imap_arg **value_r)
 {
 	const struct imap_arg *args;
-	const char *name, *error;
+	const char *name, *client_error;
 	enum imap_parser_error parse_error;
 	int ret;
 
@@ -72,15 +72,16 @@ cmd_setmetadata_parse_entryvalue(struct imap_setmetadata_context *ctx,
 	if (ret < 0) {
 		if (ret == -2)
 			return 0;
-		error = imap_parser_get_error(ctx->parser, &parse_error);
+		client_error = imap_parser_get_error(ctx->parser, &parse_error);
 		switch (parse_error) {
 		case IMAP_PARSE_ERROR_NONE:
 			i_unreached();
 		case IMAP_PARSE_ERROR_LITERAL_TOO_BIG:
-			client_disconnect_with_error(ctx->cmd->client, error);
+			client_disconnect_with_error(ctx->cmd->client,
+						     client_error);
 			break;
 		default:
-			client_send_command_error(ctx->cmd, error);
+			client_send_command_error(ctx->cmd, client_error);
 			break;
 		}
 		return -1;
@@ -94,8 +95,8 @@ cmd_setmetadata_parse_entryvalue(struct imap_setmetadata_context *ctx,
 		return -1;
 	}
 	if (!ctx->cmd_error_sent &&
-	    !imap_metadata_verify_entry_name(name, &error)) {
-		client_send_command_error(ctx->cmd, error);
+	    !imap_metadata_verify_entry_name(name, &client_error)) {
+		client_send_command_error(ctx->cmd, client_error);
 		ctx->cmd_error_sent = TRUE;
 	}
 	if (ctx->cmd_error_sent) {
@@ -214,7 +215,7 @@ cmd_setmetadata_entry(struct imap_setmetadata_context *ctx,
 static bool cmd_setmetadata_continue(struct client_command_context *cmd)
 {
 	struct imap_setmetadata_context *ctx = cmd->context;
-	const char *entry, *error_string;
+	const char *entry, *client_error;
 	enum mail_error error;
 	const struct imap_arg *value;
 	int ret;
@@ -249,16 +250,16 @@ static bool cmd_setmetadata_continue(struct client_command_context *cmd)
 	} else if (ctx->storage_failure) {
 		if (ctx->box == NULL)
 			client_disconnect_if_inconsistent(cmd->client);
-		error_string = imap_metadata_transaction_get_last_error
+		client_error = imap_metadata_transaction_get_last_error
 			(ctx->trans, &error);
 		client_send_tagline(cmd,
-			imap_get_error_string(cmd, error_string, error));
+			imap_get_error_string(cmd, client_error, error));
 	} else if (imap_metadata_transaction_commit(&ctx->trans, 
-						&error, &error_string) < 0) {
+						&error, &client_error) < 0) {
 		if (ctx->box == NULL)
 			client_disconnect_if_inconsistent(cmd->client);
 		client_send_tagline(cmd,
-			imap_get_error_string(cmd, error_string, error));
+			imap_get_error_string(cmd, client_error, error));
 	} else {
 		client_send_tagline(cmd, "OK Setmetadata completed.");
 	}
@@ -272,6 +273,8 @@ cmd_setmetadata_start(struct imap_setmetadata_context *ctx)
 	struct client_command_context *cmd = ctx->cmd;
 	struct client *client = cmd->client;
 
+	imap_metadata_transaction_validated_only(ctx->trans,
+		!cmd->client->set->imap_metadata);
 	/* we support large literals, so read the values from client
 	   asynchronously the same way as APPEND does. */
 	client->input_lock = cmd;
@@ -309,7 +312,8 @@ cmd_setmetadata_mailbox(struct imap_setmetadata_context *ctx,
 	    mailbox_equals(client->mailbox, ns, mailbox))
 		ctx->box = client->mailbox;
 	else {
-		ctx->box = mailbox_alloc(ns->list, mailbox, 0);
+		ctx->box = mailbox_alloc(ns->list, mailbox,
+					 MAILBOX_FLAG_ATTRIBUTE_SESSION);
 		mailbox_set_reason(ctx->box, "SETMETADATA");
 		if (mailbox_open(ctx->box) < 0) {
 			client_send_box_error(cmd, ctx->box);
@@ -317,6 +321,7 @@ cmd_setmetadata_mailbox(struct imap_setmetadata_context *ctx,
 			return TRUE;
 		}
 	}
+	event_add_str(ctx->cmd->event, "mailbox", mailbox_get_vname(ctx->box));
 	ctx->trans = imap_metadata_transaction_begin(ctx->box);
 	return cmd_setmetadata_start(ctx);
 }
@@ -339,11 +344,6 @@ bool cmd_setmetadata(struct client_command_context *cmd)
 	if (!imap_arg_get_astring(&args[0], &mailbox) ||
 	    args[1].type != IMAP_ARG_LIST) {
 		client_send_command_error(cmd, "Invalid arguments.");
-		return TRUE;
-	}
-
-	if (!cmd->client->imap_metadata_enabled) {
-		client_send_command_error(cmd, "METADATA disabled.");
 		return TRUE;
 	}
 

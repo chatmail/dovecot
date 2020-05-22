@@ -37,7 +37,7 @@
 #define IMAP_CLIENT_MOVE_BACK_WITHOUT_INPUT_TIMEOUT_SECS (60*5)
 
 /* How often to try to unhibernate clients. */
-#define IMAP_UNHIBERNATE_RETRY_MSECS 10
+#define IMAP_UNHIBERNATE_RETRY_MSECS 100
 
 #define IMAP_CLIENT_BUFFER_FULL_ERROR "Client output buffer is full"
 
@@ -88,6 +88,7 @@ static void imap_client_stop(struct imap_client *client);
 void imap_client_destroy(struct imap_client **_client, const char *reason);
 static void imap_client_add_idle_keepalive_timeout(struct imap_client *client);
 static void imap_clients_unhibernate(void *context);
+static void imap_client_stop_notify_listening(struct imap_client *client);
 
 static void imap_client_disconnected(struct imap_client **_client)
 {
@@ -231,11 +232,19 @@ static bool imap_client_try_move_back(struct imap_client *client)
 	int max_secs = client->input_pending ?
 		IMAP_CLIENT_MOVE_BACK_WITH_INPUT_TIMEOUT_SECS :
 		IMAP_CLIENT_MOVE_BACK_WITHOUT_INPUT_TIMEOUT_SECS;
-	if (ioloop_time - client->move_back_start > max_secs) {
+	if (client->move_back_start != 0 &&
+	    ioloop_time - client->move_back_start > max_secs) {
 		/* we've waited long enough */
 		imap_client_destroy(&client, error);
 		return TRUE;
 	}
+	/* Stop listening for client's IOs while waiting for the next
+	   reconnection attempt. However if we got here because of an external
+	   notification keep waiting to see if client sends any IO, since that
+	   will cause the unhibernation to be aborted earlier. */
+	if (client->input_pending)
+		io_remove(&client->io);
+	imap_client_stop_notify_listening(client);
 	return FALSE;
 }
 
@@ -247,8 +256,10 @@ static void imap_client_move_back(struct imap_client *client)
 	/* imap-master socket is busy. retry in a while. */
 	if (client->move_back_start == 0)
 		client->move_back_start = ioloop_time;
-	client->unhibernate_queued = TRUE;
-	priorityq_add(unhibernate_queue, &client->item);
+	if (!client->unhibernate_queued) {
+		client->unhibernate_queued = TRUE;
+		priorityq_add(unhibernate_queue, &client->item);
+	}
 	if (to_unhibernate == NULL) {
 		to_unhibernate = timeout_add_short(IMAP_UNHIBERNATE_RETRY_MSECS,
 						   imap_clients_unhibernate, NULL);
@@ -579,19 +590,25 @@ imap_client_create(int fd, const struct imap_client_state *state)
 	return client;
 }
 
-static void imap_client_stop(struct imap_client *client)
+static void imap_client_stop_notify_listening(struct imap_client *client)
 {
 	struct imap_client_notify *notify;
-
-	if (client->unhibernate_queued)
-		priorityq_remove(unhibernate_queue, &client->item);
-	io_remove(&client->io);
-	timeout_remove(&client->to_keepalive);
 
 	array_foreach_modifiable(&client->notifys, notify) {
 		io_remove(&notify->io);
 		i_close_fd(&notify->fd);
 	}
+}
+
+static void imap_client_stop(struct imap_client *client)
+{
+	if (client->unhibernate_queued) {
+		priorityq_remove(unhibernate_queue, &client->item);
+		client->unhibernate_queued = FALSE;
+	}
+	io_remove(&client->io);
+	timeout_remove(&client->to_keepalive);
+	imap_client_stop_notify_listening(client);
 }
 
 void imap_client_destroy(struct imap_client **_client, const char *reason)
@@ -613,6 +630,8 @@ void imap_client_destroy(struct imap_client **_client, const char *reason)
 			"\n", NULL));
 	}
 
+	if (client->master_conn != NULL)
+		imap_master_connection_free(&client->master_conn);
 	if (client->ioloop_ctx != NULL) {
 		io_loop_context_remove_callbacks(client->ioloop_ctx,
 						 imap_client_io_activate_user,
@@ -691,7 +710,7 @@ static void imap_clients_unhibernate(void *context ATTR_UNUSED)
 {
 	struct priorityq_item *item;
 
-	while ((item = priorityq_pop(unhibernate_queue)) != NULL) {
+	while ((item = priorityq_peek(unhibernate_queue)) != NULL) {
 		struct imap_client *client = (struct imap_client *)item;
 
 		if (!imap_client_try_move_back(client))

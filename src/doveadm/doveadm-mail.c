@@ -462,7 +462,7 @@ doveadm_mail_next_user(struct doveadm_mail_cmd_context *ctx,
 	if (ctx->v.run(ctx, ctx->cur_mail_user) < 0) {
 		i_assert(ctx->exit_code != 0);
 	}
-	mail_user_unref(&ctx->cur_mail_user);
+	mail_user_deinit(&ctx->cur_mail_user);
 	mail_storage_service_user_unref(&ctx->cur_service_user);
 	return 1;
 }
@@ -825,7 +825,7 @@ bool doveadm_mail_try_run(const char *cmd_name, int argc, char *argv[])
 void doveadm_mail_register_cmd(const struct doveadm_mail_cmd *cmd)
 {
 	/* for now we'll just assume that cmd will be permanently in memory */
-	array_append(&doveadm_mail_cmds, cmd, 1);
+	array_push_back(&doveadm_mail_cmds, cmd);
 }
 
 const struct doveadm_mail_cmd *doveadm_mail_cmd_find(const char *cmd_name)
@@ -1030,7 +1030,7 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 			else
 				mctx->iterate_all_users = arg->value.v_bool;
 			fieldstr = "-A";
-			array_append(&full_args, &fieldstr, 1);
+			array_push_back(&full_args, &fieldstr);
 		} else if (strcmp(arg->name, "socket-path") == 0) {
 			doveadm_settings->doveadm_socket_path = arg->value.v_string;
 			if (doveadm_settings->doveadm_worker_count == 0)
@@ -1041,8 +1041,8 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 				cctx->username = arg->value.v_string;
 
 			fieldstr = "-u";
-			array_append(&full_args, &fieldstr, 1);
-			array_append(&full_args, &arg->value.v_string, 1);
+			array_push_back(&full_args, &fieldstr);
+			array_push_back(&full_args, &arg->value.v_string);
 			if (strchr(arg->value.v_string, '*') != NULL ||
 			    strchr(arg->value.v_string, '?') != NULL) {
 				if (tcp_server)
@@ -1057,9 +1057,9 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 			wildcard_user = "*";
 			mctx->users_list_input = arg->value.v_istream;
 			fieldstr = "-F";
-			array_append(&full_args, &fieldstr, 1);
+			array_push_back(&full_args, &fieldstr);
 			fieldstr = ""; /* value doesn't really matter */
-			array_append(&full_args, &fieldstr, 1);
+			array_push_back(&full_args, &fieldstr);
 			i_stream_ref(mctx->users_list_input);
 		} else if (strcmp(arg->name, "field") == 0 ||
 			   strcmp(arg->name, "flag") == 0) {
@@ -1068,7 +1068,7 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 			   fieldstr) */
 			fieldstr = p_array_const_string_join(mctx->pool,
 					&arg->value.v_array, " ");
-			array_append(&pargv, &fieldstr, 1);
+			array_push_back(&pargv, &fieldstr);
 		} else if (strcmp(arg->name, "file") == 0) {
 			/* input for doveadm_mail_get_input(),
 			   used by e.g. save */
@@ -1080,6 +1080,11 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 			}
 			mctx->cmd_input = arg->value.v_istream;
 			i_stream_ref(mctx->cmd_input);
+
+		} else if (strcmp(arg->name, "trans-flags") == 0) {
+			/* This parameter allows to set additional
+			 * mailbox transaction flags. */
+			mctx->transaction_flags = arg->value.v_int64;
 
 		/* Keep all named special parameters above this line */
 
@@ -1111,15 +1116,16 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 				return;
 			}
 
-			array_append(&full_args, &short_opt_str, 1);
+			array_push_back(&full_args, &short_opt_str);
 			if (arg->type == CMD_PARAM_STR)
-				array_append(&full_args, &arg->value.v_string, 1);
+				array_push_back(&full_args,
+						&arg->value.v_string);
 		} else if ((arg->flags & CMD_PARAM_FLAG_POSITIONAL) != 0) {
 			/* feed this into pargv */
 			if (arg->type == CMD_PARAM_ARRAY)
 				array_append_array(&pargv, &arg->value.v_array);
 			else if (arg->type == CMD_PARAM_STR)
-				array_append(&pargv, &arg->value.v_string, 1);
+				array_push_back(&pargv, &arg->value.v_string);
 		} else {
 			doveadm_exit_code = EX_USAGE;
 			i_error("invalid parameter: %s", arg->name);
@@ -1129,7 +1135,7 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 	}
 
 	const char *dashdash = "--";
-	array_append(&full_args, &dashdash, 1);
+	array_push_back(&full_args, &dashdash);
 
 	array_append_zero(&pargv);
 	/* All the -parameters need to be included in full_args so that
@@ -1138,7 +1144,7 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 	array_append_array(&full_args, &pargv);
 
 	mctx->args = array_idx(&full_args, args_pos);
-	mctx->full_args = array_idx(&full_args, 0);
+	mctx->full_args = array_front(&full_args);
 
 	doveadm_mail_cmd_exec(mctx, wildcard_user);
 	doveadm_mail_cmd_free(mctx);

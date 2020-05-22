@@ -40,8 +40,7 @@ passwd_check_warnings(struct auth_request *auth_request,
 	struct timeval end_tv;
 	unsigned int msecs, percentage;
 
-	if (gettimeofday(&end_tv, NULL) < 0)
-		return;
+	i_gettimeofday(&end_tv);
 
 	msecs = timeval_diff_msecs(&end_tv, start_tv);
 	if (msecs >= PASSWD_SLOW_WARN_MSECS) {
@@ -87,18 +86,17 @@ static void passwd_lookup(struct auth_request *auth_request,
 	const char *error;
 	int ret;
 
-	auth_request_log_debug(auth_request, AUTH_SUBSYS_DB, "lookup");
+	e_debug(authdb_event(auth_request), "lookup");
 
-	if (gettimeofday(&start_tv, NULL) < 0)
-		start_tv.tv_sec = 0;
+	i_gettimeofday(&start_tv);
 	ret = i_getpwnam(auth_request->user, &pw);
 	if (start_tv.tv_sec != 0)
 		passwd_check_warnings(auth_request, module, &start_tv);
 
 	switch (ret) {
 	case -1:
-		auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
-				       "getpwnam() failed: %m");
+		e_error(authdb_event(auth_request),
+			"getpwnam() failed: %m");
 		callback(USERDB_RESULT_INTERNAL_FAILURE, auth_request);
 		return;
 	case 0:
@@ -116,8 +114,8 @@ static void passwd_lookup(struct auth_request *auth_request,
 	auth_request_set_userdb_field(auth_request, "home", pw.pw_dir);
 
 	if (userdb_template_export(module->tmpl, auth_request, &error) < 0) {
-		auth_request_log_error(auth_request, AUTH_SUBSYS_DB,
-				       "Failed to expand template: %s", error);
+		e_error(authdb_event(auth_request),
+			"Failed to expand template: %s", error);
 		callback(USERDB_RESULT_INTERNAL_FAILURE, auth_request);
 	}
 
@@ -172,12 +170,16 @@ static void passwd_iterate_next(struct userdb_iterate_context *_ctx)
 		return;
 	}
 
+	/* reset errno since it might have been set when we got here */
 	errno = 0;
 	while ((pw = getpwent()) != NULL) {
 		if (passwd_iterate_want_pw(pw, set)) {
 			_ctx->callback(pw->pw_name, _ctx->context);
 			return;
 		}
+		/* getpwent might set errno to something even if it
+		   returns non-NULL. */
+		errno = 0;
 	}
 	if (errno != 0) {
 		i_error("getpwent() failed: %m");
@@ -204,7 +206,7 @@ static int passwd_iterate_deinit(struct userdb_iterate_context *_ctx)
 
 	if (cur_userdb_iter != NULL) {
 		cur_userdb_iter_to = timeout_add(0, passwd_iterate_next_timeout,
-						 (void *)NULL);
+						 NULL);
 	}
 	return ret;
 }

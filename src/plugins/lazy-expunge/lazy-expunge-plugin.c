@@ -184,11 +184,16 @@ lazy_expunge_count_in_transaction(struct lazy_expunge_transaction *lt,
 
 static int lazy_expunge_mail_is_last_instance(struct mail *_mail)
 {
+	struct mail_private *mail = (struct mail_private *)_mail;
 	struct lazy_expunge_transaction *lt =
 		LAZY_EXPUNGE_CONTEXT_REQUIRE(_mail->transaction);
 	const char *value, *errstr;
 	unsigned long refcount;
 	enum mail_error error;
+
+	/* mail is reused by the search query, so the next mail_prefetch() on
+	   it will try to prefetch the refcount */
+	mail->wanted_fields |= MAIL_FETCH_REFCOUNT;
 
 	if (mail_get_special(_mail, MAIL_FETCH_REFCOUNT, &value) < 0) {
 		errstr = mailbox_get_last_internal_error(_mail->box, &error);
@@ -214,22 +219,22 @@ static int lazy_expunge_mail_is_last_instance(struct mail *_mail)
 		   multiple times and we're deleting more than one instance
 		   within this transaction. in those cases each expunge will
 		   see the same refcount, so we need to adjust the refcount
-		   by tracking the expunged message GUIDs. */
-		if (mail_get_special(_mail, MAIL_FETCH_GUID, &value) < 0) {
+		   by tracking the expunged message's refcount IDs. */
+		if (mail_get_special(_mail, MAIL_FETCH_REFCOUNT_ID, &value) < 0) {
 			errstr = mailbox_get_last_internal_error(_mail->box, &error);
 			if (error == MAIL_ERROR_EXPUNGED) {
 				/* already expunged - just ignore it */
 				return 0;
 			}
 			mail_set_critical(_mail,
-				"lazy_expunge: Couldn't lookup message's GUID: %s", errstr);
+				"lazy_expunge: Couldn't lookup message's refcount ID: %s", errstr);
 			return -1;
 		}
 		if (*value == '\0') {
-			/* GUIDs not supported by backend, but refcounts are?
-			   not with our current backends. */
+			/* refcount IDs not supported by backend, but refcounts
+			   are? not with our current backends. */
 			mail_set_critical(_mail,
-				"lazy_expunge: Message unexpectedly has no GUID");
+				"lazy_expunge: Message unexpectedly has no refcount ID");
 			return -1;
 		}
 		refcount -= lazy_expunge_count_in_transaction(lt, value);
@@ -404,8 +409,7 @@ static void lazy_expunge_transaction_free(struct lazy_expunge_transaction *lt)
 		mailbox_transaction_rollback(&lt->dest_trans);
 	if (lt->dest_box != NULL)
 		mailbox_free(&lt->dest_box);
-	if (hash_table_is_created(lt->guids))
-		hash_table_destroy(&lt->guids);
+	hash_table_destroy(&lt->guids);
 	pool_unref(&lt->pool);
 	i_free(lt->delayed_errstr);
 	i_free(lt->delayed_internal_errstr);
