@@ -29,7 +29,6 @@
 #include "auth-worker-client.h"
 #include "auth-master-connection.h"
 #include "auth-client-connection.h"
-#include "auth-postfix-connection.h"
 #include "auth-policy.h"
 
 #include <unistd.h>
@@ -264,7 +263,6 @@ static void main_deinit(void)
 		/* cancel all pending anvil penalty lookups */
 		auth_penalty_deinit(&auth_penalty);
 	}
-	auth_policy_deinit();
 	/* deinit auth workers, which aborts pending requests */
         auth_worker_server_deinit();
 	/* deinit passdbs and userdbs. it aborts any pending async requests. */
@@ -279,11 +277,9 @@ static void main_deinit(void)
 
 	auth_client_connections_destroy_all();
 	auth_master_connections_destroy_all();
-	auth_postfix_connections_destroy_all();
+	auth_worker_connections_destroy_all();
 
-	if (auth_worker_client != NULL)
-		auth_worker_client_destroy(&auth_worker_client);
-
+	auth_policy_deinit();
 	mech_register_deinit(&mech_reg);
 	mech_deinit(global_auth_settings);
 
@@ -308,13 +304,13 @@ static void main_deinit(void)
 
 static void worker_connected(struct master_service_connection *conn)
 {
-	if (auth_worker_client != NULL) {
+	if (auth_worker_has_client()) {
 		i_error("Auth workers can handle only a single client");
 		return;
 	}
 
 	master_service_client_connection_accept(conn);
-	(void)auth_worker_client_create(auth_default_service(), conn->fd);
+	(void)auth_worker_client_create(auth_default_service(), conn);
 }
 
 static void client_connected(struct master_service_connection *conn)
@@ -340,7 +336,7 @@ static void client_connected(struct master_service_connection *conn)
 						    l->path, &l->st, TRUE);
 		break;
 	case AUTH_SOCKET_POSTFIX:
-		(void)auth_postfix_connection_create(auth, conn->fd);
+		e_error(auth_event, "postfix socketmap is no longer supported");
 		break;
 	case AUTH_SOCKET_LOGIN_CLIENT:
 		auth_client_connection_create(auth, conn->fd, TRUE, FALSE);
@@ -373,8 +369,11 @@ static void auth_die(void)
 int main(int argc, char *argv[])
 {
 	int c;
+	enum master_service_flags service_flags =
+		MASTER_SERVICE_FLAG_USE_SSL_SETTINGS |
+		MASTER_SERVICE_FLAG_NO_SSL_INIT;
 
-	master_service = master_service_init("auth", 0, &argc, &argv, "w");
+	master_service = master_service_init("auth", service_flags, &argc, &argv, "w");
 	master_service_init_log(master_service, "auth: ");
 
 	while ((c = master_getopt(master_service)) > 0) {

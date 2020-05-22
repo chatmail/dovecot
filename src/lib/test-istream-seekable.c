@@ -1,7 +1,10 @@
 /* Copyright (c) 2009-2018 Dovecot authors, see the included COPYING file */
 
 #include "test-lib.h"
+#include "sha2.h"
 #include "istream-private.h"
+#include "istream-sized.h"
+#include "istream-hash.h"
 #include "istream-seekable.h"
 
 #include <fcntl.h>
@@ -40,6 +43,7 @@ static void test_istream_seekable_one(unsigned int buffer_size)
 	streams[i] = NULL;
 
 	input = i_stream_create_seekable(streams, buffer_size, fd_callback, NULL);
+	test_assert(!input->blocking);
 	for (i = 0; i/STREAM_BYTES < STREAM_COUNT; i++) {
 		test_istream_set_size(streams[i/STREAM_BYTES], (i%STREAM_BYTES) + 1);
 		if (i < buffer_size) {
@@ -57,7 +61,9 @@ static void test_istream_seekable_one(unsigned int buffer_size)
 			test_assert((char)data[j] == input_string[(input->v_offset + j) % STREAM_BYTES]);
 		}
 	}
+	test_assert(!input->blocking);
 	test_assert(i_stream_read(input) == -1);
+	test_assert(input->blocking);
 	for (i = 0; i < STREAM_COUNT; i++) {
 		test_assert(streams[i]->eof && streams[i]->stream_errno == 0);
 		i_stream_unref(&streams[i]);
@@ -89,12 +95,14 @@ static void test_istream_seekable_random(void)
 
 	buffer_size = i_rand_minmax(1, 100); size = 0;
 	input = i_stream_create_seekable(streams, buffer_size, fd_callback, NULL);
+	test_assert(!input->blocking);
 
 	/* first read it through */
 	while (i_stream_read(input) > 0) {
 		size = i_stream_get_data_size(input);
 		i_stream_skip(input, size);
 	}
+	test_assert(input->blocking);
 
 	i_stream_seek(input, 0);
 	for (i = 0; i < 100; i++) {
@@ -186,6 +194,28 @@ static void test_istream_seekable_early_end(void)
 	test_end();
 }
 
+static void test_istream_seekable_invalid_read(void)
+{
+	test_begin("istream seekable + other streams causing invalid read");
+	struct sha256_ctx hash_ctx;
+	sha256_init(&hash_ctx);
+	struct istream *str_input = test_istream_create("123456");
+	str_input->seekable = FALSE;
+	struct istream *seek_inputs[] = { str_input, NULL };
+	struct istream *seek_input = i_stream_create_seekable(seek_inputs, 3, fd_callback, NULL);
+	struct istream *sized_input = i_stream_create_sized(seek_input, 3);
+	struct istream *input = i_stream_create_hash(sized_input, &hash_method_sha256, &hash_ctx);
+	test_assert(i_stream_read(input) == 3);
+	test_assert(i_stream_read(input) == -2);
+	i_stream_skip(input, 3);
+	test_assert(i_stream_read(input) == -1);
+	i_stream_unref(&input);
+	i_stream_unref(&sized_input);
+	i_stream_unref(&seek_input);
+	i_stream_unref(&str_input);
+	test_end();
+}
+
 void test_istream_seekable(void)
 {
 	unsigned int i;
@@ -203,4 +233,5 @@ void test_istream_seekable(void)
 
 	test_istream_seekable_eof();
 	test_istream_seekable_early_end();
+	test_istream_seekable_invalid_read();
 }

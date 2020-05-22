@@ -95,6 +95,7 @@ buffer_check_limits(struct real_buffer *buf, size_t pos, size_t data_size)
 	if (new_size > buf->used)
 		buf->used = new_size;
 	i_assert(buf->used <= buf->alloc);
+	i_assert(buf->w_buffer != NULL);
 }
 
 #undef buffer_create_from_data
@@ -232,6 +233,40 @@ void buffer_delete(buffer_t *_buf, size_t pos, size_t size)
 	buffer_set_used_size(_buf, pos + end_size);
 }
 
+void buffer_replace(buffer_t *_buf, size_t pos, size_t size,
+		    const void *data, size_t data_size)
+{
+	struct real_buffer *buf = (struct real_buffer *)_buf;
+	size_t end_size;
+
+	if (pos >= buf->used) {
+		buffer_write(_buf, pos, data, data_size);
+		return;
+	}
+	end_size = buf->used - pos;
+
+	if (size < end_size) {
+		end_size -= size;
+		if (data_size == 0) {
+			/* delete from between */
+			memmove(buf->w_buffer + pos,
+				buf->w_buffer + pos + size, end_size);
+		} else {
+			/* insert */
+			buffer_copy(_buf, pos + data_size, _buf, pos + size,
+				    (size_t)-1);
+			memcpy(buf->w_buffer + pos, data, data_size);
+		}
+	} else {
+		/* overwrite the end */
+		end_size = 0;
+		buffer_write(_buf, pos, data, data_size);
+	}
+
+	buffer_set_used_size(_buf, pos + data_size + end_size);
+}
+
+
 void buffer_write_zero(buffer_t *_buf, size_t pos, size_t data_size)
 {
 	struct real_buffer *buf = (struct real_buffer *)_buf;
@@ -271,6 +306,8 @@ void buffer_copy(buffer_t *_dest, size_t dest_pos,
 		copy_size = max_size;
 
 	buffer_check_limits(dest, dest_pos, copy_size);
+	i_assert(src->r_buffer != NULL);
+
 	if (src == dest) {
 		memmove(dest->w_buffer + dest_pos,
 			src->r_buffer + src_pos, copy_size);
@@ -305,6 +342,7 @@ void *buffer_get_modifiable_data(const buffer_t *_buf, size_t *used_size_r)
 
 	if (used_size_r != NULL)
 		*used_size_r = buf->used;
+	i_assert(buf->used == 0 || buf->w_buffer != NULL);
 	return buf->w_buffer;
 }
 
@@ -341,10 +379,20 @@ size_t buffer_get_writable_size(const buffer_t *_buf)
 	return buf->alloc-1;
 }
 
+size_t buffer_get_avail_size(const buffer_t *_buf)
+{
+	const struct real_buffer *buf = (const struct real_buffer *)_buf;
+
+	i_assert(buf->alloc >= buf->used);
+	return ((buf->dynamic ? SIZE_MAX : buf->alloc) - buf->used);
+}
+
 bool buffer_cmp(const buffer_t *buf1, const buffer_t *buf2)
 {
 	if (buf1->used != buf2->used)
 		return FALSE;
+	if (buf1->used == 0)
+		return TRUE;
 
 	return memcmp(buf1->data, buf2->data, buf1->used) == 0;
 }

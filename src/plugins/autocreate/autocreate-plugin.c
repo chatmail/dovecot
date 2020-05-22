@@ -61,7 +61,7 @@ add_autobox(struct mail_user *user, const char *vname, bool subscriptions)
 		set->name = p_strdup(user->pool, vname);
 		set->autocreate = MAILBOX_SET_AUTO_NO;
 		set->special_use = "";
-		array_append(&tmp_ns_set.mailboxes, &set, 1);
+		array_push_back(&tmp_ns_set.mailboxes, &set);
 	}
 	if (subscriptions)
 		set->autocreate = MAILBOX_SET_AUTO_SUBSCRIBE;
@@ -74,7 +74,7 @@ read_autobox_settings(struct mail_user *user, const char *env_name_base,
 		      bool subscriptions)
 {
 	const char *value;
-	char env_name[13+MAX_INT_STRLEN+1];
+	char env_name[strlen(env_name_base) + MAX_INT_STRLEN];
 	unsigned int i = 1;
 
 	value = mail_user_plugin_getenv(user, env_name_base);

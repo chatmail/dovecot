@@ -1,6 +1,11 @@
 #ifndef LIB_EVENT_PRIVATE_H
 #define LIB_EVENT_PRIVATE_H
 
+struct event_pointer {
+	const char *key;
+	void *value;
+};
+
 struct event {
 	struct event_passthrough event_passthrough;
 	/* linked list of all events, newest first */
@@ -12,6 +17,13 @@ struct event {
 	uint64_t id;
 
 	char *log_prefix;
+	unsigned int log_prefixes_dropped;
+	event_log_prefix_callback_t *log_prefix_callback;
+	void *log_prefix_callback_context;
+	event_log_message_callback_t *log_message_callback;
+	void *log_message_callback_context;
+	ARRAY(struct event_pointer) pointers;
+	enum log_type min_log_level;
 	bool log_prefix_from_system_pool:1;
 	bool log_prefix_replace:1;
 	bool passthrough:1;
@@ -19,8 +31,7 @@ struct event {
 	bool always_log_source:1;
 	bool sending_debug_log:1;
 	bool id_sent_to_stats:1;
-	/* Call callbacks with EVENT_CALLBACK_TYPE_FREE for this event. */
-	bool call_free:1;
+	bool debug_level_checked:1;
 
 /* Fields that are exported & imported: */
 	struct timeval tv_created_ioloop;
@@ -39,9 +50,11 @@ struct event {
 };
 
 enum event_callback_type {
+	/* Event was just created */
+	EVENT_CALLBACK_TYPE_CREATE,
 	/* Event is being sent */
-	EVENT_CALLBACK_TYPE_EVENT,
-	/* Event with call_free=TRUE is being freed */
+	EVENT_CALLBACK_TYPE_SEND,
+	/* Event is being freed */
 	EVENT_CALLBACK_TYPE_FREE,
 };
 
@@ -68,7 +81,7 @@ struct event_category *event_category_find_registered(const char *name);
 struct event_category *const *
 event_get_registered_categories(unsigned int *count_r);
 
-/* Register callback to be called whenever events are sent. */
+/* Register callback to be called for event's different states. */
 void event_register_callback(event_callback_t *callback);
 void event_unregister_callback(event_callback_t *callback);
 

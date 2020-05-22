@@ -32,7 +32,8 @@ enum io_notify_result {
 
 typedef void io_callback_t(void *context);
 typedef void timeout_callback_t(void *context);
-typedef void io_loop_time_moved_callback_t(time_t old_time, time_t new_time);
+typedef void io_loop_time_moved_callback_t(const struct timeval *old_time,
+					   const struct timeval *new_time);
 typedef void io_switch_callback_t(struct ioloop *prev_ioloop);
 
 /* Time when the I/O loop started calling handlers.
@@ -54,7 +55,7 @@ struct io *io_add(int fd, enum io_condition condition,
 		  unsigned int source_linenum,
 		  io_callback_t *callback, void *context) ATTR_NULL(5);
 #define io_add(fd, condition, callback, context) \
-	io_add(fd, condition, __FILE__, __LINE__ + \
+	io_add(fd, condition, __FILE__, __LINE__ - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
 struct io *io_add_to(struct ioloop *ioloop, int fd, enum io_condition condition,
@@ -62,7 +63,7 @@ struct io *io_add_to(struct ioloop *ioloop, int fd, enum io_condition condition,
 		  unsigned int source_linenum,
 		  io_callback_t *callback, void *context) ATTR_NULL(5);
 #define io_add_to(ioloop, fd, condition, callback, context) \
-	io_add_to(ioloop, fd, condition, __FILE__, __LINE__ + \
+	io_add_to(ioloop, fd, condition, __FILE__, __LINE__ - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
 
@@ -72,7 +73,7 @@ io_add_notify(const char *path, const char *source_filename,
 	      io_callback_t *callback, void *context,
 	      struct io **io_r) ATTR_NULL(3);
 #define io_add_notify(path, callback, context, io_r) \
-	io_add_notify(path, __FILE__, __LINE__ + \
+	io_add_notify(path, __FILE__, __LINE__ - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context, io_r)
 
@@ -80,7 +81,7 @@ struct io *io_add_istream(struct istream *input, const char *source_filename,
 			  unsigned int source_linenum,
 			  io_callback_t *callback, void *context) ATTR_NULL(3);
 #define io_add_istream(input, callback, context) \
-	io_add_istream(input, __FILE__, __LINE__ + \
+	io_add_istream(input, __FILE__, __LINE__ - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
 struct io *io_add_istream_to(struct ioloop *ioloop, struct istream *input,
@@ -89,7 +90,7 @@ struct io *io_add_istream_to(struct ioloop *ioloop, struct istream *input,
 			     io_callback_t *callback, void *context)
 	ATTR_NULL(3);
 #define io_add_istream_to(ioloop, input, callback, context) \
-	io_add_istream_to(ioloop, input, __FILE__, __LINE__ + \
+	io_add_istream_to(ioloop, input, __FILE__, __LINE__ - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
 
@@ -104,6 +105,9 @@ void io_remove_closed(struct io **io);
    if some of the input has already read into some internal buffer and the
    caller wants to handle it the same way as if the fd itself had input. */
 void io_set_pending(struct io *io);
+/* Returns TRUE if io_set_pending() has been called for the IO and its callback
+   hasn't been called yet. */
+bool io_is_pending(struct io *io);
 /* If set, this IO shouldn't be the only thing being waited on, because
    it would just result in infinite wait. In those situations rather just
    crash to indicate that there's a bug. */
@@ -115,8 +119,8 @@ timeout_add(unsigned int msecs, const char *source_filename,
 	    unsigned int source_linenum,
 	    timeout_callback_t *callback, void *context) ATTR_NULL(4);
 #define timeout_add(msecs, callback, context) \
-	timeout_add(msecs, __FILE__, __LINE__ + \
-		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))) + \
+	timeout_add(msecs, __FILE__, __LINE__ - \
+		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))) - \
 		COMPILE_ERROR_IF_TRUE(__builtin_constant_p(msecs) && \
 				      ((msecs) > 0 && (msecs) < 1000)), \
 		(io_callback_t *)callback, context)
@@ -125,8 +129,8 @@ timeout_add_to(struct ioloop *ioloop, unsigned int msecs,
 	       const char *source_filename, unsigned int source_linenum,
 	       timeout_callback_t *callback, void *context) ATTR_NULL(4);
 #define timeout_add_to(ioloop, msecs, callback, context) \
-	timeout_add_to(ioloop, msecs, __FILE__, __LINE__ + \
-		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))) + \
+	timeout_add_to(ioloop, msecs, __FILE__, __LINE__ - \
+		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))) - \
 		COMPILE_ERROR_IF_TRUE(__builtin_constant_p(msecs) && \
 				      ((msecs) > 0 && (msecs) < 1000)), \
 		(io_callback_t *)callback, context)
@@ -136,7 +140,7 @@ timeout_add_short(unsigned int msecs, const char *source_filename,
 		  unsigned int source_linenum,
 		  timeout_callback_t *callback, void *context) ATTR_NULL(4);
 #define timeout_add_short(msecs, callback, context) \
-	timeout_add_short(msecs, __FILE__, __LINE__ + \
+	timeout_add_short(msecs, __FILE__, __LINE__ - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
 struct timeout *
@@ -144,7 +148,7 @@ timeout_add_short_to(struct ioloop *ioloop, unsigned int msecs,
 		     const char *source_filename, unsigned int source_linenum,
 		     timeout_callback_t *callback, void *context) ATTR_NULL(4);
 #define timeout_add_short_to(ioloop, msecs, callback, context) \
-	timeout_add_short_to(ioloop, msecs, __FILE__, __LINE__ + \
+	timeout_add_short_to(ioloop, msecs, __FILE__, __LINE__ - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
 
@@ -154,7 +158,7 @@ timeout_add_absolute(const struct timeval *time,
 		     unsigned int source_linenum,
 		     timeout_callback_t *callback, void *context) ATTR_NULL(4);
 #define timeout_add_absolute(time, callback, context) \
-	timeout_add_absolute(time, __FILE__, __LINE__ + \
+	timeout_add_absolute(time, __FILE__, __LINE__ - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
 struct timeout *
@@ -164,7 +168,7 @@ timeout_add_absolute_to(struct ioloop *ioloop,
 			unsigned int source_linenum,
 			timeout_callback_t *callback, void *context) ATTR_NULL(4);
 #define timeout_add_absolute_to(ioloop, time, callback, context) \
-	timeout_add_absolute_to(ioloop, time, __FILE__, __LINE__ + \
+	timeout_add_absolute_to(ioloop, time, __FILE__, __LINE__ - \
 		CALLBACK_TYPECHECK(callback, void (*)(typeof(context))), \
 		(io_callback_t *)callback, context)
 
@@ -177,7 +181,11 @@ void timeout_reset(struct timeout *timeout);
 void io_loop_time_refresh(void);
 
 void io_loop_run(struct ioloop *ioloop);
-void io_loop_stop(struct ioloop *ioloop); /* safe to run in signal handler */
+/* Stop the ioloop immediately. No further IO or timeout callbacks are called.
+   This is safe to run in a signal handler. */
+void io_loop_stop(struct ioloop *ioloop);
+/* Stop ioloop after finishing all the pending IOs and timeouts. */
+void io_loop_stop_delayed(struct ioloop *ioloop);
 
 bool io_loop_is_running(struct ioloop *ioloop);
 
@@ -197,6 +205,8 @@ void io_loop_set_time_moved_callback(struct ioloop *ioloop,
 
 /* Change the current_ioloop. */
 void io_loop_set_current(struct ioloop *ioloop);
+/* Return the root ioloop. */
+struct ioloop *io_loop_get_root(void);
 /* Call the callback whenever ioloop is changed. */
 void io_loop_add_switch_callback(io_switch_callback_t *callback);
 void io_loop_remove_switch_callback(io_switch_callback_t *callback);
@@ -227,7 +237,7 @@ void io_loop_context_add_callbacks(struct ioloop_context *ctx,
 				   io_callback_t *deactivate, void *context);
 #define io_loop_context_add_callbacks(ctx, activate, deactivate, context) \
 	io_loop_context_add_callbacks(ctx, 1 ? (io_callback_t *)activate : \
-		CALLBACK_TYPECHECK(activate, void (*)(typeof(context))) + \
+		CALLBACK_TYPECHECK(activate, void (*)(typeof(context))) - \
 		CALLBACK_TYPECHECK(deactivate, void (*)(typeof(context))), \
 		(io_callback_t *)deactivate, context)
 /* Remove callbacks with the given callbacks and context. */
@@ -236,7 +246,7 @@ void io_loop_context_remove_callbacks(struct ioloop_context *ctx,
 				      io_callback_t *deactivate, void *context);
 #define io_loop_context_remove_callbacks(ctx, activate, deactivate, context) \
 	io_loop_context_remove_callbacks(ctx, 1 ? (io_callback_t *)activate : \
-		CALLBACK_TYPECHECK(activate, void (*)(typeof(context))) + \
+		CALLBACK_TYPECHECK(activate, void (*)(typeof(context))) - \
 		CALLBACK_TYPECHECK(deactivate, void (*)(typeof(context))), \
 		(io_callback_t *)deactivate, context)
 /* Returns the current context set to ioloop. */

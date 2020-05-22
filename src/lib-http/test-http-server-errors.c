@@ -7,6 +7,7 @@
 #include "istream.h"
 #include "ostream.h"
 #include "time-util.h"
+#include "sleep.h"
 #include "connection.h"
 #include "test-common.h"
 #include "http-url.h"
@@ -94,7 +95,7 @@ test_slow_request_input(struct client_connection *conn ATTR_UNUSED)
 static void
 test_slow_request_connected(struct client_connection *conn)
 {
-	(void)o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"GET / HTTP/1.1\r\n"
 		"Host: example.com\r\n"
 		"\r\n");
@@ -194,7 +195,7 @@ static void test_slow_request(void)
 static void
 test_hanging_request_payload_connected(struct client_connection *conn)
 {
-	(void)o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"GET / HTTP/1.1\r\n"
 		"Host: example.com\r\n"
 		"Content-Length: 1000\r\n"
@@ -329,7 +330,7 @@ static void test_hanging_request_payload(void)
 static void
 test_hanging_response_payload_connected(struct client_connection *conn)
 {
-	(void)o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"GET / HTTP/1.1\r\n"
 		"Host: example.com\r\n"
 		"Content-Length: 18\r\n"
@@ -432,7 +433,7 @@ static void test_hanging_response_payload(void)
 static void
 test_excessive_payload_length_connected1(struct client_connection *conn)
 {
-	(void)o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"GET / HTTP/1.1\r\n"
 		"Host: example.com\r\n"
 		"Content-Length: 150\r\n"
@@ -452,7 +453,7 @@ test_client_excessive_payload_length1(unsigned int index)
 static void
 test_excessive_payload_length_connected2(struct client_connection *conn)
 {
-	(void)o_stream_send_str(conn->conn.output,
+	o_stream_nsend_str(conn->conn.output,
 		"GET / HTTP/1.1\r\n"
 		"Host: example.com\r\n"
 		"Transfer-Encoding: chunked\r\n"
@@ -613,12 +614,12 @@ client_connection_init(const struct ip_addr *ip, in_port_t port)
 	struct client_connection *conn;
 	pool_t pool;
 
-	pool = pool_alloconly_create("client connection", 256);
+	pool = pool_alloconly_create("client connection", 512);
 	conn = p_new(pool, struct client_connection, 1);
 	conn->pool = pool;
 
-	connection_init_client_ip(client_conn_list,
-		&conn->conn, ip, port);
+	connection_init_client_ip(client_conn_list, &conn->conn, NULL,
+				  ip, port);
 	(void)connection_client_connect(&conn->conn);
 }
 
@@ -738,7 +739,7 @@ test_server_run(const struct http_server_settings *http_set)
 
 	/* open server socket */
 	io_listen = io_add(fd_listen,
-		IO_READ, server_connection_accept, (void *)NULL);
+		IO_READ, server_connection_accept, NULL);
 
 	http_server = http_server_init(http_set);
 
@@ -812,7 +813,8 @@ static void test_run_client_server(
 				if (debug)
 					i_debug("client[%d]: PID=%s", i+1, my_pid);
 				/* child: client */
-				usleep(100000); /* wait a little for server setup */
+				/* wait a little for server setup */
+				i_sleep_msecs(100);
 				i_close_fd(&fd_listen);
 				ioloop = io_loop_create();
 				client_test(i);
@@ -892,5 +894,5 @@ int main(int argc, char *argv[])
 	bind_ip.family = AF_INET;
 	bind_ip.u.ip4.s_addr = htonl(INADDR_LOOPBACK);	
 
-	test_run(test_functions);
+	return test_run(test_functions);
 }

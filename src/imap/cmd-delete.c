@@ -8,7 +8,7 @@ bool cmd_delete(struct client_command_context *cmd)
 	struct client *client = cmd->client;
 	struct mail_namespace *ns;
 	struct mailbox *box;
-	const char *name, *errstr;
+	const char *name, *client_error;
 	enum mail_error error;
 	bool disconnect = FALSE;
 
@@ -21,6 +21,7 @@ bool cmd_delete(struct client_command_context *cmd)
 		return TRUE;
 
 	box = mailbox_alloc(ns->list, name, 0);
+	event_add_str(cmd->event, "mailbox", mailbox_get_vname(box));
 	mailbox_set_reason(box, "DELETE");
 	if (mailbox_is_any_inbox(box)) {
 		/* IMAP protocol allows this, but I think it's safer to
@@ -40,12 +41,13 @@ bool cmd_delete(struct client_command_context *cmd)
 	if (mailbox_delete(box) == 0)
 		client_send_tagline(cmd, "OK Delete completed.");
 	else {
-		errstr = mailbox_get_last_error(box, &error);
+		client_error = mailbox_get_last_error(box, &error);
 		if (error != MAIL_ERROR_EXISTS)
 			client_send_box_error(cmd, box);
 		else {
 			/* mailbox has children */
-			client_send_tagline(cmd, t_strdup_printf("NO %s", errstr));
+			client_send_tagline(cmd, t_strdup_printf("NO %s",
+								 client_error));
 		}
 	}
 	mailbox_free(&box);

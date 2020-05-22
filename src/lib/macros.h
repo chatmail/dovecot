@@ -22,9 +22,9 @@
 	(((size) + MEM_ALIGN_SIZE-1) & ~((size_t) MEM_ALIGN_SIZE-1))
 
 #define PTR_OFFSET(ptr, offset) \
-	((void *) (((unsigned char *) (ptr)) + (offset)))
+	((void *) (((uintptr_t) (ptr)) + ((size_t) (offset))))
 #define CONST_PTR_OFFSET(ptr, offset) \
-	((const void *) (((const unsigned char *) (ptr)) + (offset)))
+	((const void *) (((uintptr_t) (ptr)) + ((size_t) (offset))))
 
 #define container_of(ptr, type, name) \
 	(type *)((uintptr_t)(ptr) - (uintptr_t)offsetof(type, name) + \
@@ -36,10 +36,10 @@
 #define I_MAX(a, b)  (((a) > (b)) ? (a) : (b))
 
 /* make it easier to cast from/to pointers. assumes that
-   sizeof(size_t) == sizeof(void *) and they're both the largest datatypes
+   sizeof(uintptr_t) == sizeof(void *) and they're both the largest datatypes
    that are allowed to be used. so, long long isn't safe with these. */
 #define POINTER_CAST(i) \
-	((void *) ((char *) NULL + (i)))
+	((void *) (((uintptr_t)NULL) + (i)))
 #define POINTER_CAST_TO(p, type) \
 	((type) ((const char *) (p) - (const char *) NULL))
 
@@ -234,11 +234,18 @@
 #  define STATIC_ARRAY
 #endif
 
-/* Convenience wrappers for initializing a struct */
+/* Convenience wrappers for initializing a struct with zeros, although it can
+   be used for replacing other memset()s also.
+
+   // NOTE: This is the correct way to zero the whole array
+   char arr[5]; i_zero(&arr);
+   // This will give compiler error (or zero only the first element):
+   char arr[5]; i_zero(arr);
+*/
 #define i_zero(p) \
-	memset(p, 0 +  + COMPILE_ERROR_IF_TRUE(sizeof(p) > sizeof(void *)), sizeof(*(p)))
+	memset(p, 0 + COMPILE_ERROR_IF_TRUE(sizeof(p) > sizeof(void *)), sizeof(*(p)))
 #define i_zero_safe(p) \
-	safe_memset(p, 0 +  + COMPILE_ERROR_IF_TRUE(sizeof(p) > sizeof(void *)), sizeof(*(p)))
+	safe_memset(p, 0 + COMPILE_ERROR_IF_TRUE(sizeof(p) > sizeof(void *)), sizeof(*(p)))
 
 #define ST_CHANGED(st_a, st_b) \
 	((st_a).st_mtime != (st_b).st_mtime || \

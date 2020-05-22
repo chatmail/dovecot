@@ -16,7 +16,9 @@ Contents
 
          2. OX (Open-Xchange) driver
 
-             1. Example Payload
+             1. Metadata
+
+             2. Example Payload
 
          3. Lua
 
@@ -166,6 +168,18 @@ by defining "user_from_metadata" in the push_notification_driver url, e.g.
 
 ---%<-------------------------------------------------------------------------
 push_notification_driver = ox:url=http://example.com/ user_from_metadata
+---%<-------------------------------------------------------------------------
+
+Metadata
+--------
+
+The push notifications are enabled separately for each user using METADATA.
+Normally <AppSuite.txt> does this internally, but for e.g. testing purposes you
+can do this yourself:
+
+---%<-------------------------------------------------------------------------
+doveadm mailbox metadata set -u user@example.com -s ""
+/private/vendor/vendor.dovecot/http-notify user=11@3
 ---%<-------------------------------------------------------------------------
 
 Example Payload
@@ -488,4 +502,4 @@ Called when message flags or keywords are removed. flags is a bitmask.
 keywords_clear contains the keywords cleared, keywords_old is the table of
 keywords that were set before the event.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

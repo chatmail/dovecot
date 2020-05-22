@@ -99,6 +99,7 @@ static void dns_client_disconnect(struct dns_client *client, const char *error)
 	i_zero(&result);
 	result.ret = EAI_FAIL;
 	result.error = error;
+	e_debug(client->conn.event, "Disconnect: %s", error);
 
 	lookup = client->head;
 	client->head = NULL;
@@ -108,7 +109,6 @@ static void dns_client_disconnect(struct dns_client *client, const char *error)
 		dns_lookup_free(&lookup);
 		lookup = next;
 	}
-	e_debug(client->event, "Disconnect: %s", error);
 }
 
 static void dns_client_destroy(struct connection *conn)
@@ -151,8 +151,7 @@ static void dns_lookup_save_msecs(struct dns_lookup *lookup)
 	struct timeval now;
 	int diff;
 
-	if (gettimeofday(&now, NULL) < 0)
-		i_fatal("gettimeofday() failed: %m");
+	i_gettimeofday(&now);
 
 	diff = timeval_diff_msecs(&now, &lookup->start_time);
 	if (diff > 0)
@@ -301,8 +300,12 @@ struct dns_client *dns_client_init(const struct dns_lookup_settings *set)
 	client->clist = connection_list_init(&dns_client_set, &dns_client_vfuncs);
 	client->ioloop = set->ioloop == NULL ? current_ioloop : set->ioloop;
 	client->path = i_strdup(set->dns_client_socket_path);
+
 	client->event = event_create(set->event_parent);
 	event_add_category(client->event, &event_category_dns);
+
+	client->conn.event_parent = client->event;
+	connection_init_client_unix(client->clist, &client->conn, client->path);
 	return client;
 }
 
@@ -325,8 +328,6 @@ int dns_client_connect(struct dns_client *client, const char **error_r)
 {
 	if (client->connected)
 		return 0;
-	client->conn.event_parent = client->event;
-	connection_init_client_unix(client->clist, &client->conn, client->path);
 	if (client->ioloop != NULL)
 		connection_switch_ioloop_to(&client->conn, client->ioloop);
 	int ret = connection_client_connect(&client->conn);
@@ -373,8 +374,7 @@ dns_client_lookup_common(struct dns_client *client,
 	lookup = p_new(pool, struct dns_lookup, 1);
 	lookup->pool = pool;
 
-	if (gettimeofday(&lookup->start_time, NULL) < 0)
-		i_fatal("gettimeofday() failed: %m");
+	i_gettimeofday(&lookup->start_time);
 
 	lookup->client = client;
 	lookup->callback = callback;

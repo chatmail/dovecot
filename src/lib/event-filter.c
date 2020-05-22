@@ -175,7 +175,9 @@ event_filter_add_fields(struct event_filter *filter,
 		   and numbers. */
 		int_fields[i].value.str = p_strdup(filter->pool, fields[i].value);
 		if (str_to_intmax(fields[i].value, &int_fields[i].value.intmax) < 0) {
-			/* not a number - no problem */
+			/* not a number - no problem
+			   Either we have a string, or a number with wildcards */
+			int_fields[i].value.intmax = INT_MIN;
 		}
 	}
 	int_query->fields_count = count;
@@ -230,17 +232,17 @@ void event_filter_merge(struct event_filter *dest,
 
 			t_array_init(&categories, int_query->categories_count);
 			for (i = 0; i < int_query->categories_count; i++) {
-				array_append(&categories,
-					     &int_query->categories[i].name, 1);
+				array_push_back(&categories,
+						&int_query->categories[i].name);
 			}
 			for (i = 0; i < N_ELEMENTS(event_filter_log_type_names); i++) {
 				if ((int_query->log_type_mask & (1 << i)) == 0)
 					continue;
-				array_append(&categories,
-					     &event_filter_log_type_names[i], 1);
+				array_push_back(&categories,
+						&event_filter_log_type_names[i]);
 			}
 			array_append_zero(&categories);
-			query.categories = array_idx(&categories, 0);
+			query.categories = array_front(&categories);
 		}
 		if (int_query->fields_count > 0) {
 			ARRAY(struct event_filter_field) fields;
@@ -253,7 +255,7 @@ void event_filter_merge(struct event_filter *dest,
 				field->value = p_strdup(dest->pool, int_query->fields[i].value.str);
 			}
 			array_append_zero(&fields);
-			query.fields = array_idx(&fields, 0);
+			query.fields = array_front(&fields);
 		}
 
 		event_filter_add(dest, &query);
@@ -340,11 +342,11 @@ bool event_filter_import_unescaped(struct event_filter *filter,
 			/* finish the query */
 			if (array_count(&categories) > 0) {
 				array_append_zero(&categories);
-				query.categories = array_idx(&categories, 0);
+				query.categories = array_front(&categories);
 			}
 			if (array_count(&fields) > 0) {
 				array_append_zero(&fields);
-				query.fields = array_idx(&fields, 0);
+				query.fields = array_front(&fields);
 			}
 			event_filter_add(filter, &query);
 
@@ -375,7 +377,7 @@ bool event_filter_import_unescaped(struct event_filter *filter,
 			}
 			break;
 		case EVENT_FILTER_CODE_CATEGORY:
-			array_append(&categories, &arg, 1);
+			array_push_back(&categories, &arg);
 			break;
 		case EVENT_FILTER_CODE_FIELD: {
 			struct event_filter_field *field;
@@ -405,7 +407,7 @@ event_category_match(const struct event_category *category,
 		     const struct event_category *wanted_category)
 {
 	for (; category != NULL; category = category->parent) {
-		if (category == wanted_category)
+		if (category->internal == wanted_category->internal)
 			return TRUE;
 	}
 	return FALSE;
@@ -456,18 +458,28 @@ event_match_field(struct event *event, const struct event_field *wanted_field)
 	/* wanted_field has the value in all available formats */
 	while ((field = event_find_field(event, wanted_field->key)) == NULL) {
 		event = event_get_parent(event);
-		if (event == NULL)
-			return FALSE;
+		if (event == NULL) {
+			/* "field=" matches nonexistent field */
+			return wanted_field->value.str[0] == '\0';
+		}
 	}
 	switch (field->value_type) {
 	case EVENT_FIELD_VALUE_TYPE_STR:
 		if (field->value.str[0] == '\0') {
-			/* field was removed */
-			return FALSE;
+			/* field was removed, but it matches "field=" filter */
+			return wanted_field->value.str[0] == '\0';
 		}
 		return wildcard_match_icase(field->value.str, wanted_field->value.str);
 	case EVENT_FIELD_VALUE_TYPE_INTMAX:
-		return field->value.intmax == wanted_field->value.intmax;
+		if (wanted_field->value.intmax > INT_MIN) {
+			/* compare against an integer */
+			return field->value.intmax == wanted_field->value.intmax;
+		} else {
+			/* compare against an "integer" with wildcards */
+			char tmp[MAX_INT_STRLEN];
+			i_snprintf(tmp, sizeof(tmp), "%jd", field->value.intmax);
+			return wildcard_match_icase(tmp, wanted_field->value.str);
+		}
 	case EVENT_FIELD_VALUE_TYPE_TIMEVAL:
 		/* there's no point to support matching exact timestamps */
 		return FALSE;
@@ -659,7 +671,7 @@ static void event_filter_category_registered(struct event_category *category)
 	struct event_filter *filter;
 
 	for (filter = event_filters; filter != NULL; filter = filter->next) {
-		if (!category->registered)
+		if (category->internal == NULL)
 			event_filter_remove_category(filter, category);
 		else
 			event_filter_add_missing_category(filter, category);

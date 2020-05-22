@@ -13,7 +13,7 @@ Contents
 
      2. Lua interface
 
-     3. Auth request accessors
+     3. Auth request methods
 
      4. Password database
 
@@ -58,8 +58,8 @@ Also, it registers object *struct auth_request** which lets access various
 parts of the auth request. You should use the loggers associated with
 auth_request when possible.
 
-Auth request accessors
-----------------------
+Auth request methods
+--------------------
 
 Functions:
 
@@ -75,6 +75,8 @@ Functions:
    using <Variables.txt>
  * auth_request#password_verify(crypted_password, plain_password) - checks if
    the plain password matches the crypted or hashed password
+ * auth_request#event() - Returns child event for the auth request, can be used
+   for logging and other events. Comes with a prefix. (Since v2.3.6+)
 
 Subtables:
 
@@ -288,4 +290,4 @@ function auth_userdb_iterate()
 end
 ---%<-------------------------------------------------------------------------
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

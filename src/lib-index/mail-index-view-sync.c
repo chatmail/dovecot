@@ -227,6 +227,9 @@ static bool view_sync_have_expunges(struct mail_index_view *view)
 	bool have_expunges = FALSE;
 	int ret;
 
+	if (mail_transaction_log_view_is_last(view->log_view))
+		return FALSE;
+
 	mail_transaction_log_view_mark(view->log_view);
 
 	while ((ret = mail_transaction_log_view_next(view->log_view,
@@ -295,7 +298,7 @@ static int view_sync_update_keywords(struct mail_index_view_sync_ctx *ctx,
 	kw_idx = array_get(&ctx->lost_new_kw, &count);
 	if (count == 0)
 		return 0;
-	kw_names = array_idx(&ctx->view->index->keywords, 0);
+	kw_names = array_front(&ctx->view->index->keywords);
 
 	i_zero(&thdr);
 	thdr.type = MAIL_TRANSACTION_KEYWORD_UPDATE | MAIL_TRANSACTION_EXTERNAL;

@@ -134,8 +134,8 @@ msgnum_to_seq_map_add(ARRAY_TYPE(uint32_t) *msgnum_to_seq_map,
 	   a POP3 order defined */
 	seq = array_count(msgnum_to_seq_map) + 1;
 	for (; seq <= msgnum; seq++)
-		array_append(msgnum_to_seq_map, &seq, 1);
-	array_append(msgnum_to_seq_map, &mail->seq, 1);
+		array_push_back(msgnum_to_seq_map, &seq);
+	array_push_back(msgnum_to_seq_map, &mail->seq);
 }
 
 static int read_mailbox(struct client *client, uint32_t *failed_uid_r)
@@ -198,7 +198,7 @@ static int read_mailbox(struct client *client, uint32_t *failed_uid_r)
 		if (client->highest_seq < mail->seq)
 			client->highest_seq = mail->seq;
 
-		array_append(&message_sizes, &size, 1);
+		array_push_back(&message_sizes, &size);
 		msgnum++;
 	}
 
@@ -224,12 +224,12 @@ static int read_mailbox(struct client *client, uint32_t *failed_uid_r)
 
 	client->trans = t;
 	client->message_sizes =
-		buffer_free_without_data(&message_sizes.arr.buffer);
+		array_free_without_data(&message_sizes);
 	if (array_is_created(&msgnum_to_seq_map)) {
 		client->msgnum_to_seq_map_count =
 			array_count(&msgnum_to_seq_map);
 		client->msgnum_to_seq_map =
-			buffer_free_without_data(&msgnum_to_seq_map.arr.buffer);
+			array_free_without_data(&msgnum_to_seq_map);
 	}
 	return 1;
 }
@@ -375,7 +375,7 @@ int pop3_lock_session(struct client *client)
 	return ret;
 }
 
-struct client *client_create(int fd_in, int fd_out, const char *session_id,
+struct client *client_create(int fd_in, int fd_out,
 			     struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
 			     const struct pop3_settings *set)
@@ -393,7 +393,6 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 	client->service_user = service_user;
 	client->v = pop3_client_vfuncs;
 	client->set = set;
-	client->session_id = p_strdup(pool, session_id);
 	client->fd_in = fd_in;
 	client->fd_out = fd_out;
 	client->input = i_stream_create_fd(fd_in, MAX_INBUF_SIZE);
@@ -536,9 +535,8 @@ static const char *client_stats(struct client *client)
 		{ 'i', dec2str(client->input->v_offset), "input" },
 		{ 'o', dec2str(client->output->offset), "output" },
 		{ 'u', uidl_change, "uidl_change" },
-		{ '\0', client->session_id, "session" },
-		{ 'd', !client->delete_success ? "0" :
-		       dec2str(client->deleted_size), "deleted_bytes" },
+		{ '\0', !client->delete_success ? "0" :
+		        dec2str(client->deleted_size), "deleted_bytes" },
 		{ '\0', NULL, NULL }
 	};
 	const struct var_expand_table *user_tab =
@@ -633,7 +631,7 @@ static void client_default_destroy(struct client *client, const char *reason)
 	   as an active POP3 session for the user. */
 	pop3_refresh_proctitle();
 	mail_user_autoexpunge(client->user);
-	mail_user_unref(&client->user);
+	mail_user_deinit(&client->user);
 	mail_storage_service_user_unref(&client->service_user);
 
 	pop3_client_count--;

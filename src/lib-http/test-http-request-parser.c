@@ -34,9 +34,14 @@ struct http_request_valid_parse_test {
 	enum http_request_parse_flags flags;
 };
 
+static const struct http_url default_base_url = {
+	.host = { .name = "example.org" },
+};
+
 static const struct http_request_valid_parse_test
 valid_request_parse_tests[] = {
-	{ .request =
+	{
+		.request =
 			"GET / HTTP/1.1\r\n"
 			"Host: example.com\r\n"
 			"\r\n",
@@ -44,11 +49,48 @@ valid_request_parse_tests[] = {
 		.target_raw = "/",
 		.target = {
 			.format = HTTP_REQUEST_TARGET_FORMAT_ORIGIN,
-			.url = { .host = { .name = "example.com" } }
+			.url = {
+				.host = { .name = "example.com" },
+				.path = "/",
+			},
 		},
 		.version_major = 1, .version_minor = 1,
-	},{ .request =
-			"OPTIONS * HTTP/1.0\r\n"
+	},
+	{
+		.request =
+			"GET / HTTP/1.1\r\n"
+			"Host: \r\n"
+			"\r\n",
+		.method = "GET",
+		.target_raw = "/",
+		.target = {
+			.format = HTTP_REQUEST_TARGET_FORMAT_ORIGIN,
+			.url = {
+				.host = { .name = "example.org" },
+				.path = "/",
+			},
+		},
+		.version_major = 1, .version_minor = 1,
+	},
+	{
+		.request =
+			"GET / HTTP/1.0\r\n"
+			"\r\n",
+		.method = "GET",
+		.target_raw = "/",
+		.target = {
+			.format = HTTP_REQUEST_TARGET_FORMAT_ORIGIN,
+			.url = {
+				.host = { .name = "example.org" },
+				.path = "/",
+			},
+		},
+		.version_major = 1, .version_minor = 0,
+		.connection_close = TRUE,
+	},
+	{
+		.request =
+			"OPTIONS * HTTP/1.1\r\n"
 			"Host: example.com\r\n"
 			"Connection: Keep-Alive\r\n"
 			"\r\n",
@@ -56,10 +98,29 @@ valid_request_parse_tests[] = {
 		.target_raw = "*",
 		.target = {
 			.format = HTTP_REQUEST_TARGET_FORMAT_ASTERISK,
-			.url = { .host = { .name = "example.com" } }
+			.url = {
+				.host = { .name = "example.com" },
+			},
+		},
+		.version_major = 1, .version_minor = 1,
+	},
+	{
+		.request =
+			"OPTIONS * HTTP/1.0\r\n"
+			"Connection: Keep-Alive\r\n"
+			"\r\n",
+		.method = "OPTIONS",
+		.target_raw = "*",
+		.target = {
+			.format = HTTP_REQUEST_TARGET_FORMAT_ASTERISK,
+			.url = {
+				.host = { .name = "example.org" },
+			},
 		},
 		.version_major = 1, .version_minor = 0,
-	},{ .request =
+	},
+	{
+		.request =
 			"CONNECT example.com:443 HTTP/1.2\r\n"
 			"Host: example.com:443\r\n"
 			"\r\n",
@@ -69,10 +130,13 @@ valid_request_parse_tests[] = {
 			.format = HTTP_REQUEST_TARGET_FORMAT_AUTHORITY,
 			.url = {
 				.host = { .name = "example.com" },
-				.port = 443 }
+				.port = 443,
+			}
 		},
 		.version_major = 1, .version_minor = 2,
-	},{ .request =
+	},
+	{
+		.request =
 			"GET https://www.example.com:443 HTTP/1.1\r\n"
 			"Host: www.example.com:80\r\n"
 			"\r\n",
@@ -83,11 +147,13 @@ valid_request_parse_tests[] = {
 			.url = {
 				.host = { .name = "www.example.com" },
 				.port = 443,
-				.have_ssl = TRUE
-			}
+				.have_ssl = TRUE,
+			},
 		},
 		.version_major = 1, .version_minor = 1,
-	},{ .request =
+	},
+	{
+		.request =
 			"POST http://api.example.com:8080/commit?user=dirk HTTP/1.1\r\n"
 			"Host: api.example.com:8080\r\n"
 			"Content-Length: 10\r\n"
@@ -99,11 +165,15 @@ valid_request_parse_tests[] = {
 			.format = HTTP_REQUEST_TARGET_FORMAT_ABSOLUTE,
 			.url = {
 				.host = { .name = "api.example.com" },
-				.port = 8080 }
+				.port = 8080,
+				.path = "/commit",
+			},
 		},
 		.version_major = 1, .version_minor = 1,
-		.payload = "Content!\r\n"
-	},{ .request =
+		.payload = "Content!\r\n",
+	},
+	{
+		.request =
 			"GET http://www.example.com/index.php?seq=1 HTTP/1.1\r\n"
 			"Host: www.example.com\r\n"
 			"Connection: close\r\n"
@@ -113,11 +183,15 @@ valid_request_parse_tests[] = {
 		.target = {
 			.format = HTTP_REQUEST_TARGET_FORMAT_ABSOLUTE,
 			.url = {
-				.host = { .name = "www.example.com" }}
+				.host = { .name = "www.example.com" },
+				.path = "/index.php",
+			},
 		},
 		.version_major = 1, .version_minor = 1,
-		.connection_close = TRUE
-	},{ .request =
+		.connection_close = TRUE,
+	},
+	{
+		.request =
 			"GET http://www.example.com/index.html HTTP/1.0\r\n"
 			"Host: www.example.com\r\n"
 			"\r\n",
@@ -125,11 +199,16 @@ valid_request_parse_tests[] = {
 		.target_raw = "http://www.example.com/index.html",
 		.target = {
 			.format = HTTP_REQUEST_TARGET_FORMAT_ABSOLUTE,
-			.url = { .host = { .name = "www.example.com" } }
+			.url = {
+				.host = { .name = "www.example.com" },
+				.path = "/index.html",
+			},
 		},
 		.version_major = 1, .version_minor = 0,
-		.connection_close = TRUE
-	},{ .request =
+		.connection_close = TRUE,
+	},
+	{
+		.request =
 			"GET http://www.example.com/index.html HTTP/1.1\r\n"
 			"Host: www.example.com\r\n"
 			"Expect: 100-continue\r\n"
@@ -138,11 +217,16 @@ valid_request_parse_tests[] = {
 		.target_raw = "http://www.example.com/index.html",
 		.target = {
 			.format = HTTP_REQUEST_TARGET_FORMAT_ABSOLUTE,
-			.url = { .host = { .name = "www.example.com" } }
+			.url = {
+				.host = { .name = "www.example.com" },
+				.path = "/index.html",
+			},
 		},
 		.version_major = 1, .version_minor = 1,
 		.expect_100_continue = TRUE
-	},{ .request =
+	},
+	{
+		.request =
 			"GET / HTTP/1.1\r\n"
 			"Date: Mon, 09 Kul 2018 02:24:29 GMT\r\n"
 			"Host: example.com\r\n"
@@ -151,10 +235,15 @@ valid_request_parse_tests[] = {
 		.target_raw = "/",
 		.target = {
 			.format = HTTP_REQUEST_TARGET_FORMAT_ORIGIN,
-			.url = { .host = { .name = "example.com" } }
+			.url = {
+				.host = { .name = "example.com" },
+				.path = "/",
+			},
 		},
 		.version_major = 1, .version_minor = 1,
-	},{ .request =
+	},
+	{
+		.request =
 			"GET / HTTP/1.1\r\n"
 			"Date: Sun, 07 Oct 2012 19:52:03 GMT\r\n"
 			"Host: example.com\r\n"
@@ -164,10 +253,31 @@ valid_request_parse_tests[] = {
 		.target_raw = "/",
 		.target = {
 			.format = HTTP_REQUEST_TARGET_FORMAT_ORIGIN,
-			.url = { .host = { .name = "example.com" } }
+			.url = {
+				.host = { .name = "example.com" },
+				.path = "/",
+			},
 		},
 		.version_major = 1, .version_minor = 1,
-	}
+	},
+	{
+		.request =
+			"GET //index.php HTTP/1.1\r\n"
+			"Date: Sun, 07 Oct 2012 19:52:03 GMT\r\n"
+			"Host: example.com\r\n"
+			"Date: Sun, 13 Oct 2013 13:13:13 GMT\r\n"
+			"\r\n",
+		.method = "GET",
+		.target_raw = "//index.php",
+		.target = {
+			.format = HTTP_REQUEST_TARGET_FORMAT_ORIGIN,
+			.url = {
+				.host = { .name = "example.com" },
+				.path = "//index.php",
+			},
+		},
+		.version_major = 1, .version_minor = 1,
+	},
 };
 
 static const unsigned int valid_request_parse_test_count =
@@ -189,6 +299,98 @@ _request_target_format(enum http_request_target_format target_format)
 	return t_strdup_printf("<<UNKNOWN: %u>>", target_format);
 }
 
+static void
+test_http_request_url_equal(const struct http_url *urlt,
+			    const struct http_url *urlp)
+{
+	if (urlp == NULL) {
+		test_out("request->target.url = (null)",
+			 (urlt->host.name == NULL && urlt->port == 0));
+		return;
+	}
+	if (urlp->host.name == NULL || urlt->host.name == NULL) {
+		test_out(t_strdup_printf("request->target.url->host.name = %s",
+					 urlp->host.name),
+			 (urlp->host.name == urlt->host.name));
+	} else {
+		test_out(t_strdup_printf("request->target.url->host.name = %s",
+					 urlp->host.name),
+			 strcmp(urlp->host.name, urlt->host.name) == 0);
+	}
+	if (urlp->port == 0) {
+		test_out("request->target.url->port = (unspecified)",
+			 urlp->port == urlt->port);
+	} else {
+		test_out(t_strdup_printf("request->target.url->port = %u",
+					 urlp->port),
+			 urlp->port == urlt->port);
+	}
+	test_out(t_strdup_printf("request->target.url->have_ssl = %s",
+				 (urlp->have_ssl ? "yes" : "no")),
+		 urlp->have_ssl == urlt->have_ssl);
+	if (urlp->path == NULL || urlt->path == NULL) {
+		test_out(t_strdup_printf("request->target.url->path = %s",
+					 urlp->path),
+			 urlp->path == urlt->path);
+	} else {
+		test_out(t_strdup_printf("request->target.url->path = %s",
+					 urlp->path),
+			 strcmp(urlp->path, urlt->path) == 0);
+	}
+}
+
+static void
+test_http_request_equal(const struct http_request_valid_parse_test *test,
+			struct http_request request, const char *payload)
+{
+	if (request.method == NULL || test->method == NULL) {
+		test_out(t_strdup_printf("request->method = %s",
+					 request.method),
+			 request.method == test->method);
+	} else {
+		test_out(t_strdup_printf("request->method = %s",
+					 request.method),
+			 strcmp(request.method, test->method) == 0);
+	}
+
+	if (request.target_raw == NULL || test->target_raw == NULL) {
+		test_out(t_strdup_printf("request->target_raw = %s",
+					 request.target_raw),
+			 request.target_raw == test->target_raw);
+	} else {
+		test_out(t_strdup_printf("request->target_raw = %s",
+					 request.target_raw),
+			 strcmp(request.target_raw, test->target_raw) == 0);
+	}
+
+	test_http_request_url_equal(&test->target.url, request.target.url);
+
+	test_out(t_strdup_printf("request->target_format = %s",
+				 _request_target_format(request.target.format)),
+		 request.target.format == test->target.format);
+
+	test_out(t_strdup_printf("request->version = %u.%u",
+				 request.version_major, request.version_minor),
+		 (request.version_major == test->version_major &&
+		  request.version_minor == test->version_minor));
+	test_out(t_strdup_printf("request->connection_close = %s",
+				 (request.connection_close ? "yes" : "no")),
+		 request.connection_close == test->connection_close);
+	test_out(t_strdup_printf("request->expect_100_continue = %s",
+				 (request.expect_100_continue ? "yes" : "no")),
+		 request.expect_100_continue == test->expect_100_continue);
+
+	if (payload == NULL || test->payload == NULL) {
+		test_out(t_strdup_printf("request->payload = %s",
+					 str_sanitize(payload, 80)),
+			 payload == test->payload);
+	} else {
+		test_out(t_strdup_printf("request->payload = %s",
+					 str_sanitize(payload, 80)),
+			 strcmp(payload, test->payload) == 0);
+	}
+}
+
 static void test_http_request_parse_valid(void)
 {
 	unsigned int i;
@@ -208,16 +410,19 @@ static void test_http_request_parse_valid(void)
 		test = &valid_request_parse_tests[i];
 		request_text = test->request;
 		request_text_len = strlen(request_text);
-		input = test_istream_create_data(request_text, request_text_len);
-		parser = http_request_parser_init(input, NULL, test->flags);
+		input = test_istream_create_data(request_text,
+						 request_text_len);
+		parser = http_request_parser_init(input, &default_base_url,
+						  NULL, test->flags);
 
 		test_begin(t_strdup_printf("http request valid [%d]", i));
 
 		payload = NULL;
 		for (pos = 0; pos <= request_text_len && ret == 0; pos++) {
 			test_istream_set_size(input, pos);
-			ret = http_request_parse_next
-				(parser, NULL, &request_parsed, &error_code, &error);
+			ret = http_request_parse_next(parser, NULL,
+						      &request_parsed,
+						      &error_code, &error);
 		}
 		test_istream_set_size(input, request_text_len);
 		i_stream_unref(&input);
@@ -228,88 +433,24 @@ static void test_http_request_parse_valid(void)
 				buffer_set_used_size(payload_buffer, 0);
 				output = o_stream_create_buffer(payload_buffer);
 				test_out("payload receive", 
-					o_stream_send_istream(output, request.payload) == OSTREAM_SEND_ISTREAM_RESULT_FINISHED);
+					 o_stream_send_istream(
+						output, request.payload) ==
+					 OSTREAM_SEND_ISTREAM_RESULT_FINISHED);
 				o_stream_destroy(&output);
 				payload = str_c(payload_buffer);
 			} else {
 				payload = NULL;
 			}
-			ret = http_request_parse_next
-				(parser, NULL, &request_parsed, &error_code, &error);
+			ret = http_request_parse_next(
+				parser, NULL, &request_parsed,
+				&error_code, &error);
 		}
 
 		test_out_reason("parse success", ret == 0, error);
 		
 		if (ret == 0) {
 			/* verify last request only */
-			if (request.method == NULL || test->method == NULL) {
-				test_out(t_strdup_printf("request->method = %s", request.method),
-					request.method == test->method);
-			} else {
-				test_out(t_strdup_printf("request->method = %s", request.method),
-					strcmp(request.method, test->method) == 0);
-			}
-
-			if (request.target_raw == NULL || test->target_raw == NULL) {
-				test_out(t_strdup_printf
-						("request->target_raw = %s", request.target_raw),
-					request.target_raw == test->target_raw);
-			} else {
-				test_out(t_strdup_printf
-						("request->target_raw = %s", request.target_raw),
-					strcmp(request.target_raw, test->target_raw) == 0);
-			}
-			if (request.target.url == NULL) {
-				test_out("request->target.url = (null)",
-					test->target.url.host.name == NULL && test->target.url.port == 0);
-			} else {
-				if (request.target.url->host.name == NULL ||
-					test->target.url.host.name == NULL) {
-					test_out(t_strdup_printf("request->target.url->host.name = %s",
-							request.target.url->host.name),
-						request.target.url->host.name == test->target.url.host.name);
-				} else {
-					test_out(t_strdup_printf("request->target.url->host.name = %s",
-							request.target.url->host.name),
-						strcmp(request.target.url->host.name,
-							test->target.url.host.name) == 0);
-				}
-				if (request.target.url->port == 0) {
-					test_out("request->target.url->port = (unspecified)",
-						request.target.url->port == test->target.url.port);
-				} else {
-					test_out(t_strdup_printf
-						("request->target.url->port = %u", request.target.url->port),
-						request.target.url->port == test->target.url.port);
-				}
-				test_out(t_strdup_printf("request->target.url->have_ssl = %s",
-					(request.target.url->have_ssl ? "yes" : "no")),
-					request.target.url->have_ssl == test->target.url.have_ssl);
-			}
-			test_out(t_strdup_printf("request->target_format = %s",
-					_request_target_format(request.target.format)),
-					request.target.format == test->target.format);
-
-			test_out(t_strdup_printf("request->version = %u.%u",
-					request.version_major, request.version_minor),
-					request.version_major == test->version_major &&
-					request.version_minor == test->version_minor);
-			test_out(t_strdup_printf("request->connection_close = %s",
-					(request.connection_close ? "yes" : "no")),
-					request.connection_close == test->connection_close);
-			test_out(t_strdup_printf("request->expect_100_continue = %s",
-					(request.expect_100_continue ? "yes" : "no")),
-					request.expect_100_continue == test->expect_100_continue);
-		
-			if (payload == NULL || test->payload == NULL) {
-				test_out(t_strdup_printf("request->payload = %s",
-					str_sanitize(payload, 80)),
-					payload == test->payload);
-			} else {
-				test_out(t_strdup_printf("request->payload = %s",
-					str_sanitize(payload, 80)),
-					strcmp(payload, test->payload) == 0);
-			}
+			test_http_request_equal(test, request, payload);
 		}
 		test_end();
 		http_request_parser_deinit(&parser);
@@ -331,59 +472,79 @@ struct http_request_invalid_parse_test {
 
 static const struct http_request_invalid_parse_test
 invalid_request_parse_tests[] = {
-	{ .request =
+	{
+		.request =
 			"GET: / HTTP/1.1\r\n"
 			"Host: example.com\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_BROKEN_REQUEST
-	},{ .request =
+	},
+	{
+		.request =
 			"GET % HTTP/1.1\r\n"
 			"Host: example.com\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_BAD_REQUEST
-	},{ .request =
+	},
+	{
+		.request =
 			"GET /frop\" HTTP/1.1\r\n"
 			"Host: example.com\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_BAD_REQUEST
-	},{ .request =
+	},
+	{
+		.request =
 			"GET / HTCPCP/1.0\r\n"
 			"Host: example.com\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_BROKEN_REQUEST
-	},{ .request =
+	},
+	{
+		.request =
 			"GET / HTTP/1.0.1\r\n"
 			"Host: example.com\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_BROKEN_REQUEST
-	},{ .request =
+	},
+	{
+		.request =
 			"GET / HTTP/1.1\r\n"
 			"Host: \"example.com\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_BAD_REQUEST
-	},{ .request =
+	},
+	{
+		.request =
 			"GET / HTTP/1.1\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_BAD_REQUEST
-	},{ .request =
+	},
+	{
+		.request =
 			"GET / HTTP/1.1\r\n"
 			"Host: www.example.com\r\n"
 			"Transfer-Encoding: gzip\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_BROKEN_REQUEST
-	},{ .request =
+	},
+	{
+		.request =
 			"GET / HTTP/1.1\r\n"
 			"Host: www.example.com\r\n"
 			"Expect: payment\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_EXPECTATION_FAILED
-	},{ .request =
+	},
+	{
+		.request =
 			"GET / HTTP/1.1\r\n"
 			"Host: www.example.com\r\n"
 			"Transfer-Encoding: cuneiform, chunked\r\n"
 			"\r\n",
 		.error_code = HTTP_REQUEST_PARSE_ERROR_NOT_IMPLEMENTED
-	},{
+	},
+	{
 		.request =
 			"GET / HTTP/1.1\r\n"
 			"Date: Mon, 09 Kul 2018 02:24:29 GMT\r\n"
@@ -391,7 +552,8 @@ invalid_request_parse_tests[] = {
 			"\r\n",
 		.flags = HTTP_REQUEST_PARSE_FLAG_STRICT,
 		.error_code = HTTP_REQUEST_PARSE_ERROR_BROKEN_REQUEST
-	},{
+	},
+	{
 		.request =
 			"GET / HTTP/1.1\r\n"
 			"Date: Sun, 07 Oct 2012 19:52:03 GMT\r\n"
@@ -447,8 +609,10 @@ static void test_http_request_parse_invalid(void)
 	for (i = 0; i < invalid_request_parse_test_count; i++) T_BEGIN {
 		test = &invalid_request_parse_tests[i];
 		request_text = test->request;
-		input = i_stream_create_from_data(request_text, strlen(request_text));
-		parser = http_request_parser_init(input, NULL, test->flags);
+		input = i_stream_create_from_data(request_text,
+						  strlen(request_text));
+		parser = http_request_parser_init(input, &default_base_url,
+						  NULL, test->flags);
 		i_stream_unref(&input);
 
 		test_begin(t_strdup_printf("http request invalid [%d]", i));
@@ -458,8 +622,10 @@ static void test_http_request_parse_invalid(void)
 
 		test_out_reason("parse failure", ret < 0, error);
 		if (ret < 0) {
+			const char *error = _request_parse_error(error_code);
 			test_out(t_strdup_printf("parse error code = %s",
-				_request_parse_error(error_code)), error_code == test->error_code);
+						 error),
+				 error_code == test->error_code);
 		}
 		test_end();
 		http_request_parser_deinit(&parser);
@@ -490,8 +656,8 @@ static void test_http_request_parse_bad(void)
 	test_begin("http request with NULs (strict)");
 	input = i_stream_create_from_data(bad_request_with_nuls,
 					  sizeof(bad_request_with_nuls)-1);
-	parser = http_request_parser_init(input, NULL,
-		HTTP_REQUEST_PARSE_FLAG_STRICT);
+	parser = http_request_parser_init(input, &default_base_url, NULL,
+					  HTTP_REQUEST_PARSE_FLAG_STRICT);
 	i_stream_unref(&input);
 
 	while ((ret=http_request_parse_next
@@ -504,7 +670,7 @@ static void test_http_request_parse_bad(void)
 	test_begin("http request with NULs (lenient)");
 	input = i_stream_create_from_data(bad_request_with_nuls,
 					  sizeof(bad_request_with_nuls)-1);
-	parser = http_request_parser_init(input, NULL, 0);
+	parser = http_request_parser_init(input, &default_base_url, NULL, 0);
 	i_stream_unref(&input);
 
 	ret = http_request_parse_next

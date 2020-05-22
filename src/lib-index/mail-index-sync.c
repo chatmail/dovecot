@@ -25,6 +25,7 @@ struct mail_index_sync_ctx {
 	uint32_t next_uid;
 
 	bool no_warning:1;
+	bool seen_external_expunges:1;
 	bool seen_nonexternal_transactions:1;
 	bool fully_synced:1;
 };
@@ -187,8 +188,12 @@ mail_index_sync_read_and_sort(struct mail_index_sync_ctx *ctx)
 	while ((ret = mail_transaction_log_view_next(ctx->view->log_view,
 						     &ctx->hdr,
 						     &ctx->data)) > 0) {
-		if ((ctx->hdr->type & MAIL_TRANSACTION_EXTERNAL) != 0)
+		if ((ctx->hdr->type & MAIL_TRANSACTION_EXTERNAL) != 0) {
+			if ((ctx->hdr->type & (MAIL_TRANSACTION_EXPUNGE |
+					       MAIL_TRANSACTION_EXPUNGE_GUID)) != 0)
+				ctx->seen_external_expunges = TRUE;
 			continue;
+		}
 
 		T_BEGIN {
 			if (mail_index_sync_add_transaction(ctx)) {
@@ -220,7 +225,7 @@ mail_index_sync_read_and_sort(struct mail_index_sync_ctx *ctx)
 	}
 
 	keyword_updates = keyword_count == 0 ? NULL :
-		array_idx(&sync_trans->keyword_updates, 0);
+		array_front(&sync_trans->keyword_updates);
 	for (i = 0; i < keyword_count; i++) {
 		if (array_is_created(&keyword_updates[i].add_seq)) {
 			synclist = array_append_space(&ctx->sync_list);
@@ -782,13 +787,29 @@ mail_index_sync_update_mailbox_offset(struct mail_index_sync_ctx *ctx)
 		/* Everything wasn't synced. This usually means that syncing
 		   was used for locking and nothing was synced. Don't update
 		   tail offset. */
-		mail_transaction_log_view_get_prev_pos(ctx->view->log_view,
-						       &seq, &offset);
 		return;
 	}
-	/* synced everything, but we might also have committed new
-	   transactions. include them also here. */
-	mail_transaction_log_get_head(ctx->index->log, &seq, &offset);
+	/* All changes were synced. During the syncing other transactions may
+	   have been created and committed as well. They're expected to be
+	   external transactions. These could be at least:
+	    - mdbox finishing expunges
+	    - mdbox writing to dovecot.map.index (requires tail offset updates)
+	    - sdbox appending messages
+
+	   If any expunges were committed, tail_offset must not be updated
+	   before mail_index_map(MAIL_INDEX_SYNC_HANDLER_FILE) is called.
+	   Otherwise expunge handlers won't be called for them.
+
+	   We'll require MAIL_INDEX_SYNC_FLAG_UPDATE_TAIL_OFFSET flag for the
+	   few places that actually require tail_offset to include the
+	   externally committed transactions. Otherwise tail_offset is updated
+	   only up to what was just synced. */
+	if ((ctx->flags & MAIL_INDEX_SYNC_FLAG_UPDATE_TAIL_OFFSET) != 0)
+		mail_transaction_log_get_head(ctx->index->log, &seq, &offset);
+	else {
+		mail_transaction_log_view_get_prev_pos(ctx->view->log_view,
+						       &seq, &offset);
+	}
 	mail_transaction_log_set_mailbox_sync_pos(ctx->index->log, seq, offset);
 
 	/* If tail offset has changed, make sure it gets written to
@@ -797,9 +818,12 @@ mail_index_sync_update_mailbox_offset(struct mail_index_sync_ctx *ctx)
 	   avoid writing a new tail offset if all the transactions were
 	   external, because that wouldn't change effective the tail offset.
 	   except e.g. mdbox map requires this to happen, so do it
-	   optionally. */
+	   optionally. Also update the tail if we've been calling any expunge
+	   handlers, so they won't be called multiple times. That could cause
+	   at least cache file's [deleted_]record_count to shrink too much. */
 	if ((hdr->log_file_seq != seq || hdr->log_file_tail_offset < offset) &&
-	    (ctx->seen_nonexternal_transactions ||
+	    (ctx->seen_external_expunges ||
+	     ctx->seen_nonexternal_transactions ||
 	     (ctx->flags & MAIL_INDEX_SYNC_FLAG_UPDATE_TAIL_OFFSET) != 0)) {
 		ctx->ext_trans->log_updates = TRUE;
 		ctx->ext_trans->tail_offset_changed = TRUE;
@@ -855,13 +879,6 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **_ctx)
 	}
 
 	mail_index_sync_update_mailbox_offset(ctx);
-	if (mail_cache_need_compress(index->cache)) {
-		/* if cache compression fails, we don't really care.
-		   the cache offsets are updated only if the compression was
-		   successful. */
-		(void)mail_cache_compress(index->cache, ctx->ext_trans,
-					  &cache_lock);
-	}
 
 	if ((ctx->flags & MAIL_INDEX_SYNC_FLAG_DROP_RECENT) != 0) {
 		next_uid = mail_index_transaction_get_next_uid(ctx->ext_trans);
@@ -882,8 +899,6 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **_ctx)
 	}
 
 	ret2 = mail_index_transaction_commit(&ctx->ext_trans);
-	if (cache_lock != NULL)
-		mail_cache_compress_unlock(&cache_lock);
 	if (ret2 < 0) {
 		mail_index_sync_end(&ctx);
 		return -1;
@@ -904,7 +919,44 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **_ctx)
 		ret = -1;
 	index->sync_commit_result = NULL;
 
-	want_rotate = mail_transaction_log_want_rotate(index->log);
+	/* The previously called expunged handlers will update cache's
+	   record_count and deleted_record_count. That also has a side effect
+	   of updating whether cache needs to be compressed. */
+	if (ret == 0 && mail_cache_need_compress(index->cache)) {
+		struct mail_index_transaction *cache_trans;
+		enum mail_index_transaction_flags trans_flags;
+
+		trans_flags = MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL;
+		if ((ctx->flags & MAIL_INDEX_SYNC_FLAG_FSYNC) != 0)
+			trans_flags |= MAIL_INDEX_TRANSACTION_FLAG_FSYNC;
+		cache_trans = mail_index_transaction_begin(ctx->view, trans_flags);
+		if (mail_cache_compress(index->cache, cache_trans,
+					&cache_lock) < 0)
+			mail_index_transaction_rollback(&cache_trans);
+		else {
+			/* can't really do anything if index commit fails */
+			(void)mail_index_transaction_commit(&cache_trans);
+			mail_cache_compress_unlock(&cache_lock);
+			/* Make sure the newly committed cache record offsets
+			   are updated to the current index. This is important
+			   if the dovecot.index gets recreated below, because
+			   rotation of dovecot.index.log also re-maps the index
+			   to make sure everything is up-to-date. But if it
+			   wasn't, mail_index_write() will just assert-crash
+			   because log_file_head_offset changed. */
+			if (mail_index_map(ctx->index, MAIL_INDEX_SYNC_HANDLER_FILE) <= 0)
+				ret = -1;
+		}
+	}
+
+	/* Log rotation is allowed only if everything was synced. Note that
+	   tail_offset might not equal head_offset here, because
+	   mail_index_sync_update_mailbox_offset() doesn't always update
+	   tail_offset to skip over other committed external transactions.
+	   However, it's still safe to do the rotation because external
+	   transactions don't require syncing. */
+	want_rotate = ctx->fully_synced &&
+		mail_transaction_log_want_rotate(index->log);
 	if (ret == 0 &&
 	    (want_rotate || mail_index_sync_want_index_write(index))) {
 		index->need_recreate = FALSE;
@@ -945,7 +997,7 @@ bool mail_index_sync_keywords_apply(const struct mail_index_sync_rec *sync_rec,
 				return FALSE;
 		}
 
-		array_append(keywords, &idx, 1);
+		array_push_back(keywords, &idx);
 		return TRUE;
 	case MAIL_INDEX_SYNC_TYPE_KEYWORD_REMOVE:
 		for (i = 0; i < count; i++) {

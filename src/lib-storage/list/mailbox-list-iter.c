@@ -131,10 +131,10 @@ mailbox_list_iter_init_autocreate(struct mailbox_list_iterate_context *ctx)
 						     ns, box_sets[i]);
 
 		/* autocreate mailbox belongs to listed namespace */
-		array_append(&actx->all_ns_box_sets, &set, 1);
+		array_push_back(&actx->all_ns_box_sets, &set);
 		if ((ctx->flags & MAILBOX_LIST_ITER_SELECT_SUBSCRIBED) == 0 ||
 		    strcmp(set->autocreate, MAILBOX_SET_AUTO_SUBSCRIBE) == 0) {
-			array_append(&actx->box_sets, &set, 1);
+			array_push_back(&actx->box_sets, &set);
 			autobox = array_append_space(&actx->boxes);
 			autobox->name = set->name;
 			autobox->set = set;
@@ -518,6 +518,7 @@ mailbox_list_ns_prefix_return(struct ns_list_iterate_context *ctx,
 
 static void inbox_set_children_flags(struct ns_list_iterate_context *ctx)
 {
+	struct mail_namespace *ns;
 	const char *prefix;
 	int ret;
 
@@ -527,7 +528,8 @@ static void inbox_set_children_flags(struct ns_list_iterate_context *ctx)
 				      MAILBOX_NOCHILDREN)) != 0)
 		return;
 
-	if (mail_namespace_find_prefix(ctx->namespaces, "") == NULL) {
+	ns = mail_namespace_find_prefix(ctx->namespaces, "");
+	if (ns == NULL || (ns->flags & NAMESPACE_FLAG_UNUSABLE) != 0) {
 		/* prefix="" namespace doesn't exist, and neither does
 		   anything beginning with prefix=INBOX/ (we checked this
 		   earlier). there's no way to create children for INBOX. */

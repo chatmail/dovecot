@@ -343,7 +343,7 @@ parse_login_source_ips(const char *ips_str, unsigned int *count_r)
 		for (i = 0; i < tmp_ips_count; i++) {
 			if (skip_nonworking && net_try_bind(&tmp_ips[i]) < 0)
 				continue;
-			array_append(&ips, &tmp_ips[i], 1);
+			array_push_back(&ips, &tmp_ips[i]);
 		}
 	}
 	return array_get(&ips, count_r);
@@ -467,6 +467,7 @@ static void main_init(const char *login_socket)
 
 	auth_client = auth_client_init(login_socket, (unsigned int)getpid(),
 				       FALSE);
+	auth_client_connect(auth_client);
         auth_client_set_connect_notify(auth_client, auth_connect_notify, NULL);
 	master_auth = master_auth_init(master_service, post_login_socket);
 
@@ -553,9 +554,9 @@ int login_binary_run(const struct login_binary *binary,
 				    &global_other_settings);
 
 	main_preinit();
-	master_service_init_finish(master_service);
 	main_init(login_socket);
 
+	master_service_init_finish(master_service);
 	master_service_run(master_service, client_connected);
 	main_deinit();
 	pool_unref(&set_pool);

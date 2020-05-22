@@ -21,6 +21,7 @@
 #include "imap-master-client.h"
 #include "imap-resp-code.h"
 #include "imap-commands.h"
+#include "imap-feature.h"
 #include "imap-fetch.h"
 
 #include <stdio.h>
@@ -249,9 +250,16 @@ int client_create_from_input(const struct mail_storage_service_input *input,
 	event_add_category(event, &event_category_imap);
 	event_add_fields(event, (const struct event_add_field []){
 		{ .key = "user", .value = input->username },
-		{ .key = "session", .value = input->session_id },
 		{ .key = NULL }
 	});
+	if (input->local_ip.family != 0)
+		event_add_str(event, "local_ip", net_ip2addr(&input->local_ip));
+	if (input->local_port != 0)
+		event_add_int(event, "local_port", input->local_port);
+	if (input->remote_ip.family != 0)
+		event_add_str(event, "remote_ip", net_ip2addr(&input->remote_ip));
+	if (input->remote_port != 0)
+		event_add_int(event, "remote_port", input->remote_port);
 
 	service_input = *input;
 	service_input.parent_event = event;
@@ -260,6 +268,10 @@ int client_create_from_input(const struct mail_storage_service_input *input,
 		event_unref(&event);
 		return -1;
 	}
+	/* Add the session only after creating the user, because
+	   input->session_id may be NULL */
+	event_add_str(event, "session", mail_user->session_id);
+
 	restrict_access_allow_coredumps(TRUE);
 
 	smtp_set = mail_storage_service_user_get_set(user)[1];
@@ -274,13 +286,13 @@ int client_create_from_input(const struct mail_storage_service_input *input,
 				mail_user->pool, mail_user_var_expand_table(mail_user),
 				&errstr) <= 0) {
 		*error_r = t_strdup_printf("Failed to expand settings: %s", errstr);
-		mail_user_unref(&mail_user);
+		mail_user_deinit(&mail_user);
 		mail_storage_service_user_unref(&user);
 		event_unref(&event);
 		return -1;
 	}
 
-	client = client_create(fd_in, fd_out, input->session_id,
+	client = client_create(fd_in, fd_out,
 			       event, mail_user, user, imap_set, smtp_set);
 	client->userdb_fields = input->userdb_fields == NULL ? NULL :
 		p_strarray_dup(client->pool, input->userdb_fields);
@@ -481,6 +493,8 @@ int main(int argc, char *argv[])
 	/* plugins may want to add commands, so this needs to be called early */
 	commands_init();
 	imap_fetch_handlers_init();
+	imap_features_init();
+	clients_init();
 	imap_master_clients_init();
 
 	const char *error;
@@ -525,6 +539,8 @@ int main(int argc, char *argv[])
 	mail_storage_service_deinit(&storage_service);
 
 	imap_fetch_handlers_deinit();
+	imap_features_deinit();
+
 	commands_deinit();
 	imap_master_clients_deinit();
 

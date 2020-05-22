@@ -41,6 +41,26 @@ smtp_reply_get_enh_code(const struct smtp_reply *reply)
 		reply->enhanced_code.x, reply->enhanced_code.y, reply->enhanced_code.z);
 }
 
+const char *const *
+smtp_reply_get_text_lines_omit_prefix(const struct smtp_reply *reply)
+{
+	unsigned int lines_count, i;
+	const char **lines;
+	const char *p;
+
+	if ((p=strchr(reply->text_lines[0], ' ')) == NULL)
+		return reply->text_lines;
+
+	lines_count = str_array_length(reply->text_lines);
+	lines = t_new(const char *, lines_count + 1);
+
+	lines[0] = p + 1;
+	for (i = 1; i < lines_count; i++)
+		lines[i] = reply->text_lines[i];
+
+	return lines;
+}
+
 void
 smtp_reply_write(string_t *out, const struct smtp_reply *reply)
 {
@@ -80,10 +100,23 @@ smtp_reply_write(string_t *out, const struct smtp_reply *reply)
 	}
 }
 
+static void
+smtp_reply_write_message_one_line(string_t *out, const struct smtp_reply *reply)
+{
+	const char *const *lines;
+
+	lines = reply->text_lines;
+	while (*lines != NULL) {
+		if (str_len(out) > 0)
+			str_append_c(out, ' ');
+		str_append(out, *lines);
+		lines++;
+	}
+}
+
 void smtp_reply_write_one_line(string_t *out, const struct smtp_reply *reply)
 {
 	const char *enh_code = smtp_reply_get_enh_code(reply);
-	const char *const *lines;
 
 	i_assert(reply->status < 560);
 	i_assert(reply->enhanced_code.x < 6);
@@ -94,17 +127,11 @@ void smtp_reply_write_one_line(string_t *out, const struct smtp_reply *reply)
 		str_append(out, enh_code);
 	}
 
-	lines = reply->text_lines;
-	while (*lines != NULL) {
-		str_append_c(out, ' ');
-		str_append(out, *lines);
-		lines++;
-	}
+	smtp_reply_write_message_one_line(out, reply);
 }
 
 const char *smtp_reply_log(const struct smtp_reply *reply)
 {
-	const char *const *lines;
 	string_t *msg = t_str_new(256);
 
 	if (smtp_reply_is_remote(reply)) {
@@ -117,13 +144,15 @@ const char *smtp_reply_log(const struct smtp_reply *reply)
 		}
 	}
 
-	lines = reply->text_lines;
-	while (*lines != NULL) {
-		if (str_len(msg) > 0)
-			str_append_c(msg, ' ');
-		str_append(msg, *lines);
-		lines++;
-	}
+	smtp_reply_write_message_one_line(msg, reply);
+	return str_c(msg);
+}
+
+const char *smtp_reply_get_message(const struct smtp_reply *reply)
+{
+	string_t *msg = t_str_new(256);
+
+	smtp_reply_write_message_one_line(msg, reply);
 	return str_c(msg);
 }
 
@@ -143,4 +172,15 @@ struct smtp_reply *smtp_reply_clone(pool_t pool,
 	smtp_reply_copy(pool, dst, src);
 
 	return dst;
+}
+
+void smtp_reply_add_to_event(const struct smtp_reply *reply,
+			     struct event_passthrough *e)
+{
+	const char *enh_code = smtp_reply_get_enh_code(reply);
+
+	e->add_int("status_code", reply->status);
+	e->add_str("enhanced_code", enh_code);
+	if (!smtp_reply_is_success(reply))
+		e->add_str("error", smtp_reply_get_message(reply));
 }

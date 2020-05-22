@@ -93,14 +93,14 @@ int rfc2231_parse(struct rfc822_parser_context *ctx,
 			else {
 				rfc2231_param.key = t_strdup_until(key, p2);
 				rfc2231_param.value = t_strdup(str_c(str));
-				array_append(&rfc2231_params_arr,
-					     &rfc2231_param, 1);
+				array_push_back(&rfc2231_params_arr,
+						&rfc2231_param);
 			}
 		}
 		if (p == NULL) {
 			const char *value = t_strdup(str_c(str));
-			array_append(&result, &key, 1);
-			array_append(&result, &value, 1);
+			array_push_back(&result, &key);
+			array_push_back(&result, &value);
 		}
 	}
 	ctx->nul_replacement_str = prev_replacement_str;
@@ -108,7 +108,7 @@ int rfc2231_parse(struct rfc822_parser_context *ctx,
 	if (array_count(&rfc2231_params_arr) == 0) {
 		/* No RFC 2231 parameters */
 		array_append_zero(&result); /* NULL-terminate */
-		*result_r = array_idx(&result, 0);
+		*result_r = array_front(&result);
 		return broken ? -1 : 0;
 	}
 
@@ -146,9 +146,9 @@ int rfc2231_parse(struct rfc822_parser_context *ctx,
 					"%s*%u*" : "%s*%u",
 					rfc2231_params[j].key,
 					rfc2231_params[j].idx);
-				array_append(&result, &key, 1);
-				array_append(&result,
-					     &rfc2231_params[j].value, 1);
+				array_push_back(&result, &key);
+				array_push_back(&result,
+						&rfc2231_params[j].value);
 			}
 		} else {
 			/* everything was successful */
@@ -169,11 +169,11 @@ int rfc2231_parse(struct rfc822_parser_context *ctx,
 			if (have_extended)
 				key = t_strconcat(key, "*", NULL);
 			const char *value = t_strdup(str_c(str));
-			array_append(&result, &key, 1);
-			array_append(&result, &value, 1);
+			array_push_back(&result, &key);
+			array_push_back(&result, &value);
 		}
 	}
 	array_append_zero(&result); /* NULL-terminate */
-	*result_r = array_idx(&result, 0);
+	*result_r = array_front(&result);
 	return broken ? -1 : 0;
 }

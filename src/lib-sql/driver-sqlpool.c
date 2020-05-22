@@ -296,7 +296,7 @@ sqlpool_add_connection(struct sqlpool_db *db, struct sqlpool_host *host,
 	if (ret < 0)
 		i_fatal("sqlpool: %s", error);
 
-	i_array_init(&conndb->module_contexts, 5);
+	sql_init_common(conndb);
 
 	conndb->state_change_callback = sqlpool_state_changed;
 	conndb->state_change_context = db;
@@ -449,15 +449,15 @@ driver_sqlpool_parse_hosts(struct sqlpool_db *db, const char *connect_string,
 				return -1;
 			}
 		} else if (strcmp(key, "host") == 0) {
-			array_append(&hostnames, &value, 1);
+			array_push_back(&hostnames, &value);
 		} else {
-			array_append(&connect_args, args, 1);
+			array_push_back(&connect_args, args);
 		}
 	}
 
 	/* build a new connect string without our settings or hosts */
 	array_append_zero(&connect_args);
-	connect_string = t_strarray_join(array_idx(&connect_args, 0), " ");
+	connect_string = t_strarray_join(array_front(&connect_args), " ");
 
 	if (array_count(&hostnames) == 0) {
 		/* no hosts specified. create a default one. */
@@ -548,7 +548,7 @@ static void driver_sqlpool_deinit(struct sql_db *_db)
 	struct sqlpool_connection *conn;
 
 	array_foreach_modifiable(&db->all_connections, conn)
-		sql_deinit(&conn->db);
+		sql_unref(&conn->db);
 	array_clear(&db->all_connections);
 
 	driver_sqlpool_abort_requests(db);

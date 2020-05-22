@@ -91,7 +91,6 @@ libauth_la_SOURCES = \
 	auth-client-connection.c \
 	auth-master-connection.c \
 	auth-policy.c \
-	auth-postfix-connection.c \
 	mech-otp-skey-common.c \
 	mech-plain-common.c \
 	auth-penalty.c \
@@ -120,7 +119,7 @@ libauth_la_SOURCES = \
 	mech-gssapi.c \
 	mech-ntlm.c \
 	mech-otp.c \
-	mech-scram-sha1.c \
+	mech-scram.c \
 	mech-skey.c \
 	mech-rpa.c \
 	mech-apop.c \
@@ -163,9 +162,9 @@ headers = \
 	auth-client-connection.h \
 	auth-common.h \
 	auth-master-connection.h \
-	auth-postfix-connection.h \
 	mech-otp-skey-common.h \
 	mech-plain-common.h \
+	mech-scram.h \
 	auth-penalty.h \
 	auth-policy.h \
 	auth-request.h \

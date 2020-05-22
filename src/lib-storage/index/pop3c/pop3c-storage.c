@@ -16,6 +16,11 @@
 extern struct mail_storage pop3c_storage;
 extern struct mailbox pop3c_mailbox;
 
+static struct event_category event_category_pop3c = {
+	.name = "pop3c",
+	.parent = &event_category_storage,
+};
+
 static struct mail_storage *pop3c_storage_alloc(void)
 {
 	struct pop3c_storage *storage;
@@ -73,16 +78,17 @@ pop3c_client_create_from_set(struct mail_storage *storage,
 	client_set.rawlog_dir =
 		mail_user_home_expand(storage->user, set->pop3c_rawlog_dir);
 
-	client_set.ssl_ca_dir = storage->set->ssl_client_ca_dir;
-	client_set.ssl_ca_file = storage->set->ssl_client_ca_file;
-	client_set.ssl_verify = set->pop3c_ssl_verify;
+	mail_user_init_ssl_client_settings(storage->user, &client_set.ssl_set);
+
+	if (!set->pop3c_ssl_verify)
+		client_set.ssl_set.allow_invalid_cert = TRUE;
+
 	if (strcmp(set->pop3c_ssl, "pop3s") == 0)
 		client_set.ssl_mode = POP3C_CLIENT_SSL_MODE_IMMEDIATE;
 	else if (strcmp(set->pop3c_ssl, "starttls") == 0)
 		client_set.ssl_mode = POP3C_CLIENT_SSL_MODE_STARTTLS;
 	else
 		client_set.ssl_mode = POP3C_CLIENT_SSL_MODE_NONE;
-	client_set.ssl_crypto_device = storage->set->ssl_crypto_device;
 	return pop3c_client_init(&client_set);
 }
 
@@ -295,6 +301,7 @@ struct mail_storage pop3c_storage = {
 	.name = POP3C_STORAGE_NAME,
 	.class_flags = MAIL_STORAGE_CLASS_FLAG_NO_ROOT |
 		MAIL_STORAGE_CLASS_FLAG_HAVE_MAIL_GUIDS,
+	.event_category = &event_category_pop3c,
 
 	.v = {
 		pop3c_get_setting_parser_info,

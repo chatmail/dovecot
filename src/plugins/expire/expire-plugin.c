@@ -382,20 +382,20 @@ static const char *const *expire_get_patterns(struct mail_user *user)
 {
 	ARRAY_TYPE(const_string) patterns;
 	const char *str;
-	char set_name[6+MAX_INT_STRLEN+1];
+	char set_name[6 + MAX_INT_STRLEN];
 	unsigned int i;
 
 	t_array_init(&patterns, 16);
 	str = mail_user_set_plugin_getenv(user->set, "expire");
 	for (i = 2; str != NULL; i++) {
-		array_append(&patterns, &str, 1);
+		array_push_back(&patterns, &str);
 
 		if (i_snprintf(set_name, sizeof(set_name), "expire%u", i) < 0)
 			i_unreached();
 		str = mail_user_set_plugin_getenv(user->set, set_name);
 	}
 	array_append_zero(&patterns);
-	return array_idx(&patterns, 0);
+	return array_front(&patterns);
 }
 
 static void expire_mail_user_created(struct mail_user *user)

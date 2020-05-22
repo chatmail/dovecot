@@ -24,7 +24,7 @@
 #include <fcntl.h>
 
 #define BODY_SNIPPET_ALGO_V1 "1"
-#define BODY_SNIPPET_MAX_CHARS 100
+#define BODY_SNIPPET_MAX_CHARS 200
 
 struct mail_cache_field global_cache_fields[MAIL_INDEX_CACHE_FIELD_COUNT] = {
 	{ .name = "flags",
@@ -77,12 +77,22 @@ static int index_mail_write_body_snippet(struct index_mail *mail);
 int index_mail_cache_lookup_field(struct index_mail *mail, buffer_t *buf,
 				  unsigned int field_idx)
 {
+	struct mail *_mail = &mail->mail.mail;
 	int ret;
 
 	ret = mail_cache_lookup_field(mail->mail.mail.transaction->cache_view,
 				      buf, mail->data.seq, field_idx);
 	if (ret > 0)
 		mail->mail.mail.transaction->stats.cache_hit_count++;
+
+	/* If the request was lazy mark the field as cache wanted. */
+	if (_mail->lookup_abort == MAIL_LOOKUP_ABORT_NOT_IN_CACHE_START_CACHING &&
+	    mail_cache_field_get_decision(_mail->box->cache, field_idx) ==
+	    MAIL_CACHE_DECISION_NO) {
+		mail_cache_decision_add(_mail->transaction->cache_view,
+					_mail->seq, field_idx);
+	}
+
 	return ret;
 }
 
@@ -281,7 +291,7 @@ const char *const *index_mail_get_keywords(struct mail *_mail)
 	unsigned int i, count, names_count;
 
 	if (array_is_created(&data->keywords))
-		return array_idx(&data->keywords, 0);
+		return array_front(&data->keywords);
 
 	(void)index_mail_get_keyword_indexes(_mail);
 
@@ -293,12 +303,12 @@ const char *const *index_mail_get_keywords(struct mail *_mail)
 		i_assert(keyword_indexes[i] < names_count);
 
 		name = names[keyword_indexes[i]];
-		array_append(&data->keywords, &name, 1);
+		array_push_back(&data->keywords, &name);
 	}
 
 	/* end with NULL */
 	array_append_zero(&data->keywords);
-	return array_idx(&data->keywords, 0);
+	return array_front(&data->keywords);
 }
 
 const ARRAY_TYPE(keyword_indexes) *
@@ -807,7 +817,7 @@ index_mail_body_parsed_cache_bodystructure(struct index_mail *mail,
 		data->bodystructure = str_c(str);
 
 		index_mail_cache_add(mail, MAIL_CACHE_IMAP_BODYSTRUCTURE,
-				     str_c(str), str_len(str)+1);
+				     str_c(str), str_len(str));
 		bodystructure_cached = TRUE;
 	} else {
 		bodystructure_cached =
@@ -839,7 +849,7 @@ index_mail_body_parsed_cache_bodystructure(struct index_mail *mail,
 		data->body = str_c(str);
 
 		index_mail_cache_add(mail, MAIL_CACHE_IMAP_BODY,
-				     str_c(str), str_len(str)+1);
+				     str_c(str), str_len(str));
 	}
 }
 
@@ -901,7 +911,7 @@ static void index_mail_save_finish_make_snippet(struct index_mail *mail)
 	    index_mail_want_cache(mail, MAIL_CACHE_BODY_SNIPPET)) {
 		index_mail_cache_add(mail, MAIL_CACHE_BODY_SNIPPET,
 				     mail->data.body_snippet,
-				     strlen(mail->data.body_snippet)+1);
+				     strlen(mail->data.body_snippet));
 	}
 }
 
@@ -929,8 +939,8 @@ static void index_mail_cache_sizes(struct index_mail *mail)
 		size is not cached or
 		cached size differs
 	*/
-	if ((mail_index_map_get_ext_idx(view->map, _mail->box->mail_vsize_ext_id, &idx) ||
-	     mail_index_map_get_ext_idx(view->map, _mail->box->vsize_hdr_ext_id, &idx)) &&
+	if ((mail_index_map_get_ext_idx(view->index->map, _mail->box->mail_vsize_ext_id, &idx) ||
+	     mail_index_map_get_ext_idx(view->index->map, _mail->box->vsize_hdr_ext_id, &idx)) &&
 	    (sizes[0] != (uoff_t)-1 &&
 	     sizes[0] < (uint32_t)-1)) {
 		const uint32_t *vsize_ext =
@@ -1145,9 +1155,9 @@ index_mail_parse_body_finish(struct index_mail *mail,
 	index_mail_cache_sizes(mail);
 	index_mail_cache_dates(mail);
 	if (mail_set->parsed_mail_attachment_detection_add_flags_on_save &&
+	    mail->data.parsed_bodystructure &&
 	    !mail_has_attachment_keywords(&mail->mail.mail)) {
 		i_assert(mail->data.parts != NULL);
-		i_assert(mail->data.parsed_bodystructure);
 		(void)mail_set_attachment_keywords(&mail->mail.mail);
 	}
 	return 0;
@@ -1216,7 +1226,7 @@ static int index_mail_parse_body(struct index_mail *mail,
 					  mail->mail.data_pool);
 	} else {
 		message_parser_parse_body(data->parser_ctx,
-			*null_message_part_header_callback, (void *)NULL);
+			*null_message_part_header_callback, NULL);
 	}
 	ret = index_mail_stream_check_failure(mail);
 	if (index_mail_parse_body_finish(mail, field, TRUE) < 0)
@@ -1410,7 +1420,7 @@ static int index_mail_parse_bodystructure(struct index_mail *mail,
 			if (index_mail_want_cache(mail, MAIL_CACHE_BODY_SNIPPET))
 				index_mail_cache_add(mail, MAIL_CACHE_BODY_SNIPPET,
 						     mail->data.body_snippet,
-						     strlen(mail->data.body_snippet) + 1);
+						     strlen(mail->data.body_snippet));
 		}
 		i_assert(data->body_snippet != NULL &&
 			 data->body_snippet[0] != '\0');
@@ -1591,6 +1601,7 @@ int index_mail_get_special(struct mail *_mail,
 	case MAIL_FETCH_HEADER_MD5:
 	case MAIL_FETCH_POP3_ORDER:
 	case MAIL_FETCH_REFCOUNT:
+	case MAIL_FETCH_REFCOUNT_ID:
 		*value_r = "";
 		return 0;
 	case MAIL_FETCH_MAILBOX_NAME:
@@ -1903,10 +1914,6 @@ void index_mail_update_access_parts_pre(struct mail *_mail)
 			data->save_sent_date = TRUE;
 		}
 	}
-	if (mail_set->parsed_mail_attachment_detection_add_flags_on_save) {
-		data->save_bodystructure_header = TRUE;
-		data->save_bodystructure_body = TRUE;
-	}
 	if ((data->wanted_fields & MAIL_FETCH_BODY_SNIPPET) != 0 &&
 	    (storage->nonbody_access_fields & MAIL_FETCH_BODY_SNIPPET) == 0) {
 		const unsigned int cache_field =
@@ -1924,6 +1931,19 @@ void index_mail_update_access_parts_pre(struct mail *_mail)
 			data->access_part |= READ_HDR;
 		if ((data->wanted_fields & MAIL_FETCH_STREAM_BODY) != 0)
 			data->access_part |= READ_BODY;
+	}
+
+	/* NOTE: Keep this attachment detection the last, so that the
+	   access_part check works correctly.
+
+	   The attachment flag detection is done while parsing BODYSTRUCTURE.
+	   We want to do this for mails that are being saved, but also when
+	   we need to open the mail body anyway. */
+	if (mail_set->parsed_mail_attachment_detection_add_flags_on_save &&
+	    (_mail->saving || data->access_part != 0) &&
+	    !mail_has_attachment_keywords(&mail->mail.mail)) {
+		data->save_bodystructure_header = TRUE;
+		data->save_bodystructure_body = TRUE;
 	}
 }
 
@@ -1989,7 +2009,7 @@ void index_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
 		return;
 	}
 
-	if (!mail->search_mail) {
+	if (!mail->mail.search_mail) {
 		index_mail_update_access_parts_pre(_mail);
 		index_mail_update_access_parts_post(_mail);
 	} else {
@@ -2065,8 +2085,6 @@ void index_mail_add_temp_wanted_fields(struct mail *_mail,
 	struct index_mail *mail = INDEX_MAIL(_mail);
 	struct index_mail_data *data = &mail->data;
 	struct mailbox_header_lookup_ctx *new_wanted_headers;
-	ARRAY_TYPE(const_string) names;
-	unsigned int i;
 
 	data->wanted_fields |= fields;
 	if (headers == NULL) {
@@ -2076,17 +2094,9 @@ void index_mail_add_temp_wanted_fields(struct mail *_mail,
 		mailbox_header_lookup_ref(headers);
 	} else {
 		/* merge headers */
-		t_array_init(&names, 32);
-		for (i = 0; i < data->wanted_headers->count; i++)
-			array_append(&names, &data->wanted_headers->name[i], 1);
-		for (i = 0; i < headers->count; i++)
-			array_append(&names, &headers->name[i], 1);
-		array_append_zero(&names);
-		new_wanted_headers =
-			mailbox_header_lookup_init(_mail->box,
-						   array_idx(&names, 0));
-		if (data->wanted_headers != NULL)
-			mailbox_header_lookup_unref(&data->wanted_headers);
+		new_wanted_headers = mailbox_header_lookup_merge(data->wanted_headers,
+								 headers);
+		mailbox_header_lookup_unref(&data->wanted_headers);
 		data->wanted_headers = new_wanted_headers;
 	}
 	index_mail_update_access_parts_pre(_mail);
@@ -2112,10 +2122,6 @@ void index_mail_set_uid_cache_updates(struct mail *_mail, bool set)
 void index_mail_free(struct mail *_mail)
 {
 	struct index_mail *mail = INDEX_MAIL(_mail);
-
-	/* make sure mailbox_search_*() users don't try to free the mail
-	   directly */
-	i_assert(!mail->search_mail);
 
 	mail->freeing = TRUE;
 	mail->mail.v.close(_mail);

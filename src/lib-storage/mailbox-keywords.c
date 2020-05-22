@@ -17,7 +17,7 @@ mailbox_keywords_create_skip(struct mailbox *box,
 		t_array_init(&valid_keywords, 32);
 		for (; *keywords != NULL; keywords++) {
 			if (mailbox_keyword_is_valid(box, *keywords, &error))
-				array_append(&valid_keywords, keywords, 1);
+				array_push_back(&valid_keywords, keywords);
 		}
 		array_append_zero(&valid_keywords); /* NULL-terminate */
 		kw = mail_index_keywords_create(box->index, keywords);
@@ -82,6 +82,21 @@ mailbox_keywords_create_from_indexes(struct mailbox *box,
 	i_assert(box->opened);
 
 	return mail_index_keywords_create_from_indexes(box->index, idx);
+}
+
+struct mail_keywords *mailbox_keywords_merge(struct mail_keywords *keywords1,
+					     struct mail_keywords *keywords2)
+{
+	ARRAY_TYPE(keyword_indexes) keywords_merged;
+
+	i_assert(keywords1->index == keywords2->index);
+
+	t_array_init(&keywords_merged, keywords1->count + keywords2->count);
+	/* duplicates are dropped by mail_index_keywords_create() */
+	array_append(&keywords_merged, keywords1->idx, keywords1->count);
+	array_append(&keywords_merged, keywords2->idx, keywords2->count);
+	return mail_index_keywords_create_from_indexes(keywords1->index,
+						       &keywords_merged);
 }
 
 void mailbox_keywords_ref(struct mail_keywords *keywords)

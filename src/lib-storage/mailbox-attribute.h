@@ -182,6 +182,11 @@ enum mail_attribute_type {
 	MAIL_ATTRIBUTE_TYPE_PRIVATE,
 	MAIL_ATTRIBUTE_TYPE_SHARED
 };
+#define MAIL_ATTRIBUTE_TYPE_MASK		0x0f
+/* Allow accessing only attributes with
+   MAIL_ATTRIBUTE_INTERNAL_FLAG_VALIDATED. */
+#define MAIL_ATTRIBUTE_TYPE_FLAG_VALIDATED	0x80
+
 enum mail_attribute_value_flags {
 	MAIL_ATTRIBUTE_VALUE_FLAG_READONLY	= 0x01,
 	MAIL_ATTRIBUTE_VALUE_FLAG_INT_STREAMS	= 0x02
@@ -232,7 +237,11 @@ enum mail_attribute_internal_rank {
 
 enum mail_attribute_internal_flags {
 	/* Apply this attribute to the given key and its children. */
-	MAIL_ATTRIBUTE_INTERNAL_FLAG_CHILDREN	= 0x01
+	MAIL_ATTRIBUTE_INTERNAL_FLAG_CHILDREN	= 0x01,
+	/* This attribute can be set/get even without generic METADATA support.
+	   These attributes don't count towards any quotas either, so the set()
+	   callback should validate that the value isn't excessively large. */
+	MAIL_ATTRIBUTE_INTERNAL_FLAG_VALIDATED	= 0x02,
 };
 
 struct mailbox_attribute_internal {
@@ -247,6 +256,15 @@ struct mailbox_attribute_internal {
 	/* Set the value of this internal attribute */
 	int (*set)(struct mailbox_transaction_context *t, const char *key,
 		   const struct mail_attribute_value *value);
+	/* If non-NULL, the function is responsible for iterating the
+	   attribute. Typically this would be used for attributes with
+	   MAIL_ATTRIBUTE_INTERNAL_FLAG_CHILDREN to get the children
+	   iterated. If key_prefix is "", all keys should be returned.
+	   Otherwise only the keys beginning with key_prefix should be
+	   returned. The key_prefix is already relative to the
+	   mailbox_attribute_internal.key. */
+	int (*iter)(struct mailbox *box, const char *key_prefix,
+		    pool_t pool, ARRAY_TYPE(const_string) *keys);
 };
 
 void mailbox_attribute_register_internal(
@@ -267,27 +285,29 @@ void mailbox_attribute_unregister_internals(
    IMAP METADATA, so for Dovecot-specific keys use
    MAILBOX_ATTRIBUTE_PREFIX_DOVECOT. */
 int mailbox_attribute_set(struct mailbox_transaction_context *t,
-			  enum mail_attribute_type type, const char *key,
+			  enum mail_attribute_type type_flags, const char *key,
 			  const struct mail_attribute_value *value);
 /* Delete mailbox attribute key. This is just a wrapper to
    mailbox_attribute_set() with value->value=NULL. */
 int mailbox_attribute_unset(struct mailbox_transaction_context *t,
-			    enum mail_attribute_type type, const char *key);
+			    enum mail_attribute_type type_flags, const char *key);
 /* Returns value for mailbox attribute key. Returns 1 if value was returned,
    0 if value wasn't found (set to NULL), -1 if error */
 int mailbox_attribute_get(struct mailbox *box,
-			  enum mail_attribute_type type, const char *key,
+			  enum mail_attribute_type type_flags, const char *key,
 			  struct mail_attribute_value *value_r);
 /* Same as mailbox_attribute_get(), but the returned value may be either an
    input stream or a string. */
 int mailbox_attribute_get_stream(struct mailbox *box,
-				 enum mail_attribute_type type, const char *key,
+				 enum mail_attribute_type type_flags,
+				 const char *key,
 				 struct mail_attribute_value *value_r);
 
 /* Iterate through mailbox attributes of the given type. The prefix can be used
    to restrict what attributes are returned. */
 struct mailbox_attribute_iter *
-mailbox_attribute_iter_init(struct mailbox *box, enum mail_attribute_type type,
+mailbox_attribute_iter_init(struct mailbox *box,
+			    enum mail_attribute_type type_flags,
 			    const char *prefix);
 /* Returns the attribute key or NULL if there are no more attributes. */
 const char *mailbox_attribute_iter_next(struct mailbox_attribute_iter *iter);

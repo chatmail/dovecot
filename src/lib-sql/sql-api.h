@@ -94,7 +94,8 @@ struct sql_db *sql_init(const char *db_driver, const char *connect_string);
 int sql_init_full(const struct sql_settings *set, struct sql_db **db_r,
 		  const char **error_r);
 
-void sql_deinit(struct sql_db **db);
+void sql_ref(struct sql_db *db);
+void sql_unref(struct sql_db **db);
 
 /* Returns SQL database state flags. */
 enum sql_db_flags sql_get_flags(struct sql_db *db);
@@ -120,7 +121,7 @@ void sql_exec(struct sql_db *db, const char *query);
 void sql_query(struct sql_db *db, const char *query,
 	       sql_query_callback_t *callback, void *context);
 #define sql_query(db, query, callback, context) \
-	sql_query(db, query + \
+	sql_query(db, query - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			struct sql_result *, typeof(context))), \
 		(sql_query_callback_t *)callback, context)
@@ -129,7 +130,7 @@ struct sql_result *sql_query_s(struct sql_db *db, const char *query);
 
 struct sql_prepared_statement *
 sql_prepared_statement_init(struct sql_db *db, const char *query_template);
-void sql_prepared_statement_deinit(struct sql_prepared_statement **prep_stmt);
+void sql_prepared_statement_unref(struct sql_prepared_statement **prep_stmt);
 
 struct sql_statement *
 sql_statement_init(struct sql_db *db, const char *query_template);
@@ -149,7 +150,7 @@ void sql_statement_query(struct sql_statement **stmt,
 			 sql_query_callback_t *callback, void *context);
 #define sql_statement_query(stmt, callback, context) \
 	sql_statement_query(stmt, \
-		(sql_query_callback_t *)callback, context + \
+		(sql_query_callback_t *)callback, TRUE ? context : \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			struct sql_result *, typeof(context))))
 struct sql_result *sql_statement_query_s(struct sql_statement **stmt);
@@ -167,7 +168,7 @@ int sql_result_next_row(struct sql_result *result);
 void sql_result_more(struct sql_result **result,
 		     sql_query_callback_t *callback, void *context);
 #define sql_result_more(result, callback, context) \
-	sql_result_more(result + \
+	sql_result_more(result - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			struct sql_result *, typeof(context))), \
 		(sql_query_callback_t *)callback, context)
@@ -217,7 +218,7 @@ struct sql_transaction_context *sql_transaction_begin(struct sql_db *db);
 void sql_transaction_commit(struct sql_transaction_context **ctx,
 			    sql_commit_callback_t *callback, void *context);
 #define sql_transaction_commit(ctx, callback, context) \
-	  sql_transaction_commit(ctx + \
+	  sql_transaction_commit(ctx - \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			const struct sql_commit_result *, typeof(context))), \
 		(sql_commit_callback_t *)callback, context)

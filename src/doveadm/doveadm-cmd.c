@@ -43,6 +43,7 @@ static const struct exit_code_str {
 	{ EX_NOPERM, "NOPERM" },
 	{ EX_PROTOCOL, "PROTOCOL" },
 	{ EX_DATAERR, "DATAERR" },
+	{ DOVEADM_EX_NOREPLICATE, "NOREPLICATE" },
 	{ DOVEADM_EX_NOTFOUND, "NOTFOUND" }
 };
 
@@ -72,7 +73,7 @@ int doveadm_str_to_exit_code(const char *reason)
 
 void doveadm_register_cmd(const struct doveadm_cmd *cmd)
 {
-	array_append(&doveadm_cmds, cmd, 1);
+	array_push_back(&doveadm_cmds, cmd);
 }
 
 void doveadm_cmd_register_ver2(struct doveadm_cmd_ver2 *cmd)
@@ -84,7 +85,7 @@ void doveadm_cmd_register_ver2(struct doveadm_cmd_ver2 *cmd)
 			cmd->cmd = doveadm_cmd_ver2_to_cmd_wrapper;
 		else i_unreached();
 	}
-	array_append(&doveadm_cmds_ver2, cmd, 1);
+	array_push_back(&doveadm_cmds_ver2, cmd);
 }
 
 const struct doveadm_cmd_ver2 *doveadm_cmd_find_ver2(const char *cmd_name)
@@ -341,7 +342,7 @@ void doveadm_cmd_params_null_terminate_arrays(ARRAY_TYPE(doveadm_cmd_param_arr_t
 		if (param->type == CMD_PARAM_ARRAY &&
 		    array_is_created(&param->value.v_array)) {
 			array_append_zero(&param->value.v_array);
-			array_delete(&param->value.v_array, array_count(&param->value.v_array)-1, 1);
+			array_pop_back(&param->value.v_array);
 		}
 	}
 }
@@ -354,7 +355,7 @@ doveadm_cmd_params_to_argv(const char *name, int pargc, const struct doveadm_cmd
 	int i;
 	const char * const * cptr;
 	i_assert(array_count(argv) == 0);
-	array_append(argv, &name, 1);
+	array_push_back(argv, &name);
 
 	ARRAY_TYPE(const_string) pargv;
 	t_array_init(&pargv, 8);
@@ -373,24 +374,25 @@ doveadm_cmd_params_to_argv(const char *name, int pargc, const struct doveadm_cmd
 					array_add_opt = TRUE;
 				} else {
 					optarg = t_strdup_printf("-%c", params[i].short_opt);
-					array_append(argv, &optarg, 1);
+					array_push_back(argv, &optarg);
 				}
 			}
 			/* CMD_PARAM_BOOL is implicitly handled above */
 			if (params[i].type == CMD_PARAM_STR) {
-				array_append(target, &params[i].value.v_string,1);
+				array_push_back(target,
+						&params[i].value.v_string);
 			} else if (params[i].type == CMD_PARAM_INT64) {
 				const char *tmp = t_strdup_printf("%lld",
 					(long long)params[i].value.v_int64);
-				array_append(target, &tmp, 1);
+				array_push_back(target, &tmp);
 			} else if (params[i].type == CMD_PARAM_IP) {
 				const char *tmp = net_ip2addr(&params[i].value.v_ip);
-				array_append(target, &tmp, 1);
+				array_push_back(target, &tmp);
 			} else if (params[i].type == CMD_PARAM_ARRAY) {
 				array_foreach(&params[i].value.v_array, cptr) {
 					if (array_add_opt)
-						array_append(argv, &optarg, 1);
-					array_append(target, cptr, 1);
+						array_push_back(argv, &optarg);
+					array_push_back(target, cptr);
 				}
 			}
 		}
@@ -398,7 +400,7 @@ doveadm_cmd_params_to_argv(const char *name, int pargc, const struct doveadm_cmd
 
 	if (array_count(&pargv) > 0) {
 		const char *dashdash = "--";
-		array_append(argv, &dashdash, 1);
+		array_push_back(argv, &dashdash);
 		array_append_array(argv, &pargv);
 	}
 	array_append_zero(argv);
@@ -438,7 +440,7 @@ doveadm_build_options(const struct doveadm_cmd_param par[],
 		}
 		if (par[i].type != CMD_PARAM_BOOL)
 			longopt.has_arg = 1;
-		array_append(longopts, &longopt, 1);
+		array_push_back(longopts, &longopt);
 	}
 	array_append_zero(longopts);
 }
@@ -467,7 +469,7 @@ static void doveadm_fill_param(struct doveadm_cmd_param *param,
 		if (!array_is_created(&param->value.v_array))
 			p_array_init(&param->value.v_array, pool, 8);
 		const char *val = p_strdup(pool, value);
-		array_append(&param->value.v_array, &val, 1);
+		array_push_back(&param->value.v_array, &val);
 		break;
 	case CMD_PARAM_ISTREAM: {
 		struct istream *is;
@@ -522,7 +524,7 @@ int doveadm_cmd_run_ver2(int argc, const char *const argv[],
 	}
 	i_assert(pargc == array_count(&opts)-1); /* opts is NULL-terminated */
 
-	while((c = getopt_long(argc, (char*const*)argv, str_c(optbuf), array_idx(&opts, 0), &li)) > -1) {
+	while((c = getopt_long(argc, (char*const*)argv, str_c(optbuf), array_front(&opts), &li)) > -1) {
 		switch(c) {
 		case 0:
 			for(unsigned int i = 0; i < array_count(&pargv); i++) {

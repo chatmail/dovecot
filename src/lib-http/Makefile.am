@@ -5,7 +5,8 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-dns \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
-	-I$(top_srcdir)/src/lib-master
+	-I$(top_srcdir)/src/lib-master \
+	-DPKG_RUNDIR=\""$(rundir)"\"
 
 libhttp_la_SOURCES = \
 	http-date.c \
@@ -60,14 +61,15 @@ test_programs = \
 	test-http-transfer \
 	test-http-auth \
 	test-http-response-parser \
-	test-http-request-parser
+	test-http-request-parser \
+	test-http-payload \
+	test-http-client-errors \
+	test-http-client-request \
+	test-http-server-errors
 
 test_nocheck_programs = \
-	test-http-payload \
 	test-http-client \
-	test-http-client-errors \
-	test-http-server \
-	test-http-server-errors
+	test-http-server
 
 noinst_PROGRAMS = $(test_programs) $(test_nocheck_programs)
 
@@ -157,7 +159,8 @@ endif
 test_http_payload_SOURCES = test-http-payload.c
 test_http_payload_LDFLAGS = -export-dynamic
 test_http_payload_LDADD = \
-	$(test_http_libs)
+	$(test_http_libs) \
+	$(test_http_libs_ssl)
 test_http_payload_DEPENDENCIES = \
 	$(test_http_deps)
 
@@ -175,6 +178,13 @@ test_http_client_errors_LDFLAGS = -export-dynamic
 test_http_client_errors_LDADD = \
 	$(test_http_libs)
 test_http_client_errors_DEPENDENCIES = \
+	$(test_http_deps)
+
+test_http_client_request_SOURCES = test-http-client-request.c
+test_http_client_request_LDFLAGS = -export-dynamic
+test_http_client_request_LDADD = \
+	$(test_http_libs)
+test_http_client_request_DEPENDENCIES = \
 	$(test_http_deps)
 
 test_http_server_SOURCES = test-http-server.c

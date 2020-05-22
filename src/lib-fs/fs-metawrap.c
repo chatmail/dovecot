@@ -43,14 +43,14 @@ static struct fs *fs_metawrap_alloc(void)
 }
 
 static int
-fs_metawrap_init(struct fs *_fs, const char *args, const
-		 struct fs_settings *set)
+fs_metawrap_init(struct fs *_fs, const char *args,
+		 const struct fs_settings *set, const char **error_r)
 {
 	struct metawrap_fs *fs = (struct metawrap_fs *)_fs;
-	const char *parent_name, *parent_args, *error;
+	const char *parent_name, *parent_args;
 
 	if (*args == '\0') {
-		fs_set_error(_fs, "Parent filesystem not given as parameter");
+		*error_r = "Parent filesystem not given as parameter";
 		return -1;
 	}
 
@@ -62,10 +62,8 @@ fs_metawrap_init(struct fs *_fs, const char *args, const
 		parent_name = t_strdup_until(args, parent_args);
 		parent_args++;
 	}
-	if (fs_init(parent_name, parent_args, set, &_fs->parent, &error) < 0) {
-		fs_set_error(_fs, "%s", error);
+	if (fs_init(parent_name, parent_args, set, &_fs->parent, error_r) < 0)
 		return -1;
-	}
 	if ((fs_get_properties(_fs->parent) & FS_PROPERTY_METADATA) == 0)
 		fs->wrap_metadata = TRUE;
 	return 0;
@@ -135,7 +133,7 @@ static void fs_metawrap_file_deinit(struct fs_file *_file)
 	if (file->super_read != _file->parent)
 		fs_file_deinit(&file->super_read);
 	str_free(&file->metadata_header);
-	fs_file_deinit(&_file->parent);
+	fs_file_free(_file);
 	i_free(file->file.path);
 	i_free(file);
 }
@@ -166,6 +164,7 @@ fs_metawrap_set_metadata(struct fs_file *_file, const char *key,
 
 static int
 fs_metawrap_get_metadata(struct fs_file *_file,
+			 enum fs_get_metadata_flags flags,
 			 const ARRAY_TYPE(fs_metadata) **metadata_r)
 {
 	struct metawrap_fs_file *file = (struct metawrap_fs_file *)_file;
@@ -173,10 +172,12 @@ fs_metawrap_get_metadata(struct fs_file *_file,
 	char c;
 
 	if (!file->fs->wrap_metadata)
-		return fs_get_metadata(_file->parent, metadata_r);
+		return fs_get_metadata_full(_file->parent, flags, metadata_r);
 
 	if (file->metadata_read) {
 		/* we have the metadata */
+	} else if ((flags & FS_GET_METADATA_FLAG_LOADED_ONLY) != 0) {
+		/* use the existing metadata only */
 	} else if (file->input == NULL) {
 		if (fs_read(_file, &c, 1) < 0)
 			return -1;
@@ -190,7 +191,8 @@ fs_metawrap_get_metadata(struct fs_file *_file,
 			fs_wait_async(_file->fs);
 		}
 		if (ret == -1 && file->input->stream_errno != 0) {
-			fs_set_error(_file->fs, "read(%s) failed: %s",
+			fs_set_error(_file->event, file->input->stream_errno,
+				     "read(%s) failed: %s",
 				     i_stream_get_name(file->input),
 				     i_stream_get_error(file->input));
 			return -1;
@@ -435,7 +437,7 @@ static int fs_metawrap_stat(struct fs_file *_file, struct stat *st_r)
 		if (fs_stat(_file->parent, st_r) < 0)
 			return -1;
 		if ((uoff_t)st_r->st_size < file->metadata_write_size) {
-			fs_set_error(_file->fs,
+			fs_set_error(_file->event, EIO,
 				"Just-written %s shrank unexpectedly "
 				"(%"PRIuUOFF_T" < %"PRIuUOFF_T")",
 				fs_file_path(_file), st_r->st_size,
@@ -453,7 +455,8 @@ static int fs_metawrap_stat(struct fs_file *_file, struct stat *st_r)
 		i_stream_ref(input);
 	}
 	if ((ret = i_stream_get_size(input, TRUE, &input_size)) < 0) {
-		fs_set_error(_file->fs, "i_stream_get_size(%s) failed: %s",
+		fs_set_error(_file->event, input->stream_errno,
+			     "i_stream_get_size(%s) failed: %s",
 			     fs_file_path(_file), i_stream_get_error(input));
 		i_stream_unref(&input);
 		return -1;
@@ -461,9 +464,8 @@ static int fs_metawrap_stat(struct fs_file *_file, struct stat *st_r)
 	i_stream_unref(&input);
 	if (ret == 0) {
 		/* we shouldn't get here */
-		fs_set_error(_file->fs, "i_stream_get_size(%s) returned size as unknown",
+		fs_set_error(_file->event, EIO, "i_stream_get_size(%s) returned size as unknown",
 			     fs_file_path(_file));
-		errno = EIO;
 		return -1;
 	}
 

@@ -50,23 +50,26 @@ int http_url_parse(const char *url, struct http_url *base,
 		   struct http_url **url_r, const char **error_r);
 
 int http_url_request_target_parse(const char *request_target,
-	const char *host_header, pool_t pool,
-	struct http_request_target *target, const char **error_r);
+				  const char *host_header,
+				  const struct http_url *default_base,
+				  pool_t pool,
+				  struct http_request_target *target,
+				  const char **error_r) ATTR_NULL(3);
 
 /*
  * HTTP URL evaluation
  */
 
-static inline in_port_t http_url_get_port_default(const struct http_url *url,
-	in_port_t default_port)
+static inline in_port_t
+http_url_get_port_default(const struct http_url *url, in_port_t default_port)
 {
 	return (url->port != 0 ? url->port : default_port);
 }
 
 static inline in_port_t http_url_get_port(const struct http_url *url)
 {
-	return http_url_get_port_default(url,
-		(url->have_ssl ? HTTPS_DEFAULT_PORT : HTTP_DEFAULT_PORT));
+	return http_url_get_port_default(
+		url, (url->have_ssl ? HTTPS_DEFAULT_PORT : HTTP_DEFAULT_PORT));
 }
 
 /*
@@ -74,18 +77,18 @@ static inline in_port_t http_url_get_port(const struct http_url *url)
  */
 
 void http_url_copy_authority(pool_t pool, struct http_url *dest,
-	const struct http_url *src);
-struct http_url *http_url_clone_authority(pool_t pool,
-	const struct http_url *src);
+			     const struct http_url *src);
+struct http_url *
+http_url_clone_authority(pool_t pool, const struct http_url *src);
 
 void http_url_copy(pool_t pool, struct http_url *dest,
-	const struct http_url *src);
+		   const struct http_url *src);
 void http_url_copy_with_userinfo(pool_t pool, struct http_url *dest,
-	const struct http_url *src);
+				 const struct http_url *src);
 
 struct http_url *http_url_clone(pool_t pool,const struct http_url *src);
-struct http_url *http_url_clone_with_userinfo(pool_t pool,
-	const struct http_url *src);
+struct http_url *
+http_url_clone_with_userinfo(pool_t pool, const struct http_url *src);
 
 /*
  * HTTP URL construction

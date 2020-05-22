@@ -16,6 +16,7 @@ struct ssl_iostream_settings {
 	   ssl_iostream_settings_drop_stream_only() */
 	const char *min_protocol; /* both */
 	const char *cipher_list; /* both */
+	const char *ciphersuites; /* both, TLSv1.3 only */
 	const char *curve_list; /* both */
 	const char *ca, *ca_file, *ca_dir; /* context-only */
 	/* alternative cert is for providing certificate using
@@ -76,7 +77,12 @@ int ssl_iostream_handshake(struct ssl_iostream *ssl_io);
 /* Call the given callback when SSL handshake finishes. The callback must
    verify whether the certificate and its hostname is valid. If there is no
    callback, the default is to use ssl_iostream_check_cert_validity() with the
-   same host as given to io_stream_create_ssl_client() */
+   same host as given to io_stream_create_ssl_client()
+
+   Before the callback is called, certificate is only checked for issuer
+   and validity period. You should call ssl_iostream_check_cert_validity()
+   in your callback.
+*/
 void ssl_iostream_set_handshake_callback(struct ssl_iostream *ssl_io,
 					 ssl_iostream_handshake_callback_t *callback,
 					 void *context);
@@ -95,6 +101,16 @@ bool ssl_iostream_is_handshaked(const struct ssl_iostream *ssl_io);
 bool ssl_iostream_has_handshake_failed(const struct ssl_iostream *ssl_io);
 bool ssl_iostream_has_valid_client_cert(const struct ssl_iostream *ssl_io);
 bool ssl_iostream_has_broken_client_cert(struct ssl_iostream *ssl_io);
+/* Checks certificate validity based, also performs name checking. Called by
+   default in handshake, unless handshake callback is set with
+   ssl_iostream_check_cert_validity().
+
+   Host should be set as the name you want to validate the certificate name(s)
+   against. Usually this is the host name you connected to.
+
+   This function is same as calling ssl_iostream_has_valid_client_cert()
+   and ssl_iostream_cert_match_name().
+ */
 int ssl_iostream_check_cert_validity(struct ssl_iostream *ssl_io,
 				     const char *host, const char **error_r);
 /* Returns TRUE if the given name matches the SSL stream's certificate.

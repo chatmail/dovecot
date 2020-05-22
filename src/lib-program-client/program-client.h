@@ -1,6 +1,3 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file
- */
-
 #ifndef PROGRAM_CLIENT_H
 #define PROGRAM_CLIENT_H
 
@@ -18,6 +15,9 @@ struct program_client_settings {
 	struct restrict_access_settings restrict_set;
 	const char *dns_client_socket_path;
 	const char *home;
+
+	/* Event to use for the program client. */
+	struct event *event;
 
 	bool allow_root:1;
 	bool debug:1;
@@ -39,8 +39,8 @@ struct program_client *program_client_local_create(const char *bin_path,
 struct program_client *program_client_unix_create(const char *socket_path,
 	const char *const *args,
 	const struct program_client_settings *set, bool noreply);
-struct program_client *program_client_net_create(const char *host, in_port_t port,
-	const char *const *args,
+struct program_client *program_client_net_create(const char *host,
+	in_port_t port, const char *const *args,
 	const struct program_client_settings *set, bool noreply);
 struct program_client *
 program_client_net_create_ips(const struct ip_addr *ips, size_t ips_count,
@@ -61,7 +61,8 @@ void program_client_set_output(struct program_client *pclient,
 
 void program_client_set_output_seekable(struct program_client *pclient,
 	const char *temp_prefix);
-struct istream *program_client_get_output_seekable(struct program_client *pclient);
+struct istream *
+program_client_get_output_seekable(struct program_client *pclient);
 
 void program_client_switch_ioloop(struct program_client *pclient);
 
@@ -69,7 +70,7 @@ void program_client_switch_ioloop(struct program_client *pclient);
 void program_client_set_extra_fd(struct program_client *pclient, int fd,
 	 program_client_fd_callback_t * callback, void *context);
 #define program_client_set_extra_fd(pclient, fd, callback, context) \
-	program_client_set_extra_fd(pclient, fd + \
+	program_client_set_extra_fd(pclient, fd - \
 		CALLBACK_TYPECHECK(callback, \
 			void (*)(typeof(context), struct istream *input)), \
 		(program_client_fd_callback_t *)callback, context)
@@ -84,7 +85,7 @@ void program_client_run_async(struct program_client *pclient,
 			      program_client_callback_t *, void*);
 #define program_client_run_async(pclient, callback, context) \
 	program_client_run_async(pclient, (program_client_callback_t*)callback, \
-		(char*)context + CALLBACK_TYPECHECK(callback, \
+		(char*)context - CALLBACK_TYPECHECK(callback, \
 			void (*)(int, typeof(context))))
 
 #endif

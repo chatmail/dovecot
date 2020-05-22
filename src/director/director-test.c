@@ -130,7 +130,7 @@ static void client_username_check(struct imap_client *client)
 		host->ip = local_ip;
 		host->vhost_count = 100;
 		hash_table_insert(hosts, &host->ip, host);
-		array_append(&hosts_array, &host, 1);
+		array_push_back(&hosts_array, &host);
 	}
 
 	user = hash_table_lookup(users, client->username);
@@ -501,7 +501,7 @@ static void admin_read_hosts(struct admin_connection *conn)
 			    str_to_uint(args[1], &host->vhost_count) < 0)
 				i_fatal("host list broken");
 			hash_table_insert(hosts, &host->ip, host);
-			array_append(&hosts_array, &host, 1);
+			array_push_back(&hosts_array, &host);
 		} T_END;
 	}
 	if (line == NULL)
@@ -541,7 +541,7 @@ static void main_init(const char *admin_path)
 
 	to_disconnect =
 		timeout_add(1000 * i_rand_minmax(5, 5 + DIRECTOR_DISCONNECT_TIMEOUT_SECS - 1),
-			    director_connection_disconnect_timeout, (void *)NULL);
+			    director_connection_disconnect_timeout, NULL);
 }
 
 static void main_deinit(void)

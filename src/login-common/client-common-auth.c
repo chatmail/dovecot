@@ -43,6 +43,8 @@ static const struct client_auth_fail_code_id client_auth_fail_codes[] = {
 		CLIENT_AUTH_FAIL_CODE_MECH_INVALID },
 	{ AUTH_CLIENT_FAIL_CODE_MECH_SSL_REQUIRED,
 		CLIENT_AUTH_FAIL_CODE_MECH_SSL_REQUIRED },
+	{ AUTH_CLIENT_FAIL_CODE_ANONYMOUS_DENIED,
+		CLIENT_AUTH_FAIL_CODE_ANONYMOUS_DENIED },
 	{ NULL, CLIENT_AUTH_FAIL_CODE_NONE }
 };
 
@@ -72,8 +74,8 @@ static void client_auth_failed(struct client *client)
 	io_remove(&client->io);
 
 	if (!client_does_custom_io(client)) {
-		client->io = io_add(client->fd, IO_READ, client_input, client);
-		client_input(client);
+		client->io = io_add_istream(client->input, client_input, client);
+		io_set_pending(client->io);
 	}
 }
 
@@ -111,7 +113,7 @@ static void alt_username_set(ARRAY_TYPE(const_string) *alt_usernames, pool_t poo
 	}
 	if (i == count) {
 		char *new_key = i_strdup(key);
-		array_append(&global_alt_usernames, &new_key, 1);
+		array_push_back(&global_alt_usernames, &new_key);
 	}
 
 	value = p_strdup(pool, value);
@@ -124,9 +126,9 @@ static void alt_username_set(ARRAY_TYPE(const_string) *alt_usernames, pool_t poo
 	   the middle set them as "" */
 	while (array_count(alt_usernames) < i) {
 		const char *empty_str = "";
-		array_append(alt_usernames, &empty_str, 1);
+		array_push_back(alt_usernames, &empty_str);
 	}
-	array_append(alt_usernames, &value, 1);
+	array_push_back(alt_usernames, &value);
 }
 
 static void client_auth_parse_args(struct client *client, bool success,
@@ -224,7 +226,7 @@ static void client_auth_parse_args(struct client *client, bool success,
 
 		alt = p_new(client->pool, const char *,
 			    array_count(&alt_usernames) + 1);
-		memcpy(alt, array_idx(&alt_usernames, 0),
+		memcpy(alt, array_front(&alt_usernames),
 		       sizeof(*alt) * array_count(&alt_usernames));
 		client->alt_usernames = alt;
 	}
@@ -549,6 +551,9 @@ client_auth_handle_reply(struct client *client,
 		case CLIENT_AUTH_FAIL_CODE_MECH_SSL_REQUIRED:
 			result = CLIENT_AUTH_RESULT_MECH_SSL_REQUIRED;
 			break;
+		case CLIENT_AUTH_FAIL_CODE_ANONYMOUS_DENIED:
+			result = CLIENT_AUTH_RESULT_ANONYMOUS_DENIED;
+			break;
 		case CLIENT_AUTH_FAIL_CODE_LOGIN_DISABLED:
 			result = CLIENT_AUTH_RESULT_LOGIN_DISABLED;
 			if (reason == NULL)
@@ -694,6 +699,8 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 		timeout_remove(&client->to_auth_waiting);
 		if (args != NULL) {
 			client_auth_parse_args(client, FALSE, args, &reply);
+			if (reply.reason == NULL)
+				reply.reason = data;
 			client->last_auth_fail = reply.fail_code;
 			reply.nologin = TRUE;
 			reply.all_fields = args;
@@ -756,8 +763,8 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 		i_assert(client->io == NULL);
 		client->auth_waiting = TRUE;
 		if (!client_does_custom_io(client)) {
-			client->io = io_add(client->fd, IO_READ,
-					    client_auth_input, client);
+			client->io = io_add_istream(client->input,
+						    client_auth_input, client);
 			client_auth_input(client);
 		}
 		return;
@@ -766,8 +773,9 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 	client_unref(&client);
 }
 
-int client_auth_begin(struct client *client, const char *mech_name,
-		      const char *init_resp)
+static int
+client_auth_begin_common(struct client *client, const char *mech_name,
+			 bool private, const char *init_resp)
 {
 	if (!client->secured && strcmp(client->ssl_set->ssl, "required") == 0) {
 		if (client->set->auth_verbose) {
@@ -784,7 +792,7 @@ int client_auth_begin(struct client *client, const char *mech_name,
 	client_ref(client);
 	client->auth_initializing = TRUE;
 	sasl_server_auth_begin(client, login_binary->protocol, mech_name,
-			       init_resp, sasl_callback);
+			       private, init_resp, sasl_callback);
 	client->auth_initializing = FALSE;
 	if (!client->authenticating)
 		return 1;
@@ -793,6 +801,18 @@ int client_auth_begin(struct client *client, const char *mech_name,
 	io_remove(&client->io);
 	client_set_auth_waiting(client);
 	return 0;
+}
+
+int client_auth_begin(struct client *client, const char *mech_name,
+		      const char *init_resp)
+{
+	return client_auth_begin_common(client, mech_name, FALSE, init_resp);
+}
+
+int client_auth_begin_private(struct client *client, const char *mech_name,
+			      const char *init_resp)
+{
+	return client_auth_begin_common(client, mech_name, TRUE, init_resp);
 }
 
 bool client_check_plaintext_auth(struct client *client, bool pass_sent)
@@ -838,7 +858,7 @@ void clients_notify_auth_connected(void)
 
 		if (!client_does_custom_io(client) && client->input_blocked) {
 			client->input_blocked = FALSE;
-			client_input(client);
+			io_set_pending(client->io);
 		}
 	}
 }

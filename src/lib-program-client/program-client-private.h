@@ -1,6 +1,3 @@
-/* Copyright (c) 2002-2018 Dovecot authors, see the included COPYING file
- */
-
 #ifndef PROGRAM_CLIENT_PRIVATE_H
 #define PROGRAM_CLIENT_PRIVATE_H
 
@@ -35,19 +32,20 @@ struct program_client {
 	pool_t pool;
 	struct program_client_settings set;
 
-	char *path;
 	const char **args;
 	ARRAY_TYPE(const_string) envs;
+
+	struct event *event;
 
 	int fd_in, fd_out;
 	struct io *io;
 	struct timeout *to;
 	struct timeval start_time;
 
-	struct istream *input, *program_input, *seekable_output;
-	struct istream *dot_input;
-	struct ostream *output, *program_output, *dot_output;
-	char *temp_prefix;
+	struct istream *input, *program_input, *raw_program_input;
+	struct ostream *output, *program_output, *raw_program_output;
+
+	struct iostream_pump *pump_in, *pump_out;
 
 	ARRAY(struct program_client_extra_fd) extra_fds;
 
@@ -67,19 +65,20 @@ struct program_client {
 	bool debug:1;
 	bool disconnected:1;
 	bool output_seekable:1;
-	bool input_dot_created:1;
-	bool output_dot_created:1;
 	bool destroying:1;
 };
 
+void program_client_set_label(struct program_client *pclient,
+			      const char *label);
+
 void program_client_init(struct program_client *pclient, pool_t pool,
-			 const char *path,
+			 const char *initial_label,
 			 const char *const *args,
 			 const struct program_client_settings *set);
 
 void program_client_init_streams(struct program_client *pclient);
 
-int program_client_connected(struct program_client *pclient);
+void program_client_connected(struct program_client *pclient);
 
 void program_client_fail(struct program_client *pclient,
 			 enum program_client_error error);

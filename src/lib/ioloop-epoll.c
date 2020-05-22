@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "array.h"
+#include "sleep.h"
 #include "ioloop-private.h"
 #include "ioloop-iolist.h"
 
@@ -145,7 +146,7 @@ void io_loop_handle_remove(struct io_file *io, bool closed)
 			const char *errstr = t_strdup_printf(
 				"epoll_ctl(%s, %d) failed: %m",
 				op == EPOLL_CTL_DEL ? "del" : "mod", io->fd);
-			if (errno == EBADF)
+			if (errno != ENOSPC && errno != ENOMEM)
 				i_panic("%s", errstr);
 			else
 				i_error("%s", errstr);
@@ -186,7 +187,7 @@ void io_loop_handler_run_internal(struct ioloop *ioloop)
 		/* no I/Os, but we should have some timeouts.
 		   just wait for them. */
 		i_assert(msecs >= 0);
-		usleep(msecs*1000);
+		i_sleep_intr_msecs(msecs);
 		ret = 0;
 	}
 
@@ -217,8 +218,11 @@ void io_loop_handler_run_internal(struct ioloop *ioloop)
 			else if ((io->io.condition & IO_ERROR) != 0)
 				call = (event->events & IO_EPOLL_ERROR) != 0;
 
-			if (call)
+			if (call) {
 				io_loop_call_io(&io->io);
+				if (!ioloop->running)
+					return;
+			}
 		}
 	}
 }

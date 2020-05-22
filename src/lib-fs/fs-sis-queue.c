@@ -29,16 +29,16 @@ static struct fs *fs_sis_queue_alloc(void)
 
 static int
 fs_sis_queue_init(struct fs *_fs, const char *args,
-		  const struct fs_settings *set)
+		  const struct fs_settings *set, const char **error_r)
 {
 	struct sis_queue_fs *fs = (struct sis_queue_fs *)_fs;
-	const char *p, *parent_name, *parent_args, *error;
+	const char *p, *parent_name, *parent_args;
 
 	/* <queue_dir>:<parent fs>[:<args>] */
 
 	p = strchr(args, ':');
 	if (p == NULL || p[1] == '\0') {
-		fs_set_error(_fs, "Parent filesystem not given as parameter");
+		*error_r = "Parent filesystem not given as parameter";
 		return -1;
 	}
 
@@ -50,10 +50,8 @@ fs_sis_queue_init(struct fs *_fs, const char *args,
 		parent_args = "";
 	else
 		parent_name = t_strdup_until(parent_name, parent_args++);
-	if (fs_init(parent_name, parent_args, set, &_fs->parent, &error) < 0) {
-		fs_set_error(_fs, "%s", error);
+	if (fs_init(parent_name, parent_args, set, &_fs->parent, error_r) < 0)
 		return -1;
-	}
 	return 0;
 }
 
@@ -83,7 +81,7 @@ fs_sis_queue_file_init(struct fs_file *_file, const char *path,
 	file->fs = fs;
 
 	if (mode == FS_OPEN_MODE_APPEND)
-		fs_set_error(_file->fs, "APPEND mode not supported");
+		fs_set_error(_file->event, ENOTSUP, "APPEND mode not supported");
 	else
 		file->file.parent = fs_file_init_parent(_file, path, mode | flags);
 }
@@ -92,7 +90,7 @@ static void fs_sis_queue_file_deinit(struct fs_file *_file)
 {
 	struct sis_queue_fs_file *file = (struct sis_queue_fs_file *)_file;
 
-	fs_file_deinit(&_file->parent);
+	fs_file_free(_file);
 	i_free(file->file.path);
 	i_free(file);
 }
@@ -165,7 +163,7 @@ static int fs_sis_queue_write_stream_finish(struct fs_file *_file, bool success)
 static int fs_sis_queue_delete(struct fs_file *_file)
 {
 	T_BEGIN {
-		fs_sis_try_unlink_hash_file(_file->fs, _file->parent);
+		fs_sis_try_unlink_hash_file(_file, _file->parent);
 	} T_END;
 	return fs_delete(_file->parent);
 }

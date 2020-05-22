@@ -113,37 +113,15 @@ sql_dict_init(struct dict *driver, const char *uri,
 		return -1;
 	}
 
-	if ((sql_get_flags(dict->db) & SQL_DB_FLAG_PREP_STATEMENTS) != 0) {
-		hash_table_create(&dict->prep_stmt_hash, dict->pool,
-				  0, str_hash, strcmp);
-	}
 	*dict_r = &dict->dict;
 	return 0;
-}
-
-static void sql_dict_prep_stmt_hash_free(struct sql_dict *dict)
-{
-	struct hash_iterate_context *iter;
-	struct sql_prepared_statement *prep_stmt;
-	const char *query;
-
-	if (!hash_table_is_created(dict->prep_stmt_hash))
-		return;
-
-	iter = hash_table_iterate_init(dict->prep_stmt_hash);
-	while (hash_table_iterate(iter, dict->prep_stmt_hash, &query, &prep_stmt))
-		sql_prepared_statement_deinit(&prep_stmt);
-	hash_table_iterate_deinit(&iter);
-
-	hash_table_destroy(&dict->prep_stmt_hash);
 }
 
 static void sql_dict_deinit(struct dict *_dict)
 {
 	struct sql_dict *dict = (struct sql_dict *)_dict;
 
-	sql_dict_prep_stmt_hash_free(dict);
-	sql_deinit(&dict->db);
+	sql_unref(&dict->db);
 	pool_unref(&dict->pool);
 }
 
@@ -178,12 +156,13 @@ dict_sql_map_match(const struct dict_sql_map *map, const char *path,
 					pat--;
 					if (path[len-1] == '/') {
 						field = t_strndup(path, len-1);
-						array_append(values, &field, 1);
+						array_push_back(values,
+								&field);
 					} else {
-						array_append(values, &path, 1);
+						array_push_back(values, &path);
 					}
 				} else {
-					array_append(values, &path, 1);
+					array_push_back(values, &path);
 					path += len;
 				}
 				*path_len_r = path - path_start;
@@ -194,12 +173,12 @@ dict_sql_map_match(const struct dict_sql_map *map, const char *path,
 			p = strchr(path, '/');
 			if (p != NULL) {
 				field = t_strdup_until(path, p);
-				array_append(values, &field, 1);
+				array_push_back(values, &field);
 				path = p;
 			} else {
 				/* no '/' anymore, but it'll still match a
 				   partial */
-				array_append(values, &path, 1);
+				array_push_back(values, &path);
 				path += strlen(path);
 				pat++;
 			}
@@ -275,14 +254,10 @@ sql_dict_statement_init(struct sql_dict *dict, const char *query,
 	struct sql_prepared_statement *prep_stmt;
 	const struct sql_dict_param *param;
 
-	if (hash_table_is_created(dict->prep_stmt_hash)) {
-		prep_stmt = hash_table_lookup(dict->prep_stmt_hash, query);
-		if (prep_stmt == NULL) {
-			const char *query_dup = p_strdup(dict->pool, query);
-			prep_stmt = sql_prepared_statement_init(dict->db, query);
-			hash_table_insert(dict->prep_stmt_hash, query_dup, prep_stmt);
-		}
+	if ((sql_get_flags(dict->db) & SQL_DB_FLAG_PREP_STATEMENTS) != 0) {
+		prep_stmt = sql_prepared_statement_init(dict->db, query);
 		stmt = sql_statement_init_prepared(prep_stmt);
+		sql_prepared_statement_unref(&prep_stmt);
 	} else {
 		/* Prepared statements not supported by the backend.
 		   Just use regular statements to avoid wasting memory. */
@@ -431,10 +406,12 @@ sql_dict_where_build(struct sql_dict *dict, const struct dict_sql_map *map,
 		break;
 	}
 	if (priv) {
+		struct sql_dict_param *param = array_append_space(params);
 		if (count2 > 0)
 			str_append(query, " AND");
-		str_printfa(query, " %s = '%s'", map->username_field,
-			    sql_escape_string(dict->db, dict->username));
+		str_printfa(query, " %s = ?", map->username_field);
+		param->value_type = DICT_SQL_TYPE_STRING;
+		param->value_str = dict->username;
 	}
 	return 0;
 }
@@ -1087,9 +1064,11 @@ static int sql_dict_set_query(struct sql_dict_transaction_context *ctx,
 			return -1;
 	}
 	if (build->key1 == DICT_PATH_PRIVATE[0]) {
+		struct sql_dict_param *param = array_append_space(&params);
 		str_printfa(prefix, ",%s", fields[0].map->username_field);
-		str_printfa(suffix, ",'%s'",
-			    sql_escape_string(dict->db, dict->username));
+		str_append(suffix, ",?");
+		param->value_type = DICT_SQL_TYPE_STRING;
+		param->value_str = dict->username;
 	}
 
 	/* add the other fields from the key */
@@ -1194,7 +1173,7 @@ static void sql_dict_set_real(struct dict_transaction_context *_ctx,
 	i_zero(&build);
 	build.dict = dict;
 	t_array_init(&build.fields, 1);
-	array_append(&build.fields, &field, 1);
+	array_push_back(&build.fields, &field);
 	build.extra_values = &values;
 	build.key1 = key[0];
 
@@ -1286,7 +1265,7 @@ static void sql_dict_atomic_inc_real(struct sql_dict_transaction_context *ctx,
 	i_zero(&build);
 	build.dict = dict;
 	t_array_init(&build.fields, 1);
-	array_append(&build.fields, &field, 1);
+	array_push_back(&build.fields, &field);
 	build.extra_values = &values;
 	build.key1 = key[0];
 
