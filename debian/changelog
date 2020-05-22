@@ -2,6 +2,7 @@ dovecot (1:2.3.10.1-1) UNRELEASED; urgency=medium
 
   * New upstream release
   * Refresh patches
+  * Strip non-DFSG-compliant docs from .orig archives
 
  -- Noah Meyerhans <noahm@debian.org>  Thu, 21 May 2020 19:20:58 -0700
 
