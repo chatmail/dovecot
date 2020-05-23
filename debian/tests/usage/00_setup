@@ -32,7 +32,7 @@ systemctl restart dovecot
 echo "Waiting for the service to be available"
 c=0
 while ! nc -z -U /run/dovecot/auth-userdb; do
-    c=$(($c+1))
+    c=$((c+1))
     sleep 2
     if [ $c -gt 30 ]; then
         echo "Timed out waiting for the service to be available" >&2
