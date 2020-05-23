@@ -9,11 +9,10 @@ Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>,
 Build-Depends: debhelper-compat (= 12),
                default-libmysqlclient-dev,
                dh-exec,
-               dpkg-dev (>= 1.16.1),
                krb5-multidev,
                libapparmor-dev,
                libbz2-dev,
-               libclucene-dev (>= 2.3),
+               libclucene-dev,
                libdb-dev,
                libicu-dev,
                libexpat-dev,
@@ -43,11 +42,11 @@ Package: dovecot-core
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: adduser,
-         libpam-runtime (>= 0.76-13.1),
+         libpam-runtime,
          lsb-base,
          openssl,
          ssl-cert,
-         ucf (>= 2.0020),
+         ucf,
          ${misc:Depends},
          ${shlibs:Depends}
 Suggests: dovecot-gssapi,
@@ -94,7 +93,7 @@ Description: secure POP3/IMAP server - header files
 Package: dovecot-imapd
 Architecture: any
 Depends: dovecot-core (= ${binary:Version}),
-         ucf (>= 2.0020),
+         ucf,
          ${misc:Depends},
          ${shlibs:Depends}
 Suggests: ufw
@@ -111,7 +110,7 @@ Description: secure POP3/IMAP server - IMAP daemon
 Package: dovecot-pop3d
 Architecture: any
 Depends: dovecot-core (= ${binary:Version}),
-         ucf (>= 2.0020),
+         ucf,
          ${misc:Depends},
          ${shlibs:Depends}
 Suggests: ufw
@@ -128,7 +127,7 @@ Description: secure POP3/IMAP server - POP3 daemon
 Package: dovecot-lmtpd
 Architecture: any
 Depends: dovecot-core (= ${binary:Version}),
-         ucf (>= 2.0020),
+         ucf,
          ${misc:Depends},
          ${shlibs:Depends}
 Replaces: dovecot-common (<< 1:2.0.14-2~)
@@ -146,7 +145,7 @@ Package: dovecot-managesieved
 Architecture: any
 Depends: dovecot-core (= ${binary:Version}),
          dovecot-sieve (= ${binary:Version}),
-         ucf (>= 2.0020),
+         ucf,
          ${misc:Depends},
          ${shlibs:Depends}
 Replaces: dovecot-common (<< 1:2.0.14-2~)
@@ -199,7 +198,7 @@ Description: secure POP3/IMAP server - SQLite support
 Package: dovecot-ldap
 Architecture: any
 Depends: dovecot-core (= ${binary:Version}),
-         ucf (>= 2.0020),
+         ucf,
          ${misc:Depends},
          ${shlibs:Depends}
 Replaces: dovecot-core (<< 1:2.2.26.0-1~)
@@ -228,7 +227,7 @@ Description: secure POP3/IMAP server - GSSAPI support
 Package: dovecot-sieve
 Architecture: any
 Depends: dovecot-core (= ${binary:Version}),
-         ucf (>= 2.0020),
+         ucf,
          ${misc:Depends},
          ${shlibs:Depends}
 Breaks: dovecot-core (<= 1:2.2.13-6), dovecot-imapd (<< 1:2.2.26.0-1~)
@@ -269,7 +268,7 @@ Description: secure POP3/IMAP server - Lucene support
 Package: dovecot-submissiond
 Architecture: any
 Depends: dovecot-core (= ${binary:Version}),
-         ucf (>= 2.0020),
+         ucf,
          ${misc:Depends},
          ${shlibs:Depends}
 Breaks: dovecot-submission (<< 1:2.3.1-2~)
