@@ -1,18 +1,22 @@
-From: Jaldhar H. Vyas <jaldhar@debian.org>
-Date: Thu Aug 22 22:44:48 EDT 2013
-Subject: policy 22.6 compliant mbox write locking 
-Description: For NFS safety, prefer fcntl to dotlocks.  Dovecots default is
- the other way around.
+From: "Jaldhar H. Vyas" <jaldhar@debian.org>
+Date: Thu, 22 Aug 2013 22:44:48 -0400
+Subject: policy 22.6 compliant mbox write locking
+
+For NFS safety, prefer fcntl to dotlocks.
+Dovecots default is the other way around.
+
 Bug: #720502
 ---
- doc/example-config/conf.d/10-mail.conf     |    8 +++++++-
- src/config/all-settings.c                  |    2 +-
- src/lib-storage/index/mbox/mbox-settings.c |    2 +-
+ doc/example-config/conf.d/10-mail.conf     | 8 +++++++-
+ src/config/all-settings.c                  | 2 +-
+ src/lib-storage/index/mbox/mbox-settings.c | 2 +-
  3 files changed, 9 insertions(+), 3 deletions(-)
 
+diff --git a/doc/example-config/conf.d/10-mail.conf b/doc/example-config/conf.d/10-mail.conf
+index 425612a..d95112a 100644
 --- a/doc/example-config/conf.d/10-mail.conf
 +++ b/doc/example-config/conf.d/10-mail.conf
-@@ -320,8 +320,14 @@
+@@ -320,8 +320,14 @@ protocol !indexer-worker {
  # in is important to avoid deadlocks if other MTAs/MUAs are using multiple
  # locking methods as well. Some operating systems don't allow using some of
  # them simultaneously.
@@ -28,9 +32,24 @@ Bug: #720502
  
  # Maximum time to wait for lock (all of them) before aborting.
  #mbox_lock_timeout = 5 mins
+diff --git a/src/config/all-settings.c b/src/config/all-settings.c
+index f3e0661..cb93fa2 100644
+--- a/src/config/all-settings.c
++++ b/src/config/all-settings.c
+@@ -1225,7 +1225,7 @@ static const struct setting_define mbox_setting_defines[] = {
+ };
+ static const struct mbox_settings mbox_default_settings = {
+ 	.mbox_read_locks = "fcntl",
+-	.mbox_write_locks = "dotlock fcntl",
++	.mbox_write_locks = "fcntl dotlock",
+ 	.mbox_lock_timeout = 5*60,
+ 	.mbox_dotlock_change_timeout = 2*60,
+ 	.mbox_min_index_size = 0,
+diff --git a/src/lib-storage/index/mbox/mbox-settings.c b/src/lib-storage/index/mbox/mbox-settings.c
+index 53aaf8d..c4ae8e7 100644
 --- a/src/lib-storage/index/mbox/mbox-settings.c
 +++ b/src/lib-storage/index/mbox/mbox-settings.c
-@@ -27,7 +27,7 @@
+@@ -27,7 +27,7 @@ static const struct setting_define mbox_setting_defines[] = {
  
  static const struct mbox_settings mbox_default_settings = {
  	.mbox_read_locks = "fcntl",
