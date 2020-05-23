@@ -79,7 +79,7 @@ dev_files = usr/include/* \
 	dh $@
 
 override_dh_autoreconf:
-	dh_autoreconf -- debian/autogen.sh
+	dh_autoreconf debian/autogen.sh
 
 override_dh_auto_configure:
 	KRB5CONFIG=krb5-config.mit dh_auto_configure -- \
@@ -111,7 +111,6 @@ override_dh_auto_configure:
 	
 	# Pigeonhole
 	touch $(PIGEONHOLE_DIR)/stamp.h.in
-	chmod +x $(PIGEONHOLE_DIR)/configure
 	dh_auto_configure -D $(PIGEONHOLE_DIR) -- \
 	        --with-dovecot=../ \
 	        --libdir=\$${prefix}/lib \
@@ -122,8 +121,8 @@ override_dh_auto_build:
 	# Remove all-settings.c and let it be re-generated from the (patched)
 	# component settings files.
 	rm -f src/config/all-settings.c
-	dh_auto_build --parallel
-	dh_auto_build --parallel -D $(PIGEONHOLE_DIR)
+	dh_auto_build
+	dh_auto_build -D $(PIGEONHOLE_DIR)
 
 override_dh_auto_clean:
 	dh_auto_clean
