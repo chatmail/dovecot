@@ -6,7 +6,7 @@ Uploaders: Jaldhar H. Vyas <jaldhar@debian.org>,
            Jelmer Vernooij <jelmer@debian.org>,
            Apollon Oikonomopoulos <apoikos@debian.org>,
            Noah Meyerhans <noahm@debian.org>
-Build-Depends: debhelper-compat (= 12),
+Build-Depends: debhelper-compat (= 13),
                default-libmysqlclient-dev,
                dh-exec,
                krb5-multidev,
