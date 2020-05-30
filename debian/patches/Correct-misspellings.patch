@@ -1,0 +1,138 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Sun, 31 May 2020 00:55:07 +0200
+Subject: Correct misspellings
+
+Found by Lintian
+---
+ ChangeLog                                     | 6 +++---
+ NEWS                                          | 2 +-
+ pigeonhole/src/lib-sieve/sieve-address.c      | 2 +-
+ src/director/director-connection.c            | 2 +-
+ src/lib-index/mail-index-transaction-finish.c | 2 +-
+ src/lib-index/mail-index.h                    | 2 +-
+ src/lib-index/mail-transaction-log-file.c     | 2 +-
+ src/lib-storage/index/index-sync-pvt.c        | 2 +-
+ 8 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/ChangeLog b/ChangeLog
+index c97c79c..b306f77 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -42050,7 +42050,7 @@ M	src/lib-storage/index/index-mail.c
+     lib-index: Add mail_cache_close_mail() to smartly drop cached data with
+     INDEX=MEMORY
+ 
+-    Instead of reseting the entire transaction buffer when 256 kB is reached, 
++    Instead of resetting the entire transaction buffer when 256 kB is reached, 
+     just drop mails have have been marked closed with mail_cache_close_mail(). 
+     If that's not enough, continue deleting forcibly until the buffer is below 
+     256 kB.
+@@ -61950,7 +61950,7 @@ M	src/lib-storage/index/dbox-single/sdbox-storage.c
+ 
+ 2016-09-21 20:50:24 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2e5e2047a)
+ 
+-    login-proxy: Fixed "Host is down" never reseting itself.
++    login-proxy: Fixed "Host is down" never resetting itself.
+ 
+     Broken by c8eb8314a, which moved adding num_waiting_connections earlier. 
+     After that it was never 0 at the check time.
+@@ -78892,7 +78892,7 @@ M	src/login-common/ssl-proxy-openssl.c
+ 
+ 2015-12-07 11:29:29 +0200 Timo Sirainen <tss@iki.fi> (975c2cdc1)
+ 
+-    doveadm: Fixed reseting getopt() with glibc when processing multiple
++    doveadm: Fixed resetting getopt() with glibc when processing multiple
+     commands in a single process. This means commands run with doveadm batch or
+     multiple commands in a single doveadm-server connection.
+ 
+diff --git a/NEWS b/NEWS
+index 077c1d1..2df4890 100644
+--- a/NEWS
++++ b/NEWS
+@@ -1292,7 +1292,7 @@ v2.2.26 2016-10-27  Timo Sirainen <tss@iki.fi>
+ 	- zlib, IMAP BINARY: Fixed internal caching when accessing multiple
+ 	  newly created mails. They all had UID=0 and the next mail could have
+ 	  wrongly used the previously cached mail.
+-	- doveadm stats reset wasn't reseting all the stats.
++	- doveadm stats reset wasn't resetting all the stats.
+ 	- auth_stats=yes: Don't update num_logins, since it doubles them when
+ 	  using with mail stats.
+ 	- quota count: Fixed deadlocks when updating vsize header.
+diff --git a/pigeonhole/src/lib-sieve/sieve-address.c b/pigeonhole/src/lib-sieve/sieve-address.c
+index 2e81d99..eef0d75 100644
+--- a/pigeonhole/src/lib-sieve/sieve-address.c
++++ b/pigeonhole/src/lib-sieve/sieve-address.c
+@@ -433,7 +433,7 @@ static bool parse_mailbox_address
+ 
+ 	if (ctx->parser.data != ctx->parser.end) {
+ 		if ( *ctx->parser.data == ',' )
+-			sieve_address_error(ctx, "not a single addres (found ',')");
++			sieve_address_error(ctx, "not a single address (found ',')");
+ 		else
+ 			sieve_address_error(ctx, "address ends in invalid characters");
+ 		return FALSE;
+diff --git a/src/director/director-connection.c b/src/director/director-connection.c
+index 028d3db..75bb86c 100644
+--- a/src/director/director-connection.c
++++ b/src/director/director-connection.c
+@@ -875,7 +875,7 @@ static bool director_cmd_director(struct director_connection *conn,
+ 
+ 		/* already have this. just reset its last_network_failure
+ 		   timestamp, since it might be up now, but only if this
+-		   isn't part of the handshake. (if it was, reseting the
++		   isn't part of the handshake. (if it was, resetting the
+ 		   timestamp could cause us to rapidly keep trying to connect
+ 		   to it) */
+ 		if (conn->handshake_received)
+diff --git a/src/lib-index/mail-index-transaction-finish.c b/src/lib-index/mail-index-transaction-finish.c
+index 360e597..d39cbe2 100644
+--- a/src/lib-index/mail-index-transaction-finish.c
++++ b/src/lib-index/mail-index-transaction-finish.c
+@@ -53,7 +53,7 @@ ext_reset_update_atomic(struct mail_index_transaction *t,
+ 
+ 	array_idx_set(&t->ext_reset_ids, ext_id, &reset_id);
+ 
+-	/* reseting existing data is optional */
++	/* resetting existing data is optional */
+ 	if (array_is_created(&t->ext_resets)) {
+ 		reset = array_idx_modifiable(&t->ext_resets, ext_id);
+ 		if (reset->new_reset_id == (uint32_t)-1)
+diff --git a/src/lib-index/mail-index.h b/src/lib-index/mail-index.h
+index a54c41d..067cb9d 100644
+--- a/src/lib-index/mail-index.h
++++ b/src/lib-index/mail-index.h
+@@ -325,7 +325,7 @@ void mail_index_set_lock_method(struct mail_index *index,
+    use the default. */
+ void mail_index_set_optimization_settings(struct mail_index *index,
+ 	const struct mail_index_optimization_settings *set);
+-/* When creating a new index file or reseting an existing one, add the given
++/* When creating a new index file or resetting an existing one, add the given
+    extension header data immediately to it. */
+ void mail_index_set_ext_init_data(struct mail_index *index, uint32_t ext_id,
+ 				  const void *data, size_t size);
+diff --git a/src/lib-index/mail-transaction-log-file.c b/src/lib-index/mail-transaction-log-file.c
+index 5bd5e33..52ab9a8 100644
+--- a/src/lib-index/mail-transaction-log-file.c
++++ b/src/lib-index/mail-transaction-log-file.c
+@@ -759,7 +759,7 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
+ 		return -1;
+ 
+ 	if (reset) {
+-		/* don't reset modseqs. if we're reseting due to rebuilding
++		/* don't reset modseqs. if we're resetting due to rebuilding
+ 		   indexes we'll probably want to keep uidvalidity and in such
+ 		   cases we really don't want to shrink modseqs. */
+ 		file->hdr.prev_file_seq = 0;
+diff --git a/src/lib-storage/index/index-sync-pvt.c b/src/lib-storage/index/index-sync-pvt.c
+index ef374be..9fdb6ef 100644
+--- a/src/lib-storage/index/index-sync-pvt.c
++++ b/src/lib-storage/index/index-sync-pvt.c
+@@ -181,7 +181,7 @@ index_mailbox_sync_pvt_index(struct index_mailbox_sync_pvt_context *ctx,
+ 	} else {
+ 		/* mailbox created/recreated */
+ 		reset = TRUE;
+-		i_info("Mailbox %s UIDVALIDITY changed (%u -> %u), reseting private index",
++		i_info("Mailbox %s UIDVALIDITY changed (%u -> %u), resetting private index",
+ 		       ctx->box->vname, hdr_pvt->uid_validity,
+ 		       hdr_shared->uid_validity);
+ 	}
