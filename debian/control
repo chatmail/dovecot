@@ -32,7 +32,7 @@ Build-Depends: debhelper-compat (= 12),
                lsb-release,
                pkg-config,
                zlib1g-dev
-Standards-Version: 4.4.0
+Standards-Version: 4.5.0
 Rules-Requires-Root: binary-targets
 Homepage: https://dovecot.org/
 Vcs-Git: https://salsa.debian.org/debian/dovecot.git
