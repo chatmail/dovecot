@@ -1,2 +1,0 @@
-dovecot-ldap: hardening-no-fortify-functions usr/lib/dovecot/modules/auth/libauthdb_ldap.so
-
