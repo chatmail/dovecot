@@ -30,6 +30,11 @@ struct imapc_resp_code_map {
 extern struct mail_storage imapc_storage;
 extern struct mailbox imapc_mailbox;
 
+static struct event_category event_category_imapc = {
+	.name = "imapc",
+	.parent = &event_category_storage,
+};
+
 static struct imapc_resp_code_map imapc_resp_code_map[] = {
 	{ IMAP_RESP_CODE_UNAVAILABLE, MAIL_ERROR_TEMP },
 	{ IMAP_RESP_CODE_AUTHFAILED, MAIL_ERROR_PERM },
@@ -334,16 +339,16 @@ int imapc_storage_client_create(struct mail_namespace *ns,
 	mail_user_set_get_temp_prefix(str, ns->user->set);
 	set.temp_path_prefix = str_c(str);
 
-	set.ssl_ca_dir = mail_set->ssl_client_ca_dir;
-	set.ssl_ca_file = mail_set->ssl_client_ca_file;
-	set.ssl_verify = imapc_set->imapc_ssl_verify;
+	mail_user_init_ssl_client_settings(ns->user, &set.ssl_set);
+	if (!imapc_set->imapc_ssl_verify)
+		set.ssl_set.allow_invalid_cert = TRUE;
+
 	if (strcmp(imapc_set->imapc_ssl, "imaps") == 0)
 		set.ssl_mode = IMAPC_CLIENT_SSL_MODE_IMMEDIATE;
 	else if (strcmp(imapc_set->imapc_ssl, "starttls") == 0)
 		set.ssl_mode = IMAPC_CLIENT_SSL_MODE_STARTTLS;
 	else
 		set.ssl_mode = IMAPC_CLIENT_SSL_MODE_NONE;
-	set.ssl_crypto_device = mail_set->ssl_crypto_device;
 
 	set.throttle_set.init_msecs = imapc_set->throttle_init_msecs;
 	set.throttle_set.max_msecs = imapc_set->throttle_max_msecs;
@@ -584,8 +589,8 @@ imapc_mailbox_reopen_callback(const struct imapc_command_reply *reply,
 	if (reply->state != IMAPC_COMMAND_STATE_OK)
 		errmsg = reply->text_full;
 	else if (imapc_mailbox_verify_select(mbox, &errmsg)) {
+		imap_mailbox_select_finish(mbox);
 		errmsg = NULL;
-		mbox->selected = TRUE;
 	}
 
 	if (errmsg != NULL) {
@@ -656,7 +661,7 @@ imapc_mailbox_open_callback(const struct imapc_command_reply *reply,
 				"imapc: Opening mailbox failed: %s", error);
 			ctx->ret = -1;
 		} else {
-			ctx->mbox->selected = TRUE;
+			imap_mailbox_select_finish(ctx->mbox);
 			ctx->ret = 0;
 		}
 	} else if (reply->state == IMAPC_COMMAND_STATE_NO) {
@@ -1208,6 +1213,7 @@ struct mail_storage imapc_storage = {
 	.name = IMAPC_STORAGE_NAME,
 	.class_flags = MAIL_STORAGE_CLASS_FLAG_NO_ROOT |
 		       MAIL_STORAGE_CLASS_FLAG_UNIQUE_ROOT,
+	.event_category = &event_category_imapc,
 
 	.v = {
 		imapc_get_setting_parser_info,

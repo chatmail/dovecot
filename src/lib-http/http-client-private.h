@@ -168,9 +168,6 @@ struct http_client_connection {
 	struct http_client_peer_pool *ppool;
 	struct http_client_peer *peer;
 
-	char *label;
-	unsigned int id; // DEBUG: identify parallel connections
-
 	int connect_errno;
 	struct timeval connect_start_timestamp;
 	struct timeval connected_timestamp;
@@ -193,7 +190,6 @@ struct http_client_connection {
 	bool connected:1;           /* connection is connected */
 	bool tunneling:1;           /* last sent request turns this
 	                               connection into tunnel */
-	bool connect_initialized:1; /* connection was initialized */
 	bool connect_succeeded:1;   /* connection succeeded including SSL */
 	bool connect_failed:1;      /* connection failed */
 	bool lost_prematurely:1;    /* lost connection before receiving any data */
@@ -348,6 +344,7 @@ struct http_client_host_shared {
 	/* timeouts */
 	struct timeout *to_idle;
 
+	bool destroyed:1;	/* shared host object is being destroyed */
 	bool unix_local:1;
 	bool explicit_ip:1;
 };

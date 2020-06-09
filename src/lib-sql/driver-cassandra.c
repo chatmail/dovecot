@@ -71,6 +71,7 @@ static const char *cassandra_query_type_names[CASSANDRA_QUERY_TYPE_COUNT] = {
 
 struct cassandra_callback {
 	unsigned int id;
+	struct timeout *to;
 	CassFuture *future;
 	struct cassandra_db *db;
 	driver_cassandra_callback_t *callback;
@@ -360,7 +361,7 @@ static void driver_cassandra_close(struct cassandra_db *db, const char *error)
 	array_clear(&db->pending_prepares);
 
 	while (array_count(&db->results) > 0) {
-		resultp = array_idx(&db->results, 0);
+		resultp = array_front(&db->results);
 		if ((*resultp)->error == NULL)
 			(*resultp)->error = i_strdup(error);
 		result_finish(*resultp);
@@ -382,10 +383,24 @@ static void driver_cassandra_log_error(struct cassandra_db *db,
 	e_error(db->api.event, "%s: %.*s", str, (int)size, message);
 }
 
+static void cassandra_callback_run(struct cassandra_callback *cb)
+{
+	timeout_remove(&cb->to);
+	cb->callback(cb->future, cb->context);
+	cass_future_free(cb->future);
+	i_free(cb);
+}
+
 static void driver_cassandra_future_callback(CassFuture *future ATTR_UNUSED,
 					     void *context)
 {
 	struct cassandra_callback *cb = context;
+
+	if (cb->id == 0) {
+		/* called immediately from the main thread. */
+		cb->to = timeout_add_short(0, cassandra_callback_run, cb);
+		return;
+	}
 
 	/* this isn't the main thread - communicate with main thread by
 	   writing the callback id to the pipe. note that we must not use
@@ -398,13 +413,6 @@ static void driver_cassandra_future_callback(CassFuture *future ATTR_UNUSED,
 			strerror(errno));
 		(void)write_full(STDERR_FILENO, str, strlen(str));
 	}
-}
-
-static void cassandra_callback_run(struct cassandra_callback *cb)
-{
-	cb->callback(cb->future, cb->context);
-	cass_future_free(cb->future);
-	i_free(cb);
 }
 
 static void driver_cassandra_input_id(struct cassandra_db *db, unsigned int id)
@@ -455,15 +463,25 @@ driver_cassandra_set_callback(CassFuture *future, struct cassandra_db *db,
 {
 	struct cassandra_callback *cb;
 
+	i_assert(callback != NULL);
+
 	cb = i_new(struct cassandra_callback, 1);
-	cb->id = ++db->callback_ids;
 	cb->future = future;
 	cb->callback = callback;
 	cb->context = context;
 	cb->db = db;
-	array_append(&db->callbacks, &cb, 1);
 
+	/* NOTE: The callback may be called immediately. This is checked by
+	   seeing whether cb->id==0, so set it only after this call. */
 	cass_future_set_callback(future, driver_cassandra_future_callback, cb);
+
+	if (cb->to == NULL) {
+		/* callback will be called later */
+		array_push_back(&db->callbacks, &cb);
+		cb->id = ++db->callback_ids;
+		if (cb->id == 0)
+			cb->id = ++db->callback_ids;
+	}
 }
 
 static void connect_callback(CassFuture *future, void *context)
@@ -1300,7 +1318,7 @@ driver_cassandra_query_init(struct cassandra_db *db, const char *query,
 	result->query = i_strdup(query);
 	result->is_prepared = is_prepared;
 	result->api.event = event_create(db->api.event);
-	array_append(&db->results, &result, 1);
+	array_push_back(&db->results, &result);
 	return result;
 }
 
@@ -1521,8 +1539,8 @@ static int driver_cassandra_result_next_row(struct sql_result *_result)
 			ret = -1;
 			break;
 		}
-		array_append(&result->fields, &str, 1);
-		array_append(&result->field_sizes, &size, 1);
+		array_push_back(&result->fields, &str);
+		array_push_back(&result->field_sizes, &size);
 	}
 	return ret;
 }
@@ -1637,7 +1655,7 @@ driver_cassandra_result_get_values(struct sql_result *_result)
 {
 	struct cassandra_result *result = (struct cassandra_result *)_result;
 
-	return array_idx(&result->fields, 0);
+	return array_front(&result->fields);
 }
 
 static const char *driver_cassandra_result_get_error(struct sql_result *_result)
@@ -1977,7 +1995,7 @@ static void prepare_start(struct cassandra_sql_prepared_statement *prep_stmt)
 	if (!SQL_DB_IS_READY(&db->api)) {
 		if (!prep_stmt->pending) {
 			prep_stmt->pending = TRUE;
-			array_append(&db->pending_prepares, &prep_stmt, 1);
+			array_push_back(&db->pending_prepares, &prep_stmt);
 
 			if (sql_connect(&db->api) < 0)
 				i_unreached();
@@ -2065,7 +2083,7 @@ driver_cassandra_statement_init_prepared(struct sql_prepared_statement *_prep_st
 		if (prep_stmt->error != NULL)
 			prepare_start(prep_stmt);
 		/* need to wait until prepare is finished */
-		array_append(&prep_stmt->pending_statements, &stmt, 1);
+		array_push_back(&prep_stmt->pending_statements, &stmt);
 	}
 	return &stmt->stmt;
 }

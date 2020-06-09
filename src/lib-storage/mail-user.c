@@ -694,8 +694,7 @@ void mail_user_init_ssl_client_settings(struct mail_user *user,
 	const struct mail_storage_settings *mail_set =
 		mail_user_set_get_storage_set(user);
 
-	ssl_set->ca_dir = mail_set->ssl_client_ca_dir;
-	ssl_set->ca_file = mail_set->ssl_client_ca_file;
+	mail_storage_settings_init_ssl_client_settings(mail_set, ssl_set);
 }
 
 void mail_user_init_fs_settings(struct mail_user *user,
@@ -751,8 +750,10 @@ int mail_user_home_mkdir(struct mail_user *user)
 	const char *home;
 	int ret;
 
-	if (mail_user_get_home(user, &home) < 0)
-		return -1;
+	if ((ret = mail_user_get_home(user, &home)) <= 0) {
+		/* If user has no home directory, just return success. */
+		return ret;
+	}
 
 	/* Try to create the home directory by creating the root directory for
 	   a namespace that exists under the home. This way we end up in the

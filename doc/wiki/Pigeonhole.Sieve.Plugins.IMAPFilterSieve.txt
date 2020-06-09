@@ -46,4 +46,4 @@ normal configuration settings used by the LDA Sieve plugin at delivery.
 
 The sieve_before and sieve_after scripts are currently ignored by this plugin.
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

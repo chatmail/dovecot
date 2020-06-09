@@ -10,7 +10,7 @@ such as NFS.
 Dovecot extensions
 ------------------
 
-Since the standard maildir specification [http://cr.yp.to/proto/maildir.html]
+Since the standard maildir specification [https://cr.yp.to/proto/maildir.html]
 doesn't provide everything needed to fully support the IMAP protocol, Dovecot
 had to create some of its own non-standard extensions. The extensions still
 keep the maildir standards compliant, so MUAs not supporting the extensions can
@@ -113,7 +113,7 @@ extended the<flags> field to be "<flags>[,<non-standard fields>]". This means
 that if Dovecot sees a comma in the<flags> field while updating flags in the
 filename, it doesn't touch anything after the comma. However other maildir MUAs
 may mess them up, so it's still not such a good idea to do that. Basic<flags>
-are described here [http://cr.yp.to/proto/maildir.html]. The <non-standard
+are described here [https://cr.yp.to/proto/maildir.html]. The <non-standard
 fields> isn't used by Dovecot for anything currently.
 
 Dovecot supports reading a few fields from the <base filename>:
@@ -135,7 +135,7 @@ Usage of timestamps
 Timestamps of message files:
 
  * 'mtime' is used as IMAP INTERNALDATE, RFC 3501 sec 2.3.3.
-   [http://www.faqs.org/rfcs/rfc3501.html], must never change, see sec.
+   [https://www.faqs.org/rfcs/rfc3501.html], must never change, see sec.
    2.3.1.1. 4)
  * 'ctime' used as Dovecot's internal "save/copy date", unless the correct
    value is found from 'dovecot.index.cache'. This is used only by external
@@ -176,8 +176,8 @@ Maildir and filesystems
 General comparisons of Maildir on different filesystems
 -------------------------------------------------------
 
- * http://www.thesmbexchange.com/eng/qmail_fs_benchmark.html
- * http://www.htiweb.inf.br/benchmark/fsbench.htm (including some graphs)
+ * https://www.thesmbexchange.com/eng/qmail_fs_benchmark.html
+ * https://www.htiweb.inf.br/benchmark/fsbench.htm (including some graphs)
 
 Linux ext2 / ext3
 -----------------
@@ -218,20 +218,20 @@ file system parameters.
 
  * There are early reports on the dovecot mailing list which suggest that XFS
    seems quite a lot slower than ext3 or
-   ReiserFS:http://www.dovecot.org/list/dovecot/2007-January/018994.html
+   ReiserFS:https://dovecot.org/list/dovecot/2007-January/018994.html
  * But then again others recommend XFS for the use with Maildir and dovecot:
-   http://www.dovecot.org/list/dovecot/2006-May/013216.html
+   https://dovecot.org/list/dovecot/2006-May/013216.html
  * This 2007 Linux.conf.au talk about "Choosing and Tuning Linux File Systems"
    (Slides as PDF)
-   [http://mirror.linux.org.au/pub/linux.conf.au/2007/video/talks/348.pdf] also
-   recommends XFS for Maildir (alternatively ext3 with small blocks and high
-   inodetofile ratio)
+   [https://mirror.linux.org.au/pub/linux.conf.au/2007/video/talks/348.pdf]
+   also recommends XFS for Maildir (alternatively ext3 with small blocks and
+   high inodetofile ratio)
  * Someone else wrote here in the wiki: XFS on TSL 3.0.5 works almost twice as
    fast as our prior EXT3 installation of which is significant in size.
    ReiserFS is also a good option.
  * Comparisons which suggest XFS as being best choice:
-    * http://www.thesmbexchange.com/eng/qmail_fs_benchmark.html
-    * http://www.htiweb.inf.br/benchmark/fsbench.htm
+    * https://www.thesmbexchange.com/eng/qmail_fs_benchmark.html
+    * https://www.htiweb.inf.br/benchmark/fsbench.htm
 
 Various tips
 ------------
@@ -239,10 +239,10 @@ Various tips
  * Mounting XFS with 'logbufs=8' option might increase the speed.
  * Create the XFS with options '-b size=1024 -d su=16k,sw=3 -l
    logdev=<some_other_device>' (Source:
-   http://www.thesmbexchange.com/eng/qmail_fs_benchmark.html)
+   https://www.thesmbexchange.com/eng/qmail_fs_benchmark.html)
  * Use 'mkfs.xfs -f -l size=32768b,version=2' and 'mount.xfs -o
    noatime,logbufs=8,logbsize=131072' (Source:
-   http://www.htiweb.inf.br/benchmark/fsbench.htm)
+   https://www.htiweb.inf.br/benchmark/fsbench.htm)
 
 NFS
 ---
@@ -251,15 +251,15 @@ NFS v3 performance can be adversely affected by readdirplus, which causes the
 NFS server to stat() every file in a directory.  The solution under Linux is to
 make sure the NFS filesystem is mounted with the "nordirplus" option.
 
- * http://www.dovecot.org/list/dovecot/2012-July/066939.html
+ * https://dovecot.org/list/dovecot/2012-July/066939.html
 
 Directory Structure
 -------------------
 
 By default Dovecot uses Maildir++
-[http://www.courier-mta.org/imap/README.maildirquota.html] directory layout for
-organizing mailbox directories. This means that all the folders are directly
-inside '~/Maildir' directory:
+[https://www.courier-mta.org/imap/README.maildirquota.html] directory layout
+for organizing mailbox directories. This means that all the folders are
+directly inside '~/Maildir' directory:
 
  * '~/Maildir/new', '~/Maildir/cur' and '~/Maildir/tmp' directories contain the
    messages for INBOX. The 'tmp' directory is used during delivery, new
@@ -315,7 +315,7 @@ Mail delivery
 -------------
 
 Qmail's how a message is delivered page
-[http://www.qmail.org/man/man5/maildir.html] suggests to deliver the mail like
+[https://www.qmail.org/man/man5/maildir.html] suggests to deliver the mail like
 this:
 
  1. Create a unique filename (only "time.pid.host" here, later Maildir spec has
@@ -391,10 +391,10 @@ The proper way to configure procmail to deliver to a Maildir is to use
 References
 ----------
 
- * Official Maildir format page [http://cr.yp.to/proto/maildir.html]
+ * Official Maildir format page [https://cr.yp.to/proto/maildir.html]
  * Qmail's how to deliver to Maildir man page
-   [http://www.qmail.org/man/man5/maildir.html]
- * Maildir++ [http://www.courier-mta.org/imap/README.maildirquota.html]
- * Wikipedia [http://en.wikipedia.org/wiki/Maildir]
+   [https://www.qmail.org/man/man5/maildir.html]
+ * Maildir++ [https://www.courier-mta.org/imap/README.maildirquota.html]
+ * Wikipedia [https://en.wikipedia.org/wiki/Maildir]
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

@@ -127,9 +127,9 @@ struct _slow_server {
 };
 
 static void
-test_server_slow_server_destroyed(struct smtp_server_cmd_ctx *cmd)
+test_server_slow_server_destroyed(struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
+				  struct _slow_server *ctx)
 {
-	struct _slow_server *ctx = (struct _slow_server *)cmd->context;
 	test_assert(ctx->serviced);
 	timeout_remove(&ctx->to_delay);
 	i_free(ctx);
@@ -162,8 +162,9 @@ test_server_slow_server_cmd_helo(void *conn_ctx ATTR_UNUSED,
 	ctx = i_new(struct _slow_server, 1);
 	ctx->cmd = cmd;
 
-	cmd->hook_destroy = test_server_slow_server_destroyed;
-	cmd->context = ctx;
+	smtp_server_command_add_hook(cmd->cmd,
+				     SMTP_SERVER_COMMAND_HOOK_DESTROY,
+				     test_server_slow_server_destroyed, ctx);
 
 	ctx->to_delay = timeout_add(4000,
 		test_server_slow_server_delayed, ctx);
@@ -257,9 +258,9 @@ test_server_slow_client_disconnect(void *conn_ctx, const char *reason)
 }
 
 static void
-test_server_slow_client_cmd_destroyed(struct smtp_server_cmd_ctx *cmd)
+test_server_slow_client_cmd_destroyed(
+	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED, struct _slow_client *ctx)
 {
-	struct _slow_client *ctx = (struct _slow_client *)cmd->context;
 	test_assert(ctx->serviced);
 	timeout_remove(&ctx->to_delay);
 }
@@ -299,8 +300,10 @@ test_server_slow_client_cmd_helo(void *conn_ctx,
 
 	conn->context = ctx;
 
-	cmd->hook_destroy = test_server_slow_client_cmd_destroyed;
-	cmd->context = ctx;
+	smtp_server_command_add_hook(cmd->cmd,
+				     SMTP_SERVER_COMMAND_HOOK_DESTROY,
+				     test_server_slow_client_cmd_destroyed,
+				     ctx);
 
 	ctx->to_delay = timeout_add_short(500,
 		test_server_slow_client_delayed, ctx);
@@ -379,11 +382,11 @@ test_server_hanging_command_payload_trans_free(void *conn_ctx  ATTR_UNUSED,
 static int
 test_server_hanging_command_payload_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data)
+	struct smtp_server_recipient *rcpt)
 {
 	if (debug) {
 		i_debug("RCPT TO:%s",
-			smtp_address_encode(data->path));
+			smtp_address_encode(rcpt->path));
 	}
 
 	return 1;
@@ -523,7 +526,7 @@ test_server_bad_command_helo(void *conn_ctx ATTR_UNUSED,
 static int
 test_server_bad_command_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data ATTR_UNUSED)
+	struct smtp_server_recipient *rcpt ATTR_UNUSED)
 {
 	return 1;
 }
@@ -617,7 +620,7 @@ test_server_long_command_helo(void *conn_ctx ATTR_UNUSED,
 static int
 test_server_long_command_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data ATTR_UNUSED)
+	struct smtp_server_recipient *rcpt ATTR_UNUSED)
 {
 	return 1;
 }
@@ -715,11 +718,11 @@ test_server_big_data_trans_free(void *conn_ctx  ATTR_UNUSED,
 static int
 test_server_big_data_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data)
+	struct smtp_server_recipient *rcpt)
 {
 	if (debug) {
 		i_debug("RCPT TO:%s",
-			smtp_address_encode(data->path));
+			smtp_address_encode(rcpt->path));
 	}
 	return 1;
 }
@@ -866,7 +869,7 @@ test_server_bad_ehlo_helo(void *conn_ctx ATTR_UNUSED,
 static int
 test_server_bad_ehlo_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data ATTR_UNUSED)
+	struct smtp_server_recipient *rcpt ATTR_UNUSED)
 {
 	return 1;
 }
@@ -1045,7 +1048,7 @@ test_server_bad_mail_disconnect(void *context ATTR_UNUSED, const char *reason)
 static int
 test_server_bad_mail_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data ATTR_UNUSED)
+	struct smtp_server_recipient *rcpt ATTR_UNUSED)
 {
 	test_assert(FALSE);
 	return 1;
@@ -1225,7 +1228,7 @@ test_server_bad_rcpt_disconnect(void *context ATTR_UNUSED, const char *reason)
 static int
 test_server_bad_rcpt_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data ATTR_UNUSED)
+	struct smtp_server_recipient *rcpt ATTR_UNUSED)
 {
 	return 1;
 }
@@ -1412,7 +1415,7 @@ test_server_mail_workarounds_disconnect(void *context ATTR_UNUSED,
 static int
 test_server_mail_workarounds_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data ATTR_UNUSED)
+	struct smtp_server_recipient *rcpt ATTR_UNUSED)
 {
 	test_assert(FALSE);
 	return 1;
@@ -1606,7 +1609,7 @@ test_server_rcpt_workarounds_disconnect(void *context ATTR_UNUSED,
 static int
 test_server_rcpt_workarounds_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data ATTR_UNUSED)
+	struct smtp_server_recipient *rcpt ATTR_UNUSED)
 {
 	return 1;
 }
@@ -1705,11 +1708,11 @@ test_server_too_many_recipients_trans_free(void *conn_ctx  ATTR_UNUSED,
 static int
 test_server_too_many_recipients_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data)
+	struct smtp_server_recipient *rcpt)
 {
 	if (debug) {
 		i_debug("RCPT TO:%s",
-			smtp_address_encode(data->path));
+			smtp_address_encode(rcpt->path));
 	}
 	return 1;
 }
@@ -1782,7 +1785,7 @@ static void test_client_data_no_mail(unsigned int index)
 static int
 test_server_data_no_mail_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data ATTR_UNUSED)
+	struct smtp_server_recipient *rcpt ATTR_UNUSED)
 {
 	/* not supposed to get here */
 	i_assert(FALSE);
@@ -1874,7 +1877,7 @@ test_server_data_no_rcpt_trans_free(void *conn_ctx  ATTR_UNUSED,
 static int
 test_server_data_no_rcpt_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data ATTR_UNUSED)
+	struct smtp_server_recipient *rcpt ATTR_UNUSED)
 {
 	/* not supposed to get here */
 	i_assert(FALSE);
@@ -1959,11 +1962,11 @@ test_server_data_binarymime_trans_free(void *conn_ctx  ATTR_UNUSED,
 static int
 test_server_data_binarymime_rcpt(void *conn_ctx ATTR_UNUSED,
 	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_cmd_rcpt *data)
+	struct smtp_server_recipient *rcpt)
 {
 	if (debug) {
 		i_debug("RCPT TO:%s",
-			smtp_address_encode(data->path));
+			smtp_address_encode(rcpt->path));
 	}
 	return 1;
 }
@@ -2070,8 +2073,8 @@ client_connection_init(const struct ip_addr *ip, in_port_t port)
 	conn = p_new(pool, struct client_connection, 1);
 	conn->pool = pool;
 
-	connection_init_client_ip(client_conn_list,
-		&conn->conn, ip, port);
+	connection_init_client_ip(client_conn_list, &conn->conn, NULL,
+				  ip, port);
 	(void)connection_client_connect(&conn->conn);
 }
 
@@ -2402,5 +2405,5 @@ int main(int argc, char *argv[])
 	bind_ip.family = AF_INET;
 	bind_ip.u.ip4.s_addr = htonl(INADDR_LOOPBACK);
 
-	test_run(test_functions);
+	return test_run(test_functions);
 }

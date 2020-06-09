@@ -381,8 +381,7 @@ static int search_arg_match_cached(struct index_search_context *ctx,
 		case SEARCH_SINCE:
 			return date >= arg->value.time ? 1 : 0;
 		default:
-			/* unreachable */
-			break;
+			i_unreached();
 		}
 
 	/* sizes */
@@ -1252,18 +1251,18 @@ wanted_sort_fields_get(struct mailbox *box,
 			break;
 		}
 		if (header != NULL)
-			array_append(&headers, &header, 1);
+			array_push_back(&headers, &header);
 	}
 
 	if (wanted_headers != NULL) {
 		for (i = 0; wanted_headers->name[i] != NULL; i++)
-			array_append(&headers, &wanted_headers->name[i], 1);
+			array_push_back(&headers, &wanted_headers->name[i]);
 	}
 
 	if (array_count(&headers) > 0) {
 		array_append_zero(&headers);
 		*headers_ctx_r = mailbox_header_lookup_init(box,
-							array_idx(&headers, 0));
+							array_front(&headers));
 	}
 }
 
@@ -1690,7 +1689,7 @@ struct mail *index_search_get_mail(struct index_search_context *ctx)
 	imail->search_mail = TRUE;
 	ctx->mail_ctx.transaction->stats_track = TRUE;
 
-	array_append(&ctx->mails, &mail, 1);
+	array_push_back(&ctx->mails, &mail);
 	return mail;
 }
 
@@ -1743,8 +1742,8 @@ static int search_more_with_prefetching(struct index_search_context *ctx,
 	mails = array_get(&ctx->mails, &count);
 	*mail_r = mails[0];
 	if (--ctx->unused_mail_idx > 0) {
-		array_delete(&ctx->mails, 0, 1);
-		array_append(&ctx->mails, mail_r, 1);
+		array_pop_front(&ctx->mails);
+		array_push_back(&ctx->mails, mail_r);
 	}
 	index_mail_update_access_parts_post(*mail_r);
 	return 1;
@@ -1835,7 +1834,7 @@ bool index_storage_search_next_nonblock(struct mail_search_context *_ctx,
 	if (!index_sort_list_next(_ctx->sort_program, &seq))
 		return FALSE;
 
-	mailp = array_idx(&ctx->mails, 0);
+	mailp = array_front(&ctx->mails);
 	mail_set_seq(*mailp, seq);
 	index_mail_update_access_parts_pre(*mailp);
 	index_mail_update_access_parts_post(*mailp);

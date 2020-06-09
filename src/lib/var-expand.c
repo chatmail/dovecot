@@ -780,7 +780,7 @@ var_expand_register_func_array(const struct var_expand_extension_func_table *fun
 	    ptr->key != NULL;
 	    ptr++) {
 		i_assert(*ptr->key != '\0');
-		array_insert(&var_expand_extensions, 0, ptr, 1);
+		array_push_front(&var_expand_extensions, ptr);
 	}
 }
 
@@ -824,5 +824,5 @@ var_expand_merge_tables(pool_t pool, const struct var_expand_table *a,
 		entry->long_key = p_strdup(pool, b[i].long_key);
 	}
 	array_append_zero(&table);
-	return array_idx_modifiable(&table, 0);
+	return array_front_modifiable(&table);
 }

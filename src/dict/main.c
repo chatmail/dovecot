@@ -70,7 +70,7 @@ static void dict_die(void)
 static void client_connected(struct master_service_connection *conn)
 {
 	master_service_client_connection_accept(conn);
-	(void)dict_connection_create(conn->fd);
+	(void)dict_connection_create(conn);
 }
 
 static void main_preinit(void)
@@ -111,10 +111,14 @@ static void main_init(void)
 	   which we'll need to register. */
 	dict_drivers_register_all();
 	dict_commands_init();
+	dict_connections_init();
 }
 
 static void main_deinit(void)
 {
+	/* FIXME: we're not able to do a clean deinit currently without
+	   larger changes. */
+	exit(0);
 	timeout_remove(&to_proctitle);
 
 	dict_connections_destroy_all();

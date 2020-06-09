@@ -106,8 +106,10 @@ http_client_init_shared(struct http_client_context *cctx,
 	struct http_client *client;
 	const char *log_prefix;
 	pool_t pool;
+	size_t pool_size;
 
-	pool = pool_alloconly_create("http client", 1024);
+	pool_size = (set != NULL && set->ssl != NULL) ? 8192 : 1024; /* certs will be >4K */
+	pool = pool_alloconly_create("http client", pool_size);
 	client = p_new(pool, struct http_client, 1);
 	client->pool = pool;
 	client->ioloop = current_ioloop;
@@ -119,13 +121,14 @@ http_client_init_shared(struct http_client_context *cctx,
 		http_client_context_ref(cctx);
 		log_prefix = t_strdup_printf("http-client[%u]: ", id);
 	} else {
+		i_assert(set != NULL);
 		client->cctx = cctx = http_client_context_create(set);
 		log_prefix = "http-client: ";
 	}
 
 	struct event *parent_event;
-	if (set != NULL && set->event != NULL)
-		parent_event = set->event;
+	if (set != NULL && set->event_parent != NULL)
+		parent_event = set->event_parent;
 	else if (cctx->event == NULL)
 		parent_event = NULL;
 	else {
@@ -402,7 +405,7 @@ void http_client_delay_request_error(struct http_client *client,
 			timeout_add_short_to(client->ioloop, 0,
 				http_client_handle_request_errors, client);
 	}
-	array_append(&client->delayed_failing_requests, &req, 1);
+	array_push_back(&client->delayed_failing_requests, &req);
 }
 
 void http_client_remove_request_error(struct http_client *client,
@@ -429,14 +432,16 @@ http_client_context_create(const struct http_client_settings *set)
 {
 	struct http_client_context *cctx;
 	pool_t pool;
+	size_t pool_size;
 
-	pool = pool_alloconly_create("http client context", 1024);
+	pool_size = (set->ssl != NULL) ? 8192 : 1024; /* certs will be >4K */
+	pool = pool_alloconly_create("http client context", pool_size);
 	cctx = p_new(pool, struct http_client_context, 1);
 	cctx->pool = pool;
 	cctx->refcount = 1;
 	cctx->ioloop = current_ioloop;
 
-	cctx->event = event_create(set->event);
+	cctx->event = event_create(set->event_parent);
 	event_set_forced_debug(cctx->event, set->debug);
 	event_set_append_log_prefix(cctx->event, "http-client: ");
 

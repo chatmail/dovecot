@@ -942,7 +942,7 @@ director_cmd_host_hand_start(struct director_connection *conn,
 			  conn->name);
 		hosts = mail_hosts_get(conn->dir->mail_hosts);
 		while (array_count(hosts) > 0) {
-			hostp = array_idx(hosts, 0);
+			hostp = array_front(hosts);
 			director_remove_host(conn->dir, NULL, NULL, *hostp);
 		}
 	} else if (remote_ring_completed == 0 && conn->dir->ring_handshaked) {
@@ -2269,7 +2269,7 @@ director_connection_init_common(struct director *dir, int fd)
 	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE);
 	conn->output = o_stream_create_fd(conn->fd, dir->set->director_output_buffer_size);
 	o_stream_set_no_error_handling(conn->output, TRUE);
-	array_append(&dir->connections, &conn, 1);
+	array_push_back(&dir->connections, &conn);
 	return conn;
 }
 
@@ -2411,7 +2411,7 @@ void director_connection_deinit(struct director_connection **_conn,
 	}
 	if (*remote_reason != '\0' &&
 	    conn->minor_version >= DIRECTOR_VERSION_QUIT) {
-		o_stream_send_str(conn->output, t_strdup_printf(
+		o_stream_nsend_str(conn->output, t_strdup_printf(
 			"QUIT\t%s\n", remote_reason));
 	}
 

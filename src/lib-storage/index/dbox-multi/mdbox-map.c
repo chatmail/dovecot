@@ -423,7 +423,7 @@ int mdbox_map_get_file_msgs(struct mdbox_map *map, uint32_t file_id,
 			msg.map_uid = rec.map_uid;
 			msg.offset = rec.rec.offset;
 			msg.refcount = rec.refcount;
-			array_append(recs, &msg, 1);
+			array_push_back(recs, &msg);
 		}
 	}
 	return 0;
@@ -1134,8 +1134,8 @@ int mdbox_map_append_next(struct mdbox_map_append_context *ctx,
 	if (!existing) {
 		i_assert(file_append->first_append_offset == 0);
 		file_append->first_append_offset = file_append->output->offset;
-		array_append(&ctx->file_appends, &file_append, 1);
-		array_append(&ctx->files, &file, 1);
+		array_push_back(&ctx->file_appends, &file_append);
+		array_push_back(&ctx->files, &file);
 	}
 	*file_append_ctx_r = file_append;
 	return 0;
@@ -1321,7 +1321,7 @@ int mdbox_map_append_assign_map_uids(struct mdbox_map_append_context *ctx,
 	hdr = mail_index_get_header(ctx->atomic->sync_view);
 	t_array_init(&uids, 1);
 	mail_index_append_finish_uids(ctx->trans, hdr->next_uid, &uids);
-	range = array_idx(&uids, 0);
+	range = array_front(&uids);
 	i_assert(range[0].seq2 - range[0].seq1 + 1 == count);
 
 	if (hdr->uid_validity == 0) {
@@ -1468,7 +1468,8 @@ static int mdbox_map_generate_uid_validity(struct mdbox_map *map)
 
 	/* do this inside syncing, so that we're locked and there are no
 	   race conditions */
-	ret = mail_index_sync_begin(map->index, &sync_ctx, &view, &trans, 0);
+	ret = mail_index_sync_begin(map->index, &sync_ctx, &view, &trans,
+				    MAIL_INDEX_SYNC_FLAG_UPDATE_TAIL_OFFSET);
 	if (ret <= 0) {
 		i_assert(ret != 0);
 		return -1;

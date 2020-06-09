@@ -260,7 +260,7 @@ Health monitoring of backend servers
 
 Brad Davidson has written a small daemon for monitoring backend servers, and
 disable/enable them on demand.
-Ref:http://www.dovecot.org/list/dovecot/2010-August/051946.html
+Ref:https://dovecot.org/list/dovecot/2010-August/051946.html
 
 Forcefully moving users to a different backend
 ----------------------------------------------
@@ -363,4 +363,4 @@ The user-flush.sh will receive as parameters:
  * old host's IP
  * new host's IP
 
-(This file was created from the wiki on 2019-02-05 04:42)
+(This file was created from the wiki on 2019-06-19 12:42)

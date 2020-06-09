@@ -46,7 +46,8 @@ const struct fts_language fts_languages_builtin [] = {
 	{ "pt" }, /* Portuguese */
 	{ "ro" }, /* Romanian */
 	{ "ru" }, /* Russian */
-	{ "sv" } /* Swedish */
+	{ "sv" }, /* Swedish */
+	{ "tr" }, /* Turkish */
 };
 
 const struct fts_language fts_language_data = {
@@ -64,7 +65,7 @@ void fts_languages_init(void)
 	             N_ELEMENTS(fts_languages_builtin));
 	for (i = 0; i < N_ELEMENTS(fts_languages_builtin); i++){
 		lp = &fts_languages_builtin[i];
-		array_append(&fts_languages, &lp, 1);
+		array_push_back(&fts_languages, &lp);
 	}
 }
 
@@ -82,7 +83,7 @@ void fts_language_register(const char *name)
 
 	lang = p_new(fts_languages_pool, struct fts_language, 1);
 	lang->name = p_strdup(fts_languages_pool, name);
-	array_append(&fts_languages, (const struct fts_language **)&lang, 1);
+	array_push_back(&fts_languages, (const struct fts_language **)&lang);
 }
 
 const struct fts_language *fts_language_find(const char *name)
@@ -162,7 +163,7 @@ void fts_language_list_add(struct fts_language_list *list,
 			   const struct fts_language *lang)
 {
 	i_assert(fts_language_list_find(list, lang->name) == NULL);
-	array_append(&list->languages, &lang, 1);
+	array_push_back(&list->languages, &lang);
 }
 
 bool fts_language_list_add_names(struct fts_language_list *list,
@@ -196,7 +197,7 @@ fts_language_list_get_first(struct fts_language_list *list)
 {
 	const struct fts_language *const *langp;
 
-	langp = array_idx(&list->languages, 0);
+	langp = array_front(&list->languages);
 	return *langp;
 }
 
@@ -307,7 +308,7 @@ fts_language_detect(struct fts_language_list *list,
 	/* if there's only a single wanted language, return it always. */
 	if (array_count(&list->languages) == 1) {
 		const struct fts_language *const *langp =
-			array_idx(&list->languages, 0);
+			array_front(&list->languages);
 		*lang_r = *langp;
 		return FTS_LANGUAGE_RESULT_OK;
 	}

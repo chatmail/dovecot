@@ -467,7 +467,7 @@ static void json_parser_object_open(struct json_parser *parser)
 {
 	parser->data++;
 	parser->state = JSON_STATE_OBJECT_OPEN;
-	array_append(&parser->nesting, &parser->state, 1);
+	array_push_back(&parser->nesting, &parser->state);
 	json_parser_update_input_pos(parser);
 }
 
@@ -504,7 +504,7 @@ json_try_parse_next(struct json_parser *parser, enum json_type *type_r,
 		} else if (*parser->data == '[') {
 			parser->data++;
 			parser->state = JSON_STATE_ARRAY_OPEN;
-			array_append(&parser->nesting, &parser->state, 1);
+			array_push_back(&parser->nesting, &parser->state);
 			json_parser_update_input_pos(parser);
 
 			if (parser->skipping) {
@@ -672,6 +672,24 @@ void json_parse_skip_next(struct json_parser *parser)
 		parser->state = JSON_STATE_ARRAY_NEXT_SKIP;
 }
 
+void json_parse_skip(struct json_parser *parser)
+{
+	i_assert(!parser->skipping);
+	i_assert(parser->strinput == NULL);
+	i_assert(parser->state == JSON_STATE_OBJECT_NEXT ||
+		 parser->state == JSON_STATE_OBJECT_OPEN ||
+		 parser->state == JSON_STATE_ARRAY_NEXT ||
+		 parser->state == JSON_STATE_ARRAY_OPEN);
+
+	if (parser->state == JSON_STATE_OBJECT_OPEN ||
+	    parser->state == JSON_STATE_ARRAY_OPEN)
+		parser->nested_skip_count++;
+
+	parser->skipping = TRUE;
+	if (parser->state == JSON_STATE_ARRAY_NEXT)
+		parser->state = JSON_STATE_ARRAY_NEXT_SKIP;
+}
+
 static void json_strinput_destroyed(struct json_parser *parser)
 {
 	i_assert(parser->strinput != NULL);
@@ -803,9 +821,13 @@ void json_append_escaped_data(string_t *dest, const unsigned char *src, size_t s
 
 	for (i = 0; i < size;) {
 		bytes = uni_utf8_get_char_n(src+i, size-i, &chr);
-		/* refuse to add invalid data */
-		i_assert(bytes > 0 && uni_is_valid_ucs4(chr));
-		json_append_escaped_ucs4(dest, chr);
-		i += bytes;
+		if (bytes > 0 && uni_is_valid_ucs4(chr)) {
+			json_append_escaped_ucs4(dest, chr);
+			i += bytes;
+		} else {
+			str_append_data(dest, UNICODE_REPLACEMENT_CHAR_UTF8,
+					      UTF8_REPLACEMENT_CHAR_LEN);
+			i++;
+		}
 	}
 }

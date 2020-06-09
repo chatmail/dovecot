@@ -80,9 +80,16 @@ struct mail_storage_settings {
 	const char *hostname;
 	const char *recipient_delimiter;
 
-	const char *ssl_client_ca_dir;
 	const char *ssl_client_ca_file;
+	const char *ssl_client_ca_dir;
+	const char *ssl_client_cert;
+	const char *ssl_client_key;
+	const char *ssl_cipher_list;
+	const char *ssl_curve_list;
+	const char *ssl_min_protocol;
 	const char *ssl_crypto_device;
+	bool ssl_client_require_valid_cert;
+	bool verbose_ssl;
 	const char *mail_attachment_detection_options;
 
 	enum file_lock_method parsed_lock_method;
@@ -366,6 +373,7 @@ struct master_service_ssl_settings {
 	const char *ssl_options;
 
 	bool ssl_verify_client_cert;
+	bool ssl_client_require_valid_cert;
 	bool ssl_require_crl;
 	bool verbose_ssl;
 	bool ssl_prefer_server_ciphers;
@@ -562,7 +570,7 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 				set->parsed_mail_attachment_exclude_inlined = TRUE;
 			} else if (str_begins(opt, "content-type=")) {
 				const char *value = p_strdup(pool, opt+13);
-				array_append(&content_types, &value, 1);
+				array_push_back(&content_types, &value);
 			} else {
 				*error_r = t_strdup_printf("mail_attachment_detection_options: "
 					"Unknown option: %s", opt);
@@ -572,7 +580,7 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 		}
 
 		array_append_zero(&content_types);
-		set->parsed_mail_attachment_content_type_filter = array_idx(&content_types, 0);
+		set->parsed_mail_attachment_content_type_filter = array_front(&content_types);
 	}
 
 	return TRUE;
@@ -828,9 +836,16 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_STR, hostname),
 	DEF(SET_STR, recipient_delimiter),
 
-	DEF(SET_STR, ssl_client_ca_dir),
 	DEF(SET_STR, ssl_client_ca_file),
+	DEF(SET_STR, ssl_client_ca_dir),
+	DEF(SET_STR, ssl_client_cert),
+	DEF(SET_STR, ssl_client_key),
+	DEF(SET_STR, ssl_cipher_list),
+	DEF(SET_STR, ssl_curve_list),
+	DEF(SET_STR, ssl_min_protocol),
 	DEF(SET_STR, ssl_crypto_device),
+	DEF(SET_BOOL, ssl_client_require_valid_cert),
+	DEF(SET_BOOL, verbose_ssl),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -886,9 +901,17 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.hostname = "",
 	.recipient_delimiter = "+",
 
-	.ssl_client_ca_dir = "",
+	/* Keep synced with master-service-ssl-settings */
 	.ssl_client_ca_file = "",
-	.ssl_crypto_device = ""
+	.ssl_client_ca_dir = "",
+	.ssl_client_cert = "",
+	.ssl_client_key = "",
+	.ssl_cipher_list = "ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH",
+	.ssl_curve_list = "",
+	.ssl_min_protocol = "TLSv1",
+	.ssl_crypto_device = "",
+	.ssl_client_require_valid_cert = TRUE,
+	.verbose_ssl = FALSE,
 };
 const struct setting_parser_info mail_storage_setting_parser_info = {
 	.module_name = "mail",
@@ -1514,6 +1537,9 @@ struct submission_settings {
 	const char *submission_client_workarounds;
 	const char *submission_logout_format;
 
+	/* submission backend: */
+	const char *submission_backend_capabilities;
+
 	/* submission relay: */
 	const char *submission_relay_host;
 	in_port_t submission_relay_port;
@@ -1545,9 +1571,75 @@ struct submission_login_settings {
 
 	/* submission: */
 	size_t submission_max_mail_size;
+	const char *submission_backend_capabilities;
 };
 /* ../../src/stats/stats-settings.h */
 extern const struct setting_parser_info stats_setting_parser_info;
+/* <settings checks> */
+/*
+ * We allow a selection of a timestamp format.
+ *
+ * The 'time-unix' format generates a number with the number of seconds
+ * since 1970-01-01 00:00 UTC.
+ *
+ * The 'time-rfc3339' format uses the YYYY-MM-DDTHH:MM:SS.uuuuuuZ format as
+ * defined by RFC 3339.
+ *
+ * The special native format (not explicitly selectable in the config, but
+ * default if no time-* token is used) uses the format's native timestamp
+ * format.  Note that not all formats have a timestamp data format.
+ *
+ * The native format and the rules below try to address the question: can a
+ * parser that doesn't have any knowledge of fields' values' types losslessly
+ * reconstruct the fields?
+ *
+ * For example, JSON only has strings and numbers, so it cannot represent a
+ * timestamp in a "context-free lossless" way.  Therefore, when making a
+ * JSON blob, we need to decide which way to serialize timestamps.  No
+ * matter how we do it, we incur some loss.  If a decoder sees 1557232304 in
+ * a field, it cannot be certain if the field is an integer that just
+ * happens to be a reasonable timestamp, or if it actually is a timestamp.
+ * Same goes with RFC3339 - it could just be that the user supplied a string
+ * that looks like a timestamp, and that string made it into an event field.
+ *
+ * Other common serialization formats, such as CBOR, have a lossless way of
+ * encoding timestamps.
+ *
+ * Note that there are two concepts at play: native and default.
+ *
+ * The rules for how the format's timestamp formats are used:
+ *
+ * 1. The default time format is the native format.
+ * 2. The native time format may or may not exist for a given format (e.g.,
+ *    in JSON)
+ * 3. If the native format doesn't exist and no time format was specified in
+ *    the config, it is a config error.
+ *
+ * We went with these rules because:
+ *
+ * 1. It prevents type information loss by default.
+ * 2. It completely isolates the policy from the algorithm.
+ * 3. It defers the decision whether each format without a native timestamp
+ *    type should have a default acting as native until after we've had some
+ *    operational experience.
+ * 4. A future decision to add a default (via 3. point) will be 100% compatible.
+ */
+enum event_exporter_time_fmt {
+	EVENT_EXPORTER_TIME_FMT_NATIVE = 0,
+	EVENT_EXPORTER_TIME_FMT_UNIX,
+	EVENT_EXPORTER_TIME_FMT_RFC3339,
+};
+/* </settings checks> */
+struct stats_exporter_settings {
+	const char *name;
+	const char *transport;
+	const char *transport_args;
+	const char *format;
+	const char *format_args;
+
+	/* parsed values */
+	enum event_exporter_time_fmt parsed_time_format;
+};
 struct stats_metric_settings {
 	const char *name;
 	const char *event_name;
@@ -1557,8 +1649,13 @@ struct stats_metric_settings {
 	ARRAY(const char *) filter;
 
 	unsigned int parsed_source_linenum;
+
+	/* exporter related fields */
+	const char *exporter;
+	const char *exporter_include;
 };
 struct stats_settings {
+	ARRAY(struct stats_exporter_settings *) exporters;
 	ARRAY(struct stats_metric_settings *) metrics;
 };
 /* ../../src/replication/replicator/replicator-settings.h */
@@ -1712,6 +1809,9 @@ struct lmtp_settings {
 	const char *login_greeting;
 	const char *login_trusted_networks;
 
+	const char *mail_plugins;
+	const char *mail_plugin_dir;
+
 	enum lmtp_hdr_delivery_address parsed_lmtp_hdr_delivery_address;
 };
 /* ../../src/imap/imap-settings.h */
@@ -1810,8 +1910,6 @@ struct doveadm_settings {
 	const char *doveadm_allowed_commands;
 	const char *dsync_alt_char;
 	const char *dsync_remote_cmd;
-	const char *ssl_client_ca_dir;
-	const char *ssl_client_ca_file;
 	const char *director_username_hash;
 	const char *doveadm_api_key;
 	const char *dsync_features;
@@ -1910,6 +2008,7 @@ struct auth_settings {
 	bool policy_check_before_auth;
 	bool policy_check_after_auth;
 	bool policy_report_after_auth;
+	bool policy_log_only;
 	unsigned int policy_hash_truncate;
 
 	bool stats;
@@ -2082,6 +2181,8 @@ static const struct setting_define submission_setting_defines[] = {
 	DEF(SET_STR, submission_client_workarounds),
 	DEF(SET_STR, submission_logout_format),
 
+	DEF(SET_STR, submission_backend_capabilities),
+
 	DEF(SET_STR, submission_relay_host),
 	DEF(SET_IN_PORT, submission_relay_port),
 	DEF(SET_BOOL, submission_relay_trusted),
@@ -2117,6 +2218,8 @@ static const struct submission_settings submission_default_settings = {
 	.submission_max_recipients = 0,
 	.submission_client_workarounds = "",
 	.submission_logout_format = "in=%i out=%o",
+
+	.submission_backend_capabilities = NULL,
 
 	.submission_relay_host = "",
 	.submission_relay_port = 25,
@@ -2201,6 +2304,7 @@ static const struct setting_define submission_login_setting_defines[] = {
 	DEF(SET_STR, hostname),
 
 	DEF(SET_SIZE, submission_max_mail_size),
+	DEF(SET_STR, submission_backend_capabilities),
 
 	SETTING_DEFINE_LIST_END
 };
@@ -2208,6 +2312,7 @@ static const struct submission_login_settings submission_login_default_settings 
 	.hostname = "",
 
 	.submission_max_mail_size = 0,
+	.submission_backend_capabilities = NULL
 };
 static const struct setting_parser_info *submission_login_setting_dependencies[] = {
 	&login_setting_parser_info,
@@ -2234,6 +2339,7 @@ const struct setting_parser_info *submission_login_setting_roots[] = {
 };
 /* ../../src/stats/stats-settings.c */
 extern const struct setting_parser_info stats_metric_setting_parser_info;
+extern const struct setting_parser_info stats_exporter_setting_parser_info;
 /* <settings checks> */
 static struct file_listener_settings stats_unix_listeners_array[] = {
 	{ "stats-reader", 0600, "", "" },
@@ -2248,6 +2354,122 @@ static buffer_t stats_unix_listeners_buf = {
 };
 /* </settings checks> */
 /* <settings checks> */
+static bool parse_format_args_set_time(struct stats_exporter_settings *set,
+				       enum event_exporter_time_fmt fmt,
+				       const char **error_r)
+{
+	if ((set->parsed_time_format != EVENT_EXPORTER_TIME_FMT_NATIVE) &&
+	    (set->parsed_time_format != fmt)) {
+		*error_r = t_strdup_printf("Exporter '%s' specifies multiple "
+					   "time format args", set->name);
+		return FALSE;
+	}
+
+	set->parsed_time_format = fmt;
+
+	return TRUE;
+}
+
+static bool parse_format_args(struct stats_exporter_settings *set,
+			      const char **error_r)
+{
+	const char *const *tmp;
+
+	/* Defaults */
+	set->parsed_time_format = EVENT_EXPORTER_TIME_FMT_NATIVE;
+
+	tmp = t_strsplit_spaces(set->format_args, " ");
+
+	/*
+	 * If the config contains multiple types of the same type (e.g.,
+	 * both time-rfc3339 and time-unix) we fail the config check.
+	 *
+	 * Note: At the moment, we have only time-* tokens.  In the future
+	 * when we have other tokens, they should be parsed here.
+	 */
+	for (; *tmp != NULL; tmp++) {
+		enum event_exporter_time_fmt fmt;
+
+		if (strcmp(*tmp, "time-rfc3339") == 0) {
+			fmt = EVENT_EXPORTER_TIME_FMT_RFC3339;
+		} else if (strcmp(*tmp, "time-unix") == 0) {
+			fmt = EVENT_EXPORTER_TIME_FMT_UNIX;
+		} else {
+			*error_r = t_strdup_printf("Unknown exporter format "
+						   "arg: %s", *tmp);
+			return FALSE;
+		}
+
+		if (!parse_format_args_set_time(set, fmt, error_r))
+			return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool stats_exporter_settings_check(void *_set, pool_t pool ATTR_UNUSED,
+					  const char **error_r)
+{
+	struct stats_exporter_settings *set = _set;
+	bool time_fmt_required;
+
+	if (set->name[0] == '\0') {
+		*error_r = "Exporter name can't be empty";
+		return FALSE;
+	}
+
+	/* TODO: The following should be plugable.
+	 *
+	 * Note: Make sure to mirror any changes to the below code in
+	 * stats_exporters_add_set().
+	 */
+	if (set->format[0] == '\0') {
+		*error_r = "Exporter format name can't be empty";
+		return FALSE;
+	} else if (strcmp(set->format, "none") == 0) {
+		time_fmt_required = FALSE;
+	} else if (strcmp(set->format, "json") == 0) {
+		time_fmt_required = TRUE;
+	} else if (strcmp(set->format, "tab-text") == 0) {
+		time_fmt_required = TRUE;
+	} else {
+		*error_r = t_strdup_printf("Unknown exporter format '%s'",
+					   set->format);
+		return FALSE;
+	}
+
+	/* TODO: The following should be plugable.
+	 *
+	 * Note: Make sure to mirror any changes to the below code in
+	 * stats_exporters_add_set().
+	 */
+	if (set->transport[0] == '\0') {
+		*error_r = "Exporter transport name can't be empty";
+		return FALSE;
+	} else if (strcmp(set->transport, "drop") == 0 ||
+		   strcmp(set->transport, "http-post") == 0 ||
+		   strcmp(set->transport, "log") == 0) {
+		/* no-op */
+	} else {
+		*error_r = t_strdup_printf("Unknown transport type '%s'",
+					   set->transport);
+		return FALSE;
+	}
+
+	if (!parse_format_args(set, error_r))
+		return FALSE;
+
+	/* Some formats don't have a native way of serializing time stamps */
+	if (time_fmt_required &&
+	    set->parsed_time_format == EVENT_EXPORTER_TIME_FMT_NATIVE) {
+		*error_r = t_strdup_printf("%s exporter format requires a "
+					   "time-* argument", set->format);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 static bool stats_metric_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 					const char **error_r)
 {
@@ -2269,6 +2491,43 @@ static bool stats_metric_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 			return FALSE;
 		}
 	}
+
+	return TRUE;
+}
+
+static bool stats_settings_check(void *_set, pool_t pool ATTR_UNUSED,
+				 const char **error_r)
+{
+	struct stats_settings *set = _set;
+	struct stats_exporter_settings *const *exporter;
+	struct stats_metric_settings *const *metric;
+
+	if (!array_is_created(&set->metrics) || !array_is_created(&set->exporters))
+		return TRUE;
+
+	/* check that all metrics refer to exporters that exist */
+	array_foreach(&set->metrics, metric) {
+		bool found = FALSE;
+
+		if ((*metric)->exporter[0] == '\0')
+			continue; /* metric not exported */
+
+		array_foreach(&set->exporters, exporter) {
+			if (strcmp((*metric)->exporter, (*exporter)->name) == 0) {
+				found = TRUE;
+				break;
+			}
+		}
+
+		if (!found) {
+			*error_r = t_strdup_printf("metric %s refers to "
+						   "non-existent exporter '%s'",
+						   (*metric)->name,
+						   (*metric)->exporter);
+			return FALSE;
+		}
+	}
+
 	return TRUE;
 }
 /* </settings checks> */
@@ -2298,6 +2557,34 @@ struct service_settings stats_service_settings = {
 };
 #undef DEF
 #define DEF(type, name) \
+	{ type, #name, offsetof(struct stats_exporter_settings, name), NULL }
+static const struct setting_define stats_exporter_setting_defines[] = {
+	DEF(SET_STR, name),
+	DEF(SET_STR, transport),
+	DEF(SET_STR, transport_args),
+	DEF(SET_STR, format),
+	DEF(SET_STR, format_args),
+	SETTING_DEFINE_LIST_END
+};
+static const struct stats_exporter_settings stats_exporter_default_settings = {
+	.name = "",
+	.transport = "",
+	.transport_args = "",
+	.format = "",
+	.format_args = "",
+};
+const struct setting_parser_info stats_exporter_setting_parser_info = {
+	.defines = stats_exporter_setting_defines,
+	.defaults = &stats_exporter_default_settings,
+
+	.type_offset = offsetof(struct stats_exporter_settings, name),
+	.struct_size = sizeof(struct stats_exporter_settings),
+
+	.parent_offset = (size_t)-1,
+	.check_func = stats_exporter_settings_check,
+};
+#undef DEF
+#define DEF(type, name) \
 	{ type, #name, offsetof(struct stats_metric_settings, name), NULL }
 static const struct setting_define stats_metric_setting_defines[] = {
 	DEF(SET_STR, name),
@@ -2306,6 +2593,8 @@ static const struct setting_define stats_metric_setting_defines[] = {
 	DEF(SET_STR, categories),
 	DEF(SET_STR, fields),
 	{ SET_STRLIST, "filter", offsetof(struct stats_metric_settings, filter), NULL },
+	DEF(SET_STR, exporter),
+	DEF(SET_STR, exporter_include),
 	SETTING_DEFINE_LIST_END
 };
 const struct stats_metric_settings stats_metric_default_settings = {
@@ -2314,6 +2603,8 @@ const struct stats_metric_settings stats_metric_default_settings = {
 	.source_location = "",
 	.categories = "",
 	.fields = "",
+	.exporter = "",
+	.exporter_include = "name hostname timestamps categories fields",
 };
 const struct setting_parser_info stats_metric_setting_parser_info = {
 	.defines = stats_metric_setting_defines,
@@ -2331,10 +2622,12 @@ const struct setting_parser_info stats_metric_setting_parser_info = {
 	  offsetof(struct stats_settings, field), defines }
 static const struct setting_define stats_setting_defines[] = {
 	DEFLIST_UNIQUE(metrics, "metric", &stats_metric_setting_parser_info),
+	DEFLIST_UNIQUE(exporters, "event_exporter", &stats_exporter_setting_parser_info),
 	SETTING_DEFINE_LIST_END
 };
 const struct stats_settings stats_default_settings = {
-	.metrics = ARRAY_INIT
+	.metrics = ARRAY_INIT,
+	.exporters = ARRAY_INIT,
 };
 const struct setting_parser_info stats_setting_parser_info = {
 	.module_name = "stats",
@@ -2344,7 +2637,8 @@ const struct setting_parser_info stats_setting_parser_info = {
 	.type_offset = (size_t)-1,
 	.struct_size = sizeof(struct stats_settings),
 
-	.parent_offset = (size_t)-1
+	.parent_offset = (size_t)-1,
+	.check_func = stats_settings_check,
 };
 /* ../../src/replication/replicator/replicator-settings.c */
 /* <settings checks> */
@@ -2918,7 +3212,7 @@ fix_file_listener_paths(ARRAY_TYPE(file_listener_settings) *l,
 				  "unix_listener: %s", set->path);
 		}
 		if (set->mode != 0)
-			array_append(all_listeners, &set->path, 1);
+			array_push_back(all_listeners, &set->path);
 	}
 	return TRUE;
 }
@@ -2937,7 +3231,7 @@ static void add_inet_listeners(ARRAY_TYPE(inet_listener_settings) *l,
 
 		if (set->port != 0) {
 			str = t_strdup_printf("%u:%s", set->port, set->address);
-			array_append(all_listeners, &str, 1);
+			array_push_back(all_listeners, &str);
 		}
 	}
 }
@@ -3648,6 +3942,9 @@ static const struct setting_define lmtp_setting_defines[] = {
 	DEF(SET_STR_VARS, login_greeting),
 	DEF(SET_STR, login_trusted_networks),
 
+	DEF(SET_STR, mail_plugins),
+	DEF(SET_STR, mail_plugin_dir),
+
 	SETTING_DEFINE_LIST_END
 };
 static const struct lmtp_settings lmtp_default_settings = {
@@ -3660,7 +3957,10 @@ static const struct lmtp_settings lmtp_default_settings = {
 	.lmtp_proxy_rawlog_dir = "",
 
 	.login_greeting = PACKAGE_NAME" ready.",
-	.login_trusted_networks = ""
+	.login_trusted_networks = "",
+
+	.mail_plugins = "",
+	.mail_plugin_dir = MODULEDIR,
 };
 static const struct setting_parser_info *lmtp_setting_dependencies[] = {
 	&lda_setting_parser_info,
@@ -4408,8 +4708,6 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, doveadm_allowed_commands),
 	DEF(SET_STR, dsync_alt_char),
 	DEF(SET_STR, dsync_remote_cmd),
-	DEF(SET_STR, ssl_client_ca_dir),
-	DEF(SET_STR, ssl_client_ca_file),
 	DEF(SET_STR, director_username_hash),
 	DEF(SET_STR, doveadm_api_key),
 	DEF(SET_STR, dsync_features),
@@ -4439,8 +4737,6 @@ const struct doveadm_settings doveadm_default_settings = {
 	.dsync_features = "",
 	.dsync_hashed_headers = "Date Message-ID",
 	.dsync_commit_msgs_interval = 100,
-	.ssl_client_ca_dir = "",
-	.ssl_client_ca_file = "",
 	.director_username_hash = "%Lu",
 	.doveadm_api_key = "",
 	.doveadm_http_rawlog_dir = "",
@@ -4816,7 +5112,7 @@ auth_settings_set_self_ips(struct auth_settings *set, pool_t pool,
 		array_append(&ips_array, ips, ips_count);
 	}
 	array_append_zero(&ips_array);
-	set->proxy_self_ips = array_idx(&ips_array, 0);
+	set->proxy_self_ips = array_front(&ips_array);
 	return TRUE;
 }
 
@@ -5142,6 +5438,7 @@ static const struct setting_define auth_setting_defines[] = {
 	DEF(SET_BOOL, policy_check_before_auth),
 	DEF(SET_BOOL, policy_check_after_auth),
 	DEF(SET_BOOL, policy_report_after_auth),
+	DEF(SET_BOOL, policy_log_only),
 	DEF(SET_UINT, policy_hash_truncate),
 
 	DEF(SET_BOOL, stats),
@@ -5199,6 +5496,7 @@ static const struct auth_settings auth_default_settings = {
 	.policy_check_before_auth = TRUE,
 	.policy_check_after_auth = TRUE,
 	.policy_report_after_auth = TRUE,
+	.policy_log_only = FALSE,
 	.policy_hash_truncate = 12,
 
 	.stats = FALSE,
@@ -5318,36 +5616,36 @@ const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
 	&smtp_submit_setting_parser_info,
-	&imap_login_setting_parser_info, 
-	&pop3_login_setting_parser_info, 
-	&maildir_setting_parser_info, 
-	&doveadm_setting_parser_info, 
-	&mbox_setting_parser_info, 
-	&master_setting_parser_info, 
-	&imap_urlauth_login_setting_parser_info, 
-	&fs_crypt_setting_parser_info, 
-	&director_setting_parser_info, 
-	&pop3c_setting_parser_info, 
-	&dict_setting_parser_info, 
-	&submission_setting_parser_info, 
-	&submission_login_setting_parser_info, 
-	&lda_setting_parser_info, 
-	&stats_setting_parser_info, 
-	&imapc_setting_parser_info, 
-	&mdbox_setting_parser_info, 
-	&lmtp_setting_parser_info, 
-	&replicator_setting_parser_info, 
-	&imap_urlauth_worker_setting_parser_info, 
-	&auth_setting_parser_info, 
-	&pop3_setting_parser_info, 
-	&mail_user_setting_parser_info, 
-	&imap_urlauth_setting_parser_info, 
-	&mail_storage_setting_parser_info, 
-	&imap_setting_parser_info, 
-	&old_stats_setting_parser_info, 
-	&login_setting_parser_info, 
-	&quota_status_setting_parser_info, 
 	&aggregator_setting_parser_info, 
+	&auth_setting_parser_info, 
+	&dict_setting_parser_info, 
+	&director_setting_parser_info, 
+	&doveadm_setting_parser_info, 
+	&fs_crypt_setting_parser_info, 
+	&imap_login_setting_parser_info, 
+	&imap_setting_parser_info, 
+	&imap_urlauth_login_setting_parser_info, 
+	&imap_urlauth_setting_parser_info, 
+	&imap_urlauth_worker_setting_parser_info, 
+	&imapc_setting_parser_info, 
+	&lda_setting_parser_info, 
+	&lmtp_setting_parser_info, 
+	&login_setting_parser_info, 
+	&mail_storage_setting_parser_info, 
+	&mail_user_setting_parser_info, 
+	&maildir_setting_parser_info, 
+	&master_setting_parser_info, 
+	&mbox_setting_parser_info, 
+	&mdbox_setting_parser_info, 
+	&old_stats_setting_parser_info, 
+	&pop3_login_setting_parser_info, 
+	&pop3_setting_parser_info, 
+	&pop3c_setting_parser_info, 
+	&quota_status_setting_parser_info, 
+	&replicator_setting_parser_info, 
+	&stats_setting_parser_info, 
+	&submission_login_setting_parser_info, 
+	&submission_setting_parser_info, 
 	NULL
 };
 const struct setting_parser_info *const *all_roots = all_default_roots;

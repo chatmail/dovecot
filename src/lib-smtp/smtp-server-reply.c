@@ -10,43 +10,6 @@
 #include "smtp-server-private.h"
 
 /*
- * Logging
- */
-
-static inline void ATTR_FORMAT(2, 3)
-smtp_server_reply_debug(struct smtp_server_reply *reply,
-			const char *format, ...)
-{
-	struct smtp_server_command *command = reply->command;
-	struct smtp_server_connection *conn = command->context.conn;
-	const struct smtp_server_settings *set = &conn->set;
-	va_list args;
-
-	if (set->debug) {
-		va_start(args, format);
-		if (command->replies_expected > 1) {
-			i_debug("%s-server: conn %s: "
-				"command %s; %u reply [%u/%u]: %s",
-				smtp_protocol_name(set->protocol),
-				smtp_server_connection_label(conn),
-				smtp_server_command_label(command),
-				reply->content->status,
-				reply->index+1, command->replies_expected,
-				t_strdup_vprintf(format, args));
-		} else {
-			i_debug("%s-server: conn %s: "
-				"command %s; %u reply: %s",
-				smtp_protocol_name(set->protocol),
-				smtp_server_connection_label(conn),
-				smtp_server_command_label(command),
-				reply->content->status,
-				t_strdup_vprintf(format, args));
-		}
-		va_end(args);
-	}
-}
-
-/*
  * Reply
  */
 
@@ -55,7 +18,10 @@ static void smtp_server_reply_destroy(struct smtp_server_reply *reply)
 	if (reply->command == NULL)
 		return;
 
-	smtp_server_reply_debug(reply, "Destroy");
+	if (reply->event != NULL) {
+		e_debug(reply->event, "Destroy");
+		event_unref(&reply->event);
+	}
 
 	if (reply->content == NULL)
 		return;
@@ -70,6 +36,27 @@ static void smtp_server_reply_clear(struct smtp_server_reply *reply)
 		reply->command->replies_submitted--;
 	}
 	reply->submitted = FALSE;
+	reply->forwarded = FALSE;
+}
+
+static void smtp_server_reply_update_event(struct smtp_server_reply *reply)
+{
+	struct smtp_server_command *command = reply->command;
+
+	event_add_int(reply->event, "index", reply->index);
+	event_add_int(reply->event, "status", reply->content->status);
+
+	if (command->replies_expected > 1) {
+		event_set_append_log_prefix(reply->event,
+			t_strdup_printf("%u reply [%u/%u]: ",
+					reply->content->status,
+					reply->index+1,
+					command->replies_expected));
+	} else {
+		event_set_append_log_prefix(reply->event,
+			t_strdup_printf("%u reply: ",
+					reply->content->status));
+	}
 }
 
 static struct smtp_server_reply *
@@ -88,6 +75,8 @@ smtp_server_reply_alloc(struct smtp_server_command *cmd, unsigned int index)
 		array_idx_clear(&cmd->replies, cmd->replies_expected - 1);
 		reply = array_idx_modifiable(&cmd->replies, index);
 	}
+	reply->event = event_create(cmd->context.event);
+
 	return reply;
 }
 
@@ -129,6 +118,7 @@ smtp_server_reply_create_index(struct smtp_server_command *cmd,
 	if (reply->content == NULL)
 		reply->content = p_new(pool, struct smtp_server_reply_content, 1);
 	reply->content->status = status;
+	reply->content->enhanced_code = p_strdup(pool, enh_code);
 	if (enh_code == NULL || *enh_code == '\0') {
 		reply->content->status_prefix =
 			p_strdup_printf(pool, "%03u-", status);
@@ -137,6 +127,9 @@ smtp_server_reply_create_index(struct smtp_server_command *cmd,
 			p_strdup_printf(pool, "%03u-%s ", status, enh_code);
 	}
 	reply->content->text = str_new(default_pool, 256);
+
+	smtp_server_reply_update_event(reply);
+
 	return reply;
 }
 
@@ -152,10 +145,37 @@ smtp_server_reply_create_forward(struct smtp_server_command *cmd,
 	unsigned int index, const struct smtp_reply *from)
 {
 	struct smtp_server_reply *reply;
+	string_t *textbuf;
+	char *text;
+	size_t last_line, i;
 
 	reply = smtp_server_reply_create_index(cmd, index,
 		from->status, smtp_reply_get_enh_code(from));
 	smtp_reply_write(reply->content->text, from);
+
+	i_assert(reply->content != NULL);
+	textbuf = reply->content->text;
+	text = str_c_modifiable(textbuf);
+
+	/* Find the last line */
+	reply->content->last_line = last_line = 0;
+	for (i = 0; i < str_len(textbuf); i++) {
+		if (text[i] == '\n') {
+			reply->content->last_line = last_line;
+			last_line = i + 1;
+		}
+	}
+
+	/* Make this reply suitable for further amendment with
+	   smtp_server_reply_add_text() */
+	if ((reply->content->last_line + 3) < str_len(textbuf)) {
+		i_assert(text[reply->content->last_line + 3] == ' ');
+		text[reply->content->last_line + 3] = '-';
+	} else {
+		str_append_c(textbuf, '-');
+	}
+
+	reply->forwarded = TRUE;
 
 	return reply;
 }
@@ -210,7 +230,7 @@ void smtp_server_reply_submit(struct smtp_server_reply *reply)
 	i_assert(!reply->submitted);
 	i_assert(reply->content != NULL);
 	i_assert(str_len(reply->content->text) >= 5);
-	smtp_server_reply_debug(reply, "Submitted");
+	e_debug(reply->event, "Submitted");
 
 	reply->command->replies_submitted++;
 	reply->submitted = TRUE;
@@ -237,6 +257,7 @@ void smtp_server_reply_submit_duplicate(struct smtp_server_cmd_ctx *_cmd,
 	reply->index = index;
 	reply->command = cmd;
 	reply->content = from_reply->content;
+	smtp_server_reply_update_event(reply);
 
 	smtp_server_reply_submit(reply);
 }
@@ -364,9 +385,11 @@ void smtp_server_reply_quit(struct smtp_server_cmd_ctx *_cmd)
 	smtp_server_reply_submit(reply);
 }
 
-const char *smtp_server_reply_get_one_line(struct smtp_server_reply *reply)
+static void
+smtp_server_reply_write_one_line(const struct smtp_server_reply *reply,
+				 string_t *str, bool skip_status)
 {
-	string_t *textbuf, *str;
+	string_t *textbuf;
 	const char *text, *p;
 	size_t text_len, prefix_len, line_len;
 
@@ -375,9 +398,14 @@ const char *smtp_server_reply_get_one_line(struct smtp_server_reply *reply)
 	i_assert(str_len(textbuf) > 0);
 
 	prefix_len = strlen(reply->content->status_prefix);
-	str = t_str_new(256);
 	text = str_c(textbuf);
 	text_len = str_len(textbuf);
+
+	if (skip_status) {
+		i_assert(text_len > prefix_len);
+		text_len -= prefix_len;
+		text += prefix_len;
+	}
 
 	for (;;) {
 		p = strchr(text, '\n');
@@ -395,7 +423,23 @@ const char *smtp_server_reply_get_one_line(struct smtp_server_reply *reply)
 		text += prefix_len;
 		str_append_c(str, ' ');
 	}
+}
 
+const char *
+smtp_server_reply_get_one_line(const struct smtp_server_reply *reply)
+{
+	string_t *str = t_str_new(256);
+
+	smtp_server_reply_write_one_line(reply, str, FALSE);
+	return str_c(str);
+}
+
+const char *
+smtp_server_reply_get_message(const struct smtp_server_reply *reply)
+{
+	string_t *str = t_str_new(256);
+
+	smtp_server_reply_write_one_line(reply, str, TRUE);
 	return str_c(str);
 }
 
@@ -403,7 +447,6 @@ static int smtp_server_reply_send_real(struct smtp_server_reply *reply)
 {
 	struct smtp_server_command *cmd = reply->command;
 	struct smtp_server_connection *conn = cmd->context.conn;
-	const struct smtp_server_settings *set = &conn->set;
 	struct ostream *output = conn->conn.output;
 	string_t *textbuf;
 	char *text;
@@ -426,10 +469,8 @@ static int smtp_server_reply_send_real(struct smtp_server_reply *reply)
 		return -1;
 	}
 
-	if (set->debug) {
-		smtp_server_reply_debug(reply, "Sent: %s",
-			smtp_server_reply_get_one_line(reply));
-	}
+	e_debug(reply->event, "Sent: %s",
+		smtp_server_reply_get_one_line(reply));
 	return ret;
 }
 
@@ -446,6 +487,22 @@ int smtp_server_reply_send(struct smtp_server_reply *reply)
 
 	reply->sent = TRUE;
 	return ret;
+}
+
+bool smtp_server_reply_is_success(const struct smtp_server_reply *reply)
+{
+	i_assert(reply->content != NULL);
+	return (reply->content->status / 100 == 2);
+}
+
+void smtp_server_reply_add_to_event(const struct smtp_server_reply *reply,
+				    struct event_passthrough *e)
+{
+	i_assert(reply->content != NULL);
+	e->add_int("status_code", reply->content->status);
+	e->add_str("enhanced_code", reply->content->enhanced_code);
+	if (!smtp_server_reply_is_success(reply))
+		e->add_str("error", smtp_server_reply_get_message(reply));
 }
 
 /*
@@ -503,6 +560,131 @@ void smtp_server_reply_ehlo_add_param(struct smtp_server_reply *reply,
 		va_end(args);
 	}
 	str_append(textbuf, "\r\n");
+}
+
+void smtp_server_reply_ehlo_add_params(struct smtp_server_reply *reply,
+				       const char *keyword,
+				       const char *const *params)
+{
+	string_t *textbuf;
+
+	i_assert(!reply->submitted);
+	i_assert(reply->content != NULL);
+	textbuf = reply->content->text;
+
+	reply->content->last_line = str_len(textbuf);
+	str_append(textbuf, reply->content->status_prefix);
+	str_append(textbuf, keyword);
+	if (params != NULL) {
+		while (*params != NULL) {
+			str_append_c(textbuf, ' ');
+			str_append(textbuf, *params);
+			params++;
+		}
+	}
+	str_append(textbuf, "\r\n");
+}
+
+void smtp_server_reply_ehlo_add_8bitmime(struct smtp_server_reply *reply)
+{
+	struct smtp_server_cmd_ctx *cmd = &reply->command->context;
+	struct smtp_server_connection *conn = cmd->conn;
+	enum smtp_capability caps = conn->set.capabilities;
+
+	if ((caps & SMTP_CAPABILITY_8BITMIME) == 0)
+		return;
+	smtp_server_reply_ehlo_add(reply, "8BITMIME");
+}
+
+void smtp_server_reply_ehlo_add_binarymime(struct smtp_server_reply *reply)
+{
+	struct smtp_server_cmd_ctx *cmd = &reply->command->context;
+	struct smtp_server_connection *conn = cmd->conn;
+	enum smtp_capability caps = conn->set.capabilities;
+
+	if ((caps & SMTP_CAPABILITY_BINARYMIME) == 0 ||
+	    (caps & SMTP_CAPABILITY_CHUNKING) == 0)
+		return;
+	smtp_server_reply_ehlo_add(reply, "BINARYMIME");
+}
+
+void smtp_server_reply_ehlo_add_chunking(struct smtp_server_reply *reply)
+{
+	struct smtp_server_cmd_ctx *cmd = &reply->command->context;
+	struct smtp_server_connection *conn = cmd->conn;
+	enum smtp_capability caps = conn->set.capabilities;
+
+	if ((caps & SMTP_CAPABILITY_CHUNKING) == 0)
+		return;
+	smtp_server_reply_ehlo_add(reply, "CHUNKING");
+}
+
+void smtp_server_reply_ehlo_add_dsn(struct smtp_server_reply *reply)
+{
+	struct smtp_server_cmd_ctx *cmd = &reply->command->context;
+	struct smtp_server_connection *conn = cmd->conn;
+	enum smtp_capability caps = conn->set.capabilities;
+
+	if ((caps & SMTP_CAPABILITY_DSN) == 0)
+		return;
+	smtp_server_reply_ehlo_add(reply, "DSN");
+}
+
+void smtp_server_reply_ehlo_add_enhancedstatuscodes(
+	struct smtp_server_reply *reply)
+{
+	struct smtp_server_cmd_ctx *cmd = &reply->command->context;
+	struct smtp_server_connection *conn = cmd->conn;
+	enum smtp_capability caps = conn->set.capabilities;
+
+	if ((caps & SMTP_CAPABILITY_ENHANCEDSTATUSCODES) == 0)
+		return;
+	smtp_server_reply_ehlo_add(reply, "ENHANCEDSTATUSCODES");
+}
+
+void smtp_server_reply_ehlo_add_pipelining(struct smtp_server_reply *reply)
+{
+	smtp_server_reply_ehlo_add(reply, "PIPELINING");
+}
+
+void smtp_server_reply_ehlo_add_size(struct smtp_server_reply *reply)
+{
+	struct smtp_server_cmd_ctx *cmd = &reply->command->context;
+	struct smtp_server_connection *conn = cmd->conn;
+	enum smtp_capability caps = conn->set.capabilities;
+	uoff_t cap_size = conn->set.max_message_size;
+
+	if ((caps & SMTP_CAPABILITY_SIZE) == 0)
+		return;
+
+	if (cap_size > 0 && cap_size != (uoff_t)-1) {
+		smtp_server_reply_ehlo_add_param(reply,
+			"SIZE", "%"PRIuUOFF_T, cap_size);
+	} else {
+		smtp_server_reply_ehlo_add(reply, "SIZE");
+	}
+}
+
+void smtp_server_reply_ehlo_add_starttls(struct smtp_server_reply *reply)
+{
+	struct smtp_server_cmd_ctx *cmd = &reply->command->context;
+	struct smtp_server_connection *conn = cmd->conn;
+	enum smtp_capability caps = conn->set.capabilities;
+
+	if ((caps & SMTP_CAPABILITY_STARTTLS) == 0)
+		return;
+	smtp_server_reply_ehlo_add(reply, "STARTTLS");
+}
+
+void smtp_server_reply_ehlo_add_vrfy(struct smtp_server_reply *reply)
+{
+	struct smtp_server_cmd_ctx *cmd = &reply->command->context;
+	struct smtp_server_connection *conn = cmd->conn;
+	enum smtp_capability caps = conn->set.capabilities;
+
+	if ((caps & SMTP_CAPABILITY_VRFY) == 0)
+		return;
+	smtp_server_reply_ehlo_add(reply, "VRFY");
 }
 
 void smtp_server_reply_ehlo_add_xclient(struct smtp_server_reply *reply)
