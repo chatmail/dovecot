@@ -104,6 +104,7 @@ void smtp_server_cmd_rcpt(struct smtp_server_cmd_ctx *cmd,
 	struct smtp_server_cmd_rcpt *rcpt_data;
 	struct smtp_server_recipient *rcpt;
 	enum smtp_address_parse_flags path_parse_flags;
+	enum smtp_param_rcpt_parse_flags param_parse_flags;
 	const char *const *param_extensions = NULL;
 	struct smtp_address *path;
 	struct smtp_params_rcpt rcpt_params;
@@ -164,11 +165,14 @@ void smtp_server_cmd_rcpt(struct smtp_server_cmd_ctx *cmd,
 	}
 
 	/* [SP Rcpt-parameters] */
+	param_parse_flags = 0;
+	if (conn->set.rcpt_domain_optional)
+		param_parse_flags |= SMTP_PARAM_RCPT_FLAG_ORCPT_ALLOW_LOCALPART;
 	if (array_is_created(&conn->rcpt_param_extensions))
 		param_extensions = array_front(&conn->rcpt_param_extensions);
-	if (smtp_params_rcpt_parse(pool_datastack_create(), params, caps,
-				   param_extensions, &rcpt_params, &pperror,
-				   &error) < 0) {
+	if (smtp_params_rcpt_parse(pool_datastack_create(), params,
+				   param_parse_flags, caps, param_extensions,
+				   &rcpt_params, &pperror, &error) < 0) {
 		switch (pperror) {
 		case SMTP_PARAM_PARSE_ERROR_BAD_SYNTAX:
 			smtp_server_reply(cmd,
@@ -188,6 +192,7 @@ void smtp_server_cmd_rcpt(struct smtp_server_cmd_ctx *cmd,
 
 	rcpt_data = p_new(cmd->pool, struct smtp_server_cmd_rcpt, 1);
 	rcpt_data->rcpt = rcpt;
+	command->data = rcpt_data;
 
 	smtp_server_command_add_hook(command, SMTP_SERVER_COMMAND_HOOK_NEXT,
 				     cmd_rcpt_recheck, rcpt_data);
@@ -213,9 +218,16 @@ void smtp_server_cmd_rcpt(struct smtp_server_cmd_ctx *cmd,
 	smtp_server_command_unref(&command);
 }
 
+bool smtp_server_command_is_rcpt(struct smtp_server_cmd_ctx *cmd)
+{
+	return (cmd->cmd->reg->func == smtp_server_cmd_rcpt);
+}
+
 void smtp_server_cmd_rcpt_reply_success(struct smtp_server_cmd_ctx *cmd)
 {
-	i_assert(cmd->cmd->reg->func == smtp_server_cmd_rcpt);
+	struct smtp_server_cmd_rcpt *rcpt_data = cmd->cmd->data;
 
-	smtp_server_reply(cmd, 250, "2.1.5", "OK");
+	i_assert(smtp_server_command_is_rcpt(cmd));
+
+	smtp_server_recipient_reply(rcpt_data->rcpt, 250, "2.1.5", "OK");
 }

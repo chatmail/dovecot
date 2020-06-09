@@ -13,6 +13,7 @@ struct imap_metadata_transaction {
 	char *error_string;
 
 	bool server:1;
+	bool validated_only:1;
 };
 
 bool imap_metadata_verify_entry_name(const char *name,
@@ -99,6 +100,10 @@ imap_metadata_entry2key(struct imap_metadata_transaction *imtrans,
 		i_assert((*key_r)[0] == '/');
 		*key_r += 1;
 	}
+
+	if (imtrans->validated_only)
+		*type_r |= MAIL_ATTRIBUTE_TYPE_FLAG_VALIDATED;
+
 	if (str_begins(*key_r, MAILBOX_ATTRIBUTE_PREFIX_DOVECOT_PVT)) {
 		/* Dovecot's internal attribute (mailbox or server).
 		   don't allow accessing this. */
@@ -138,7 +143,7 @@ int imap_metadata_set(struct imap_metadata_transaction *imtrans,
 
 	if (imap_metadata_get_mailbox_transaction(imtrans) < 0)
 		return -1;
-	return (value->value == NULL ?
+	return (value->value == NULL && value->value_stream == NULL ?
 		mailbox_attribute_unset(imtrans->trans, type, key) :
 		mailbox_attribute_set(imtrans->trans, type, key, value));
 }
@@ -238,11 +243,19 @@ imap_metadata_transaction_begin_server(struct mail_user *user)
 	struct imap_metadata_transaction *imtrans;
 
 	ns = mail_namespace_find_inbox(user->namespaces);
-	box = mailbox_alloc(ns->list, "INBOX", 0);
+	/* Server metadata shouldn't depend on INBOX's ACLs, so ignore them. */
+	box = mailbox_alloc(ns->list, "INBOX", MAILBOX_FLAG_IGNORE_ACLS |
+			    MAILBOX_FLAG_ATTRIBUTE_SESSION);
 	mailbox_set_reason(box, "Server METADATA");
 	imtrans = imap_metadata_transaction_begin(box);
 	imtrans->server = TRUE;
 	return imtrans;
+}
+
+void imap_metadata_transaction_validated_only(struct imap_metadata_transaction *imtrans,
+					      bool set)
+{
+	imtrans->validated_only = set;
 }
 
 static void

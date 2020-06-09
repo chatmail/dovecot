@@ -15,141 +15,83 @@
 #include "push-notification-event-messagenew.h"
 #include "push-notification-txn-msg.h"
 
-
 #define EVENT_NAME "MessageNew"
 
 static struct push_notification_event_messagenew_config default_config;
 
-
 static void *push_notification_event_messagenew_default_config(void)
 {
-    i_zero(&default_config);
+	i_zero(&default_config);
 
-    return &default_config;
-}
-
-static void push_notification_event_messagenew_debug_msg
-(struct push_notification_txn_event *event)
-{
-    struct push_notification_event_messagenew_data *data = event->data;
-    struct tm *tm;
-
-    if (data->date != -1) {
-        tm = gmtime(&data->date);
-        i_debug("%s: Date [%s]", EVENT_NAME,
-                iso8601_date_create_tm(tm, data->date_tz));
-    }
-
-    if (data->from != NULL) {
-        i_debug("%s: From [%s]", EVENT_NAME, data->from);
-    }
-
-    if (data->snippet != NULL) {
-        i_debug("%s: Snippet [%s]", EVENT_NAME, data->snippet);
-    }
-
-    if (data->subject != NULL) {
-        i_debug("%s: Subject [%s]", EVENT_NAME, data->subject);
-    }
-
-    if (data->to != NULL) {
-        i_debug("%s: To [%s]", EVENT_NAME, data->to);
-    }
+	return &default_config;
 }
 
 static void
-push_notification_event_messagenew_event(struct push_notification_txn *ptxn,
-                                         struct push_notification_event_config *ec,
-                                         struct push_notification_txn_msg *msg,
-                                         struct mail *mail)
+push_notification_event_messagenew_debug_msg(
+	struct push_notification_txn_event *event)
 {
-    struct push_notification_event_messagenew_config *config =
-        (struct push_notification_event_messagenew_config *)ec->config;
-    struct push_notification_event_messagenew_data *data;
-    time_t date;
-    int tz;
-    const char *value;
+	struct push_notification_event_messagenew_data *data = event->data;
+	struct tm *tm;
 
-    if (config->flags == 0) {
-        return;
-    }
+	if (data->date != -1) {
+		tm = gmtime(&data->date);
+		i_debug("%s: Date [%s]", EVENT_NAME,
+			iso8601_date_create_tm(tm, data->date_tz));
+	}
 
-    data = push_notification_txn_msg_get_eventdata(msg, EVENT_NAME);
-    if (data == NULL) {
-        data = p_new(ptxn->pool,
-                     struct push_notification_event_messagenew_data, 1);
-        data->date = -1;
-
-        push_notification_txn_msg_set_eventdata(ptxn, msg, ec, data);
-    }
-
-    if ((data->to == NULL) &&
-        (config->flags & PUSH_NOTIFICATION_MESSAGE_HDR_TO) != 0 &&
-        (mail_get_first_header(mail, "To", &value) >= 0)) {
-        data->to = p_strdup(ptxn->pool, value);
-    }
-
-    if ((data->from == NULL) &&
-        (config->flags & PUSH_NOTIFICATION_MESSAGE_HDR_FROM) != 0 &&
-        (mail_get_first_header(mail, "From", &value) >= 0)) {
-        data->from = p_strdup(ptxn->pool, value);
-    }
-
-    if ((data->subject == NULL) &&
-        (config->flags & PUSH_NOTIFICATION_MESSAGE_HDR_SUBJECT) != 0 &&
-        (mail_get_first_header(mail, "Subject", &value) >= 0)) {
-        data->subject = p_strdup(ptxn->pool, value);
-    }
-
-    if ((data->date == -1) &&
-        (config->flags & PUSH_NOTIFICATION_MESSAGE_HDR_DATE) != 0 &&
-        (mail_get_date(mail, &date, &tz) >= 0)) {
-        data->date = date;
-        data->date_tz = tz;
-    }
-
-    if ((data->snippet == NULL) &&
-        (config->flags & PUSH_NOTIFICATION_MESSAGE_BODY_SNIPPET) != 0 &&
-        (mail_get_special(mail, MAIL_FETCH_BODY_SNIPPET, &value) >= 0)) {
-        /* [0] contains the snippet algorithm, skip over it */
-        i_assert(value[0] != '\0');
-        data->snippet = p_strdup(ptxn->pool, value + 1);
-    }
-
-    if (!data->flags_set &&
-        (config->flags & PUSH_NOTIFICATION_MESSAGE_FLAGS) != 0) {
-        data->flags = mail_get_flags(mail);
-        data->flags_set = TRUE;
-    }
-
-    if ((data->keywords == NULL) &&
-        (config->flags & PUSH_NOTIFICATION_MESSAGE_KEYWORDS) != 0) {
-        const char *const *mail_kws = mail_get_keywords(mail);
-        ARRAY_TYPE(const_string) kws;
-        p_array_init(&kws, ptxn->pool, 2);
-        for (;*mail_kws != NULL; mail_kws++) {
-           value = p_strdup(ptxn->pool, *mail_kws);
-           array_append(&kws, &value, 1);
-        }
-        array_append_zero(&kws);
-        data->keywords = array_idx(&kws, 0);
-    }
+	if (data->from != NULL)
+		i_debug("%s: From [%s]", EVENT_NAME, data->from);
+	if (data->snippet != NULL)
+		i_debug("%s: Snippet [%s]", EVENT_NAME, data->snippet);
+	if (data->subject != NULL)
+		i_debug("%s: Subject [%s]", EVENT_NAME, data->subject);
+	if (data->to != NULL)
+		i_debug("%s: To [%s]", EVENT_NAME, data->to);
 }
 
+static void
+push_notification_event_messagenew_event(
+	struct push_notification_txn *ptxn,
+	struct push_notification_event_config *ec,
+	struct push_notification_txn_msg *msg, struct mail *mail)
+{
+	struct push_notification_event_messagenew_config *config =
+		(struct push_notification_event_messagenew_config *)ec->config;
+	struct push_notification_event_messagenew_data *data;
+
+	if (config->flags == 0)
+		return;
+
+	data = push_notification_txn_msg_get_eventdata(msg, EVENT_NAME);
+	if (data == NULL) {
+		data = p_new(ptxn->pool,
+			     struct push_notification_event_messagenew_data, 1);
+		data->date = -1;
+
+		push_notification_txn_msg_set_eventdata(ptxn, msg, ec, data);
+	}
+
+	push_notification_message_fill(mail, ptxn->pool, config->flags,
+				       &data->from, &data->to, &data->subject,
+				       &data->date, &data->date_tz,
+				       &data->message_id,
+				       &data->flags, &data->flags_set,
+				       &data->keywords,
+				       &data->snippet, &data->ext);
+}
 
 /* Event definition */
 
-extern struct push_notification_event push_notification_event_messagenew;
-
 struct push_notification_event push_notification_event_messagenew = {
-    .name = EVENT_NAME,
-    .init = {
-        .default_config = push_notification_event_messagenew_default_config
-    },
-    .msg = {
-        .debug_msg = push_notification_event_messagenew_debug_msg
-    },
-    .msg_triggers = {
-        .save = push_notification_event_messagenew_event
-    }
+	.name = EVENT_NAME,
+	.init = {
+		.default_config =
+			push_notification_event_messagenew_default_config,
+	},
+	.msg = {
+		.debug_msg = push_notification_event_messagenew_debug_msg,
+	},
+	.msg_triggers = {
+		.save = push_notification_event_messagenew_event,
+	},
 };

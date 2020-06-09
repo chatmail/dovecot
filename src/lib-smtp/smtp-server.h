@@ -54,6 +54,8 @@ enum smtp_server_recipient_hook_type {
 	/* approved: the server is about to approve this recipient by sending
 	   a success reply to the RCPT command. */
 	SMTP_SERVER_RECIPIENT_HOOK_APPROVED,
+	/* data_replied: the DATA command is replied for this recipient */
+	SMTP_SERVER_RECIPIENT_HOOK_DATA_REPLIED,
 	/* destroy: recipient is about to be destroyed. */
 	SMTP_SERVER_RECIPIENT_HOOK_DESTROY
 };
@@ -79,9 +81,28 @@ struct smtp_server_recipient {
 
 	void *context;
 
+	bool replied:1;
 	bool finished:1;
 };
 ARRAY_DEFINE_TYPE(smtp_server_recipient, struct smtp_server_recipient *);
+
+/* Returns the original recipient path if available. Otherwise, it returns the
+   final path. */
+const struct smtp_address *
+smtp_server_recipient_get_original(struct smtp_server_recipient *rcpt);
+
+struct smtp_server_reply *
+smtp_server_recipient_get_reply(struct smtp_server_recipient *rcpt);
+bool smtp_server_recipient_is_replied(struct smtp_server_recipient *rcpt);
+void smtp_server_recipient_replyv(struct smtp_server_recipient *rcpt,
+				  unsigned int status, const char *enh_code,
+				  const char *fmt, va_list args)
+				  ATTR_FORMAT(4, 0);
+void smtp_server_recipient_reply(struct smtp_server_recipient *rcpt,
+				 unsigned int status, const char *enh_code,
+				 const char *fmt, ...) ATTR_FORMAT(4, 5);
+void smtp_server_recipient_reply_forward(struct smtp_server_recipient *rcpt,
+					 const struct smtp_reply *from);
 
 /* Hooks */
 
@@ -105,6 +126,15 @@ void smtp_server_recipient_remove_hook(
 /*
  * Transaction
  */
+
+enum smtp_server_trace_rcpt_to_address {
+	/* Don't add recipient address to trace header. */
+	SMTP_SERVER_TRACE_RCPT_TO_ADDRESS_NONE,
+	/* Add final recipient address to trace header. */
+	SMTP_SERVER_TRACE_RCPT_TO_ADDRESS_FINAL,
+	/* Add original recipient address to trace header. */
+	SMTP_SERVER_TRACE_RCPT_TO_ADDRESS_ORIGINAL,
+};
 
 enum smtp_server_transaction_flags {
 	SMTP_SERVER_TRANSACTION_FLAG_REPLY_PER_RCPT = BIT(0),
@@ -144,8 +174,9 @@ void smtp_server_transaction_fail_data(
 	unsigned int status, const char *enh_code,
 	const char *fmt, va_list args) ATTR_FORMAT(5, 0);
 
-void smtp_server_transaction_write_trace_record(string_t *str,
-	struct smtp_server_transaction *trans);
+void smtp_server_transaction_write_trace_record(
+	string_t *str, struct smtp_server_transaction *trans,
+	enum smtp_server_trace_rcpt_to_address rcpt_to_address);
 
 /*
  * Callbacks
@@ -348,6 +379,15 @@ struct smtp_server_settings {
 	bool auth_optional:1;
 	/* TLS security is required for this service */
 	bool tls_required:1;
+	/* The path provided to the MAIL command does not need to be valid. A
+	   completely invalid path will parse as <>. Paths that can still be
+	   fixed by splitting it on the last `@' yielding a usable localpart and
+	   domain, will be parsed as such. There are limits though; when the
+	   path is badly delimited or contains control characters, the MAIL
+	   command will still fail. The unparsed broken address will be
+	   available in the `raw' field of struct smtp_address for logging etc.
+	 */
+	bool mail_path_allow_broken:1;
 	/* The path provided to the RCPT command does not need to have the
 	   domain part. */
 	bool rcpt_domain_optional:1;
@@ -404,6 +444,10 @@ void smtp_server_connection_start(struct smtp_server_connection *conn);
    handling command input is held off until smtp_server_connection_resume() is
    called. */
 void smtp_server_connection_start_pending(struct smtp_server_connection *conn);
+/* Abort the connection prematurely (before it is started). */
+void smtp_server_connection_abort(struct smtp_server_connection **_conn,
+				  unsigned int status, const char *enh_code,
+				  const char *reason);
 
 /* Halt connection command input and idle timeout entirely. */
 void smtp_server_connection_halt(struct smtp_server_connection *conn);
@@ -479,6 +523,8 @@ enum smtp_server_command_hook_type {
 	/* next: command is next to reply but has not submittted all replies
 	   yet. */
 	SMTP_SERVER_COMMAND_HOOK_NEXT,
+	/* replied_one: command has submitted one reply. */
+	SMTP_SERVER_COMMAND_HOOK_REPLIED_ONE,
 	/* replied: command has submitted all replies. */
 	SMTP_SERVER_COMMAND_HOOK_REPLIED,
 	/* completed: server is about to send last replies for this command. */
@@ -582,6 +628,7 @@ void smtp_server_cmd_mail_reply_success(struct smtp_server_cmd_ctx *cmd);
 
 /* RCPT */
 
+bool smtp_server_command_is_rcpt(struct smtp_server_cmd_ctx *cmd);
 void smtp_server_cmd_rcpt_reply_success(struct smtp_server_cmd_ctx *cmd);
 
 /* RSET */
@@ -615,8 +662,19 @@ struct smtp_server_reply *
 smtp_server_reply_create_forward(struct smtp_server_command *cmd,
 	unsigned int index, const struct smtp_reply *from);
 
+void smtp_server_reply_set_status(struct smtp_server_reply *reply,
+				  unsigned int status, const char *enh_code)
+				  ATTR_NULL(3);
+unsigned int smtp_server_reply_get_status(struct smtp_server_reply *reply,
+					  const char **enh_code_r) ATTR_NULL(3);
+
 void smtp_server_reply_add_text(struct smtp_server_reply *reply,
 	const char *line);
+void smtp_server_reply_prepend_text(struct smtp_server_reply *reply,
+				    const char *text_prefix);
+void smtp_server_reply_replace_path(struct smtp_server_reply *reply,
+				    struct smtp_address *path, bool add);
+
 void smtp_server_reply_submit(struct smtp_server_reply *reply);
 void smtp_server_reply_submit_duplicate(struct smtp_server_cmd_ctx *_cmd,
 					unsigned int index,

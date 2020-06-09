@@ -14,11 +14,13 @@ struct doveadm_settings {
 	const char *libexec_dir;
 	const char *mail_plugins;
 	const char *mail_plugin_dir;
+	const char *mail_temp_dir;
 	bool auth_debug;
 	const char *auth_socket_path;
 	const char *doveadm_socket_path;
 	unsigned int doveadm_worker_count;
 	in_port_t doveadm_port;
+	const char *doveadm_ssl;
 	const char *doveadm_username;
 	const char *doveadm_password;
 	const char *doveadm_allowed_commands;
@@ -41,5 +43,6 @@ extern const struct master_service_ssl_settings *doveadm_ssl_set;
 struct ssl_iostream_settings;
 
 void doveadm_get_ssl_settings(struct ssl_iostream_settings *set_r, pool_t pool);
+void doveadm_settings_expand(struct doveadm_settings *set, pool_t pool);
 
 #endif

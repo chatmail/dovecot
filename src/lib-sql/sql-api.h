@@ -94,7 +94,8 @@ struct sql_db *sql_init(const char *db_driver, const char *connect_string);
 int sql_init_full(const struct sql_settings *set, struct sql_db **db_r,
 		  const char **error_r);
 
-void sql_deinit(struct sql_db **db);
+void sql_ref(struct sql_db *db);
+void sql_unref(struct sql_db **db);
 
 /* Returns SQL database state flags. */
 enum sql_db_flags sql_get_flags(struct sql_db *db);
@@ -129,7 +130,7 @@ struct sql_result *sql_query_s(struct sql_db *db, const char *query);
 
 struct sql_prepared_statement *
 sql_prepared_statement_init(struct sql_db *db, const char *query_template);
-void sql_prepared_statement_deinit(struct sql_prepared_statement **prep_stmt);
+void sql_prepared_statement_unref(struct sql_prepared_statement **prep_stmt);
 
 struct sql_statement *
 sql_statement_init(struct sql_db *db, const char *query_template);
@@ -149,7 +150,7 @@ void sql_statement_query(struct sql_statement **stmt,
 			 sql_query_callback_t *callback, void *context);
 #define sql_statement_query(stmt, callback, context) \
 	sql_statement_query(stmt, \
-		(sql_query_callback_t *)callback, context - \
+		(sql_query_callback_t *)callback, TRUE ? context : \
 		CALLBACK_TYPECHECK(callback, void (*)( \
 			struct sql_result *, typeof(context))))
 struct sql_result *sql_statement_query_s(struct sql_statement **stmt);

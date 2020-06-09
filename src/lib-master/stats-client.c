@@ -175,7 +175,6 @@ stats_event_write(struct event *event, const struct failure_context *ctx,
 	if (begin) {
 		str_printfa(str, "BEGIN\t%"PRIu64"\t", event->id);
 		event->id_sent_to_stats = TRUE;
-		event->call_free = TRUE;
 	} else {
 		str_append(str, "EVENT\t");
 	}
@@ -227,7 +226,9 @@ stats_event_callback(struct event *event, enum event_callback_type type,
 		return TRUE;
 
 	switch (type) {
-	case EVENT_CALLBACK_TYPE_EVENT:
+	case EVENT_CALLBACK_TYPE_CREATE:
+		break;
+	case EVENT_CALLBACK_TYPE_SEND:
 		stats_client_send_event(client, event, ctx);
 		break;
 	case EVENT_CALLBACK_TYPE_FREE:

@@ -66,10 +66,18 @@ int client_default_cmd_rcpt(struct client *client,
 	char delim = '\0';
 	int ret;
 
+	i_assert(!smtp_address_isnull(rcpt->path));
+	if (*rcpt->path->localpart == '\0' && rcpt->path->domain == NULL) {
+		smtp_server_recipient_reply(
+			rcpt, 550, "5.1.1",
+			"Unacceptable TO: Empty path not allowed");
+		return -1;
+	}
 
 	smtp_address_detail_parse_temp(
 		client->unexpanded_lda_set->recipient_delimiter,
 		rcpt->path, &username, &delim, &detail);
+	i_assert(*username != '\0');
 
 	/* Make user name and detail available in the recipient event. The
 	   mail_user event (for local delivery) also adds the user field, but
@@ -114,7 +122,29 @@ cmd_data_create_added_headers(struct client *client,
 
 	/* headers for local and proxied messages */
 	proxy_offset = str_len(str);
-	smtp_server_transaction_write_trace_record(str, trans);
+	if (client->lmtp_set->lmtp_add_received_header) {
+		const struct lmtp_settings *lmtp_set = client->lmtp_set;
+		enum smtp_server_trace_rcpt_to_address rcpt_to_address =
+			SMTP_SERVER_TRACE_RCPT_TO_ADDRESS_FINAL;
+
+		switch (lmtp_set->parsed_lmtp_hdr_delivery_address) {
+		case LMTP_HDR_DELIVERY_ADDRESS_NONE:
+			rcpt_to_address =
+				SMTP_SERVER_TRACE_RCPT_TO_ADDRESS_NONE;
+			break;
+		case LMTP_HDR_DELIVERY_ADDRESS_FINAL:
+			rcpt_to_address =
+				SMTP_SERVER_TRACE_RCPT_TO_ADDRESS_FINAL;
+			break;
+		case LMTP_HDR_DELIVERY_ADDRESS_ORIGINAL:
+			rcpt_to_address =
+				SMTP_SERVER_TRACE_RCPT_TO_ADDRESS_ORIGINAL;
+			break;
+		}
+
+		smtp_server_transaction_write_trace_record(
+			str, trans, rcpt_to_address);
+	}
 
 	client->state.added_headers_local =
 		p_strdup(client->state_pool, str_c(str));

@@ -40,11 +40,11 @@ static struct fs *fs_compress_alloc(void)
 }
 
 static int
-fs_compress_init(struct fs *_fs, const char *args, const
-		 struct fs_settings *set)
+fs_compress_init(struct fs *_fs, const char *args,
+		 const struct fs_settings *set, const char **error_r)
 {
 	struct compress_fs *fs = (struct compress_fs *)_fs;
-	const char *p, *compression_name, *level_str, *error;
+	const char *p, *compression_name, *level_str;
 	const char *parent_name, *parent_args;
 
 	/* get compression handler name */
@@ -55,7 +55,7 @@ fs_compress_init(struct fs *_fs, const char *args, const
 
 	p = strchr(args, ':');
 	if (p == NULL) {
-		fs_set_error(_fs, "Compression method not given as parameter");
+		*error_r = "Compression method not given as parameter";
 		return -1;
 	}
 	compression_name = t_strdup_until(args, p++);
@@ -64,21 +64,23 @@ fs_compress_init(struct fs *_fs, const char *args, const
 	/* get compression level */
 	p = strchr(args, ':');
 	if (p == NULL || p[1] == '\0') {
-		fs_set_error(_fs, "Parent filesystem not given as parameter");
+		*error_r = "Parent filesystem not given as parameter";
 		return -1;
 	}
 
 	level_str = t_strdup_until(args, p++);
 	if (str_to_uint(level_str, &fs->compress_level) < 0 ||
 	    fs->compress_level > 9) {
-		fs_set_error(_fs, "Invalid compression level parameter '%s'", level_str);
+		*error_r = t_strdup_printf(
+			"Invalid compression level parameter '%s'", level_str);
 		return -1;
 	}
 	args = p;
 
 	fs->handler = compression_lookup_handler(compression_name);
 	if (fs->handler == NULL) {
-		fs_set_error(_fs, "Compression method '%s' not support", compression_name);
+		*error_r = t_strdup_printf(
+			"Compression method '%s' not supported", compression_name);
 		return -1;
 	}
 
@@ -90,11 +92,7 @@ fs_compress_init(struct fs *_fs, const char *args, const
 		parent_name = t_strdup_until(args, parent_args);
 		parent_args++;
 	}
-	if (fs_init(parent_name, parent_args, set, &_fs->parent, &error) < 0) {
-		fs_set_error(_fs, "%s: %s", parent_name, error);
-		return -1;
-	}
-	return 0;
+	return fs_init(parent_name, parent_args, set, &_fs->parent, error_r);
 }
 
 static void fs_compress_deinit(struct fs *_fs)
@@ -143,7 +141,7 @@ static void fs_compress_file_deinit(struct fs_file *_file)
 
 	if (file->super_read != _file->parent)
 		fs_file_deinit(&file->super_read);
-	fs_file_deinit(&_file->parent);
+	fs_file_free(_file);
 	i_free(file->file.path);
 	i_free(file);
 }

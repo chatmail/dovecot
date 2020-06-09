@@ -233,6 +233,40 @@ void buffer_delete(buffer_t *_buf, size_t pos, size_t size)
 	buffer_set_used_size(_buf, pos + end_size);
 }
 
+void buffer_replace(buffer_t *_buf, size_t pos, size_t size,
+		    const void *data, size_t data_size)
+{
+	struct real_buffer *buf = (struct real_buffer *)_buf;
+	size_t end_size;
+
+	if (pos >= buf->used) {
+		buffer_write(_buf, pos, data, data_size);
+		return;
+	}
+	end_size = buf->used - pos;
+
+	if (size < end_size) {
+		end_size -= size;
+		if (data_size == 0) {
+			/* delete from between */
+			memmove(buf->w_buffer + pos,
+				buf->w_buffer + pos + size, end_size);
+		} else {
+			/* insert */
+			buffer_copy(_buf, pos + data_size, _buf, pos + size,
+				    (size_t)-1);
+			memcpy(buf->w_buffer + pos, data, data_size);
+		}
+	} else {
+		/* overwrite the end */
+		end_size = 0;
+		buffer_write(_buf, pos, data, data_size);
+	}
+
+	buffer_set_used_size(_buf, pos + data_size + end_size);
+}
+
+
 void buffer_write_zero(buffer_t *_buf, size_t pos, size_t data_size)
 {
 	struct real_buffer *buf = (struct real_buffer *)_buf;
@@ -343,6 +377,14 @@ size_t buffer_get_writable_size(const buffer_t *_buf)
 	   increase the buffer's alloc size unnecessarily when it just wants
 	   to access the entire buffer. */
 	return buf->alloc-1;
+}
+
+size_t buffer_get_avail_size(const buffer_t *_buf)
+{
+	const struct real_buffer *buf = (const struct real_buffer *)_buf;
+
+	i_assert(buf->alloc >= buf->used);
+	return ((buf->dynamic ? SIZE_MAX : buf->alloc) - buf->used);
 }
 
 bool buffer_cmp(const buffer_t *buf1, const buffer_t *buf2)

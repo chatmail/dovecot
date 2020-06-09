@@ -39,8 +39,8 @@ cmd_copy_box(struct copy_cmd_context *ctx, struct mailbox *destbox,
 	   this guarantees that mails aren't expunged without actually having
 	   been copied. */
 	desttrans = mailbox_transaction_begin(destbox,
-					MAILBOX_TRANSACTION_FLAG_EXTERNAL,
-					__func__);
+					MAILBOX_TRANSACTION_FLAG_EXTERNAL |
+					ctx->ctx.transaction_flags, __func__);
 
 	while (doveadm_mail_iter_next(iter, &mail)) {
 		save_ctx = mailbox_save_alloc(desttrans);
@@ -170,7 +170,7 @@ static void cmd_copy_deinit(struct doveadm_mail_cmd_context *_ctx)
 
 	if (ctx->source_user != NULL) {
 		mail_storage_service_user_unref(&ctx->source_service_user);
-		mail_user_unref(&ctx->source_user);
+		mail_user_deinit(&ctx->source_user);
 	}
 }
 

@@ -603,12 +603,13 @@ void smtp_client_transaction_ref(struct smtp_client_transaction *trans)
 void smtp_client_transaction_unref(struct smtp_client_transaction **_trans)
 {
 	struct smtp_client_transaction *trans = *_trans;
-	struct smtp_client_connection *conn = trans->conn;
+	struct smtp_client_connection *conn;
 
 	*_trans = NULL;
 
 	if (trans == NULL)
 		return;
+	conn = trans->conn;
 
 	i_assert(trans->refcount > 0);
 	if (--trans->refcount > 0)
@@ -940,6 +941,8 @@ void smtp_client_transaction_start(
 	i_assert(mail != NULL);
 	event_add_str(trans->event, "mail_from",
 		      smtp_address_encode(mail->mail_from));
+	event_add_str(trans->event, "mail_from_raw",
+		      smtp_address_encode_raw(mail->mail_from));
 	smtp_params_mail_add_to_event(&mail->mail_params,
 				      trans->event);
 
@@ -960,7 +963,8 @@ void smtp_client_transaction_start(
 
 	smtp_client_connection_add_transaction(conn, trans);
 
-	if (trans->immediate) {
+	if (trans->immediate &&
+	    conn->state == SMTP_CLIENT_CONNECTION_STATE_READY) {
 		trans->state = SMTP_CLIENT_TRANSACTION_STATE_MAIL_FROM;
 
 		if (!trans->submitting)

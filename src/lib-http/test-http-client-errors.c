@@ -8,6 +8,7 @@
 #include "istream-chain.h"
 #include "ostream.h"
 #include "time-util.h"
+#include "sleep.h"
 #include "connection.h"
 #include "test-common.h"
 #include "http-url.h"
@@ -1417,7 +1418,7 @@ test_early_success_input(struct server_connection *conn)
 		"\r\n"
 		"Everything is OK\r\n";
 
-	usleep(200000);
+	i_sleep_msecs(200);
 	o_stream_nsend_str(conn->conn.output, resp);
 	server_connection_deinit(&conn);
 }
@@ -3290,7 +3291,7 @@ static void test_server_run(unsigned int index)
 
 	/* open server socket */
 	io_listen = io_add(fd_listen,
-		IO_READ, server_connection_accept, (void *)NULL);
+		IO_READ, server_connection_accept, NULL);
 
 	server_conn_list = connection_list_init
 		(&server_connection_set, &server_connection_vfuncs);
@@ -3426,7 +3427,7 @@ static void test_run_client_server(
 
 	/* parent: client */
 
-	usleep(100000); /* wait a little for server setup */
+	i_sleep_msecs(100); /* wait a little for server setup */
 
 	ioloop = io_loop_create();
 	test_client_run(client_test, client_set);

@@ -12,8 +12,8 @@ enum auth_master_flags {
 
 struct auth_user_info {
 	const char *service;
-	struct ip_addr local_ip, remote_ip;
-	in_port_t local_port, remote_port;
+	struct ip_addr local_ip, remote_ip, real_local_ip, real_remote_ip;
+	in_port_t local_port, remote_port, real_local_port, real_remote_port;
 	bool debug;
 };
 
@@ -67,4 +67,6 @@ const char *auth_master_user_list_next(struct auth_master_user_list_ctx *ctx);
 /* Returns -1 if anything failed, 0 if ok */
 int auth_master_user_list_deinit(struct auth_master_user_list_ctx **ctx);
 
+/* INTERNAL: */
+void auth_user_info_export(string_t *str, const struct auth_user_info *info);
 #endif

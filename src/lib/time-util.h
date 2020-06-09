@@ -3,6 +3,15 @@
 
 #include <sys/time.h> /* for struct timeval */
 
+/* Same as gettimeofday(), but call i_fatal() if the call fails. */
+void i_gettimeofday(struct timeval *tv_r);
+/* Return nanoseconds since UNIX epoch (1970-01-01). */
+uint64_t i_nanoseconds(void);
+/* Return microseconds since UNIX epoch (1970-01-01). */
+static inline uint64_t i_microseconds(void) {
+	return i_nanoseconds() / 1000;
+}
+
 /* Returns -1 if tv1<tv2, 1 if tv1>tv2, 0 if they're equal. */
 int timeval_cmp(const struct timeval *tv1, const struct timeval *tv2);
 /* Same as timeval_cmp, but tv->usecs must differ by at least usec_margin */
@@ -13,6 +22,30 @@ int timeval_diff_msecs(const struct timeval *tv1, const struct timeval *tv2);
 /* Returns tv1-tv2 in microseconds. */
 long long timeval_diff_usecs(const struct timeval *tv1,
 			     const struct timeval *tv2);
+
+static inline void
+timeval_add_usecs(struct timeval *tv, long long usecs)
+{
+	i_assert(usecs >= 0);
+	tv->tv_sec += usecs / 1000000;
+	tv->tv_usec += (usecs % 1000000);
+	if (tv->tv_usec >= 1000000) {
+		tv->tv_sec++;
+		tv->tv_usec -= 1000000;
+	}
+}
+
+static inline void
+timeval_sub_usecs(struct timeval *tv, long long usecs)
+{
+	i_assert(usecs >= 0);
+	tv->tv_sec -= usecs / 1000000;
+	tv->tv_usec -= (usecs % 1000000);
+	if (tv->tv_usec < 0) {
+		tv->tv_sec--;
+		tv->tv_usec += 1000000;
+	}
+}
 
 static inline void
 timeval_add_msecs(struct timeval *tv, unsigned int msecs)

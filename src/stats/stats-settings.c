@@ -34,7 +34,7 @@ struct service_settings stats_service_settings = {
 	.group = "",
 	.privileged_group = "",
 	.extra_groups = "",
-	.chroot = "empty",
+	.chroot = "",
 
 	.drop_priv_before_exec = FALSE,
 
@@ -62,6 +62,7 @@ static const struct setting_define stats_exporter_setting_defines[] = {
 	DEF(SET_STR, name),
 	DEF(SET_STR, transport),
 	DEF(SET_STR, transport_args),
+	DEF(SET_TIME_MSECS, transport_timeout),
 	DEF(SET_STR, format),
 	DEF(SET_STR, format_args),
 	SETTING_DEFINE_LIST_END
@@ -71,6 +72,7 @@ static const struct stats_exporter_settings stats_exporter_default_settings = {
 	.name = "",
 	.transport = "",
 	.transport_args = "",
+	.transport_timeout = 250, /* ms */
 	.format = "",
 	.format_args = "",
 };
@@ -100,19 +102,21 @@ static const struct setting_define stats_metric_setting_defines[] = {
 	DEF(SET_STR, source_location),
 	DEF(SET_STR, categories),
 	DEF(SET_STR, fields),
+	DEF(SET_STR, group_by),
 	{ SET_STRLIST, "filter", offsetof(struct stats_metric_settings, filter), NULL },
 	DEF(SET_STR, exporter),
 	DEF(SET_STR, exporter_include),
 	SETTING_DEFINE_LIST_END
 };
 
-const struct stats_metric_settings stats_metric_default_settings = {
+static const struct stats_metric_settings stats_metric_default_settings = {
 	.name = "",
 	.event_name = "",
 	.source_location = "",
 	.categories = "",
 	.fields = "",
 	.exporter = "",
+	.group_by = "",
 	.exporter_include = "name hostname timestamps categories fields",
 };
 

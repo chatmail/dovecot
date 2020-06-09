@@ -3,12 +3,9 @@
 #include "lib.h"
 #include "llist.h"
 #include "smtp-address.h"
+#include "smtp-reply.h"
 
 #include "smtp-server-private.h"
-
-static bool
-smtp_server_recipient_call_hooks(struct smtp_server_recipient **_rcpt,
-				 enum smtp_server_recipient_hook_type type);
 
 static void
 smtp_server_recipient_update_event(struct smtp_server_recipient_private *prcpt)
@@ -80,7 +77,7 @@ bool smtp_server_recipient_unref(struct smtp_server_recipient **_rcpt)
 
 	if (!rcpt->finished) {
 		struct event_passthrough *e =
-			e = event_create_passthrough(rcpt->event)->
+			event_create_passthrough(rcpt->event)->
 			set_name("smtp_server_transaction_rcpt_finished");
 		e->add_int("status_code", 9000);
 		e->add_str("enhanced_code", "9.0.0");
@@ -97,6 +94,14 @@ bool smtp_server_recipient_unref(struct smtp_server_recipient **_rcpt)
 void smtp_server_recipient_destroy(struct smtp_server_recipient **_rcpt)
 {
 	smtp_server_recipient_unref(_rcpt);
+}
+
+const struct smtp_address *
+smtp_server_recipient_get_original(struct smtp_server_recipient *rcpt)
+{
+	if (rcpt->params.orcpt.addr == NULL)
+		return rcpt->path;
+	return rcpt->params.orcpt.addr;
 }
 
 bool smtp_server_recipient_approved(struct smtp_server_recipient **_rcpt)
@@ -134,6 +139,76 @@ void smtp_server_recipient_last_data(struct smtp_server_recipient *rcpt,
 {
 	i_assert(rcpt->cmd == NULL);
 	rcpt->cmd = cmd;
+}
+
+void smtp_server_recipient_data_replied(struct smtp_server_recipient *rcpt)
+{
+	if (rcpt->replied)
+		return;
+	if (smtp_server_recipient_get_reply(rcpt) == NULL)
+		return;
+	rcpt->replied = TRUE;
+	if (!smtp_server_recipient_call_hooks(
+		&rcpt, SMTP_SERVER_RECIPIENT_HOOK_DATA_REPLIED)) {
+		/* nothing to do */
+	}
+}
+
+struct smtp_server_reply *
+smtp_server_recipient_get_reply(struct smtp_server_recipient *rcpt)
+{
+	if (!HAS_ALL_BITS(rcpt->trans->flags,
+			 SMTP_SERVER_TRANSACTION_FLAG_REPLY_PER_RCPT))
+		return smtp_server_command_get_reply(rcpt->cmd->cmd, 0);
+	return smtp_server_command_get_reply(rcpt->cmd->cmd, rcpt->index);
+}
+
+bool smtp_server_recipient_is_replied(struct smtp_server_recipient *rcpt)
+{
+	i_assert(rcpt->cmd != NULL);
+
+	return smtp_server_command_is_replied(rcpt->cmd->cmd);
+}
+
+void smtp_server_recipient_replyv(struct smtp_server_recipient *rcpt,
+				  unsigned int status, const char *enh_code,
+				  const char *fmt, va_list args)
+{
+	i_assert(rcpt->cmd != NULL);
+
+	if (smtp_server_command_is_rcpt(rcpt->cmd) && (status / 100) == 2) {
+		smtp_server_reply_indexv(rcpt->cmd, rcpt->index,
+					 status, enh_code, fmt, args);
+		return;
+	}
+		
+	smtp_server_reply_index(rcpt->cmd, rcpt->index, status, enh_code,
+				"<%s> %s", smtp_address_encode(rcpt->path),
+				t_strdup_vprintf(fmt, args));
+}
+
+void smtp_server_recipient_reply(struct smtp_server_recipient *rcpt,
+				 unsigned int status, const char *enh_code,
+				 const char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+	smtp_server_recipient_replyv(rcpt, status, enh_code, fmt, args);
+	va_end(args);
+}
+
+void smtp_server_recipient_reply_forward(struct smtp_server_recipient *rcpt,
+					 const struct smtp_reply *from)
+{
+	bool add_path = (!smtp_server_command_is_rcpt(rcpt->cmd) ||
+			 !smtp_reply_is_success(from));
+	struct smtp_server_reply *reply;
+
+	reply = smtp_server_reply_create_forward(rcpt->cmd->cmd, rcpt->index,
+						 from);
+	smtp_server_reply_replace_path(reply, rcpt->path, add_path);
+	smtp_server_reply_submit(reply);
 }
 
 void smtp_server_recipient_reset(struct smtp_server_recipient *rcpt)
@@ -219,9 +294,9 @@ void smtp_server_recipient_remove_hook(
 	i_assert(found);
 }
 
-static bool
-smtp_server_recipient_call_hooks(struct smtp_server_recipient **_rcpt,
-				 enum smtp_server_recipient_hook_type type)
+bool smtp_server_recipient_call_hooks(
+	struct smtp_server_recipient **_rcpt,
+	enum smtp_server_recipient_hook_type type)
 {
 	struct smtp_server_recipient *rcpt = *_rcpt;
 	struct smtp_server_recipient_private *prcpt =

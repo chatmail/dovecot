@@ -25,7 +25,7 @@ struct ioloop {
 	unsigned int max_fd_count;
 
 	io_loop_time_moved_callback_t *time_moved_callback;
-	time_t next_max_time;
+	struct timeval next_max_time;
 	uint64_t ioloop_wait_usecs;
 	struct timeval wait_started;
 
@@ -33,6 +33,7 @@ struct ioloop {
 
 	bool running:1;
 	bool iolooping:1;
+	bool stop_after_run_loop:1;
 };
 
 struct io {

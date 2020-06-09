@@ -47,6 +47,8 @@ static void
 client_connection_tcp_send_auth_handshake(struct client_connection_tcp *conn);
 static void
 client_connection_tcp_destroy(struct client_connection_tcp **_conn);
+static int
+client_connection_tcp_init_ssl(struct client_connection_tcp *conn);
 
 static failure_callback_t *orig_error_callback, *orig_fatal_callback;
 static failure_callback_t *orig_info_callback, *orig_debug_callback = NULL;
@@ -290,6 +292,8 @@ doveadm_mail_cmd_server_run(struct client_connection_tcp *conn,
 		o_stream_nsend(conn->output, "\n-\n", 3);
 	} else if (ret == 0) {
 		o_stream_nsend_str(conn->output, "\n-NOUSER\n");
+	} else if (mctx->exit_code == DOVEADM_EX_NOREPLICATE) {
+		o_stream_nsend_str(conn->output, "\n-NOREPLICATE\n");
 	} else if (mctx->exit_code != 0) {
 		/* maybe not an error, but not a full success either */
 		o_stream_nsend_str(conn->output,
@@ -418,10 +422,8 @@ static bool client_handle_command(struct client_connection_tcp *conn,
 	conn->io = io_add_istream(conn->input, client_connection_tcp_input, conn);
 	client_connection_set_proctitle(&conn->conn, "");
 
-	/* flush the output and possibly run next command */
-	net_set_nonblock(conn->fd, FALSE);
+	/* Try to flush the output. It might finish later. */
 	(void)o_stream_flush(conn->output);
-	net_set_nonblock(conn->fd, TRUE);
 	return TRUE;
 }
 
@@ -444,6 +446,14 @@ client_connection_tcp_authenticate(struct client_connection_tcp *conn)
 		i_error("doveadm_password not set, "
 			"remote authentication disabled");
 		return -1;
+	}
+
+	if (strcmp(line, "STARTTLS") == 0) {
+		io_remove(&conn->io);
+		if (client_connection_tcp_init_ssl(conn) < 0)
+			return -1;
+		conn->io = io_add_istream(conn->input, client_connection_tcp_input, conn);
+		return 0;
 	}
 
 	/* FIXME: some day we should probably let auth process do this and

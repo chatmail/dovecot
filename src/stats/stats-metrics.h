@@ -2,6 +2,7 @@
 #define STATS_METRICS_H
 
 #include "stats-settings.h"
+#include "sha1.h"
 
 struct metric;
 
@@ -27,6 +28,7 @@ struct exporter {
 	 * the "how do we get the event to the external location" knobs
 	 */
 	const char *transport_args;
+	unsigned int transport_timeout;
 
 	/* function to send the event */
 	void (*transport)(const struct exporter *, const buffer_t *);
@@ -50,14 +52,45 @@ struct metric_field {
 	struct stats_dist *stats;
 };
 
+enum metric_value_type {
+	METRIC_VALUE_TYPE_STR,
+	METRIC_VALUE_TYPE_INT,
+};
+
+struct metric_value {
+	enum metric_value_type type;
+	unsigned char hash[SHA1_RESULTLEN];
+	intmax_t intmax;
+};
+
 struct metric {
 	const char *name;
+	/* When this metric is a sub-metric, then this is the
+	   suffix for name and any sub_names before it.
+
+	   So if we have
+
+	   struct metric imap_command {
+	       event_name = imap_command_finished
+	       group_by = cmd_name
+	   }
+
+	   The metric.name will always be imap_command and for each sub-metric
+	   metric.sub_name will be whatever the cmd_name is, such as 'select'.
+
+	   This is a display name and does not guarantee uniqueness.
+	*/
+	const char *sub_name;
 
 	/* Timing for how long the event existed */
 	struct stats_dist *duration_stats;
 
 	unsigned int fields_count;
 	struct metric_field *fields;
+
+	const char *const *group_by;
+	struct metric_value group_value;
+	ARRAY(struct metric *) sub_metrics;
 
 	struct metric_export_info export_info;
 };

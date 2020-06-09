@@ -3,6 +3,8 @@
 
 #define AUTH_LOG_MSG_PASSWORD_MISMATCH "Password mismatch"
 
+struct hash_method;
+
 enum password_encoding {
 	PW_ENCODING_NONE,
 	PW_ENCODING_BASE64,
@@ -22,10 +24,12 @@ struct password_scheme {
 	   hex and base64 encoded passwords. */
 	unsigned int raw_password_len;
 
-	int (*password_verify)(const char *plaintext, const struct password_generate_params *params,
+	int (*password_verify)(const char *plaintext,
+			       const struct password_generate_params *params,
 			       const unsigned char *raw_password, size_t size,
 			       const char **error_r);
-	void (*password_generate)(const char *plaintext, const struct password_generate_params *params,
+	void (*password_generate)(const char *plaintext,
+				  const struct password_generate_params *params,
 				  const unsigned char **raw_password_r,
 				  size_t *size_r);
 };
@@ -36,8 +40,10 @@ extern unsigned int password_scheme_encryption_rounds;
 
 /* Returns 1 = matched, 0 = didn't match, -1 = unknown scheme or invalid
    raw_password */
-int password_verify(const char *plaintext, const struct password_generate_params *params,
-		    const char *scheme, const unsigned char *raw_password, size_t size,
+int password_verify(const char *plaintext,
+		    const struct password_generate_params *params,
+		    const char *scheme,
+		    const unsigned char *raw_password, size_t size,
 		    const char **error_r);
 
 /* Extracts scheme from password, or returns NULL if it isn't found.
@@ -53,13 +59,15 @@ int password_decode(const char *password, const char *scheme,
 /* Create password with wanted scheme out of plaintext password and username.
    Potential base64/hex directives are ignored in scheme. Returns FALSE if
    the scheme is unknown. */
-bool password_generate(const char *plaintext, const struct password_generate_params *params,
+bool password_generate(const char *plaintext,
+		       const struct password_generate_params *params,
 		       const char *scheme,
 		       const unsigned char **raw_password_r, size_t *size_r);
 /* Like above, but generate encoded passwords. If hex/base64 directive isn't
    specified in the scheme, the default encoding for the scheme is used.
    Returns FALSE if the scheme is unknown. */
-bool password_generate_encoded(const char *plaintext, const struct password_generate_params *params,
+bool password_generate_encoded(const char *plaintext,
+			       const struct password_generate_params *params,
 			       const char *scheme, const char **password_r);
 
 /* Returns TRUE if schemes are equivalent. */
@@ -89,22 +97,43 @@ int password_generate_otp(const char *pw, const char *state_data,
 	ATTR_NULL(2);
 void password_generate_rpa(const char *pw, unsigned char result[]);
 
-int crypt_verify(const char *plaintext, const struct password_generate_params *params,
+int crypt_verify(const char *plaintext,
+		 const struct password_generate_params *params,
 		 const unsigned char *raw_password, size_t size,
 		 const char **error_r);
 
-int scram_sha1_scheme_parse(const unsigned char *credentials, size_t size,
-			    unsigned int *iter_count_r, const char **salt_r,
-			    unsigned char stored_key_r[],
-			    unsigned char server_key_r[], const char **error_r);
-int scram_sha1_verify(const char *plaintext, const struct password_generate_params *params ATTR_UNUSED,
+int scram_scheme_parse(const struct hash_method *hmethod, const char *name,
+		       const unsigned char *credentials, size_t size,
+		       unsigned int *iter_count_r, const char **salt_r,
+		       unsigned char stored_key_r[],
+		       unsigned char server_key_r[], const char **error_r);
+int scram_verify(const struct hash_method *hmethod, const char *scheme_name,
+		 const char *plaintext, const unsigned char *raw_password,
+		 size_t size, const char **error_r);
+void scram_generate(const struct hash_method *hmethod, const char *plaintext,
+		    const unsigned char **raw_password_r, size_t *size_r);
+
+int scram_sha1_verify(const char *plaintext,
+		      const struct password_generate_params *params ATTR_UNUSED,
 		      const unsigned char *raw_password, size_t size,
 		      const char **error_r ATTR_UNUSED);
-void scram_sha1_generate(const char *plaintext, const struct password_generate_params *params ATTR_UNUSED,
+void scram_sha1_generate(const char *plaintext,
+			 const struct password_generate_params *params ATTR_UNUSED,
 			 const unsigned char **raw_password_r, size_t *size_r);
-void pbkdf2_generate(const char *plaintext, const struct password_generate_params *params ATTR_UNUSED,
+
+int scram_sha256_verify(const char *plaintext,
+			const struct password_generate_params *params ATTR_UNUSED,
+			const unsigned char *raw_password, size_t size,
+			const char **error_r);
+void scram_sha256_generate(const char *plaintext,
+			   const struct password_generate_params *params ATTR_UNUSED,
+			   const unsigned char **raw_password_r, size_t *size_r);
+
+void pbkdf2_generate(const char *plaintext,
+		     const struct password_generate_params *params ATTR_UNUSED,
 		     const unsigned char **raw_password_r, size_t *size_r);
-int pbkdf2_verify(const char *plaintext, const struct password_generate_params *params ATTR_UNUSED,
+int pbkdf2_verify(const char *plaintext,
+		  const struct password_generate_params *params ATTR_UNUSED,
 		  const unsigned char *raw_password, size_t size,
 		  const char **error_r);
 
