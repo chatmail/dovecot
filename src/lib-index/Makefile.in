@@ -140,12 +140,13 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
 	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
-	$(am__DIST_COMMON)
+DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
+	$(pkginc_lib_HEADERS) $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
@@ -176,7 +177,7 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__EXEEXT_1 = test-mail-index-map$(EXEEXT) \
+am__EXEEXT_1 = test-mail-index$(EXEEXT) test-mail-index-map$(EXEEXT) \
 	test-mail-index-modseq$(EXEEXT) \
 	test-mail-index-sync-ext$(EXEEXT) \
 	test-mail-index-transaction-finish$(EXEEXT) \
@@ -185,6 +186,8 @@ am__EXEEXT_1 = test-mail-index-map$(EXEEXT) \
 	test-mail-transaction-log-file$(EXEEXT) \
 	test-mail-transaction-log-view$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
+am_test_mail_index_OBJECTS = test-mail-index.$(OBJEXT)
+test_mail_index_OBJECTS = $(am_test_mail_index_OBJECTS)
 am_test_mail_index_map_OBJECTS = test-mail-index-map.$(OBJEXT)
 test_mail_index_map_OBJECTS = $(am_test_mail_index_map_OBJECTS)
 am_test_mail_index_modseq_OBJECTS = test-mail-index-modseq.$(OBJEXT)
@@ -247,7 +250,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libindex_la_SOURCES) $(test_mail_index_map_SOURCES) \
+SOURCES = $(libindex_la_SOURCES) $(test_mail_index_SOURCES) \
+	$(test_mail_index_map_SOURCES) \
 	$(test_mail_index_modseq_SOURCES) \
 	$(test_mail_index_sync_ext_SOURCES) \
 	$(test_mail_index_transaction_finish_SOURCES) \
@@ -255,7 +259,8 @@ SOURCES = $(libindex_la_SOURCES) $(test_mail_index_map_SOURCES) \
 	$(test_mail_transaction_log_append_SOURCES) \
 	$(test_mail_transaction_log_file_SOURCES) \
 	$(test_mail_transaction_log_view_SOURCES)
-DIST_SOURCES = $(libindex_la_SOURCES) $(test_mail_index_map_SOURCES) \
+DIST_SOURCES = $(libindex_la_SOURCES) $(test_mail_index_SOURCES) \
+	$(test_mail_index_map_SOURCES) \
 	$(test_mail_index_modseq_SOURCES) \
 	$(test_mail_index_sync_ext_SOURCES) \
 	$(test_mail_index_transaction_finish_SOURCES) \
@@ -296,7 +301,7 @@ am__uninstall_files_from_dir = { \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
 am__installdirs = "$(DESTDIR)$(pkginc_libdir)"
-HEADERS = $(pkginc_lib_HEADERS)
+HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -352,6 +357,7 @@ CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DICT_LIBS = @DICT_LIBS@
+DLLIB = @DLLIB@
 DLLTOOL = @DLLTOOL@
 DSYMUTIL = @DSYMUTIL@
 DUMPBIN = @DUMPBIN@
@@ -401,6 +407,8 @@ LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
 LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
 LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
+LIBUNWIND_CFLAGS = @LIBUNWIND_CFLAGS@
+LIBUNWIND_LIBS = @LIBUNWIND_LIBS@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LIPO = @LIPO@
@@ -584,6 +592,7 @@ headers = \
         mailbox-log.h
 
 test_programs = \
+	test-mail-index \
 	test-mail-index-map \
 	test-mail-index-modseq \
 	test-mail-index-sync-ext \
@@ -599,6 +608,9 @@ test_libs = \
 	../lib/liblib.la
 
 test_deps = $(noinst_LTLIBRARIES) $(test_libs)
+test_mail_index_SOURCES = test-mail-index.c
+test_mail_index_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
+test_mail_index_DEPENDENCIES = $(test_deps)
 test_mail_index_map_SOURCES = test-mail-index-map.c
 test_mail_index_map_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
 test_mail_index_map_DEPENDENCIES = $(test_deps)
@@ -625,6 +637,7 @@ test_mail_transaction_log_view_LDADD = mail-transaction-log-view.lo $(test_libs)
 test_mail_transaction_log_view_DEPENDENCIES = $(test_deps)
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
+noinst_HEADERS = test-mail-index.h
 all: all-am
 
 .SUFFIXES:
@@ -681,6 +694,10 @@ clean-noinstPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
+
+test-mail-index$(EXEEXT): $(test_mail_index_OBJECTS) $(test_mail_index_DEPENDENCIES) $(EXTRA_test_mail_index_DEPENDENCIES) 
+	@rm -f test-mail-index$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_mail_index_OBJECTS) $(test_mail_index_LDADD) $(LIBS)
 
 test-mail-index-map$(EXEEXT): $(test_mail_index_map_OBJECTS) $(test_mail_index_map_DEPENDENCIES) $(EXTRA_test_mail_index_map_DEPENDENCIES) 
 	@rm -f test-mail-index-map$(EXEEXT)
@@ -761,6 +778,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-sync-ext.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-transaction-finish.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-transaction-update.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-transaction-log-append.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-transaction-log-file.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-transaction-log-view.Po@am__quote@

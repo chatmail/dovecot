@@ -458,7 +458,7 @@ test_server_init(const struct smtp_server_settings *server_set)
 {
 	/* open server socket */
 	io_listen = io_add(fd_listen,
-		IO_READ, client_accept, (void *)NULL);
+		IO_READ, client_accept, NULL);
 
 	smtp_server = smtp_server_init(server_set);
 }
@@ -754,7 +754,8 @@ static void test_client_continue(void *dummy ATTR_UNUSED)
 
 		tctrans->conn->trans = smtp_client_transaction_create(
 			tctrans->conn->conn,
-			SMTP_ADDRESS_LITERAL("user", "example.com"),
+			&((struct smtp_address){.localpart = "user",
+						.domain = "example.com"}),
 			&mail_params, 0,
 			test_client_transaction_finish, tctrans);
 
@@ -1000,6 +1001,7 @@ static void test_run_scenarios(enum smtp_protocol protocol,
 
 	test_out_reason("unknown payload size", (failure == NULL), failure);
 
+#ifdef HAVE_OPENSSL
 	smtp_server_set.max_pipelined_commands = 5;
 	smtp_server_set.capabilities |= SMTP_CAPABILITY_PIPELINING;
 	test_max_pending = MAX_PARALLEL_PENDING;
@@ -1027,6 +1029,7 @@ static void test_run_scenarios(enum smtp_protocol protocol,
 
 	test_out_reason("parallel pipelining startls",
 			(failure == NULL), failure);
+#endif
 }
 
 static void test_smtp_normal(void)

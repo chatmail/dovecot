@@ -7,6 +7,7 @@
 #include "istream.h"
 #include "ostream.h"
 #include "time-util.h"
+#include "sleep.h"
 #include "connection.h"
 #include "test-common.h"
 #include "http-url.h"
@@ -738,7 +739,7 @@ test_server_run(const struct http_server_settings *http_set)
 
 	/* open server socket */
 	io_listen = io_add(fd_listen,
-		IO_READ, server_connection_accept, (void *)NULL);
+		IO_READ, server_connection_accept, NULL);
 
 	http_server = http_server_init(http_set);
 
@@ -812,7 +813,8 @@ static void test_run_client_server(
 				if (debug)
 					i_debug("client[%d]: PID=%s", i+1, my_pid);
 				/* child: client */
-				usleep(100000); /* wait a little for server setup */
+				/* wait a little for server setup */
+				i_sleep_msecs(100);
 				i_close_fd(&fd_listen);
 				ioloop = io_loop_create();
 				client_test(i);

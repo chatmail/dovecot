@@ -241,14 +241,18 @@ void smtp_server_command_debug(struct smtp_server_cmd_ctx *cmd,
 struct smtp_server_command *
 smtp_server_command_new_invalid(struct smtp_server_connection *conn);
 struct smtp_server_command *
-smtp_server_command_new(struct smtp_server_connection *conn,
-	const char *name, const char *params);
+smtp_server_command_new(struct smtp_server_connection *conn, const char *name);
+
+void smtp_server_command_execute(struct smtp_server_command *cmd,
+				 const char *params);
+
 void smtp_server_command_ref(struct smtp_server_command *cmd);
 bool smtp_server_command_unref(struct smtp_server_command **_cmd);
 void smtp_server_command_abort(struct smtp_server_command **_cmd);
 
 bool smtp_server_command_call_hooks(struct smtp_server_command **_cmd,
-				    enum smtp_server_command_hook_type type);
+				    enum smtp_server_command_hook_type type,
+				    bool remove);
 void smtp_server_command_remove_hooks(struct smtp_server_command *cmd,
 				      enum smtp_server_command_hook_type type);
 
@@ -379,10 +383,15 @@ void smtp_server_recipient_denied(struct smtp_server_recipient *rcpt,
 
 void smtp_server_recipient_last_data(struct smtp_server_recipient *rcpt,
 				     struct smtp_server_cmd_ctx *cmd);
+void smtp_server_recipient_data_replied(struct smtp_server_recipient *rcpt);
 
 void smtp_server_recipient_reset(struct smtp_server_recipient *rcpt);
 void smtp_server_recipient_finished(struct smtp_server_recipient *rcpt,
 				    const struct smtp_server_reply *reply);
+
+bool smtp_server_recipient_call_hooks(
+	struct smtp_server_recipient **_rcpt,
+	enum smtp_server_recipient_hook_type type);
 
 /*
  * Transaction
@@ -390,10 +399,7 @@ void smtp_server_recipient_finished(struct smtp_server_recipient *rcpt,
 
 struct smtp_server_transaction *
 smtp_server_transaction_create(struct smtp_server_connection *conn,
-			       enum smtp_server_transaction_flags flags,
-			       const struct smtp_address *mail_from,
-			       const struct smtp_params_mail *params,
-			       const struct timeval *timestamp);
+			       const struct smtp_server_cmd_mail *mail_data);
 void smtp_server_transaction_free(struct smtp_server_transaction **_trans);
 
 void smtp_server_transaction_add_rcpt(struct smtp_server_transaction *trans,

@@ -79,7 +79,7 @@ enum smtp_param_parse_error {
  */
 
 int smtp_param_parse(pool_t pool, const char *text,
-	struct smtp_param *param_r, const char **error_r);
+		     struct smtp_param *param_r, const char **error_r);
 void smtp_param_write(string_t *out, const struct smtp_param *param);
 
 /*
@@ -98,9 +98,8 @@ int smtp_params_mail_parse(pool_t pool, const char *args,
 
 /* manipulate */
 
-void smtp_params_mail_copy(pool_t pool,
-	struct smtp_params_mail *dst, const struct smtp_params_mail *src)
-	ATTR_NULL(3);
+void smtp_params_mail_copy(pool_t pool, struct smtp_params_mail *dst,
+			   const struct smtp_params_mail *src) ATTR_NULL(3);
 
 void smtp_params_mail_add_extra(struct smtp_params_mail *params, pool_t pool,
 				const char *keyword, const char *value)
@@ -111,9 +110,8 @@ bool smtp_params_mail_drop_extra(struct smtp_params_mail *params,
 
 /* write */
 
-void smtp_params_mail_write(string_t *buffer,
-	enum smtp_capability caps,
-	const struct smtp_params_mail *params);
+void smtp_params_mail_write(string_t *buffer, enum smtp_capability caps,
+			    const struct smtp_params_mail *params);
 
 /* evaluate */
 
@@ -132,7 +130,13 @@ void smtp_params_mail_add_to_event(const struct smtp_params_mail *params,
 
 /* parse */
 
+enum smtp_param_rcpt_parse_flags {
+	/* Allow address values without a domain part */
+	SMTP_PARAM_RCPT_FLAG_ORCPT_ALLOW_LOCALPART = BIT(0),
+};
+
 int smtp_params_rcpt_parse(pool_t pool, const char *args,
+			   enum smtp_param_rcpt_parse_flags flags,
 			   enum smtp_capability caps,
 			   const char *const *param_extensions,
 			   struct smtp_params_rcpt *params_r,
@@ -141,9 +145,8 @@ int smtp_params_rcpt_parse(pool_t pool, const char *args,
 
 /* manipulate */
 
-void smtp_params_rcpt_copy(pool_t pool,
-	struct smtp_params_rcpt *dst, const struct smtp_params_rcpt *src)
-	ATTR_NULL(3);
+void smtp_params_rcpt_copy(pool_t pool, struct smtp_params_rcpt *dst,
+			   const struct smtp_params_rcpt *src) ATTR_NULL(3);
 
 void smtp_params_rcpt_add_extra(struct smtp_params_rcpt *params, pool_t pool,
 				const char *keyword, const char *value)
@@ -152,11 +155,13 @@ bool smtp_params_rcpt_drop_extra(struct smtp_params_rcpt *params,
 				 const char *keyword, const char **value_r)
 				 ATTR_NULL(3);
 
+void smtp_params_rcpt_set_orcpt(struct smtp_params_rcpt *params, pool_t pool,
+				struct smtp_address *rcpt);
+
 /* write */
 
-void smtp_params_rcpt_write(string_t *buffer,
-	enum smtp_capability caps,
-	const struct smtp_params_rcpt *params);
+void smtp_params_rcpt_write(string_t *buffer, enum smtp_capability caps,
+			    const struct smtp_params_rcpt *params);
 
 /* evaluate */
 
@@ -166,6 +171,12 @@ smtp_params_rcpt_get_extra(const struct smtp_params_rcpt *params,
 
 bool smtp_params_rcpt_equals(const struct smtp_params_rcpt *params1,
 			     const struct smtp_params_rcpt *params2);
+
+static inline bool
+smtp_params_rcpt_has_orcpt(const struct smtp_params_rcpt *params)
+{
+	return (params->orcpt.addr_type != NULL);
+}
 
 /* events */
 

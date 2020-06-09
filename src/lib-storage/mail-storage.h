@@ -73,6 +73,13 @@ enum mailbox_flags {
 	   useful in fixing index corruption errors that aren't otherwise
 	   detected and that are causing the full mailbox opening to fail. */
 	MAILBOX_FLAG_FSCK		= 0x4000,
+	/* Interpret name argument for mailbox_alloc_for_user() as a SPECIAL-USE
+	   flag. */
+	MAILBOX_FLAG_SPECIAL_USE	= 0x8000,
+	/* Mailbox is opened for reading/writing attributes. This allows ACL
+	   plugin to determine correctly whether the mailbox should be allowed
+	   to be opened. */
+	MAILBOX_FLAG_ATTRIBUTE_SESSION	= 0x10000,
 };
 
 enum mailbox_feature {
@@ -180,7 +187,8 @@ enum mail_fetch_field {
 	MAIL_FETCH_GUID			= 0x00200000,
 	MAIL_FETCH_POP3_ORDER		= 0x00400000,
 	MAIL_FETCH_REFCOUNT		= 0x00800000,
-	MAIL_FETCH_BODY_SNIPPET		= 0x01000000
+	MAIL_FETCH_BODY_SNIPPET		= 0x01000000,
+	MAIL_FETCH_REFCOUNT_ID		= 0x02000000,
 };
 
 enum mailbox_transaction_flags {
@@ -379,7 +387,12 @@ enum mail_lookup_abort {
 	   operations to be performed, such as stat()ing a file. */
 	MAIL_LOOKUP_ABORT_READ_MAIL,
 	/* Abort if the operation can't be done fully using cache file */
-	MAIL_LOOKUP_ABORT_NOT_IN_CACHE
+	MAIL_LOOKUP_ABORT_NOT_IN_CACHE,
+	/* Abort if the operation can't be done fully using cache file.
+	 * During this lookup all cache lookups that have "no" decision
+	 * will be changed to "tmp". This way the field will start to be
+	 * cached in the future. */
+	MAIL_LOOKUP_ABORT_NOT_IN_CACHE_START_CACHING,
 };
 
 enum mail_access_type {
@@ -517,10 +530,14 @@ struct mailbox *mailbox_alloc(struct mailbox_list *list, const char *vname,
 struct mailbox *mailbox_alloc_guid(struct mailbox_list *list,
 				   const guid_128_t guid,
 				   enum mailbox_flags flags);
-/* Initialize mailbox for delivery without actually opening any files or
-   verifying that it exists. */
-struct mailbox *mailbox_alloc_delivery(struct mail_user *user,
-	const char *name, enum mailbox_flags flags);
+/* Initialize mailbox for a particular user without actually opening any files
+   or verifying that it exists. The mname parameter is normally equal to the
+   mailbox vname, except when the MAILBOX_FLAG_SPECIAL_USE flag is set, in which
+   case it is the special-use flag. */
+struct mailbox *
+mailbox_alloc_for_user(struct mail_user *user, const char *mname,
+		       enum mailbox_flags flags);
+
 /* Set a human-readable reason for why this mailbox is being accessed.
    This is used for logging purposes. */
 void mailbox_set_reason(struct mailbox *box, const char *reason);
@@ -545,6 +562,9 @@ bool mailbox_equals(const struct mailbox *box1,
 		    const char *vname2) ATTR_PURE;
 /* Returns TRUE if the mailbox is user's INBOX or another user's shared INBOX */
 bool mailbox_is_any_inbox(struct mailbox *box);
+
+/* Returns TRUE if the mailbox has the specified special use flag assigned. */
+bool mailbox_has_special_use(struct mailbox *box, const char *special_use);
 
 /* Change mailbox_verify_create_name() to not verify new mailbox name
    restrictions (but still check that it's a valid existing name). This is
@@ -728,6 +748,10 @@ bool mailbox_search_next_nonblock(struct mail_search_context *ctx,
    determine correctly if those messages should have been returned in this
    search. */
 bool mailbox_search_seen_lost_data(struct mail_search_context *ctx);
+/* Detach the given mail from the search context. This allows the mail to live
+   even after mail_search_context has been freed. */
+void mailbox_search_mail_detach(struct mail_search_context *ctx,
+				struct mail *mail);
 
 /* Remember the search result for future use. This must be called before the
    first mailbox_search_next*() call. */
@@ -763,6 +787,10 @@ mailbox_keywords_create_valid(struct mailbox *box,
 struct mail_keywords *
 mailbox_keywords_create_from_indexes(struct mailbox *box,
 				     const ARRAY_TYPE(keyword_indexes) *idx);
+/* Return union of two mail_keywords. They must be created in the same
+   mailbox. */
+struct mail_keywords *mailbox_keywords_merge(struct mail_keywords *keywords1,
+					     struct mail_keywords *keywords2);
 void mailbox_keywords_ref(struct mail_keywords *keywords);
 void mailbox_keywords_unref(struct mail_keywords **keywords);
 /* Returns TRUE if keyword is valid, FALSE and error if not. */

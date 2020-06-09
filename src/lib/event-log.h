@@ -9,6 +9,28 @@ struct event_log_params {
 	enum log_type log_type;
 	const char *source_filename;
 	unsigned int source_linenum;
+
+	/* Base event used as a reference for base_* parameters (see below) */
+	struct event *base_event;
+
+	/* Append the event message to base_str_out in addition to emitting the
+	   event as normal. The message appended to the string buffer includes
+	   prefixes and message callback modifications by parent events up until
+	   the base_event. The event is otherwise sent as normal with the full
+	   prefixes and all modifications up to the root event (unless
+	   no_send=TRUE). This is primarily useful to mimic (part of) event
+	   logging in parallel logs that are visible to users. */
+	string_t *base_str_out;
+
+	/* Prefix inserted at the base_event for the sent log message. */
+	const char *base_send_prefix;
+	/* Prefix inserted at the base_event for the log message appended to the
+	   string buffer. */
+	const char *base_str_prefix;
+
+	/* Don't actually send the event; only append to the provided string
+	   buffer (base_str_out must not be NULL). */
+	bool no_send:1;
 };
 
 void e_error(struct event *event,
@@ -51,6 +73,18 @@ void e_debug(struct event *event,
 	else \
 		event_send_abort(_tmp_event); \
 	} STMT_END
+
+void e_log(struct event *event, enum log_type level,
+	   const char *source_filename, unsigned int source_linenum,
+	   const char *fmt, ...) ATTR_FORMAT(5, 6);
+#define e_log(_event, level, ...) STMT_START { \
+	struct event *_tmp_event = (_event); \
+	if (event_want_level(_tmp_event, level)) \
+		e_log(_tmp_event, level, __FILE__, __LINE__, __VA_ARGS__); \
+	else \
+		event_send_abort(_tmp_event); \
+	} STMT_END
+
 /* Returns TRUE if debug event should be sent (either logged or sent to
    stats). */
 bool event_want_log_level(struct event *event, enum log_type level,

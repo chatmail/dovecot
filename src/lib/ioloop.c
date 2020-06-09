@@ -227,11 +227,10 @@ void io_set_never_wait_alone(struct io *io, bool set)
 
 static void timeout_update_next(struct timeout *timeout, struct timeval *tv_now)
 {
-	if (tv_now == NULL) {
-		if (gettimeofday(&timeout->next_run, NULL) < 0)
-			i_fatal("gettimeofday(): %m");
-	} else {
-                timeout->next_run.tv_sec = tv_now->tv_sec;
+	if (tv_now == NULL)
+		i_gettimeofday(&timeout->next_run);
+	else {
+		timeout->next_run.tv_sec = tv_now->tv_sec;
                 timeout->next_run.tv_usec = tv_now->tv_usec;
 	}
 
@@ -449,10 +448,8 @@ static int timeout_get_wait_time(struct timeout *timeout, struct timeval *tv_r,
 {
 	int ret;
 
-	if (tv_now->tv_sec == 0) {
-		if (gettimeofday(tv_now, NULL) < 0)
-			i_fatal("gettimeofday(): %m");
-	} 
+	if (tv_now->tv_sec == 0)
+		i_gettimeofday(tv_now);
 	tv_r->tv_sec = tv_now->tv_sec;
 	tv_r->tv_usec = tv_now->tv_usec;
 
@@ -466,7 +463,8 @@ static int timeout_get_wait_time(struct timeout *timeout, struct timeval *tv_r,
 		tv_r->tv_usec += 1000000;
 	}
 
-	if (tv_r->tv_sec < 0 || (tv_r->tv_sec == 0 && tv_r->tv_usec < 1000)) {
+	if (tv_r->tv_sec < 0) {
+		/* The timeout should have been called already */
 		tv_r->tv_sec = 0;
 		tv_r->tv_usec = 0;
 		return 0;
@@ -476,7 +474,7 @@ static int timeout_get_wait_time(struct timeout *timeout, struct timeval *tv_r,
 
 	/* round wait times up to next millisecond */
 	ret = tv_r->tv_sec * 1000 + (tv_r->tv_usec + 999) / 1000;
-	i_assert(ret > 0 && tv_r->tv_sec >= 0 && tv_r->tv_usec >= 0);
+	i_assert(ret >= 0 && tv_r->tv_sec >= 0 && tv_r->tv_usec >= 0);
 	return ret;
 }
 
@@ -498,13 +496,13 @@ static int io_loop_get_wait_time(struct ioloop *ioloop, struct timeval *tv_r)
 		   return -1 for poll/epoll infinity. */
 		tv_r->tv_sec = INT_MAX / 1000;
 		tv_r->tv_usec = 0;
-		ioloop->next_max_time = (1ULL << (TIME_T_MAX_BITS-1)) - 1;
+		ioloop->next_max_time.tv_sec = (1ULL << (TIME_T_MAX_BITS-1)) - 1;
+		ioloop->next_max_time.tv_usec = 0;
 		return -1;
 	}
 
 	if (ioloop->io_pending_count > 0) {
-		if (gettimeofday(&tv_now, NULL) < 0)
-			i_fatal("gettimeofday(): %m");
+		i_gettimeofday(&tv_now);
 		msecs = 0;
 		tv_r->tv_sec = 0;
 		tv_r->tv_usec = 0;
@@ -512,7 +510,8 @@ static int io_loop_get_wait_time(struct ioloop *ioloop, struct timeval *tv_r)
 		tv_now.tv_sec = 0;
 		msecs = timeout_get_wait_time(timeout, tv_r, &tv_now);
 	}
-	ioloop->next_max_time = (tv_now.tv_sec + msecs/1000) + 1;
+	ioloop->next_max_time = tv_now;
+	timeval_add_msecs(&ioloop->next_max_time, msecs);
 
 	/* update ioloop_timeval - this is meant for io_loop_handle_timeouts()'s
 	   ioloop_wait_usecs calculation. normally after this we go to the
@@ -548,11 +547,14 @@ static int timeout_cmp(const void *p1, const void *p2)
 	return timeval_cmp(&to1->next_run, &to2->next_run);
 }
 
-static void io_loop_default_time_moved(time_t old_time, time_t new_time)
+static void
+io_loop_default_time_moved(const struct timeval *old_time,
+			   const struct timeval *new_time)
 {
-	if (old_time > new_time) {
-		i_warning("Time moved backwards by %ld seconds.",
-			  (long)(old_time - new_time));
+	long long diff = timeval_diff_usecs(old_time, new_time);
+	if (diff > 0) {
+		i_warning("Time moved backwards by %lld.%06lld seconds.",
+			  diff / 1000000, diff % 1000000);
 	}
 }
 
@@ -577,7 +579,7 @@ static void io_loop_timeouts_start_new(struct ioloop *ioloop)
 	array_clear(&ioloop->timeouts_new);
 }
 
-static void io_loop_timeouts_update(struct ioloop *ioloop, long diff_secs)
+static void io_loop_timeouts_update(struct ioloop *ioloop, long long diff_usecs)
 {
 	struct priorityq_item *const *items;
 	unsigned int i, count;
@@ -587,23 +589,32 @@ static void io_loop_timeouts_update(struct ioloop *ioloop, long diff_secs)
 	for (i = 0; i < count; i++) {
 		struct timeout *to = (struct timeout *)items[i];
 
-		to->next_run.tv_sec += diff_secs;
+		if (diff_usecs > 0)
+			timeval_add_usecs(&to->next_run, diff_usecs);
+		else
+			timeval_sub_usecs(&to->next_run, -diff_usecs);
 	}
 }
 
-static void io_loops_timeouts_update(long diff_secs)
+static void io_loops_timeouts_update(long long diff_usecs)
 {
 	struct ioloop *ioloop;
 
 	for (ioloop = current_ioloop; ioloop != NULL; ioloop = ioloop->prev)
-		io_loop_timeouts_update(ioloop, diff_secs);
+		io_loop_timeouts_update(ioloop, diff_usecs);
 }
 
 static void ioloop_add_wait_time(struct ioloop *ioloop)
 {
 	struct io_wait_timer *timer;
-	long long diff =
-		timeval_diff_usecs(&ioloop_timeval, &ioloop->wait_started);
+	long long diff;
+
+	diff = timeval_diff_usecs(&ioloop_timeval, &ioloop->wait_started);
+	if (diff < 0) {
+		/* time moved backwards */
+		diff = 0;
+	}
+
 	ioloop->ioloop_wait_usecs += diff;
 	ioloop_global_wait_usecs += diff;
 
@@ -614,31 +625,29 @@ static void ioloop_add_wait_time(struct ioloop *ioloop)
 static void io_loop_handle_timeouts_real(struct ioloop *ioloop)
 {
 	struct priorityq_item *item;
-	struct timeval tv, tv_call;
+	struct timeval tv_old, tv, tv_call;
+	long long diff_usecs;
 	data_stack_frame_t t_id;
 
-	if (gettimeofday(&ioloop_timeval, NULL) < 0)
-		i_fatal("gettimeofday(): %m");
+	tv_old = ioloop_timeval;
+	i_gettimeofday(&ioloop_timeval);
 
-	/* Don't bother comparing usecs. */
-	if (unlikely(ioloop_time > ioloop_timeval.tv_sec)) {
+	diff_usecs = timeval_diff_usecs(&ioloop_timeval, &tv_old);
+	if (unlikely(diff_usecs < 0)) {
 		/* time moved backwards */
-		io_loops_timeouts_update(-(long)(ioloop_time -
-						 ioloop_timeval.tv_sec));
-		ioloop->time_moved_callback(ioloop_time,
-					    ioloop_timeval.tv_sec);
+		io_loops_timeouts_update(diff_usecs);
+		ioloop->time_moved_callback(&tv_old, &ioloop_timeval);
 		i_assert(ioloop == current_ioloop);
 		/* the callback may have slept, so check the time again. */
-		if (gettimeofday(&ioloop_timeval, NULL) < 0)
-			i_fatal("gettimeofday(): %m");
+		i_gettimeofday(&ioloop_timeval);
 	} else {
-		if (unlikely(ioloop_timeval.tv_sec >
-			     ioloop->next_max_time)) {
-			io_loops_timeouts_update(ioloop_timeval.tv_sec -
-						 ioloop->next_max_time);
+		diff_usecs = timeval_diff_usecs(&ioloop->next_max_time,
+						&ioloop_timeval);
+		if (unlikely(diff_usecs < 0)) {
+			io_loops_timeouts_update(-diff_usecs);
 			/* time moved forwards */
-			ioloop->time_moved_callback(ioloop->next_max_time,
-						    ioloop_timeval.tv_sec);
+			ioloop->time_moved_callback(&ioloop->next_max_time,
+						    &ioloop_timeval);
 			i_assert(ioloop == current_ioloop);
 		}
 		ioloop_add_wait_time(ioloop);
@@ -755,6 +764,8 @@ void io_loop_handler_run(struct ioloop *ioloop)
 	ioloop->wait_started = ioloop_timeval;
 	io_loop_handler_run_internal(ioloop);
 	io_loop_call_pending(ioloop);
+	if (ioloop->stop_after_run_loop)
+		io_loop_stop(ioloop);
 
 	i_assert(ioloop == current_ioloop);
 }
@@ -762,6 +773,12 @@ void io_loop_handler_run(struct ioloop *ioloop)
 void io_loop_stop(struct ioloop *ioloop)
 {
         ioloop->running = FALSE;
+	ioloop->stop_after_run_loop = FALSE;
+}
+
+void io_loop_stop_delayed(struct ioloop *ioloop)
+{
+        ioloop->stop_after_run_loop = TRUE;
 }
 
 void io_loop_set_running(struct ioloop *ioloop)
@@ -781,8 +798,7 @@ bool io_loop_is_running(struct ioloop *ioloop)
 
 void io_loop_time_refresh(void)
 {
-	if (gettimeofday(&ioloop_timeval, NULL) < 0)
-		i_fatal("gettimeofday(): %m");
+	i_gettimeofday(&ioloop_timeval);
 	ioloop_time = ioloop_timeval.tv_sec;
 }
 
@@ -796,8 +812,7 @@ struct ioloop *io_loop_create(void)
 	}
 
 	/* initialize time */
-	if (gettimeofday(&ioloop_timeval, NULL) < 0)
-		i_fatal("gettimeofday(): %m");
+	i_gettimeofday(&ioloop_timeval);
 	ioloop_time = ioloop_timeval.tv_sec;
 
         ioloop = i_new(struct ioloop, 1);
@@ -931,6 +946,15 @@ void io_loop_set_current(struct ioloop *ioloop)
 		array_foreach(&io_switch_callbacks, callbackp)
 			(*callbackp)(prev_ioloop);
 	}
+}
+
+struct ioloop *io_loop_get_root(void)
+{
+	struct ioloop *ioloop = current_ioloop;
+
+	while (ioloop->prev != NULL)
+		ioloop = ioloop->prev;
+	return ioloop;
 }
 
 void io_loop_add_switch_callback(io_switch_callback_t *callback)

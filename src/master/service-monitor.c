@@ -7,6 +7,7 @@
 #include "str.h"
 #include "safe-mkstemp.h"
 #include "time-util.h"
+#include "sleep.h"
 #include "master-client.h"
 #include "service.h"
 #include "service-process.h"
@@ -194,14 +195,19 @@ static void service_monitor_throttle(struct service *service)
 	if (service->to_throttle != NULL || service->list->destroying)
 		return;
 
-	i_assert(service->throttle_secs > 0);
+	i_assert(service->throttle_msecs > 0);
 
-	service_error(service, "command startup failed, throttling for %u secs",
-		      service->throttle_secs);
-	service_throttle(service, service->throttle_secs);
-	service->throttle_secs *= 2;
-	if (service->throttle_secs > SERVICE_STARTUP_FAILURE_THROTTLE_MAX_SECS)
-		service->throttle_secs = SERVICE_STARTUP_FAILURE_THROTTLE_MAX_SECS;
+	service_error(service,
+		      "command startup failed, throttling for %u.%03u secs",
+		      service->throttle_msecs / 1000,
+		      service->throttle_msecs % 1000);
+	service_throttle(service, service->throttle_msecs);
+	service->throttle_msecs *= 2;
+	if (service->throttle_msecs >
+	    SERVICE_STARTUP_FAILURE_THROTTLE_MAX_MSECS) {
+		service->throttle_msecs =
+			SERVICE_STARTUP_FAILURE_THROTTLE_MAX_MSECS;
+	}
 }
 
 static void service_drop_timeout(struct service *service)
@@ -587,7 +593,7 @@ static void services_monitor_wait(struct service_list *service_list)
 		if (finished ||
 		    timeval_diff_msecs(&ioloop_timeval, &tv_start) > MAX_DIE_WAIT_MSECS)
 			break;
-		usleep(100000);
+		i_sleep_msecs(100);
 	}
 }
 
@@ -637,7 +643,7 @@ static void services_monitor_wait_and_kill(struct service_list *service_list)
 	if (service_list_processes_close_listeners(service_list)) {
 		/* SIGQUITs were sent. wait a little bit to make sure they're
 		   also processed before quitting. */
-		usleep(1000000);
+		i_sleep_msecs(1000);
 	}
 }
 
@@ -705,8 +711,8 @@ void services_monitor_reap_children(void)
 			/* success - one success resets all failures */
 			service->have_successful_exits = TRUE;
 			service->exit_failures_in_sec = 0;
-			service->throttle_secs =
-				SERVICE_STARTUP_FAILURE_THROTTLE_MIN_SECS;
+			service->throttle_msecs =
+				SERVICE_STARTUP_FAILURE_THROTTLE_MIN_MSECS;
 			throttle = FALSE;
 		} else {
 			throttle = service_process_failure(process, status);

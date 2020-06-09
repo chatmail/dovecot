@@ -1,0 +1,9 @@
+#ifndef EXT_INCLUDE_LIMITS_H
+#define EXT_INCLUDE_LIMITS_H
+
+#include "sieve-common.h"
+
+#define EXT_INCLUDE_DEFAULT_MAX_NESTING_DEPTH 10
+#define EXT_INCLUDE_DEFAULT_MAX_INCLUDES      255
+
+#endif

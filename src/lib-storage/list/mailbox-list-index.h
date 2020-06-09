@@ -36,6 +36,11 @@
 #define INDEX_LIST_CONTEXT_REQUIRE(obj) \
 	MODULE_CONTEXT_REQUIRE(obj, mailbox_list_index_module)
 
+/* Should the STATUS information for this mailbox not be written to the
+   mailbox list index? */
+#define MAILBOX_IS_NEVER_IN_INDEX(box) \
+	((box)->inbox_any && !(box)->storage->set->mailbox_list_index_include_inbox)
+
 struct mail_index_view;
 struct mailbox_index_vsize;
 struct mailbox_vfuncs;
@@ -167,6 +172,18 @@ int mailbox_list_index_refresh_force(struct mailbox_list *list);
 void mailbox_list_index_refresh_later(struct mailbox_list *list);
 int mailbox_list_index_handle_corruption(struct mailbox_list *list);
 int mailbox_list_index_set_uncorrupted(struct mailbox_list *list);
+
+/* Returns TRUE and index_r if mailbox list index exists, FALSE if not. */
+bool mailbox_list_index_get_index(struct mailbox_list *list,
+				  struct mail_index **index_r);
+/* Open mailbox list index's view and get the given mailbox's sequence number
+   in it. If require_refreshed is TRUE, the mailbox must have up-to-date
+   information in the mailbox list index. Returns 1 if ok, 0 if mailbox wasn't
+   found or it wasn't up-to-date as requested, -1 if there was an error. The
+   error is stored to the mailbox storage. */
+int mailbox_list_index_view_open(struct mailbox *box, bool require_refreshed,
+				 struct mail_index_view **view_r,
+				 uint32_t *seq_r);
 
 struct mailbox_list_index_node *
 mailbox_list_index_node_find_sibling(struct mailbox_list_index_node *node,

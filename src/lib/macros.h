@@ -22,9 +22,9 @@
 	(((size) + MEM_ALIGN_SIZE-1) & ~((size_t) MEM_ALIGN_SIZE-1))
 
 #define PTR_OFFSET(ptr, offset) \
-	((void *) (((uintptr_t) (ptr)) + (offset)))
+	((void *) (((uintptr_t) (ptr)) + ((size_t) (offset))))
 #define CONST_PTR_OFFSET(ptr, offset) \
-	((const void *) (((uintptr_t) (ptr)) + (offset)))
+	((const void *) (((uintptr_t) (ptr)) + ((size_t) (offset))))
 
 #define container_of(ptr, type, name) \
 	(type *)((uintptr_t)(ptr) - (uintptr_t)offsetof(type, name) + \
@@ -36,7 +36,7 @@
 #define I_MAX(a, b)  (((a) > (b)) ? (a) : (b))
 
 /* make it easier to cast from/to pointers. assumes that
-   sizeof(size_t) == sizeof(void *) and they're both the largest datatypes
+   sizeof(uintptr_t) == sizeof(void *) and they're both the largest datatypes
    that are allowed to be used. so, long long isn't safe with these. */
 #define POINTER_CAST(i) \
 	((void *) (((uintptr_t)NULL) + (i)))

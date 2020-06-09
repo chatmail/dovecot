@@ -48,6 +48,15 @@ enum net_listen_flags {
 	NET_LISTEN_FLAG_REUSEPORT	= 0x01
 };
 
+enum net_hosterror_type {
+	/* Internal error - should be logged as an error */
+	NET_HOSTERROR_TYPE_INTERNAL_ERROR,
+	/* Host not found or no valid IP addresses found */
+	NET_HOSTERROR_TYPE_NOT_FOUND,
+	/* Nameserver returned an error */
+	NET_HOSTERROR_TYPE_NAMESERVER,
+};
+
 /* INADDR_ANY for IPv4 or IPv6. The IPv6 any address may
    include IPv4 depending on the system (Linux yes, BSD no). */
 extern const struct ip_addr net_ip4_any;
@@ -89,6 +98,10 @@ void net_set_nonblock(int fd, bool nonblock);
 int net_set_cork(int fd, bool cork) ATTR_NOWARN_UNUSED_RESULT;
 /* Set TCP_NODELAY, which disables the Nagle algorithm. */
 int net_set_tcp_nodelay(int fd, bool nodelay);
+/* Set TCP_QUICKACK, which tells the kernel to not delay ACKs. Note that the
+   kernel can (and will) re-enable delayed ACKs while processing the TCP stack.
+   This means that this function needs to be called repeatedly. */
+int net_set_tcp_quickack(int fd, bool quickack);
 
 /* Set socket kernel buffer sizes */
 int net_set_send_buffer_size(int fd, size_t size);
@@ -122,6 +135,8 @@ int net_gethostbyname(const char *addr, struct ip_addr **ips,
 int net_gethostbyaddr(const struct ip_addr *ip, const char **name_r);
 /* get error of net_gethostname() */
 const char *net_gethosterror(int error) ATTR_CONST;
+/* Return type of the error returned by net_gethostname() */
+enum net_hosterror_type net_get_hosterror_type(int error);
 /* return TRUE if host lookup failed because it didn't exist (ie. not
    some error with name server) */
 int net_hosterror_notfound(int error) ATTR_CONST;

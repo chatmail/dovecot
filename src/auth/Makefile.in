@@ -140,6 +140,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
 	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -187,16 +188,16 @@ am__objects_1 = db-ldap.lo passdb-ldap.lo userdb-ldap.lo
 am__objects_2 = db-lua.lo passdb-lua.lo userdb-lua.lo
 am_libauth_la_OBJECTS = auth.lo auth-cache.lo \
 	auth-client-connection.lo auth-master-connection.lo \
-	auth-policy.lo auth-postfix-connection.lo \
-	mech-otp-skey-common.lo mech-plain-common.lo auth-penalty.lo \
-	auth-request.lo auth-request-handler.lo auth-request-stats.lo \
-	auth-request-var-expand.lo auth-settings.lo auth-fields.lo \
-	auth-token.lo auth-worker-client.lo auth-worker-server.lo \
+	auth-policy.lo mech-otp-skey-common.lo mech-plain-common.lo \
+	auth-penalty.lo auth-request.lo auth-request-handler.lo \
+	auth-request-stats.lo auth-request-var-expand.lo \
+	auth-settings.lo auth-fields.lo auth-token.lo \
+	auth-worker-client.lo auth-worker-server.lo \
 	db-checkpassword.lo db-dict.lo db-dict-cache-key.lo \
 	db-oauth2.lo db-sql.lo db-passwd-file.lo mech.lo \
 	mech-anonymous.lo mech-plain.lo mech-login.lo mech-cram-md5.lo \
 	mech-digest-md5.lo mech-external.lo mech-gssapi.lo \
-	mech-ntlm.lo mech-otp.lo mech-scram-sha1.lo mech-skey.lo \
+	mech-ntlm.lo mech-otp.lo mech-scram.lo mech-skey.lo \
 	mech-rpa.lo mech-apop.lo mech-winbind.lo mech-dovecot-token.lo \
 	mech-oauth2.lo passdb.lo passdb-blocking.lo passdb-bsdauth.lo \
 	passdb-cache.lo passdb-checkpassword.lo passdb-dict.lo \
@@ -417,6 +418,7 @@ CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DICT_LIBS = @DICT_LIBS@
+DLLIB = @DLLIB@
 DLLTOOL = @DLLTOOL@
 DSYMUTIL = @DSYMUTIL@
 DUMPBIN = @DUMPBIN@
@@ -466,6 +468,8 @@ LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
 LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
 LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
+LIBUNWIND_CFLAGS = @LIBUNWIND_CFLAGS@
+LIBUNWIND_LIBS = @LIBUNWIND_LIBS@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LIPO = @LIPO@
@@ -659,7 +663,6 @@ libauth_la_SOURCES = \
 	auth-client-connection.c \
 	auth-master-connection.c \
 	auth-policy.c \
-	auth-postfix-connection.c \
 	mech-otp-skey-common.c \
 	mech-plain-common.c \
 	auth-penalty.c \
@@ -688,7 +691,7 @@ libauth_la_SOURCES = \
 	mech-gssapi.c \
 	mech-ntlm.c \
 	mech-otp.c \
-	mech-scram-sha1.c \
+	mech-scram.c \
 	mech-skey.c \
 	mech-rpa.c \
 	mech-apop.c \
@@ -731,9 +734,9 @@ headers = \
 	auth-client-connection.h \
 	auth-common.h \
 	auth-master-connection.h \
-	auth-postfix-connection.h \
 	mech-otp-skey-common.h \
 	mech-plain-common.h \
+	mech-scram.h \
 	auth-penalty.h \
 	auth-policy.h \
 	auth-request.h \
@@ -1065,7 +1068,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-master-connection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-penalty.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-policy.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-postfix-connection.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-handler.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-stats.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/auth-request-var-expand.Plo@am__quote@
@@ -1118,7 +1120,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-rpa.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-scram-sha1.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-scram.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-skey.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-winbind.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech.Plo@am__quote@

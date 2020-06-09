@@ -811,7 +811,7 @@ static int search_arg_match_text(struct mail_search_arg *args,
 
 	if (have_headers) {
 		/* see if the header search succeeded in finishing the search */
-		ret = mail_search_args_foreach(args, search_none, (void *)NULL);
+		ret = mail_search_args_foreach(args, search_none, NULL);
 		if (ret >= 0 || !have_body)
 			return ret;
 	}
@@ -1284,12 +1284,11 @@ index_storage_search_init(struct mailbox_transaction_context *t,
 	ctx->mail_ctx.args = args;
 	ctx->mail_ctx.sort_program = index_sort_program_init(t, sort_program);
 
-	ctx->max_mails = t->box->storage->set->mail_prefetch_count + 1;
-	if (ctx->max_mails == 0)
-		ctx->max_mails = UINT_MAX;
+	ctx->mail_ctx.max_mails = t->box->storage->set->mail_prefetch_count + 1;
+	if (ctx->mail_ctx.max_mails == 0)
+		ctx->mail_ctx.max_mails = UINT_MAX;
 	ctx->next_time_check_cost = SEARCH_INITIAL_MAX_COST;
-	if (gettimeofday(&ctx->last_nonblock_timeval, NULL) < 0)
-		i_fatal("gettimeofday() failed: %m");
+	i_gettimeofday(&ctx->last_nonblock_timeval);
 
 	mailbox_get_open_status(t->box, STATUS_MESSAGES, &status);
 	ctx->mail_ctx.progress_max = status.messages;
@@ -1297,7 +1296,7 @@ index_storage_search_init(struct mailbox_transaction_context *t,
 	i_array_init(&ctx->mail_ctx.results, 5);
 	array_create(&ctx->mail_ctx.module_contexts, default_pool,
 		     sizeof(void *), 5);
-	i_array_init(&ctx->mails, ctx->max_mails);
+	i_array_init(&ctx->mail_ctx.mails, ctx->mail_ctx.max_mails);
 
 	mail_search_args_reset(ctx->mail_ctx.args->args, TRUE);
 	if (args->have_inthreads) {
@@ -1364,16 +1363,16 @@ int index_storage_search_deinit(struct mail_search_context *_ctx)
 	array_free(&ctx->mail_ctx.results);
 	array_free(&ctx->mail_ctx.module_contexts);
 
-	array_foreach_modifiable(&ctx->mails, mailp) {
+	array_foreach_modifiable(&ctx->mail_ctx.mails, mailp) {
 		struct index_mail *imail = INDEX_MAIL(*mailp);
 
-		imail->search_mail = FALSE;
+		imail->mail.search_mail = FALSE;
 		mail_free(mailp);
 	}
 
 	if (ctx->failed)
 		mail_storage_last_error_pop(ctx->box->storage);
-	array_free(&ctx->mails);
+	array_free(&ctx->mail_ctx.mails);
 	i_free(ctx);
 	return ret;
 }
@@ -1493,7 +1492,7 @@ static int search_match_next(struct index_search_context *ctx)
 	}
 
 	/* avoid doing extra work for as long as possible */
-	if (ctx->max_mails > 1) {
+	if (ctx->mail_ctx.max_mails > 1) {
 		/* we're doing prefetching. if we have to read the mail,
 		   do a prefetch first and the final search later */
 		n--;
@@ -1553,8 +1552,7 @@ static bool search_would_block(struct index_search_context *ctx)
 	if (ctx->cost < ctx->next_time_check_cost)
 		return FALSE;
 
-	if (gettimeofday(&now, NULL) < 0)
-		i_fatal("gettimeofday() failed: %m");
+	i_gettimeofday(&now);
 
 	usecs = timeval_diff_usecs(&now, &ctx->last_nonblock_timeval);
 	if (usecs < 0) {
@@ -1675,21 +1673,21 @@ struct mail *index_search_get_mail(struct index_search_context *ctx)
 	struct mail *const *mails, *mail;
 	unsigned int count;
 
-	if (ctx->unused_mail_idx == ctx->max_mails)
+	if (ctx->mail_ctx.unused_mail_idx == ctx->mail_ctx.max_mails)
 		return NULL;
 
-	mails = array_get(&ctx->mails, &count);
-	if (ctx->unused_mail_idx < count)
-		return mails[ctx->unused_mail_idx];
+	mails = array_get(&ctx->mail_ctx.mails, &count);
+	if (ctx->mail_ctx.unused_mail_idx < count)
+		return mails[ctx->mail_ctx.unused_mail_idx];
 
 	mail = mail_alloc(ctx->mail_ctx.transaction,
 			  ctx->mail_ctx.wanted_fields,
 			  ctx->mail_ctx.wanted_headers);
 	imail = INDEX_MAIL(mail);
-	imail->search_mail = TRUE;
+	imail->mail.search_mail = TRUE;
 	ctx->mail_ctx.transaction->stats_track = TRUE;
 
-	array_push_back(&ctx->mails, &mail);
+	array_push_back(&ctx->mail_ctx.mails, &mail);
 	return mail;
 }
 
@@ -1710,16 +1708,16 @@ static int search_more_with_prefetching(struct index_search_context *ctx,
 		if (ctx->mail_ctx.sort_program != NULL) {
 			/* don't prefetch when using a sort program,
 			   since the mails' access order will change */
-			i_assert(ctx->unused_mail_idx == 0);
+			i_assert(ctx->mail_ctx.unused_mail_idx == 0);
 			*mail_r = mail;
 			return 1;
 		}
-		if (mail_prefetch(mail) && ctx->unused_mail_idx == 0) {
+		if (mail_prefetch(mail) && ctx->mail_ctx.unused_mail_idx == 0) {
 			/* no prefetching done, return it immediately */
 			*mail_r = mail;
 			return 1;
 		}
-		ctx->unused_mail_idx++;
+		ctx->mail_ctx.unused_mail_idx++;
 	}
 
 	if (mail != NULL) {
@@ -1728,7 +1726,7 @@ static int search_more_with_prefetching(struct index_search_context *ctx,
 			return 0;
 		}
 		i_assert(ret < 0);
-		if (ctx->unused_mail_idx == 0) {
+		if (ctx->mail_ctx.unused_mail_idx == 0) {
 			/* finished */
 			return -1;
 		}
@@ -1737,13 +1735,13 @@ static int search_more_with_prefetching(struct index_search_context *ctx,
 	}
 
 	/* return the next message */
-	i_assert(ctx->unused_mail_idx > 0);
+	i_assert(ctx->mail_ctx.unused_mail_idx > 0);
 
-	mails = array_get(&ctx->mails, &count);
+	mails = array_get(&ctx->mail_ctx.mails, &count);
 	*mail_r = mails[0];
-	if (--ctx->unused_mail_idx > 0) {
-		array_pop_front(&ctx->mails);
-		array_push_back(&ctx->mails, mail_r);
+	if (--ctx->mail_ctx.unused_mail_idx > 0) {
+		array_pop_front(&ctx->mail_ctx.mails);
+		array_push_back(&ctx->mail_ctx.mails, mail_r);
 	}
 	index_mail_update_access_parts_post(*mail_r);
 	return 1;
@@ -1834,7 +1832,7 @@ bool index_storage_search_next_nonblock(struct mail_search_context *_ctx,
 	if (!index_sort_list_next(_ctx->sort_program, &seq))
 		return FALSE;
 
-	mailp = array_front(&ctx->mails);
+	mailp = array_front(&ctx->mail_ctx.mails);
 	mail_set_seq(*mailp, seq);
 	index_mail_update_access_parts_pre(*mailp);
 	index_mail_update_access_parts_post(*mailp);
