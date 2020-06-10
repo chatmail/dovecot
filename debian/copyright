@@ -5,6 +5,7 @@ Upstream-Contact: Timo Sirainen <tss@iki.fi>
 Comment: This package was debianized by Jaldhar H. Vyas <jaldhar@debian.org> on
          Tue,  3 Dec 2002 01:10:07 -0500.
 Source: https://github.com/dovecot/core
+Files-Excluded-pigeonhole: doc/rfc
 
 Files: *
 Copyright: (c) 2001-2018 Dovecot authors
