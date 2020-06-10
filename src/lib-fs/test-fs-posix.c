@@ -56,7 +56,8 @@ static void test_fs_posix(void)
 	file = fs_file_init(fs, "fail_1", FS_OPEN_MODE_READONLY);
 	test_assert(fs_exists(file) == 0);
 	count = fs_read(file, buf, 1);
-	test_assert(count == -1 && errno == ENOENT);
+	test_assert(count == -1 && errno == ENOENT &&
+		    strstr(fs_file_last_error(file), "No such file or directory") != NULL);
 	fs_file_deinit(&file);
 	test_end();
 
@@ -84,7 +85,7 @@ static void test_fs_posix(void)
 	filename = fs_iter_next(iter);
 	test_assert_strcmp(filename, "good1");
 	test_assert(fs_iter_next(iter) == NULL);
-	fs_iter_deinit(&iter);
+	fs_iter_deinit(&iter, &error);
 	test_end();
 
 	struct stat st;

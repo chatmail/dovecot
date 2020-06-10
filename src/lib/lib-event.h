@@ -5,6 +5,7 @@
 #include <sys/time.h>
 
 struct event;
+struct event_log_params;
 
 /* Hierarchical category of events. Each event can belong to multiple
    categories. For example [ lib-storage/maildir, syscall/io ]. The categories
@@ -13,8 +14,15 @@ struct event_category {
 	struct event_category *parent;
 	const char *name;
 
-	/* TRUE after an event with this category is sent the first time */
-	bool registered;
+	/* non-NULL if this category has been registered
+
+	   Do NOT dereference outside of event code in src/lib.
+
+	   At any point in time it is safe to (1) check the pointer for
+	   NULL/non-NULL to determine if this particular category instance
+	   has been registered, and (2) compare two categories' internal
+	   pointers to determine if they represent the same category. */
+	void *internal;
 };
 
 enum event_field_value_type {
@@ -74,10 +82,17 @@ struct event_passthrough {
 	struct event_passthrough *
 		(*inc_int)(const char *key, intmax_t num);
 
+	struct event_passthrough *
+		(*clear_field)(const char *key);
+
 	struct event *(*event)(void);
 };
 
-typedef const char *event_log_prefix_callback_t(void *context);
+typedef const char *
+event_log_prefix_callback_t(void *context);
+typedef const char *
+event_log_message_callback_t(void *context, enum log_type log_type,
+			     const char *message);
 
 /* Returns TRUE if the event has all the categories that the "other" event has (and maybe more). */
 bool event_has_all_categories(struct event *event, const struct event *other);
@@ -85,19 +100,20 @@ bool event_has_all_categories(struct event *event, const struct event *other);
    Only the fields in the events themselves are checked. Parent events' fields are not checked. */
 bool event_has_all_fields(struct event *event, const struct event *other);
 
-/* Returns the source event duplicated into a new event. */
+/* Returns the source event duplicated into a new event. Event pointers are
+   dropped. */
 struct event *event_dup(const struct event *source);
 /* Returns a flattened version of the source event.
    Both categories and fields will be flattened.
    A new reference to the source event is returned if no flattening was
-   needed. */
+   needed. Event pointers are dropped if a new event was created. */
 struct event *event_flatten(struct event *src);
 /* Returns a minimized version of the source event.
    Remove parents with no fields or categories, attempt to flatten fields
    and categories to avoid sending one-off parent events.  (There is a more
    detailed description in a comment above the function implementation.)
    A new reference to the source event is returned if no simplification
-   occured. */
+   occured. Event pointers are dropped if a new event was created. */
 struct event *event_minimize(struct event *src);
 /* Copy all categories from source to dest.
    Only the categories in source event itself are copied.
@@ -169,12 +185,19 @@ struct event *event_get_global(void);
 struct event *
 event_set_append_log_prefix(struct event *event, const char *prefix);
 /* Replace the full log prefix string for this event. The parent events' log
-   prefixes won't be used.
+   prefixes won't be used. Also, any parent event's message amendment callback
+   is not used.
 
    Clears log_prefix callback.
 */
 struct event *event_replace_log_prefix(struct event *event, const char *prefix);
 
+/* Drop count prefixes from parents when this event is used for logging. This
+   does not affect the parent events. This only counts actual prefixes and not
+   parents. If the count is higher than the actual number of prefixes added by
+   parents, all will be dropped. */
+struct event *
+event_drop_parent_log_prefixes(struct event *event, unsigned int count);
 
 /* Sets event prefix callback, sets log_prefix empty */
 struct event *event_set_log_prefix_callback(struct event *event,
@@ -182,8 +205,20 @@ struct event *event_set_log_prefix_callback(struct event *event,
 					    event_log_prefix_callback_t *callback,
 					    void *context);
 #define event_set_log_prefix_callback(event, replace, callback, context) \
-	event_set_log_prefix_callback(event, replace, (event_log_prefix_callback_t*)callback, \
-		context - CALLBACK_TYPECHECK(callback, const char *(*)(typeof(context))))
+	event_set_log_prefix_callback(event, replace, \
+		(event_log_prefix_callback_t*)callback, TRUE ? context : \
+		CALLBACK_TYPECHECK(callback, const char *(*)(typeof(context))))
+
+/* Sets event message amendment callback */
+struct event *event_set_log_message_callback(struct event *event,
+					     event_log_message_callback_t *callback,
+					     void *context);
+#define event_set_log_message_callback(event, callback, context) \
+	event_set_log_message_callback(event, \
+		(event_log_message_callback_t*)callback, TRUE ? context : \
+		CALLBACK_TYPECHECK(callback, \
+			const char *(*)(typeof(context), enum log_type, \
+					const char *)))
 
 /* Set the event's name. The name is specific to a single sending of an event,
    and it'll be automatically cleared once the event is sent. This should
@@ -204,6 +239,15 @@ struct event *event_set_always_log_source(struct event *event);
 /* Set minimum log level for the event */
 struct event *event_set_min_log_level(struct event *event, enum log_type level);
 enum log_type event_get_min_log_level(const struct event *event);
+
+/* Add an internal pointer to an event. It can be looked up only with
+   event_get_ptr(). The keys are in their own namespace and won't conflict
+   with event fields. The pointers are specific to this specific event only -
+   they will be dropped from any duplicated/flattened/minimized events. */
+struct event *event_set_ptr(struct event *event, const char *key, void *value);
+/* Return a pointer set with event_set_ptr(), or NULL if it doesn't exist.
+   The pointer is looked up only from the event itself, not its parents. */
+void *event_get_ptr(struct event *event, const char *key);
 
 /* Add NULL-terminated list of categories to the event. The categories pointer
    doesn't need to stay valid afterwards, but the event_category structs
@@ -286,11 +330,6 @@ bool event_import_unescaped(struct event *event, const char *const *args,
    Most importantly this frees any passthrough events. Typically this shouldn't
    need to be called. */
 void event_send_abort(struct event *event);
-
-/* Explicitly register an event category. It must not be in use by any events
-   at this point. This is normally necessary only when unloading an plugin
-   that has registered an event category. */
-void event_category_unregister(struct event_category *category);
 
 void lib_event_init(void);
 void lib_event_deinit(void);

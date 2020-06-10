@@ -106,6 +106,8 @@ IMAP extensions
     Resynchronization (CONDSTORE) and Quick Mailbox
     Resynchronization (QRESYNC) (updated RFC4551 and RFC5162)
 -   RFC7888 - IMAP4 Non-synchronizing Literals (updated RFC2088)
+-   RFC8457 - IMAP "$Important" Keyword and "\Important" Special-Use
+    Attribute
 
 
 SMTP/LMTP base

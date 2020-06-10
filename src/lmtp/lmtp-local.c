@@ -117,29 +117,22 @@ lmtp_local_rcpt_destroy(struct smtp_server_recipient *rcpt ATTR_UNUSED,
 
 static void
 lmtp_local_rcpt_reply_overquota(struct lmtp_local_recipient *llrcpt,
-				struct smtp_server_cmd_ctx *cmd,
 				const char *error)
 {
 	struct smtp_server_recipient *rcpt = llrcpt->rcpt->rcpt;
-	struct smtp_address *address = rcpt->path;
-	unsigned int rcpt_idx = rcpt->index;
 	struct lda_settings *lda_set =
 		mail_storage_service_user_get_set(llrcpt->service_user)[2];
 
-	if (lda_set->quota_full_tempfail) {
-		smtp_server_reply_index(cmd, rcpt_idx, 452, "4.2.2", "<%s> %s",
-					smtp_address_encode(address), error);
-	} else {
-		smtp_server_reply_index(cmd, rcpt_idx, 552, "5.2.2", "<%s> %s",
-					smtp_address_encode(address), error);
-	}
+	if (lda_set->quota_full_tempfail)
+		smtp_server_recipient_reply(rcpt, 452, "4.2.2", "%s", error);
+	else
+		smtp_server_recipient_reply(rcpt, 552, "5.2.2", "%s", error);
 }
 
-static void ATTR_FORMAT(5,6)
+static void ATTR_FORMAT(4,5)
 lmtp_local_rcpt_fail_all(struct lmtp_local *local,
-	struct smtp_server_cmd_ctx *cmd,
-	unsigned int status, const char *enh_code,
-	const char *fmt, ...)
+			 unsigned int status, const char *enh_code,
+			 const char *fmt, ...)
 {
 	struct lmtp_local_recipient *const *llrcpts;
 	const char *msg;
@@ -154,9 +147,7 @@ lmtp_local_rcpt_fail_all(struct lmtp_local *local,
 	for (i = 0; i < count; i++) {
 		struct smtp_server_recipient *rcpt = llrcpts[i]->rcpt->rcpt;
 
-		smtp_server_reply_index(cmd, rcpt->index,
-			status, enh_code, "<%s> %s",
-			smtp_address_encode(rcpt->path), msg);
+		smtp_server_recipient_reply(rcpt, status, enh_code, "%s", msg);
 	}
 }
 
@@ -169,7 +160,6 @@ lmtp_local_rcpt_check_quota(struct lmtp_local_recipient *llrcpt)
 {
 	struct client *client = llrcpt->rcpt->client;
 	struct smtp_server_recipient *rcpt = llrcpt->rcpt->rcpt;
-	struct smtp_server_cmd_ctx *cmd = rcpt->cmd;
 	struct smtp_address *address = rcpt->path;
 	struct mail_user *user;
 	struct mail_namespace *ns;
@@ -206,7 +196,7 @@ lmtp_local_rcpt_check_quota(struct lmtp_local_recipient *llrcpt)
 		if (ret < 0) {
 			error = mailbox_get_last_error(box, &mail_error);
 			if (mail_error == MAIL_ERROR_NOQUOTA) {
-				lmtp_local_rcpt_reply_overquota(llrcpt, cmd, error);
+				lmtp_local_rcpt_reply_overquota(llrcpt, error);
 			} else {
 				e_error(rcpt->event,
 					"mailbox_get_status(%s, STATUS_CHECK_OVER_QUOTA) "
@@ -217,14 +207,12 @@ lmtp_local_rcpt_check_quota(struct lmtp_local_recipient *llrcpt)
 			ret = -1;
 		}
 		mailbox_free(&box);
-		mail_user_unref(&user);
+		mail_user_deinit(&user);
 	}
 
-	if (ret < 0 &&
-		!smtp_server_command_is_replied(cmd->cmd)) {
-		smtp_server_reply(cmd, 451, "4.3.0",
-				  "<%s> Temporary internal error",
-				  smtp_address_encode(address));
+	if (ret < 0 && !smtp_server_recipient_is_replied(rcpt)) {
+		smtp_server_recipient_reply(rcpt, 451, "4.3.0",
+					    "Temporary internal error");
 	}
 	return ret;
 }
@@ -269,8 +257,6 @@ lmtp_local_rcpt_anvil_cb(const char *reply, void *context)
 		(struct lmtp_local_recipient *)context;
 	struct client *client = llrcpt->rcpt->client;
 	struct smtp_server_recipient *rcpt = llrcpt->rcpt->rcpt;
-	struct smtp_server_cmd_ctx *cmd = rcpt->cmd;
-	struct smtp_address *address = rcpt->path;
 	const struct mail_storage_service_input *input;
 	unsigned int parallel_count = 0;
 
@@ -282,9 +268,9 @@ lmtp_local_rcpt_anvil_cb(const char *reply, void *context)
 	}
 
 	if (parallel_count >= client->lmtp_set->lmtp_user_concurrency_limit) {
-		smtp_server_reply(cmd, 451, "4.3.0",
-			"<%s> Too many concurrent deliveries for user",
-			smtp_address_encode(address));
+		smtp_server_recipient_reply(
+			rcpt, 451, "4.3.0",
+			"Too many concurrent deliveries for user");
 	} else if (lmtp_local_rcpt_anvil_finish(llrcpt)) {
 		llrcpt->anvil_connect_sent = TRUE;
 		input = mail_storage_service_user_get_input(llrcpt->service_user);
@@ -300,7 +286,6 @@ int lmtp_local_rcpt(struct client *client, struct smtp_server_cmd_ctx *cmd,
 {
 	struct smtp_server_connection *conn = cmd->conn;
 	struct smtp_server_recipient *rcpt = lrcpt->rcpt;
-	const struct smtp_address *address = rcpt->path;
 	struct smtp_server_transaction *trans;
 	struct lmtp_local_recipient *llrcpt;
 	struct mail_storage_service_input input;
@@ -342,15 +327,14 @@ int lmtp_local_rcpt(struct client *client, struct smtp_server_cmd_ctx *cmd,
 	if (ret < 0) {
 		e_error(rcpt->event, "Failed to lookup user %s: %s",
 			username, error);
-		smtp_server_reply(cmd, 451, "4.3.0",
-			"<%s> Temporary internal error",
-			smtp_address_encode(address));
+		smtp_server_recipient_reply(rcpt, 451, "4.3.0",
+					    "Temporary internal error");
 		return -1;
 	}
 	if (ret == 0) {
-		smtp_server_reply(cmd, 550, "5.1.1",
-			"<%s> User doesn't exist: %s",
-			smtp_address_encode(address), username);
+		smtp_server_recipient_reply(rcpt, 550, "5.1.1",
+					    "User doesn't exist: %s",
+					    username);
 		return -1;
 	}
 
@@ -399,11 +383,11 @@ void lmtp_local_add_headers(struct lmtp_local *local,
 			    struct smtp_server_transaction *trans,
 			    string_t *headers)
 {
+	struct client *client = local->client;
+	const struct lmtp_settings *lmtp_set = client->lmtp_set;
 	struct lmtp_local_recipient *const *llrcpts;
-	const struct lmtp_settings *lmtp_set;
 	const struct smtp_address *rcpt_to = NULL;
 	unsigned int count;
-	void **sets;
 
 	str_printfa(headers, "Return-Path: <%s>\r\n",
 		    smtp_address_encode(trans->mail_from));
@@ -411,9 +395,6 @@ void lmtp_local_add_headers(struct lmtp_local *local,
 	llrcpts = array_get(&local->rcpt_to, &count);
 	if (count == 1) {
 		struct smtp_server_recipient *rcpt = llrcpts[0]->rcpt->rcpt;
-
-		sets = mail_storage_service_user_get_set(llrcpts[0]->service_user);
-		lmtp_set = sets[3];
 
 		switch (lmtp_set->parsed_lmtp_hdr_delivery_address) {
 		case LMTP_HDR_DELIVERY_ADDRESS_NONE:
@@ -434,7 +415,7 @@ void lmtp_local_add_headers(struct lmtp_local *local,
 
 static int
 lmtp_local_deliver(struct lmtp_local *local,
-		   struct smtp_server_cmd_ctx *cmd,
+		   struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
 		   struct smtp_server_transaction *trans,
 		   struct lmtp_local_recipient *llrcpt,
 		   struct mail *src_mail,
@@ -443,8 +424,6 @@ lmtp_local_deliver(struct lmtp_local *local,
 	struct client *client = local->client;
 	struct lmtp_recipient *lrcpt = llrcpt->rcpt;
 	struct smtp_server_recipient *rcpt = lrcpt->rcpt;
-	struct smtp_address *rcpt_to = rcpt->path;
-	unsigned int rcpt_idx = rcpt->index;
 	struct mail_storage_service_user *service_user = llrcpt->service_user;
 	struct lmtp_local_deliver_context lldctx;
 	struct mail_user *rcpt_user;
@@ -496,9 +475,8 @@ lmtp_local_deliver(struct lmtp_local *local,
 	if (mail_storage_service_next(storage_service, service_user,
 				      &rcpt_user, &error) < 0) {
 		e_error(rcpt->event, "Failed to initialize user: %s", error);
-		smtp_server_reply_index(cmd, rcpt_idx, 451, "4.3.0",
-			"<%s> Temporary internal error",
-			smtp_address_encode(rcpt_to));
+		smtp_server_recipient_reply(rcpt, 451, "4.3.0",
+					    "Temporary internal error");
 		return -1;
 	}
 	local->rcpt_user = rcpt_user;
@@ -519,9 +497,8 @@ lmtp_local_deliver(struct lmtp_local *local,
 	}
 	if (ret <= 0) {
 		e_error(rcpt->event, "Failed to expand settings: %s", error);
-		smtp_server_reply_index(cmd, rcpt_idx, 451, "4.3.0",
-			"<%s> Temporary internal error",
-			smtp_address_encode(rcpt_to));
+		smtp_server_recipient_reply(rcpt, 451, "4.3.0",
+					    "Temporary internal error");
 		return -1;
 	}
 
@@ -531,9 +508,8 @@ lmtp_local_deliver(struct lmtp_local *local,
 				  rcpt_user, &error) <= 0) {
 		e_error(rcpt->event, "Failed to expand mail_log_prefix=%s: %s",
 			rcpt_user->set->mail_log_prefix, error);
-		smtp_server_reply_index(cmd, rcpt_idx, 451, "4.3.0",
-			"<%s> Temporary internal error",
-			smtp_address_encode(rcpt_to));
+		smtp_server_recipient_reply(rcpt, 451, "4.3.0",
+					    "Temporary internal error");
 		return -1;
 	}
 	i_set_failure_prefix("%s", str_c(str));
@@ -559,7 +535,7 @@ lmtp_local_deliver(struct lmtp_local *local,
 
 int lmtp_local_default_deliver(struct client *client,
 			       struct lmtp_recipient *lrcpt,
-			       struct smtp_server_cmd_ctx *cmd,
+			       struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
 			       struct smtp_server_transaction *trans,
 			       struct lmtp_local_deliver_context *lldctx)
 {
@@ -567,81 +543,84 @@ int lmtp_local_default_deliver(struct client *client,
 	struct lmtp_local_recipient *llrcpt = lrcpt->backend_context;
 	struct smtp_server_recipient *rcpt = lrcpt->rcpt;
 	struct smtp_address *rcpt_to = rcpt->path;
-	unsigned int rcpt_idx = rcpt->index;
+	struct mail_deliver_input dinput;
 	struct mail_deliver_context dctx;
 	struct mail_storage *storage;
+	struct event *event;
 	enum mail_error mail_error;
 	const char *error;
 	int ret;
 
-	i_zero(&dctx);
-	dctx.session = lldctx->session;
-	dctx.pool = lldctx->session->pool;
-	dctx.set = lldctx->lda_set;
-	dctx.smtp_set = lldctx->smtp_set;
-	dctx.session_id = lldctx->session_id;
-	dctx.src_mail = lldctx->src_mail;
+	event = event_create(rcpt->event);
+	event_drop_parent_log_prefixes(event, 3);
+
+	i_zero(&dinput);
+	dinput.session = lldctx->session;
+	dinput.set = lldctx->lda_set;
+	dinput.smtp_set = lldctx->smtp_set;
+	dinput.session_id = lldctx->session_id;
+	dinput.event_parent = event;
+	dinput.src_mail = lldctx->src_mail;
 
 	/* MAIL FROM */
-	dctx.mail_from = trans->mail_from;
-	smtp_params_mail_copy(dctx.pool,
-		&dctx.mail_params, &trans->params);
+	dinput.mail_from = trans->mail_from;
+	dinput.mail_params = trans->params;
 
 	/* RCPT TO */
-	dctx.rcpt_user = lldctx->rcpt_user;
-	smtp_params_rcpt_copy(dctx.pool, &dctx.rcpt_params, &rcpt->params);
-	if (dctx.rcpt_params.orcpt.addr == NULL &&
-		*dctx.set->lda_original_recipient_header != '\0') {
-		dctx.rcpt_params.orcpt.addr =
-			mail_deliver_get_address(lldctx->src_mail,
-				dctx.set->lda_original_recipient_header);
+	dinput.rcpt_user = lldctx->rcpt_user;
+	dinput.rcpt_params = rcpt->params;
+	if (dinput.rcpt_params.orcpt.addr == NULL &&
+	    *dinput.set->lda_original_recipient_header != '\0') {
+		dinput.rcpt_params.orcpt.addr =
+			mail_deliver_get_address(
+				lldctx->src_mail,
+				dinput.set->lda_original_recipient_header);
 	}
-	if (dctx.rcpt_params.orcpt.addr == NULL)
-		dctx.rcpt_params.orcpt.addr = rcpt_to;
-	dctx.rcpt_to = rcpt_to;
-	dctx.rcpt_default_mailbox = lldctx->rcpt_default_mailbox;
+	if (dinput.rcpt_params.orcpt.addr == NULL)
+		dinput.rcpt_params.orcpt.addr = rcpt_to;
+	dinput.rcpt_to = rcpt_to;
+	dinput.rcpt_default_mailbox = lldctx->rcpt_default_mailbox;
 
-	dctx.save_dest_mail = array_count(&trans->rcpt_to) > 1 &&
+	dinput.save_dest_mail = array_count(&trans->rcpt_to) > 1 &&
 		local->first_saved_mail == NULL;
 
-	dctx.session_time_msecs =
+	dinput.session_time_msecs =
 		timeval_diff_msecs(&client->state.data_end_timeval,
 				   &trans->timestamp);
-	dctx.delivery_time_started = lldctx->delivery_time_started;
+	dinput.delivery_time_started = lldctx->delivery_time_started;
 
+	mail_deliver_init(&dctx, &dinput);
 	if (mail_deliver(&dctx, &storage) == 0) {
 		if (dctx.dest_mail != NULL) {
 			i_assert(local->first_saved_mail == NULL);
 			local->first_saved_mail = dctx.dest_mail;
 		}
-		smtp_server_reply_index(cmd, rcpt_idx,
-			250, "2.0.0", "<%s> %s Saved",
-			smtp_address_encode(rcpt_to), lldctx->session_id);
+		smtp_server_recipient_reply(rcpt, 250, "2.0.0", "%s Saved",
+					    lldctx->session_id);
 		ret = 0;
 	} else if (dctx.tempfail_error != NULL) {
-		smtp_server_reply_index(cmd, rcpt_idx,
-			451, "4.2.0", "<%s> %s",
-			smtp_address_encode(rcpt_to),
-			dctx.tempfail_error);
+		smtp_server_recipient_reply(rcpt, 451, "4.2.0", "%s",
+					    dctx.tempfail_error);
 		ret = -1;
 	} else if (storage != NULL) {
 		error = mail_storage_get_last_error(storage, &mail_error);
 		if (mail_error == MAIL_ERROR_NOQUOTA) {
-			lmtp_local_rcpt_reply_overquota(llrcpt, cmd, error);
+			lmtp_local_rcpt_reply_overquota(llrcpt, error);
 		} else {
-			smtp_server_reply_index(cmd, rcpt_idx,
-				451, "4.2.0", "<%s> %s",
-				smtp_address_encode(rcpt_to), error);
+			smtp_server_recipient_reply(rcpt, 451, "4.2.0", "%s",
+						    error);
 		}
 		ret = -1;
 	} else {
 		/* This shouldn't happen */
 		e_error(rcpt->event, "BUG: Saving failed to unknown storage");
-		smtp_server_reply_index(cmd, rcpt_idx, 451, "4.3.0",
-			"<%s> Temporary internal error",
-			smtp_address_encode(rcpt_to));
+		smtp_server_recipient_reply(rcpt, 451, "4.3.0",
+					    "Temporary internal error");
 		ret = -1;
 	}
+	mail_deliver_deinit(&dctx);
+	event_unref(&event);
+
 	return ret;
 }
 
@@ -684,7 +663,7 @@ lmtp_local_deliver_to_rcpts(struct lmtp_local *local,
 		    (ret != 0 && local->rcpt_user != NULL)) {
 			if (i == (count - 1))
 				mail_user_autoexpunge(local->rcpt_user);
-			mail_user_unref(&local->rcpt_user);
+			mail_user_deinit(&local->rcpt_user);
 		} else if (ret == 0) {
 			/* use the first saved message to save it elsewhere too.
 			   this might allow hard linking the files.
@@ -701,7 +680,6 @@ lmtp_local_deliver_to_rcpts(struct lmtp_local *local,
 
 static int
 lmtp_local_open_raw_mail(struct lmtp_local *local,
-			 struct smtp_server_cmd_ctx *cmd,
 			 struct smtp_server_transaction *trans,
 			 struct istream *input)
 {
@@ -721,8 +699,8 @@ lmtp_local_open_raw_mail(struct lmtp_local *local,
 		e_error(client->event, "Can't open delivery mail as raw: %s",
 			mailbox_get_last_internal_error(box, &error));
 		mailbox_free(&box);
-		lmtp_local_rcpt_fail_all(local, cmd,
-			451, "4.3.0", "Temporary internal error");
+		lmtp_local_rcpt_fail_all(local, 451, "4.3.0",
+					 "Temporary internal error");
 		return -1;
 	}
 
@@ -744,7 +722,7 @@ void lmtp_local_data(struct client *client,
 	struct mail_deliver_session *session;
 	uid_t old_uid, first_uid;
 
-	if (lmtp_local_open_raw_mail(local, cmd, trans, input) < 0)
+	if (lmtp_local_open_raw_mail(local, trans, input) < 0)
 		return;
 
 	session = mail_deliver_session_init();
@@ -771,7 +749,7 @@ void lmtp_local_data(struct client *client,
 		mailbox_transaction_rollback(&trans);
 		mailbox_free(&box);
 		mail_user_autoexpunge(user);
-		mail_user_unref(&user);
+		mail_user_deinit(&user);
 	}
 
 	if (old_uid == 0) {

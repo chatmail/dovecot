@@ -14,6 +14,7 @@
 
 @SET_MAKE@
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -139,6 +140,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
 	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -149,7 +151,8 @@ CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 @TCPWRAPPERS_TRUE@am__EXEEXT_1 = tcpwrap$(EXEEXT)
-am__installdirs = "$(DESTDIR)$(pkglibexecdir)"
+am__installdirs = "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(bindir)" \
+	"$(DESTDIR)$(pkglibexecdir)"
 PROGRAMS = $(pkglibexec_PROGRAMS)
 am_gdbhelper_OBJECTS = gdbhelper.$(OBJEXT)
 gdbhelper_OBJECTS = $(am_gdbhelper_OBJECTS)
@@ -162,7 +165,7 @@ am_maildirlock_OBJECTS = maildirlock.$(OBJEXT)
 maildirlock_OBJECTS = $(am_maildirlock_OBJECTS)
 am_rawlog_OBJECTS = rawlog.$(OBJEXT)
 rawlog_OBJECTS = $(am_rawlog_OBJECTS)
-am_script_OBJECTS = script.$(OBJEXT)
+am_script_OBJECTS = script.$(OBJEXT) health-check-settings.$(OBJEXT)
 script_OBJECTS = $(am_script_OBJECTS)
 am_script_login_OBJECTS = script-login.$(OBJEXT)
 script_login_OBJECTS = $(am_script_login_OBJECTS)
@@ -170,6 +173,34 @@ am__tcpwrap_SOURCES_DIST = tcpwrap.c tcpwrap-settings.c
 @TCPWRAPPERS_TRUE@am_tcpwrap_OBJECTS = tcpwrap.$(OBJEXT) \
 @TCPWRAPPERS_TRUE@	tcpwrap-settings.$(OBJEXT)
 tcpwrap_OBJECTS = $(am_tcpwrap_OBJECTS)
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
+SCRIPTS = $(bin_SCRIPTS) $(pkglibexec_SCRIPTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -271,6 +302,7 @@ CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DICT_LIBS = @DICT_LIBS@
+DLLIB = @DLLIB@
 DLLTOOL = @DLLTOOL@
 DSYMUTIL = @DSYMUTIL@
 DUMPBIN = @DUMPBIN@
@@ -320,6 +352,8 @@ LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
 LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
 LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
+LIBUNWIND_CFLAGS = @LIBUNWIND_CFLAGS@
+LIBUNWIND_LIBS = @LIBUNWIND_LIBS@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LIPO = @LIPO@
@@ -480,7 +514,8 @@ script_LDADD = $(LIBDOVECOT) \
 
 script_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 script_SOURCES = \
-	script.c
+	script.c \
+	health-check-settings.c
 
 @TCPWRAPPERS_TRUE@TCPWRAP_BIN = tcpwrap
 @TCPWRAPPERS_TRUE@tcpwrap_LDADD = $(LIBDOVECOT) $(LIBWRAP_LIBS) \
@@ -504,6 +539,11 @@ maildirlock_LDADD = $(LIBDOVECOT) \
 maildirlock_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 maildirlock_SOURCES = \
 	maildirlock.c
+
+pkglibexec_SCRIPTS = health-check.sh
+bin_SCRIPTS = dovecot-sysreport
+EXTRA_DIST = $(pkglibexec_SCRIPTS) \
+	$(bin_SCRIPTS)
 
 all: all-am
 
@@ -611,6 +651,76 @@ script-login$(EXEEXT): $(script_login_OBJECTS) $(script_login_DEPENDENCIES) $(EX
 tcpwrap$(EXEEXT): $(tcpwrap_OBJECTS) $(tcpwrap_DEPENDENCIES) $(EXTRA_tcpwrap_DEPENDENCIES) 
 	@rm -f tcpwrap$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tcpwrap_OBJECTS) $(tcpwrap_LDADD) $(LIBS)
+install-binSCRIPTS: $(bin_SCRIPTS)
+	@$(NORMAL_INSTALL)
+	@list='$(bin_SCRIPTS)'; test -n "$(bindir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(bindir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(bindir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  if test -f "$$d$$p"; then echo "$$d$$p"; echo "$$p"; else :; fi; \
+	done | \
+	sed -e 'p;s,.*/,,;n' \
+	    -e 'h;s|.*|.|' \
+	    -e 'p;x;s,.*/,,;$(transform)' | sed 'N;N;N;s,\n, ,g' | \
+	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1; } \
+	  { d=$$3; if (dirs[d] != 1) { print "d", d; dirs[d] = 1 } \
+	    if ($$2 == $$4) { files[d] = files[d] " " $$1; \
+	      if (++n[d] == $(am__install_max)) { \
+		print "f", d, files[d]; n[d] = 0; files[d] = "" } } \
+	    else { print "f", d "/" $$4, $$1 } } \
+	  END { for (d in files) print "f", d, files[d] }' | \
+	while read type dir files; do \
+	     if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
+	     test -z "$$files" || { \
+	       echo " $(INSTALL_SCRIPT) $$files '$(DESTDIR)$(bindir)$$dir'"; \
+	       $(INSTALL_SCRIPT) $$files "$(DESTDIR)$(bindir)$$dir" || exit $$?; \
+	     } \
+	; done
+
+uninstall-binSCRIPTS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(bin_SCRIPTS)'; test -n "$(bindir)" || exit 0; \
+	files=`for p in $$list; do echo "$$p"; done | \
+	       sed -e 's,.*/,,;$(transform)'`; \
+	dir='$(DESTDIR)$(bindir)'; $(am__uninstall_files_from_dir)
+install-pkglibexecSCRIPTS: $(pkglibexec_SCRIPTS)
+	@$(NORMAL_INSTALL)
+	@list='$(pkglibexec_SCRIPTS)'; test -n "$(pkglibexecdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(pkglibexecdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(pkglibexecdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  if test -f "$$d$$p"; then echo "$$d$$p"; echo "$$p"; else :; fi; \
+	done | \
+	sed -e 'p;s,.*/,,;n' \
+	    -e 'h;s|.*|.|' \
+	    -e 'p;x;s,.*/,,;$(transform)' | sed 'N;N;N;s,\n, ,g' | \
+	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1; } \
+	  { d=$$3; if (dirs[d] != 1) { print "d", d; dirs[d] = 1 } \
+	    if ($$2 == $$4) { files[d] = files[d] " " $$1; \
+	      if (++n[d] == $(am__install_max)) { \
+		print "f", d, files[d]; n[d] = 0; files[d] = "" } } \
+	    else { print "f", d "/" $$4, $$1 } } \
+	  END { for (d in files) print "f", d, files[d] }' | \
+	while read type dir files; do \
+	     if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
+	     test -z "$$files" || { \
+	       echo " $(INSTALL_SCRIPT) $$files '$(DESTDIR)$(pkglibexecdir)$$dir'"; \
+	       $(INSTALL_SCRIPT) $$files "$(DESTDIR)$(pkglibexecdir)$$dir" || exit $$?; \
+	     } \
+	; done
+
+uninstall-pkglibexecSCRIPTS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(pkglibexec_SCRIPTS)'; test -n "$(pkglibexecdir)" || exit 0; \
+	files=`for p in $$list; do echo "$$p"; done | \
+	       sed -e 's,.*/,,;$(transform)'`; \
+	dir='$(DESTDIR)$(pkglibexecdir)'; $(am__uninstall_files_from_dir)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -619,6 +729,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gdbhelper.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/health-check-settings.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/maildirlock.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rawlog.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/script-login.Po@am__quote@
@@ -737,9 +848,9 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(PROGRAMS)
+all-am: Makefile $(PROGRAMS) $(SCRIPTS)
 installdirs:
-	for dir in "$(DESTDIR)$(pkglibexecdir)"; do \
+	for dir in "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -801,7 +912,8 @@ install-dvi: install-dvi-am
 
 install-dvi-am:
 
-install-exec-am: install-pkglibexecPROGRAMS
+install-exec-am: install-binSCRIPTS install-pkglibexecPROGRAMS \
+	install-pkglibexecSCRIPTS
 
 install-html: install-html-am
 
@@ -841,7 +953,8 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-pkglibexecPROGRAMS
+uninstall-am: uninstall-binSCRIPTS uninstall-pkglibexecPROGRAMS \
+	uninstall-pkglibexecSCRIPTS
 
 .MAKE: install-am install-strip
 
@@ -849,16 +962,18 @@ uninstall-am: uninstall-pkglibexecPROGRAMS
 	clean-libtool clean-pkglibexecPROGRAMS cscopelist-am ctags \
 	ctags-am distclean distclean-compile distclean-generic \
 	distclean-libtool distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-data \
-	install-data-am install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-man install-pdf install-pdf-am \
-	install-pkglibexecPROGRAMS install-ps install-ps-am \
+	html-am info info-am install install-am install-binSCRIPTS \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-pkglibexecPROGRAMS \
+	install-pkglibexecSCRIPTS install-ps install-ps-am \
 	install-strip installcheck installcheck-am installdirs \
 	maintainer-clean maintainer-clean-generic mostlyclean \
 	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
 	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-pkglibexecPROGRAMS
+	uninstall-binSCRIPTS uninstall-pkglibexecPROGRAMS \
+	uninstall-pkglibexecSCRIPTS
 
 .PRECIOUS: Makefile
 

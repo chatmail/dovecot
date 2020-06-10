@@ -257,7 +257,7 @@ static bool ext_include_binary_open
 	offset = 0;
 
 	if ( !sieve_binary_read_unsigned(sblock, &offset, &depcount) ) {
-		sieve_sys_error(svinst,
+		e_error(svinst->event,
 			"include: failed to read include count "
 			"for dependency block %d of binary %s", block_id,
 			sieve_binary_path(sbin));
@@ -266,7 +266,7 @@ static bool ext_include_binary_open
 
 	/* Check include limit */
 	if ( depcount > ext_ctx->max_includes ) {
-		sieve_sys_error(svinst,
+		e_error(svinst->event,
 			"include: binary %s includes too many scripts (%u > %u)",
 			sieve_binary_path(sbin), depcount, ext_ctx->max_includes);
 		return FALSE;
@@ -289,25 +289,26 @@ static bool ext_include_binary_open
 			!sieve_binary_read_string(sblock, &offset, &script_name) ||
 			!sieve_binary_read_byte(sblock, &offset, &flags) ) {
 			/* Binary is corrupt, recompile */
-			sieve_sys_error(svinst,
+			e_error(svinst->event,
 				"include: failed to read included script "
-				"from dependency block %d of binary %s", block_id,
-				sieve_binary_path(sbin));
+				"from dependency block %d of binary %s",
+				block_id, sieve_binary_path(sbin));
 			return FALSE;
 		}
 
 		if ( inc_block_id != 0 &&
 			(inc_block=sieve_binary_block_get(sbin, inc_block_id)) == NULL ) {
-			sieve_sys_error(svinst,
+			e_error(svinst->event,
 				"include: failed to find block %d for included script "
-				"from dependency block %d of binary %s", inc_block_id, block_id,
+				"from dependency block %d of binary %s",
+				inc_block_id, block_id,
 				sieve_binary_path(sbin));
 			return FALSE;
 		}
 
 		if ( location >= EXT_INCLUDE_LOCATION_INVALID ) {
 			/* Binary is corrupt, recompile */
-			sieve_sys_error(svinst,
+			e_error(svinst->event,
 				"include: dependency block %d of binary %s "
 				"uses invalid script location (id %d)",
 				block_id, sieve_binary_path(sbin), location);
@@ -339,9 +340,11 @@ static bool ext_include_binary_open
 			if ( (flags & EXT_INCLUDE_FLAG_OPTIONAL) == 0 ) {
 				/* Not supposed to be missing, recompile */
 				if ( svinst->debug ) {
-					sieve_sys_debug(svinst,
-						"include: script '%s' included in binary %s is missing, "
-						"so recompile", str_c(script_name), sieve_binary_path(sbin));
+					e_debug(svinst->event, "include: "
+						"script '%s' included in binary %s is missing, "
+						"so recompile",
+						str_c(script_name),
+						sieve_binary_path(sbin));
 				}
 				return FALSE;
 			}
@@ -351,8 +354,8 @@ static bool ext_include_binary_open
 			 * what.
 			 */
 			if ( svinst->debug ) {
-				sieve_sys_debug(svinst,
-					"include: script '%s' is missing in binary %s, but is now available, "
+				e_debug(svinst->event, "include: "
+					"script '%s' is missing in binary %s, but is now available, "
 					"so recompile", str_c(script_name), sieve_binary_path(sbin));
 			}
 			sieve_script_unref(&script);
@@ -363,10 +366,11 @@ static bool ext_include_binary_open
 		if ( (ret=sieve_script_binary_read_metadata
 			(script, sblock, &offset))	< 0 ) {
 			/* Binary is corrupt, recompile */
-			sieve_sys_error(svinst,
-				"include: dependency block %d of binary %s "
+			e_error(svinst->event, "include: "
+				"dependency block %d of binary %s "
 				"contains invalid script metadata for script %s",
-				block_id, sieve_binary_path(sbin), sieve_script_location(script));
+				block_id, sieve_binary_path(sbin),
+				sieve_script_location(script));
 			sieve_script_unref(&script);
 			return FALSE;
 		}

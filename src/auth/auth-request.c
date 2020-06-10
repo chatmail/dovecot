@@ -298,6 +298,7 @@ void auth_request_success_continue(struct auth_policy_check_ctx *ctx)
 		auth_request_fail(request);
 		return;
 	}
+	request->successful = TRUE;
 
 	/* log before delay */
 	auth_request_log_finished(request);
@@ -309,7 +310,6 @@ void auth_request_success_continue(struct auth_policy_check_ctx *ctx)
 		return;
 	}
 
-	request->successful = TRUE;
 	if (ctx->success_data->used > 0 && !request->final_resp_ok) {
 		/* we'll need one more SASL round, since client doesn't support
 		   the final SASL response */
@@ -876,6 +876,7 @@ void auth_request_passdb_lookup_begin(struct auth_request *request)
 		request->passdb->passdb->iface.name);
 
 	event = event_create(request->event);
+	event_add_str(event, "passdb_id", dec2str(request->passdb->passdb->id));
 	event_add_str(event, "passdb_name", name);
 	event_add_str(event, "passdb", request->passdb->passdb->iface.name);
 	event_set_log_prefix_callback(event, FALSE, get_log_prefix_db, request);
@@ -937,6 +938,7 @@ void auth_request_userdb_lookup_begin(struct auth_request *request)
 		request->userdb->userdb->iface->name);
 
 	event = event_create(request->event);
+	event_add_str(event, "userdb_id", dec2str(request->userdb->userdb->id));
 	event_add_str(event, "userdb_name", name);
 	event_add_str(event, "userdb", request->userdb->userdb->iface->name);
 	event_set_log_prefix_callback(event, FALSE, get_log_prefix_db, request);
@@ -2827,6 +2829,17 @@ int auth_request_password_verify_log(struct auth_request *request,
 				     subsystem);
 	} T_END;
 	return ret;
+}
+
+enum passdb_result auth_request_password_missing(struct auth_request *request)
+{
+	if (request->skip_password_check) {
+		/* This passdb wasn't used for authentication */
+		return PASSDB_RESULT_OK;
+	}
+	e_info(authdb_event(request),
+	       "No password returned (and no nopassword)");
+	return PASSDB_RESULT_PASSWORD_MISMATCH;
 }
 
 void auth_request_get_log_prefix(string_t *str, struct auth_request *auth_request,

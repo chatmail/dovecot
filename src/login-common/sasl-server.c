@@ -27,9 +27,19 @@
 
 struct anvil_request {
 	struct client *client;
-	unsigned int auth_pid, auth_id;
+	unsigned int auth_pid;
 	unsigned char cookie[MASTER_AUTH_COOKIE_SIZE];
 };
+
+static bool
+sasl_server_filter_mech(struct client *client, struct auth_mech_desc *mech)
+{
+	if (client->v.sasl_filter_mech != NULL &&
+	    !client->v.sasl_filter_mech(client, mech))
+		return FALSE;
+	return ((mech->flags & MECH_SEC_ANONYMOUS) == 0 ||
+		login_binary->anonymous_login_acceptable);
+}
 
 const struct auth_mech_desc *
 sasl_server_get_advertised_mechs(struct client *client, unsigned int *count_r)
@@ -47,17 +57,44 @@ sasl_server_get_advertised_mechs(struct client *client, unsigned int *count_r)
 
 	ret_mech = t_new(struct auth_mech_desc, count);
 	for (i = j = 0; i < count; i++) {
+		struct auth_mech_desc fmech = mech[i];
+
+		if (!sasl_server_filter_mech(client, &fmech))
+			continue;
+
 		/* a) transport is secured
 		   b) auth mechanism isn't plaintext
 		   c) we allow insecure authentication
 		*/
-		if ((mech[i].flags & MECH_SEC_PRIVATE) == 0 &&
+		if ((fmech.flags & MECH_SEC_PRIVATE) == 0 &&
 		    (client->secured || !client->set->disable_plaintext_auth ||
-		     (mech[i].flags & MECH_SEC_PLAINTEXT) == 0))
-			ret_mech[j++] = mech[i];
+		     (fmech.flags & MECH_SEC_PLAINTEXT) == 0))
+			ret_mech[j++] = fmech;
 	}
 	*count_r = j;
 	return ret_mech;
+}
+
+const struct auth_mech_desc *
+sasl_server_find_available_mech(struct client *client, const char *name)
+{
+	const struct auth_mech_desc *mech;
+	struct auth_mech_desc fmech;
+
+	mech = auth_client_find_mech(auth_client, name);
+	if (mech == NULL)
+		return NULL;
+
+	fmech = *mech;
+	if (!sasl_server_filter_mech(client, &fmech))
+		return NULL;
+	if (memcmp(&fmech, mech, sizeof(fmech)) != 0) {
+		struct auth_mech_desc *nmech = t_new(struct auth_mech_desc, 1);
+
+		*nmech = fmech;
+		mech = nmech;
+	}
+	return mech;
 }
 
 static enum auth_request_flags
@@ -134,7 +171,7 @@ static int master_send_request(struct anvil_request *anvil_request)
 
 	i_zero(&req);
 	req.auth_pid = anvil_request->auth_pid;
-	req.auth_id = anvil_request->auth_id;
+	req.auth_id = client->master_auth_id;
 	req.local_ip = client->local_ip;
 	req.remote_ip = client->ip;
 	req.local_port = client->local_port;
@@ -161,7 +198,6 @@ static int master_send_request(struct anvil_request *anvil_request)
 	req.data_size = buf->used;
 
 	client->auth_finished = ioloop_time;
-	client->master_auth_id = req.auth_id;
 
 	i_zero(&params);
 	params.client_fd = fd;
@@ -201,7 +237,7 @@ anvil_lookup_callback(const char *reply, void *context)
 	}
 	if (ret < 0) {
 		client->authenticating = FALSE;
-		auth_client_send_cancel(auth_client, req->auth_id);
+		auth_client_send_cancel(auth_client, client->master_auth_id);
 		call_client_callback(client, SASL_SERVER_REPLY_MASTER_FAILED,
 				     errmsg, NULL);
 	}
@@ -219,7 +255,6 @@ anvil_check_too_many_connections(struct client *client,
 	req = i_new(struct anvil_request, 1);
 	req->client = client;
 	req->auth_pid = auth_client_request_get_server_pid(request);
-	req->auth_id = auth_client_request_get_id(request);
 
 	buffer_create_from_data(&buf, req->cookie, sizeof(req->cookie));
 	cookie = auth_client_request_get_cookie(request);
@@ -236,6 +271,22 @@ anvil_check_too_many_connections(struct client *client,
 			    net_ip2addr(&client->ip), "/",
 			    str_tabescape(client->virtual_user), NULL);
 	anvil_client_query(anvil, query, anvil_lookup_callback, req);
+}
+
+static bool
+sasl_server_check_login(struct client *client)
+{
+	if (client->v.sasl_check_login != NULL &&
+	    !client->v.sasl_check_login(client))
+		return FALSE;
+	if (client->auth_anonymous &&
+	    !login_binary->anonymous_login_acceptable) {
+		sasl_server_auth_failed(client,
+			"Anonymous login denied",
+			AUTH_CLIENT_FAIL_CODE_ANONYMOUS_DENIED);
+		return FALSE;
+	}
+	return TRUE;
 }
 
 static void
@@ -262,6 +313,7 @@ authenticate_callback(struct auth_client_request *request,
 				      data_base64, NULL);
 		break;
 	case AUTH_REQUEST_STATUS_OK:
+		client->master_auth_id = auth_client_request_get_id(request);
 		client->auth_request = NULL;
 		client->auth_successes++;
 		client->auth_passdb_args = p_strarray_dup(client->pool, args);
@@ -288,6 +340,8 @@ authenticate_callback(struct auth_client_request *request,
 				   strcmp(args[i], "proxy") == 0) {
 				/* user can't login */
 				nologin = TRUE;
+			} else if (strcmp(args[i], "anonymous") == 0 ) {
+				client->auth_anonymous = TRUE;
 			} else if (str_begins(args[i], "resp=") &&
 				   login_binary->sasl_support_final_reply) {
 				client->sasl_final_resp =
@@ -299,6 +353,8 @@ authenticate_callback(struct auth_client_request *request,
 			client->authenticating = FALSE;
 			call_client_callback(client, SASL_SERVER_REPLY_SUCCESS,
 					     NULL, args);
+		} else if (!sasl_server_check_login(client)) {
+			i_assert(!client->authenticating);
 		} else {
 			anvil_check_too_many_connections(client, request);
 		}
@@ -377,7 +433,7 @@ static bool get_cert_username(struct client *client, const char **username_r,
 
 void sasl_server_auth_begin(struct client *client,
 			    const char *service, const char *mech_name,
-			    const char *initial_resp_base64,
+			    bool private, const char *initial_resp_base64,
 			    sasl_server_callback_t *callback)
 {
 	struct auth_request_info info;
@@ -388,19 +444,24 @@ void sasl_server_auth_begin(struct client *client,
 
 	client->auth_attempts++;
 	client->authenticating = TRUE;
+	client->master_auth_id = 0;
 	if (client->auth_first_started == 0)
 		client->auth_first_started = ioloop_time;
 	i_free(client->auth_mech_name);
 	client->auth_mech_name = str_ucase(i_strdup(mech_name));
+	client->auth_anonymous = FALSE;
 	client->sasl_callback = callback;
 
-	mech = auth_client_find_mech(auth_client, mech_name);
-	if (mech == NULL) {
+	mech = sasl_server_find_available_mech(client, mech_name);
+	if (mech == NULL ||
+	    ((mech->flags & MECH_SEC_PRIVATE) != 0 && !private)) {
 		sasl_server_auth_failed(client,
 			"Unsupported authentication mechanism.",
 			AUTH_CLIENT_FAIL_CODE_MECH_INVALID);
 		return;
 	}
+
+	i_assert(!private || (mech->flags & MECH_SEC_PRIVATE) != 0);
 
 	if (!client->secured && client->set->disable_plaintext_auth &&
 	    (mech->flags & MECH_SEC_PLAINTEXT) != 0) {
@@ -469,6 +530,8 @@ sasl_server_auth_cancel(struct client *client, const char *reason,
 	client->authenticating = FALSE;
 	if (client->auth_request != NULL)
 		auth_client_request_abort(&client->auth_request, reason);
+	if (client->master_auth_id != 0)
+		auth_client_send_cancel(auth_client, client->master_auth_id);
 
 	if (code != NULL) {
 		const char *args[2];

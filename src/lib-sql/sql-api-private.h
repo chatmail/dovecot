@@ -69,6 +69,7 @@ struct sql_db_vfuncs {
 	int (*init_full)(const struct sql_settings *set, struct sql_db **db_r,
 			 const char **error);
 	void (*deinit)(struct sql_db *db);
+	void (*unref)(struct sql_db *db);
 
 	int (*connect)(struct sql_db *db);
 	void (*disconnect)(struct sql_db *db);
@@ -123,6 +124,7 @@ struct sql_db_vfuncs {
 struct sql_db {
 	const char *name;
 	enum sql_db_flags flags;
+	int refcount;
 
 	struct sql_db_vfuncs v;
 	ARRAY(union sql_db_module_context *) module_contexts;
@@ -133,6 +135,7 @@ struct sql_db {
 	void *state_change_context;
 
 	struct event *event;
+	HASH_TABLE(char *, struct sql_prepared_statement *) prepared_stmt_hash;
 
 	enum sql_db_state state;
 	/* last time we started connecting to this server
@@ -176,6 +179,8 @@ struct sql_result_vfuncs {
 
 struct sql_prepared_statement {
 	struct sql_db *db;
+	int refcount;
+	char *query_template;
 };
 
 struct sql_statement {
@@ -223,6 +228,7 @@ ARRAY_DEFINE_TYPE(sql_drivers, const struct sql_db *);
 extern ARRAY_TYPE(sql_drivers) sql_drivers;
 extern struct sql_result sql_not_connected_result;
 
+void sql_init_common(struct sql_db *db);
 struct sql_db *
 driver_sqlpool_init(const char *connect_string, const struct sql_db *driver);
 int driver_sqlpool_init_full(const struct sql_settings *set, const struct sql_db *driver,

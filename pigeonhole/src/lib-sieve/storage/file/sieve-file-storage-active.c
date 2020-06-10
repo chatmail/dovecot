@@ -6,6 +6,7 @@
 #include "ioloop.h"
 #include "hostpid.h"
 #include "file-copy.h"
+#include "time-util.h"
 
 #include "sieve-file-storage.h"
 
@@ -34,9 +35,9 @@ static int sieve_file_storage_active_read_link
 			 */
 			if ( (storage->flags & SIEVE_STORAGE_FLAG_READWRITE) != 0 &&
 				(storage->flags & SIEVE_STORAGE_FLAG_SYNCHRONIZING) == 0 ) {
-				sieve_storage_sys_warning(storage,
-					"Active sieve script symlink %s is no symlink.",
-				  fstorage->active_path);
+				e_warning(storage->event,
+					  "Active sieve script symlink %s is no symlink.",
+					  fstorage->active_path);
 			}
 			return 0;
 		}
@@ -86,27 +87,27 @@ static const char *sieve_file_storage_active_parse_link
 
 	/* Warn if link is deemed to be invalid */
 	if ( scriptname == NULL ) {
-		sieve_storage_sys_warning(storage,
-			"Active Sieve script symlink %s is broken: "
-			"Invalid scriptname (points to %s).",
-			fstorage->active_path, link);
+		e_warning(storage->event,
+			  "Active Sieve script symlink %s is broken: "
+			  "Invalid scriptname (points to %s).",
+			  fstorage->active_path, link);
 		return NULL;
 	}
 
 	/* Check whether the path is any good */
 	const char *error = NULL;
 	if ( t_normpath_to(scriptpath, link_dir, &scriptpath, &error) < 0 ) {
-		sieve_storage_sys_warning(storage,
-			"Failed to check active Sieve script symlink %s: "
-			"Failed to normalize path (points to %s): %s",
-			fstorage->active_path, scriptpath, error);
+		e_warning(storage->event,
+			  "Failed to check active Sieve script symlink %s: "
+			  "Failed to normalize path (points to %s): %s",
+			  fstorage->active_path, scriptpath, error);
 		return NULL;
 	}
 	if ( strcmp(scriptpath, fstorage->path) != 0 ) {
-		sieve_storage_sys_warning(storage,
-			"Active sieve script symlink %s is broken: "
-			"Invalid/unknown path to storage (points to %s).",
-			fstorage->active_path, scriptpath);
+		e_warning(storage->event,
+			  "Active sieve script symlink %s is broken: "
+			  "Invalid/unknown path to storage (points to %s).",
+			  fstorage->active_path, scriptpath);
 		return NULL;
 	}
 
@@ -142,8 +143,7 @@ int sieve_file_storage_active_replace_link
 				/* Wait and try again - very unlikely */
 				sleep(2);
 				tv = &tv_now;
-				if (gettimeofday(&tv_now, NULL) < 0)
-					i_fatal("gettimeofday(): %m");
+				i_gettimeofday(&tv_now);
 				continue;
 			}
 
@@ -287,9 +287,9 @@ struct sieve_script *sieve_file_storage_active_script_open
 		sieve_script_file_get_scriptname(scriptfile),
 		NULL);
 	if ( fscript == NULL && storage->error_code == SIEVE_ERROR_NOT_FOUND ) {
-		sieve_storage_sys_warning(storage,
-			"Active sieve script symlink %s points to non-existent script "
-			"(points to %s).", fstorage->active_path, link);
+		e_warning(storage->event,
+			  "Active sieve script symlink %s points to non-existent script "
+			  "(points to %s).", fstorage->active_path, link);
 	}
 	return (fscript != NULL ? &fscript->script : NULL);
 }
@@ -336,7 +336,7 @@ bool sieve_file_storage_active_rescue_regular
 	}
 
 	if ( S_ISLNK( st.st_mode ) ) {
-		sieve_storage_sys_debug(storage,
+		e_debug(storage->event,
 			"Nothing to rescue %s.", fstorage->active_path);
 		return TRUE; /* Nothing to rescue */
 	}
@@ -358,10 +358,10 @@ bool sieve_file_storage_active_rescue_regular
 					fstorage->active_path, dstpath);
 				result = FALSE;
 			} else {
-				sieve_storage_sys_info(storage,
-					"Moved active sieve script file '%s' "
-					"to script storage as '%s'.",
-					fstorage->active_path, dstpath);
+				e_info(storage->event,
+				       "Moved active sieve script file '%s' "
+				       "to script storage as '%s'.",
+				       fstorage->active_path, dstpath);
 			}
 		} T_END;
 

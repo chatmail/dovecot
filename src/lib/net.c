@@ -318,8 +318,7 @@ int net_connect_unix_with_retries(const char *path, unsigned int msecs)
 	struct timeval start, now;
 	int fd;
 
-	if (gettimeofday(&start, NULL) < 0)
-		i_panic("gettimeofday() failed: %m");
+	i_gettimeofday(&start);
 
 	do {
 		fd = net_connect_unix(path);
@@ -328,8 +327,7 @@ int net_connect_unix_with_retries(const char *path, unsigned int msecs)
 
 		/* busy. wait for a while. */
 		usleep(i_rand_minmax(1, 10) * 10000);
-		if (gettimeofday(&now, NULL) < 0)
-			i_panic("gettimeofday() failed: %m");
+		i_gettimeofday(&now);
 	} while (timeval_diff_msecs(&now, &start) < (int)msecs);
 	return fd;
 }
@@ -364,6 +362,18 @@ int net_set_tcp_nodelay(int fd, bool nodelay)
 	int val = nodelay;
 
 	return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof(val));
+}
+
+int net_set_tcp_quickack(int fd ATTR_UNUSED, bool quickack ATTR_UNUSED)
+{
+#ifdef TCP_QUICKACK
+	int val = quickack;
+
+	return setsockopt(fd, IPPROTO_TCP, TCP_QUICKACK, &val, sizeof(val));
+#else
+	errno = ENOPROTOOPT;
+	return -1;
+#endif
 }
 
 int net_set_send_buffer_size(int fd, size_t size)
@@ -1060,6 +1070,37 @@ const char *net_gethosterror(int error)
 	i_assert(error != 0);
 
 	return gai_strerror(error);
+}
+
+enum net_hosterror_type net_get_hosterror_type(int error)
+{
+	const struct {
+		int error;
+		enum net_hosterror_type type;
+	} error_map[] = {
+#ifdef EAI_ADDRFAMILY /* Obsoleted by RFC 2553bis-02 */
+		{ EAI_ADDRFAMILY, NET_HOSTERROR_TYPE_NOT_FOUND },
+#endif
+		{ EAI_AGAIN, NET_HOSTERROR_TYPE_NAMESERVER },
+		{ EAI_BADFLAGS, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+		{ EAI_FAIL, NET_HOSTERROR_TYPE_NAMESERVER },
+		{ EAI_FAMILY, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+		{ EAI_MEMORY, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+#ifdef EAI_NODATA /* Obsoleted by RFC 2553bis-02 */
+		{ EAI_NODATA, NET_HOSTERROR_TYPE_NOT_FOUND },
+#endif
+		{ EAI_NONAME, NET_HOSTERROR_TYPE_NOT_FOUND },
+		{ EAI_SERVICE, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+		{ EAI_SOCKTYPE, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+		{ EAI_SYSTEM, NET_HOSTERROR_TYPE_INTERNAL_ERROR },
+	};
+	for (unsigned int i = 0; i < N_ELEMENTS(error_map); i++) {
+		if (error_map[i].error == error)
+			return error_map[i].type;
+	}
+
+	/* shouldn't happen? assume internal error */
+	return NET_HOSTERROR_TYPE_INTERNAL_ERROR;
 }
 
 int net_hosterror_notfound(int error)

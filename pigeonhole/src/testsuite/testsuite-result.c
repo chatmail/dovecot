@@ -18,34 +18,47 @@
 
 #include "testsuite-result.h"
 
-static struct sieve_result *_testsuite_result;
+struct sieve_execute_env testsuite_execute_env;
+
+static pool_t testsuite_execute_pool = NULL;
+static struct sieve_result *_testsuite_result = NULL;
 
 void testsuite_result_init(void)
 {
 	struct sieve_instance *svinst = testsuite_sieve_instance;
 
-	_testsuite_result = sieve_result_create
-		(svinst, &testsuite_msgdata, testsuite_scriptenv);
+	testsuite_execute_pool = pool_alloconly_create("sieve execution", 4096);
+
+	sieve_execute_init(&testsuite_execute_env, testsuite_sieve_instance,
+			   testsuite_execute_pool, &testsuite_msgdata,
+			   testsuite_scriptenv, 0);
+
+	_testsuite_result = sieve_result_create(svinst, testsuite_execute_pool,
+						&testsuite_execute_env);
 }
 
 void testsuite_result_deinit(void)
 {
-	if ( _testsuite_result != NULL ) {
+	if (_testsuite_result != NULL)
 		sieve_result_unref(&_testsuite_result);
-	}
+	sieve_execute_deinit(&testsuite_execute_env);
+	pool_unref(&testsuite_execute_pool);
 }
 
-void testsuite_result_reset
-(const struct sieve_runtime_env *renv)
+void testsuite_result_reset(const struct sieve_runtime_env *renv)
 {
 	struct sieve_instance *svinst = testsuite_sieve_instance;
 
-	if ( _testsuite_result != NULL ) {
+	if (_testsuite_result != NULL) {
 		sieve_result_unref(&_testsuite_result);
+		pool_unref(&testsuite_execute_pool);
 	}
 
-	_testsuite_result = sieve_result_create
-		(svinst, &testsuite_msgdata, testsuite_scriptenv);
+	i_zero(testsuite_execute_env.exec_status);
+
+	testsuite_execute_pool = pool_alloconly_create("sieve execution", 4096);
+	_testsuite_result = sieve_result_create(svinst, testsuite_execute_pool,
+						&testsuite_execute_env);
 	sieve_interpreter_set_result(renv->interp, _testsuite_result);
 }
 
@@ -56,7 +69,7 @@ struct sieve_result *testsuite_result_get(void)
 
 struct sieve_result_iterate_context *testsuite_result_iterate_init(void)
 {
-	if ( _testsuite_result == NULL )
+	if (_testsuite_result == NULL)
 		return NULL;
 
 	return sieve_result_iterate_init(_testsuite_result);
@@ -66,31 +79,32 @@ bool testsuite_result_execute(const struct sieve_runtime_env *renv)
 {
 	int ret;
 
-	if ( _testsuite_result == NULL ) {
-		sieve_runtime_error(renv, NULL,
-			"testsuite: trying to execute result, but no result evaluated yet");
+	if (_testsuite_result == NULL) {
+		sieve_runtime_error(renv, NULL,	"testsuite: "
+				    "trying to execute result, "
+				    "but no result evaluated yet");
 		return FALSE;
 	}
 
 	testsuite_log_clear_messages();
 
 	/* Execute the result */
-	ret=sieve_result_execute
-		(_testsuite_result, NULL, testsuite_log_ehandler, 0);
+	ret = sieve_result_execute(_testsuite_result, NULL,
+				   testsuite_log_ehandler);
 
-	return ( ret > 0 );
+	return (ret > 0);
 }
 
-void testsuite_result_print
-(const struct sieve_runtime_env *renv)
+void testsuite_result_print(const struct sieve_runtime_env *renv)
 {
+	const struct sieve_execute_env *eenv = renv->exec_env;
 	struct ostream *out;
 
 	out = o_stream_create_fd(1, 0);
 	o_stream_set_no_error_handling(out, TRUE);
 
 	o_stream_nsend_str(out, "\n--");
-	sieve_result_print(_testsuite_result, renv->scriptenv, out, NULL);
+	sieve_result_print(_testsuite_result, eenv->scriptenv, out, NULL);
 	o_stream_nsend_str(out, "--\n\n");
 
 	o_stream_destroy(&out);
@@ -102,10 +116,11 @@ void testsuite_result_print
 
 /* Forward declarations */
 
-static int testsuite_result_stringlist_next_item
-	(struct sieve_stringlist *_strlist, string_t **str_r);
-static void testsuite_result_stringlist_reset
-	(struct sieve_stringlist *_strlist);
+static int
+testsuite_result_stringlist_next_item(struct sieve_stringlist *_strlist,
+				      string_t **str_r);
+static void
+testsuite_result_stringlist_reset(struct sieve_stringlist *_strlist);
 
 /* Stringlist object */
 
@@ -116,8 +131,9 @@ struct testsuite_result_stringlist {
 	int pos, index;
 };
 
-struct sieve_stringlist *testsuite_result_stringlist_create
-(const struct sieve_runtime_env *renv, int index)
+struct sieve_stringlist *
+testsuite_result_stringlist_create(const struct sieve_runtime_env *renv,
+				   int index)
 {
 	struct testsuite_result_stringlist *strlist;
 
@@ -134,45 +150,46 @@ struct sieve_stringlist *testsuite_result_stringlist_create
 	return &strlist->strlist;
 }
 
-static int testsuite_result_stringlist_next_item
-(struct sieve_stringlist *_strlist, string_t **str_r)
+static int
+testsuite_result_stringlist_next_item(struct sieve_stringlist *_strlist,
+				      string_t **str_r)
 {
 	struct testsuite_result_stringlist *strlist =
-		(struct testsuite_result_stringlist *) _strlist;
+		(struct testsuite_result_stringlist *)_strlist;
 	const struct sieve_action *action;
 	const char *act_name;
 	bool keep;
 
 	*str_r = NULL;
 
-	if ( strlist->index > 0 && strlist->pos > 0 )
+	if (strlist->index > 0 && strlist->pos > 0)
 		return 0;
 
 	do {
-		if ( (action=sieve_result_iterate_next(strlist->result_iter, &keep))
-			== NULL )
+		if ((action = sieve_result_iterate_next(strlist->result_iter,
+							&keep)) == NULL)
 			return 0;
 
 		strlist->pos++;
-	} while ( strlist->pos < strlist->index );
+	} while (strlist->pos < strlist->index);
 
-	if ( keep )
+	if (keep)
 		act_name = "keep";
-	else
-		act_name = ( action == NULL || action->def == NULL ||
-			action->def->name == NULL ) ? "" : action->def->name;
+	else {
+		act_name = ((action == NULL || action->def == NULL ||
+			     action->def->name == NULL) ?
+			    "" : action->def->name);
+	}
 
 	*str_r = t_str_new_const(act_name, strlen(act_name));
 	return 1;
 }
 
-static void testsuite_result_stringlist_reset
-(struct sieve_stringlist *_strlist)
+static void testsuite_result_stringlist_reset(struct sieve_stringlist *_strlist)
 {
 	struct testsuite_result_stringlist *strlist =
-		(struct testsuite_result_stringlist *) _strlist;
+		(struct testsuite_result_stringlist *)_strlist;
 
 	strlist->result_iter = testsuite_result_iterate_init();
 	strlist->pos = 0;
 }
-

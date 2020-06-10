@@ -353,16 +353,21 @@ void connection_update_event(struct connection *conn)
 	event_set_append_log_prefix(conn->event, str_c(prefix));
 
 	if (conn->local_ip.family > 0) {
-		event_add_str(conn->event, "local_ip",
+		event_add_str(conn->event, conn->list->set.client ?
+			      "source_ip" : "local_ip",
 			      net_ip2addr(&conn->local_ip));
 	}
 
 	if (conn->remote_ip.family > 0) {
-		event_add_str(conn->event, "remote_ip",
+		event_add_str(conn->event, conn->list->set.client ?
+			      "dest_ip" : "remote_ip",
 			      net_ip2addr(&conn->remote_ip));
 	}
-	if (conn->remote_port > 0)
-		event_add_int(conn->event, "remote_port", conn->remote_port);
+	if (conn->remote_port > 0) {
+		event_add_int(conn->event, conn->list->set.client ?
+			      "dest_port" : "remote_port",
+			      conn->remote_port);
+	}
 
 	if (conn->remote_pid != (pid_t)-1)
 		event_add_int(conn->event, "remote_pid", conn->remote_pid);
@@ -376,29 +381,30 @@ connection_update_properties(struct connection *conn)
 	int fd = (conn->fd_in < 0 ? conn->fd_out : conn->fd_in);
 	struct net_unix_cred cred;
 
-	if (conn->remote_ip.family != 0)
-		i_assert(conn->remote_port != 0);
-	else if (conn->fd_in != conn->fd_out || fd < 0 ||
-		 net_getpeername(fd, &conn->remote_ip,
-				 &conn->remote_port) < 0 ||
-		 conn->remote_ip.family == 0) {
-		conn->remote_ip.family = 0;
-		conn->remote_port = 0;
+	if (conn->remote_ip.family != 0) {
+		/* remote IP was already set */
+	} else if (conn->unix_peer_checked) {
+		/* already checked */
+	} else if (fd < 0) {
+		/* not connected yet - wait */
+	} else {
+		if (net_getpeername(fd, &conn->remote_ip,
+				    &conn->remote_port) == 0) {
+			/* either TCP or UNIX socket connection */
+			errno = 0;
+		}
 
-		if (conn->unix_peer_known) {
-			/* already known */
-		} else if (fd < 0 || errno == ENOTSOCK ||
-		      net_getunixcred(fd, &cred) < 0) {
-			conn->remote_uid = (uid_t)-1;
-			conn->remote_pid = (pid_t)-1;
-		} else {
+		if (conn->remote_ip.family != 0) {
+			/* TCP connection */
+			i_assert(conn->remote_port != 0);
+		} else if (errno == ENOTSOCK) {
+			/* getpeername() already found out this can't be a UNIX
+			   socket connection */
+		} else if (net_getunixcred(fd, &cred) == 0) {
 			conn->remote_pid = cred.pid;
 			conn->remote_uid = cred.uid;
 		}
-		conn->unix_peer_known = TRUE;
-	} else {
-		conn->remote_uid = (uid_t)-1;
-		conn->remote_pid = (pid_t)-1;
+		conn->unix_peer_checked = TRUE;
 	}
 
 	connection_update_property_label(conn);
@@ -509,6 +515,8 @@ connection_init_full(struct connection_list *list, struct connection *conn,
 	conn->fd_in = fd_in;
 	conn->fd_out = fd_out;
 	conn->disconnected = TRUE;
+	conn->remote_uid = (uid_t)-1;
+	conn->remote_pid = (pid_t)-1;
 
 	i_free(conn->base_name);
 	conn->base_name = i_strdup(name);
@@ -614,13 +622,9 @@ void connection_init_client_ip_from(struct connection_list *list,
 		i_zero(&conn->local_ip);
 
 	connection_init(list, conn, name);
-
-	event_field_clear(conn->event, "socket_path");
-
-	if (my_ip != NULL)
-		event_add_str(conn->event, "client_ip", net_ip2addr(my_ip));
-	event_add_str(conn->event, "ip", net_ip2addr(ip));
-	event_add_str(conn->event, "port", dec2str(port));
+	if (hostname != NULL)
+		event_add_str(conn->event, "dest_host", hostname);
+	connection_update_event(conn);
 }
 
 void connection_init_client_ip(struct connection_list *list,
@@ -638,12 +642,6 @@ void connection_init_client_unix(struct connection_list *list,
 	conn->unix_socket = TRUE;
 
 	connection_init(list, conn, path);
-
-	event_field_clear(conn->event, "ip");
-	event_field_clear(conn->event, "port");
-	event_field_clear(conn->event, "client_ip");
-	event_field_clear(conn->event, "client_port");
-
 	event_add_str(conn->event, "socket_path", path);
 }
 

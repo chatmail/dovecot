@@ -44,6 +44,7 @@ struct cmd_append_context {
 	bool message_input:1;
 	bool binary_input:1;
 	bool catenate:1;
+	bool cmd_args_set:1;
 	bool failed:1;
 };
 
@@ -480,6 +481,11 @@ cmd_append_handle_args(struct client_command_context *cmd,
 	time_t internal_date;
 	int ret, timezone_offset;
 	bool valid;
+
+	if (!ctx->cmd_args_set) {
+		ctx->cmd_args_set = TRUE;
+		client_args_finished(cmd, args);
+	}
 
 	/* [<flags>] */
 	if (!imap_arg_get_list(args, &flags_list))
@@ -927,6 +933,8 @@ bool cmd_append(struct client_command_context *cmd)
 	if (client_open_save_dest_box(cmd, mailbox, &ctx->box) < 0)
 		ctx->failed = TRUE;
 	else {
+		event_add_str(cmd->event, "mailbox",
+			      mailbox_get_vname(ctx->box));
 		ctx->t = mailbox_transaction_begin(ctx->box,
 					MAILBOX_TRANSACTION_FLAG_EXTERNAL |
 					MAILBOX_TRANSACTION_FLAG_ASSIGN_UIDS,

@@ -46,7 +46,7 @@ struct mail_user {
 	const char *service;
 	const char *session_id;
 	struct mail_user_connection_data conn;
-	const char *auth_token, *auth_user;
+	const char *auth_mech, *auth_token, *auth_user;
 	const char *const *userdb_fields;
 	/* Timestamp when this session was initially created. Most importantly
 	   this stays the same after IMAP client is hibernated and restored. */
@@ -136,6 +136,8 @@ int mail_user_init(struct mail_user *user, const char **error_r);
 
 void mail_user_ref(struct mail_user *user);
 void mail_user_unref(struct mail_user **user);
+/* Assert that this is the last reference for the user and unref it. */
+void mail_user_deinit(struct mail_user **user);
 
 /* Duplicate a mail_user. mail_user_init() and mail_namespaces_init() need to
    be called before the user is usable. */

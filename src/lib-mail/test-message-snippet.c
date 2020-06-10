@@ -3,6 +3,7 @@
 #include "lib.h"
 #include "str.h"
 #include "istream.h"
+#include "unichar.h"
 #include "message-snippet.h"
 #include "test-common.h"
 
@@ -50,7 +51,7 @@ static const struct {
 	  "&gt; -foo\n"
 	  "</div><br =class=3D\"\"></body></html>=\n",
 	  100,
-	  "Hi, How is it going? > -foo" },
+	  "Hi, How is it going?" },
 
 	{ "Content-Transfer-Encoding: quoted-printable\n"
 	  "Content-Type: application/xhtml+xml;\n"
@@ -64,7 +65,63 @@ static const struct {
 	  "&gt; -foo\n"
 	  "</div><br =class=3D\"\"></body></html>=\n",
 	  100,
-	  "Hi, How is it going? > -foo" },
+	  "Hi, How is it going?" },
+	{ "Content-Type: text/plain\n"
+	  "\n"
+	  ">quote1\n>quote2\n",
+	  100,
+	  ">quote1 quote2" },
+	{ "Content-Type: text/plain\n"
+	  "\n"
+	  ">quote1\n>quote2\nbottom\nposter\n",
+	  100,
+	  "bottom poster" },
+	{ "Content-Type: text/plain\n"
+	  "\n"
+	  "top\nposter\n>quote1\n>quote2\n",
+	  100,
+	  "top poster" },
+	{ "Content-Type: text/plain\n"
+	  "\n"
+	  ">quoted long text",
+	  7,
+	  ">quoted" },
+	{ "Content-Type: text/plain\n"
+	  "\n"
+	  ">quoted long text",
+	  8,
+	  ">quoted" },
+	{ "Content-Type: text/plain\n"
+	  "\n"
+	  "whitespace and more",
+	  10,
+	  "whitespace" },
+	{ "Content-Type: text/plain\n"
+	  "\n"
+	  "whitespace and more",
+	  11,
+	  "whitespace" },
+	{ "Content-Type: text/plain; charset=utf-8\n"
+	  "\n"
+	  "Invalid utf8 \x80\xff\n",
+	  100,
+	  "Invalid utf8 "UNICODE_REPLACEMENT_CHAR_UTF8 },
+	{ "Content-Type: text/plain; charset=utf-8\n"
+	  "\n"
+	  "Incomplete utf8 \xC3",
+	  100,
+	  "Incomplete utf8" },
+        { "Content-Transfer-Encoding: quoted-printable\n"
+          "Content-Type: text/html;\n"
+          "      charset=utf-8\n"
+          "\n"
+          "<html><head><meta http-equiv=3D\"Content-Type\" content=3D\"text/html =\n"
+          "charset=3Dutf-8\"></head><body style=3D\"word-wrap: break-word; =\n"
+          "-webkit-nbsp-mode: space; -webkit-line-break: after-white-space;\" =\n"
+          "class=3D\"\"><div><blockquote>quoted text is included</blockquote>\n"
+          "</div><br =class=3D\"\"></body></html>=\n",
+          100,
+          ">quoted text is included" },
 };
 
 static void test_message_snippet(void)
@@ -76,7 +133,12 @@ static void test_message_snippet(void)
 	test_begin("message snippet");
 	for (i = 0; i < N_ELEMENTS(tests); i++) {
 		str_truncate(str, 0);
-		input = i_stream_create_from_data(tests[i].input, strlen(tests[i].input));
+		input = test_istream_create(tests[i].input);
+		/* Limit the input max buffer size so the parsing uses multiple
+		   blocks. 45 = large enough to be able to read the Content-*
+		   headers. */
+		test_istream_set_max_buffer_size(input,
+			I_MIN(45, strlen(tests[i].input)));
 		test_assert_idx(message_snippet_generate(input, tests[i].max_snippet_chars, str) == 0, i);
 		test_assert_idx(strcmp(tests[i].output, str_c(str)) == 0, i);
 		i_stream_destroy(&input);

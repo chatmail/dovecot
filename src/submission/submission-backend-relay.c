@@ -488,7 +488,8 @@ relay_cmd_rcpt_callback(const struct smtp_reply *relay_reply,
 {
 	struct smtp_server_cmd_ctx *cmd = rcpt_cmd->cmd;
 	struct submission_backend_relay *backend = rcpt_cmd->backend;
-	struct submission_recipient *rcpt = rcpt_cmd->rcpt;
+	struct submission_recipient *srcpt = rcpt_cmd->rcpt;
+	struct smtp_server_recipient *rcpt = srcpt->rcpt;
 	struct smtp_client_transaction_rcpt *relay_rcpt = rcpt_cmd->relay_rcpt;
 	struct smtp_reply reply;
 
@@ -506,11 +507,11 @@ relay_cmd_rcpt_callback(const struct smtp_reply *relay_reply,
 			reply.enhanced_code = SMTP_REPLY_ENH_CODE(2, 1, 5);
 
 		i_assert(relay_rcpt != NULL);
-		rcpt->backend_context = relay_rcpt;
+		srcpt->backend_context = relay_rcpt;
 	}
 
 	/* forward reply */
-	smtp_server_reply_forward(cmd, &reply);
+	smtp_server_recipient_reply_forward(rcpt, &reply);
 }
 
 static int
@@ -650,7 +651,7 @@ relay_cmd_data_rcpt_callback(const struct smtp_reply *relay_reply,
 		       str_sanitize(smtp_reply_log(&reply), 128));
 	}
 
-	smtp_server_reply_index_forward(cmd, rcpt->index, &reply);
+	smtp_server_recipient_reply_forward(rcpt, &reply);
 }
 
 static void
@@ -1032,16 +1033,21 @@ submission_backend_relay_create(
 	smtp_set.username = set->user;
 	smtp_set.master_user = set->master_user;
 	smtp_set.password = set->password;
+	smtp_set.sasl_mech = set->sasl_mech;
 	smtp_set.connect_timeout_msecs = set->connect_timeout_msecs;
 	smtp_set.command_timeout_msecs = set->command_timeout_msecs;
 
-	if (set->path == NULL) {
+	if (set->path != NULL) {
+		backend->conn = smtp_client_connection_create_unix(
+			smtp_client, set->protocol, set->path, &smtp_set);
+	} else if (set->ip.family == 0) {
 		backend->conn = smtp_client_connection_create(
 			smtp_client, set->protocol, set->host, set->port,
 			set->ssl_mode, &smtp_set);
 	} else {
-		backend->conn = smtp_client_connection_create_unix(
-			smtp_client, set->protocol, set->path, &smtp_set);
+		backend->conn = smtp_client_connection_create_ip(
+			smtp_client, set->protocol, &set->ip, set->port,
+			set->host, set->ssl_mode, &smtp_set);
 	}
 
 	return backend;

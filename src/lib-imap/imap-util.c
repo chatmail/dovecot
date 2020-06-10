@@ -83,11 +83,13 @@ void imap_write_arg(string_t *dest, const struct imap_arg *arg)
 	case IMAP_ARG_ATOM:
 		str_append(dest, imap_arg_as_astring(arg));
 		break;
-	case IMAP_ARG_STRING:
+	case IMAP_ARG_STRING: {
+		const char *strarg = imap_arg_as_astring(arg);
 		str_append_c(dest, '"');
-		str_append(dest, str_escape(imap_arg_as_astring(arg)));
+		str_append_escaped(dest, strarg, strlen(strarg));
 		str_append_c(dest, '"');
 		break;
+	}
 	case IMAP_ARG_LITERAL: {
 		const char *strarg = imap_arg_as_astring(arg);
 		str_printfa(dest, "{%"PRIuSIZE_T"}\r\n",
@@ -102,9 +104,8 @@ void imap_write_arg(string_t *dest, const struct imap_arg *arg)
 		break;
 	case IMAP_ARG_LITERAL_SIZE:
 	case IMAP_ARG_LITERAL_SIZE_NONSYNC:
-		str_printfa(dest, "{%"PRIuUOFF_T"}\r\n",
+		str_printfa(dest, "<%"PRIuUOFF_T" byte literal>",
 			    imap_arg_as_literal_size(arg));
-		str_append(dest, "<too large>");
 		break;
 	case IMAP_ARG_EOL:
 		i_unreached();

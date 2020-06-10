@@ -138,6 +138,15 @@ int client_default_cmd_mail(struct client *client,
 			    struct smtp_server_cmd_ctx *cmd,
 			    struct smtp_server_cmd_mail *data)
 {
+	if (client->user->anonymous && !client->state.anonymous_allowed) {
+		/* NOTE: may need to allow anonymous BURL access in the future,
+		   but while that is not supported, deny all anonymous access
+		   explicitly. */
+		smtp_server_reply(cmd, 554, "5.7.1",
+				  "Access denied (anonymous user)");
+		return -1;
+	}
+
 	return submission_backend_cmd_mail(client->state.backend, cmd, data);
 }
 
@@ -160,6 +169,16 @@ int client_default_cmd_rcpt(struct client *client ATTR_UNUSED,
 			    struct smtp_server_cmd_ctx *cmd,
 			    struct submission_recipient *srcpt)
 {
+	if (client->user->anonymous && !srcpt->anonymous_allowed) {
+		/* NOTE: may need to allow anonymous BURL access in the future,
+		   but while that is not supported, deny all anonymous access
+		   explicitly. */
+		smtp_server_recipient_reply(
+			srcpt->rcpt, 554, "5.7.1",
+			"Access denied (anonymous user)");
+		return -1;
+	}
+
 	return submission_backend_cmd_rcpt(srcpt->backend, cmd, srcpt);
 }
 
@@ -223,7 +242,8 @@ int cmd_data_continue(void *conn_ctx, struct smtp_server_cmd_ctx *cmd,
 
 	/* prepend our own headers */
 	added_headers = t_str_new(200);
-	smtp_server_transaction_write_trace_record(added_headers, trans);
+	smtp_server_transaction_write_trace_record(
+		added_headers, trans, SMTP_SERVER_TRACE_RCPT_TO_ADDRESS_FINAL);
 
 	i_stream_seek(data_input, 0);
 	inputs[0] = i_stream_create_copy_from_data(
@@ -252,6 +272,12 @@ int cmd_data_begin(void *conn_ctx,
 	struct client *client = conn_ctx;
 	struct istream *inputs[2];
 	string_t *path;
+
+	if (client->user->anonymous && !client->state.anonymous_allowed) {
+		smtp_server_reply(cmd, 554, "5.7.1",
+				  "Access denied (anonymous user)");
+		return -1;
+	}
 
 	inputs[0] = data_input;
 	inputs[1] = NULL;
@@ -469,6 +495,12 @@ void cmd_burl(struct smtp_server_cmd_ctx *cmd, const char *params)
 	if (ret < 0 || !smtp_server_connection_data_check_state(cmd))
 		return;
 
+	if (client->user->anonymous) {
+		smtp_server_reply(cmd, 554, "5.7.1",
+				  "Access denied (anonymous user)");
+		return;
+	}
+
 	burl_cmd = p_new(cmd->pool, struct cmd_burl_context, 1);
 	burl_cmd->client = client;
 	burl_cmd->cmd = cmd;
@@ -496,6 +528,12 @@ int cmd_vrfy(void *conn_ctx, struct smtp_server_cmd_ctx *cmd,
 	     const char *param)
 {
 	struct client *client = conn_ctx;
+
+	if (client->user->anonymous) {
+		smtp_server_reply(cmd, 550, "5.7.1",
+				  "Access denied (anonymous user)");
+		return -1;
+	}
 
 	return client->v.cmd_vrfy(client, cmd, param);
 }

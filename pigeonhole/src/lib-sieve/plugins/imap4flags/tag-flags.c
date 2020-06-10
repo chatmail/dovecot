@@ -67,20 +67,19 @@ static int seff_flags_merge
 static void seff_flags_print
 	(const struct sieve_side_effect *seffect, const struct sieve_action *action,
 		const struct sieve_result_print_env *rpenv, bool *keep);
-static int seff_flags_pre_execute
-	(const struct sieve_side_effect *seffect, const struct sieve_action *action,
-		const struct sieve_action_exec_env *aenv, void **context, void *tr_context);
+static int
+seff_flags_pre_execute(const struct sieve_side_effect *seffect,
+		       const struct sieve_action_exec_env *aenv,
+		       void **context, void *tr_context);
 
 const struct sieve_side_effect_def flags_side_effect = {
 	SIEVE_OBJECT("flags", &flags_side_effect_operand, 0),
-	&act_store,
-
-	seff_flags_dump_context,
-	seff_flags_read_context,
-	seff_flags_merge,
-	seff_flags_print,
-	seff_flags_pre_execute,
-	NULL, NULL, NULL
+	.to_action = &act_store,
+	.dump_context = seff_flags_dump_context,
+	.read_context = seff_flags_read_context,
+	.merge = seff_flags_merge,
+	.print = seff_flags_print,
+	.pre_execute = seff_flags_pre_execute
 };
 
 /*
@@ -379,10 +378,10 @@ static void seff_flags_print
 
 /* Result execution */
 
-static int seff_flags_pre_execute
-(const struct sieve_side_effect *seffect,
-	const struct sieve_action *action ATTR_UNUSED,
-	const struct sieve_action_exec_env *aenv, void **context, void *tr_context)
+static int
+seff_flags_pre_execute(const struct sieve_side_effect *seffect,
+		       const struct sieve_action_exec_env *aenv,
+		       void **context, void *tr_context)
 {
 	struct seff_flags_context *ctx = (struct seff_flags_context *) *context;
 	const char *const *keywords;

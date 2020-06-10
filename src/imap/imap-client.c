@@ -68,7 +68,7 @@ static void client_init_urlauth(struct client *client)
 	config.url_port = client->set->imap_urlauth_port;
 	config.socket_path = t_strconcat(client->user->set->base_dir,
 					 "/"IMAP_URLAUTH_SOCKET_NAME, NULL);
-	config.session_id = client->session_id;
+	config.session_id = client->user->session_id;
 	config.access_user = client->user->username;
 	config.access_service = "imap";
 	config.access_anonymous = client->user->anonymous;
@@ -107,7 +107,7 @@ static bool user_has_special_use_mailboxes(struct mail_user *user)
 	return FALSE;
 }
 
-struct client *client_create(int fd_in, int fd_out, const char *session_id,
+struct client *client_create(int fd_in, int fd_out,
 			     struct event *event, struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
 			     const struct imap_settings *set,
@@ -131,7 +131,6 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 	client->set = set;
 	client->smtp_set = smtp_set;
 	client->service_user = service_user;
-	client->session_id = p_strdup(pool, session_id);
 	client->fd_in = fd_in;
 	client->fd_out = fd_out;
 	client->input = i_stream_create_fd(fd_in,
@@ -199,10 +198,8 @@ struct client *client_create(int fd_in, int fd_out, const char *session_id,
 		client_add_capability(client, "URLAUTH");
 		client_add_capability(client, "URLAUTH=BINARY");
 	}
-	if (set->imap_metadata && *mail_set->mail_attribute_dict != '\0') {
-		client->imap_metadata_enabled = TRUE;
+	if (set->imap_metadata && *mail_set->mail_attribute_dict != '\0')
 		client_add_capability(client, "METADATA");
-	}
 	if (user_has_special_use_mailboxes(user)) {
 		/* Advertise SPECIAL-USE only if there are actually some
 		   SPECIAL-USE flags in mailbox configuration. */
@@ -281,7 +278,7 @@ const char *client_stats(struct client *client)
 	const struct var_expand_table logout_tab[] = {
 		{ 'i', dec2str(i_stream_get_absolute_offset(client->input)), "input" },
 		{ 'o', dec2str(client->output->offset), "output" },
-		{ '\0', client->session_id, "session" },
+		{ '\0', client->user->session_id, "session" },
 		{ '\0', dec2str(client->fetch_hdr_count), "fetch_hdr_count" },
 		{ '\0', dec2str(client->fetch_hdr_bytes), "fetch_hdr_bytes" },
 		{ '\0', dec2str(client->fetch_body_count), "fetch_body_count" },
@@ -480,7 +477,6 @@ static void client_default_destroy(struct client *client, const char *reason)
 		imap_parser_unref(&client->free_parser);
 	io_remove(&client->io);
 	timeout_remove(&client->to_idle_output);
-	timeout_remove(&client->to_delayed_input);
 	timeout_remove(&client->to_idle);
 
 	/* i/ostreams are already closed at this stage, so fd can be closed */
@@ -500,7 +496,7 @@ static void client_default_destroy(struct client *client, const char *reason)
 		client->autoexpunged_count = mail_user_autoexpunge(client->user);
 		client_log_disconnect(client, reason);
 	}
-	mail_user_unref(&client->user);
+	mail_user_deinit(&client->user);
 
 	/* free the i/ostreams after mail_user_unref(), which could trigger
 	   mail_storage_callbacks notifications that write to the ostream. */
@@ -720,7 +716,6 @@ void client_send_internal_error(struct client_command_context *cmd)
 bool client_read_args(struct client_command_context *cmd, unsigned int count,
 		      unsigned int flags, const struct imap_arg **args_r)
 {
-	string_t *str;
 	int ret;
 
 	i_assert(count <= INT_MAX);
@@ -731,14 +726,7 @@ bool client_read_args(struct client_command_context *cmd, unsigned int count,
 		i_assert(cmd->client->input_lock == NULL ||
 			 cmd->client->input_lock == cmd);
 
-		str = t_str_new(256);
-		imap_write_args(str, *args_r);
-		cmd->args = p_strdup(cmd->pool, str_c(str));
-
-		str_truncate(str, 0);
-		imap_write_args_for_human(str, *args_r);
-		cmd->human_args = p_strdup(cmd->pool, str_c(str));
-
+		client_args_finished(cmd, *args_r);
 		cmd->client->input_lock = NULL;
 		return TRUE;
 	} else if (ret == -2) {
@@ -787,6 +775,29 @@ bool client_read_string_args(struct client_command_context *cmd,
 	va_end(va);
 
 	return i == count;
+}
+
+void client_args_finished(struct client_command_context *cmd,
+			  const struct imap_arg *args)
+{
+	string_t *str = t_str_new(256);
+
+	if (cmd->args != NULL && cmd->args[0] != '\0') {
+		str_append(str, cmd->args);
+		str_append_c(str, ' ');
+	}
+	imap_write_args(str, args);
+	cmd->args = p_strdup(cmd->pool, str_c(str));
+	event_add_str(cmd->event, "cmd_args", cmd->args);
+
+	str_truncate(str, 0);
+	if (cmd->human_args != NULL && cmd->human_args[0] != '\0') {
+		str_append(str, cmd->human_args);
+		str_append_c(str, ' ');
+	}
+	imap_write_args_for_human(str, args);
+	cmd->human_args = p_strdup(cmd->pool, str_c(str));
+	event_add_str(cmd->event, "cmd_human_args", cmd->human_args);
 }
 
 static struct client_command_context *
@@ -896,12 +907,8 @@ struct client_command_context *client_command_alloc(struct client *client)
 
 void client_command_init_finished(struct client_command_context *cmd)
 {
-	event_add_str(cmd->event, "tag", cmd->tag);
-	event_add_str(cmd->event, "name", t_str_ucase(cmd->name));
-	if (cmd->args != NULL)
-		event_add_str(cmd->event, "args", cmd->args);
-	if (cmd->human_args != NULL)
-		event_add_str(cmd->event, "human_args", cmd->human_args);
+	event_add_str(cmd->event, "cmd_tag", cmd->tag);
+	event_add_str(cmd->event, "cmd_name", t_str_ucase(cmd->name));
 }
 
 static struct client_command_context *
@@ -1006,10 +1013,7 @@ void client_command_free(struct client_command_context **_cmd)
 	if (state == CLIENT_COMMAND_STATE_WAIT_EXTERNAL &&
 	    !client->disconnected) {
 		client_add_missing_io(client);
-		if (client->to_delayed_input == NULL) {
-			client->to_delayed_input =
-				timeout_add(0, client_input, client);
-		}
+		io_set_pending(client->io);
 	}
 }
 
@@ -1321,8 +1325,6 @@ void client_input(struct client *client)
 
 	client->last_input = ioloop_time;
 	timeout_reset(client->to_idle);
-
-	timeout_remove(&client->to_delayed_input);
 
 	bytes = i_stream_read(client->input);
 	if (bytes == -1) {

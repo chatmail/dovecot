@@ -792,15 +792,12 @@ static void json_append_escaped_char(string_t *dest, unsigned char src)
 
 void json_append_escaped_ucs4(string_t *dest, unichar_t chr)
 {
-	unichar_t high,low;
 	if (chr < 0x80)
 		json_append_escaped_char(dest, (unsigned char)chr);
-	else if (chr >= UTF16_SURROGATE_BASE) {
-		uni_split_surrogate(chr, &high, &low);
-		str_printfa(dest, "\\u%04x\\u%04x", high, low);
-	} else {
+	else if (chr == 0x2028 || chr == 0x2029)
 		str_printfa(dest, "\\u%04x", chr);
-	}
+	else
+		uni_ucs4_to_utf8_c(chr, dest);
 }
 
 void ostream_escaped_json_format(string_t *dest, unsigned char src)

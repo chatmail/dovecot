@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2018 Dovecot authors, see the included COPYING file */
+/* Copyright (c) 2010-2019 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
 #include "array.h"
@@ -21,6 +21,7 @@
 
 static ARRAY_TYPE(const_string) exec_args;
 static const char **accepted_envs;
+static bool passthrough = FALSE;
 
 static void script_verify_version(const char *line)
 {
@@ -54,7 +55,7 @@ exec_child(struct master_service_connection *conn,
 	if (close(conn->fd) < 0)
 		i_error("close(conn->fd) failed: %m");
 
-	for (; *args != NULL; args++) {
+	for (; args != NULL && *args != NULL; args++) {
 		const char *arg = t_str_tabunescape(*args);
 		array_push_back(&exec_args, &arg);
 	}
@@ -70,19 +71,15 @@ exec_child(struct master_service_connection *conn,
 	execvp_const(args[0], args);
 }
 
-static bool client_exec_script(struct master_service_connection *conn)
+static bool
+parse_input(ARRAY_TYPE(const_string)* envs, const char *const **args_r,
+	struct master_service_connection* conn, ssize_t *output_r)
 {
-	ARRAY_TYPE(const_string) envs;
-	const char *const *args;
 	string_t *input;
 	void *buf;
 	size_t prev_size, scanpos;
 	bool header_complete = FALSE, noreply = FALSE;
-	ssize_t ret;
-	int status;
-	pid_t pid;
 
-	net_set_nonblock(conn->fd, FALSE);
 	input = t_buffer_create(IO_BLOCK_SIZE);
 
 	/* Input contains:
@@ -110,13 +107,13 @@ static bool client_exec_script(struct master_service_connection *conn)
 		buf = buffer_append_space_unsafe(input, IO_BLOCK_SIZE);
 
 		/* peek in socket input buffer */
-		ret = recv(conn->fd, buf, IO_BLOCK_SIZE, MSG_PEEK);
-		if (ret <= 0) {
+		*output_r = recv(conn->fd, buf, IO_BLOCK_SIZE, MSG_PEEK);
+		if (*output_r <= 0) {
 			buffer_set_used_size(input, prev_size);
 			if (strchr(str_c(input), '\n') != NULL)
 				script_verify_version(t_strcut(str_c(input), '\n'));
 
-			if (ret < 0)
+			if (*output_r < 0)
 				i_fatal("recv(MSG_PEEK) failed: %m");
 
 			i_fatal("recv(MSG_PEEK) failed: disconnected");
@@ -124,7 +121,7 @@ static bool client_exec_script(struct master_service_connection *conn)
 
 		/* scan for final \n\n */
 		pos = CONST_PTR_OFFSET(input->data, scanpos);
-		end = CONST_PTR_OFFSET(input->data, prev_size + ret);
+		end = CONST_PTR_OFFSET(input->data, prev_size + *output_r);
 		for (; pos < end; pos++) {
 			if (pos[-1] == '\n' && pos[0] == '\n') {
 				header_complete = TRUE;
@@ -135,11 +132,11 @@ static bool client_exec_script(struct master_service_connection *conn)
 		scanpos = pos - (const unsigned char *)input->data;
 
 		/* read data for real (up to and including \n\n) */
-		ret = recv(conn->fd, buf, scanpos-prev_size, 0);
-		if (prev_size+ret != scanpos) {
-			if (ret < 0)
+		*output_r = recv(conn->fd, buf, scanpos-prev_size, 0);
+		if (prev_size+(*output_r) != scanpos) {
+			if (*output_r < 0)
 				i_fatal("recv() failed: %m");
-			if (ret == 0)
+			if (*output_r == 0)
 				i_fatal("recv() failed: disconnected");
 			i_fatal("recv() failed: size of definitive recv() differs from peek");
 		}
@@ -150,43 +147,60 @@ static bool client_exec_script(struct master_service_connection *conn)
 	/* drop the last two LFs */
 	buffer_set_used_size(input, scanpos-2);
 
-	args = t_strsplit(str_c(input), "\n");
-	script_verify_version(*args); args++;
-	t_array_init(&envs, 16);
-	if (*args != NULL) {
+	*args_r = t_strsplit(str_c(input), "\n");
+	script_verify_version(**args_r); (*args_r)++;
+	if (**args_r != NULL) {
 		const char *p;
 
-		if (str_begins(*args, "alarm=")) {
+		if (str_begins(**args_r, "alarm=")) {
 			unsigned int seconds;
-			if (str_to_uint(*args + 6, &seconds) < 0)
+			if (str_to_uint((**args_r) + 6, &seconds) < 0)
 				i_fatal("invalid alarm option");
 			alarm(seconds);
-			args++;
+			(*args_r)++;
 		}
-		while (str_begins(*args, "env_")) {
+		while (str_begins(**args_r, "env_")) {
 			const char *envname, *env;
 
-			env = t_str_tabunescape(*args+4);
+			env = t_str_tabunescape((**args_r)+4);
 			p = strchr(env, '=');
 			if (p == NULL)
 				i_fatal("invalid environment variable");
-			envname = t_strdup_until(*args+4, p);
+			envname = t_strdup_until((**args_r)+4, p);
 
 			if (str_array_find(accepted_envs, envname))
-				array_push_back(&envs, &env);
-			args++;
+				array_push_back(envs, &env);
+			(*args_r)++;
 		}
-		if (strcmp(*args, "noreply") == 0) {
+		if (strcmp(**args_r, "noreply") == 0) {
 			noreply = TRUE;
 		}
-		if (**args == '\0')
+		if (***args_r == '\0')
 			i_fatal("empty options");
-		args++;
+		(*args_r)++;
 	}
-	array_append_zero(&envs);
+	array_append_zero(envs);
 
-	if (noreply) {
-		/* no need to fork and check exit status */
+	return noreply;
+}
+
+static bool client_exec_script(struct master_service_connection *conn)
+{
+	ARRAY_TYPE(const_string) envs;
+	const char *const *args = NULL;
+	ssize_t ret;
+	int status;
+	pid_t pid;
+
+	t_array_init(&envs, 16);
+
+	net_set_nonblock(conn->fd, FALSE);
+
+	if (!passthrough && parse_input(&envs, &args, conn, &ret)) {
+		/* parse_input returns TRUE if noreply is set in the input.
+		 * In that case there is no need to fork and check exit
+		 * status. Parsing the input must only happen if passthrough
+		 * is not enabled. */
 		exec_child(conn, args, array_front(&envs));
 		i_unreached();
 	}
@@ -198,7 +212,10 @@ static bool client_exec_script(struct master_service_connection *conn)
 
 	if (pid == 0) {
 		/* child */
-		exec_child(conn, args, array_front(&envs));
+		if (!passthrough)
+			exec_child(conn, args, array_front(&envs));
+		else
+			exec_child(conn, NULL, NULL);
 		i_unreached();
 	}
 
@@ -229,12 +246,16 @@ static bool client_exec_script(struct master_service_connection *conn)
 
 static void client_connected(struct master_service_connection *conn)
 {
-	char response[2];
+	if (!passthrough) {
+		char response[2];
 
-	response[0] = client_exec_script(conn) ? '+' : '-';
-	response[1] = '\n';
-	if (write_full(conn->fd, &response, 2) < 0)
-		i_error("write(response) failed: %m");
+		response[0] = client_exec_script(conn) ? '+' : '-';
+		response[1] = '\n';
+		if (write_full(conn->fd, &response, 2) < 0)
+			i_error("write(response) failed: %m");
+	} else {
+		client_exec_script(conn);
+	}
 }
 
 int main(int argc, char *argv[])
@@ -247,7 +268,7 @@ int main(int argc, char *argv[])
 	int c, i;
 
 	master_service = master_service_init("script", service_flags,
-					     &argc, &argv, "+e:");
+					     &argc, &argv, "+e:p");
 
 	t_array_init(&aenvs, 16);
 	while ((c = master_getopt(master_service)) > 0) {
@@ -258,6 +279,9 @@ int main(int argc, char *argv[])
 				array_push_back(&aenvs, envs);
 				envs++;
 			}
+			break;
+		case 'p':
+			passthrough = TRUE;
 			break;
 		default:
 			return FATAL_DEFAULT;
