@@ -16,6 +16,8 @@ struct client_state {
 	struct submission_backend *backend;
 	struct istream *data_input;
 	uoff_t data_size;
+
+	bool anonymous_allowed:1;
 };
 
 struct client_extra_capability {
@@ -78,7 +80,6 @@ struct client {
 	pool_t pool;
 
 	struct submission_client_vfuncs v;
-	char *session_id;
 
 	const struct setting_parser_info *user_set_info;
 	const struct submission_settings *set;
@@ -117,6 +118,7 @@ struct client {
 	bool destroyed:1;
 	bool anvil_sent:1;
 	bool backend_capabilities_configured:1;
+	bool anonymous_allowed:1;
 };
 
 struct submission_module_register {
@@ -133,7 +135,7 @@ extern struct client *submission_clients;
 extern unsigned int submission_client_count;
 
 struct client *client_create(int fd_in, int fd_out,
-			     const char *session_id, struct mail_user *user,
+			     struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
 			     const struct submission_settings *set,
 			     const char *helo,

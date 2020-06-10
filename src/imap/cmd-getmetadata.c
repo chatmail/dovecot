@@ -28,10 +28,11 @@ struct imap_getmetadata_context {
 	string_t *iter_entry_prefix;
 
 	string_t *delayed_errors;
+	string_t *last_error_str;
+	enum mail_error last_error;
 
 	unsigned int entry_idx;
 	bool first_entry_sent;
-	bool failed;
 };
 
 static bool
@@ -146,25 +147,56 @@ cmd_getmetadata_send_nil_reply(struct imap_getmetadata_context *ctx,
 	o_stream_nsend(ctx->cmd->client->output, str_data(str), str_len(str));
 }
 
+static void
+cmd_getmetadata_handle_error_str(struct imap_getmetadata_context *ctx,
+				 const char *error_string,
+				 enum mail_error error)
+{
+	if (str_len(ctx->last_error_str) > 0) {
+		str_append(ctx->delayed_errors, "* NO ");
+		str_append_str(ctx->delayed_errors, ctx->last_error_str);
+		str_append(ctx->delayed_errors, "\r\n");
+		str_truncate(ctx->last_error_str, 0);
+	}
+	str_append(ctx->last_error_str, error_string);
+	ctx->last_error = error;
+}
+
+static bool
+cmd_getmetadata_handle_error(struct imap_getmetadata_context *ctx,
+			     bool entry_error)
+{
+	const char *error_string;
+	enum mail_error error;
+
+	error_string = imap_metadata_transaction_get_last_error(ctx->trans, &error);
+	if ((error == MAIL_ERROR_NOTFOUND || error == MAIL_ERROR_PERM) &&
+	    entry_error) {
+		/* don't treat this as an error */
+		return FALSE;
+	}
+	if (error == MAIL_ERROR_NOTPOSSIBLE && ctx->depth > 0) {
+		/* Using DEPTH to iterate children with imap_metadata=no.
+		   Don't return an error, since some of the entries could be
+		   returned successfully. */
+		return FALSE;
+	}
+
+	cmd_getmetadata_handle_error_str(ctx, error_string, error);
+	return TRUE;
+}
+
 static void cmd_getmetadata_send_entry(struct imap_getmetadata_context *ctx,
 				       const char *entry, bool require_reply)
 {
 	struct client *client = ctx->cmd->client;
 	struct mail_attribute_value value;
-	const char *error_string;
-	enum mail_error error;
 	uoff_t value_len;
 	string_t *str;
 
 	if (imap_metadata_get_stream(ctx->trans, entry, &value) < 0) {
-		error_string = imap_metadata_transaction_get_last_error(
-			ctx->trans, &error);
-		if (error != MAIL_ERROR_NOTFOUND && error != MAIL_ERROR_PERM) {
-			str_printfa(ctx->delayed_errors, "* NO %s\r\n",
-				    error_string);
-			ctx->failed = TRUE;
+		if (cmd_getmetadata_handle_error(ctx, TRUE))
 			return;
-		}
 	}
 
 	if (value.value != NULL)
@@ -175,7 +207,8 @@ static void cmd_getmetadata_send_entry(struct imap_getmetadata_context *ctx,
 				i_stream_get_name(value.value_stream),
 				i_stream_get_error(value.value_stream));
 			i_stream_unref(&value.value_stream);
-			ctx->failed = TRUE;
+			cmd_getmetadata_handle_error_str(ctx,
+				MAIL_ERRSTR_CRITICAL_MSG, MAIL_ERROR_TEMP);
 			return;
 		}
 	} else {
@@ -260,18 +293,16 @@ cmd_getmetadata_send_entry_tree(struct imap_getmetadata_context *ctx,
 			if (subentry == NULL) {
 				/* iteration finished, get to the next entry */
 				if (imap_metadata_iter_deinit(&ctx->iter) < 0) {
-					enum mail_error error;
-
-					str_printfa(ctx->delayed_errors, "* NO %s\r\n",
-						imap_metadata_transaction_get_last_error(ctx->trans, &error));
-					ctx->failed = TRUE;
+					if (!cmd_getmetadata_handle_error(ctx, FALSE))
+						i_unreached();
 				}
 				return -1;
 			}
 		} while (ctx->depth == 1 && strchr(subentry, '/') != NULL);
 		entry = t_strconcat(str_c(ctx->iter_entry_prefix), subentry, NULL);
 	}
-	cmd_getmetadata_send_entry(ctx, entry, ctx->iter == NULL);
+	/* send NIL only on depth 0 query */
+	cmd_getmetadata_send_entry(ctx, entry, ctx->depth == 0);
 
 	if (ctx->cur_stream != NULL) {
 		if (!cmd_getmetadata_stream_continue(ctx))
@@ -318,8 +349,12 @@ static void cmd_getmetadata_deinit(struct imap_getmetadata_context *ctx)
 	if (ctx->list_iter != NULL &&
 	    mailbox_list_iter_deinit(&ctx->list_iter) < 0)
 		client_send_list_error(cmd, cmd->client->user->namespaces->list);
-	else if (ctx->failed) {
-		client_send_tagline(cmd, "NO Getmetadata failed to send some entries");
+	else if (ctx->last_error != 0) {
+		i_assert(str_len(ctx->last_error_str) > 0);
+		const char *tagline =
+			imap_get_error_string(cmd, str_c(ctx->last_error_str),
+					      ctx->last_error);
+		client_send_tagline(cmd, tagline);
 	} else if (ctx->largest_seen_size != 0) {
 		client_send_tagline(cmd, t_strdup_printf(
 			"OK [METADATA LONGENTRIES %"PRIuUOFF_T"] "
@@ -381,6 +416,8 @@ cmd_getmetadata_start(struct imap_getmetadata_context *ctx)
 
 	if (ctx->depth > 0)
 		ctx->iter_entry_prefix = str_new(cmd->pool, 128);
+	imap_metadata_transaction_validated_only(ctx->trans,
+		!cmd->client->set->imap_metadata);
 
 	if (!cmd_getmetadata_continue(cmd)) {
 		cmd->state = CLIENT_COMMAND_STATE_WAIT_OUTPUT;
@@ -402,6 +439,7 @@ cmd_getmetadata_try_mailbox(struct imap_getmetadata_context *ctx,
 			    struct mail_namespace *ns, const char *mailbox)
 {
 	ctx->box = mailbox_alloc(ns->list, mailbox, MAILBOX_FLAG_READONLY);
+	event_add_str(ctx->cmd->event, "mailbox", mailbox_get_vname(ctx->box));
 	mailbox_set_reason(ctx->box, "GETMETADATA");
 	if (mailbox_open(ctx->box) < 0)
 		return -1;
@@ -464,16 +502,12 @@ bool cmd_getmetadata(struct client_command_context *cmd)
 	if (!client_read_args(cmd, 0, 0, &args))
 		return FALSE;
 
-	if (!cmd->client->imap_metadata_enabled) {
-		client_send_command_error(cmd, "METADATA disabled.");
-		return TRUE;
-	}
-
 	ctx = p_new(cmd->pool, struct imap_getmetadata_context, 1);
 	ctx->cmd = cmd;
 	ctx->maxsize = (uint32_t)-1;
 	ctx->cmd->context = ctx;
 	ctx->delayed_errors = str_new(cmd->pool, 128);
+	ctx->last_error_str = str_new(cmd->pool, 128);
 
 	if (imap_arg_get_list(&args[0], &options)) {
 		if (!cmd_getmetadata_parse_options(ctx, options))

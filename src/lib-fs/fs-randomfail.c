@@ -159,24 +159,25 @@ static int fs_randomfail_parse_params(struct randomfail_fs *fs,
 
 static int
 fs_randomfail_init(struct fs *_fs, const char *args,
-		   const struct fs_settings *set)
+		   const struct fs_settings *set, const char **error_r)
 {
 	struct randomfail_fs *fs = (struct randomfail_fs *)_fs;
 	const char *p, *parent_name, *parent_args, *error;
 
 	p = strchr(args, ':');
 	if (p == NULL) {
-		fs_set_error(_fs, "Randomfail parameters missing");
+		*error_r = "Randomfail parameters missing";
 		return -1;
 	}
 	if (fs_randomfail_parse_params(fs, t_strdup_until(args, p++), &error) < 0) {
-		fs_set_error(_fs, "Invalid randomfail parameters: %s", error);
+		*error_r = t_strdup_printf(
+			"Invalid randomfail parameters: %s", error);
 		return -1;
 	}
 	args = p;
 
 	if (*args == '\0') {
-		fs_set_error(_fs, "Parent filesystem not given as parameter");
+		*error_r = "Parent filesystem not given as parameter";
 		return -1;
 	}
 
@@ -188,10 +189,8 @@ fs_randomfail_init(struct fs *_fs, const char *args,
 		parent_name = t_strdup_until(args, parent_args);
 		parent_args++;
 	}
-	if (fs_init(parent_name, parent_args, set, &_fs->parent, &error) < 0) {
-		fs_set_error(_fs, "%s", error);
+	if (fs_init(parent_name, parent_args, set, &_fs->parent, error_r) < 0)
 		return -1;
-	}
 	return 0;
 }
 
@@ -228,20 +227,20 @@ static void fs_randomfail_file_deinit(struct fs_file *_file)
 {
 	struct randomfail_fs_file *file = (struct randomfail_fs_file *)_file;
 
-	fs_file_deinit(&file->file.parent);
+	fs_file_free(_file);
 	i_free(file->file.path);
 	i_free(file);
 }
 
-static bool fs_random_fail(struct fs *_fs, int divider, enum fs_op op)
+static bool fs_random_fail(struct fs *_fs, struct event *event,
+			   int divider, enum fs_op op)
 {
 	struct randomfail_fs *fs = (struct randomfail_fs *)_fs;
 
 	if (fs->op_probability[op] == 0)
 		return FALSE;
 	if ((unsigned int)i_rand_limit(100 * divider) <= fs->op_probability[op]) {
-		errno = EIO;
-		fs_set_error(_fs, RANDOMFAIL_ERROR);
+		fs_set_error(event, EIO, RANDOMFAIL_ERROR);
 		return TRUE;
 	}
 	return FALSE;
@@ -251,7 +250,7 @@ static bool
 fs_file_random_fail_begin(struct randomfail_fs_file *file, enum fs_op op)
 {
 	if (!file->op_pending[op]) {
-		if (fs_random_fail(file->file.fs, 2, op))
+		if (fs_random_fail(file->file.fs, file->file.event, 2, op))
 			return TRUE;
 	}
 	file->op_pending[op] = TRUE;
@@ -263,7 +262,7 @@ fs_file_random_fail_end(struct randomfail_fs_file *file,
 			int ret, enum fs_op op)
 {
 	if (ret == 0 || errno != EAGAIN) {
-		if (fs_random_fail(file->file.fs, 2, op))
+		if (fs_random_fail(file->file.fs, file->file.event, 2, op))
 			return -1;
 		file->op_pending[op] = FALSE;
 	}
@@ -271,11 +270,12 @@ fs_file_random_fail_end(struct randomfail_fs_file *file,
 }
 
 static bool
-fs_random_fail_range(struct fs *_fs, enum fs_op op, uoff_t *offset_r)
+fs_random_fail_range(struct fs *_fs, struct event *event,
+		     enum fs_op op, uoff_t *offset_r)
 {
 	struct randomfail_fs *fs = (struct randomfail_fs *)_fs;
 
-	if (!fs_random_fail(_fs, 1, op))
+	if (!fs_random_fail(_fs, event, 1, op))
 		return FALSE;
 	*offset_r = i_rand_minmax(fs->range_start[op], fs->range_end[op]);
 	return TRUE;
@@ -283,6 +283,7 @@ fs_random_fail_range(struct fs *_fs, enum fs_op op, uoff_t *offset_r)
 
 static int
 fs_randomfail_get_metadata(struct fs_file *_file,
+			   enum fs_get_metadata_flags flags,
 			   const ARRAY_TYPE(fs_metadata) **metadata_r)
 {
 	struct randomfail_fs_file *file = (struct randomfail_fs_file *)_file;
@@ -290,13 +291,13 @@ fs_randomfail_get_metadata(struct fs_file *_file,
 
 	if (fs_file_random_fail_begin(file, FS_OP_METADATA))
 		return -1;
-	ret = fs_get_metadata(_file->parent, metadata_r);
+	ret = fs_get_metadata_full(_file->parent, flags, metadata_r);
 	return fs_file_random_fail_end(file, ret, FS_OP_METADATA);
 }
 
 static bool fs_randomfail_prefetch(struct fs_file *_file, uoff_t length)
 {
-	if (fs_random_fail(_file->fs, 1, FS_OP_PREFETCH))
+	if (fs_random_fail(_file->fs, _file->event, 1, FS_OP_PREFETCH))
 		return TRUE;
 	return fs_prefetch(_file->parent, length);
 }
@@ -321,7 +322,7 @@ fs_randomfail_read_stream(struct fs_file *_file, size_t max_buffer_size)
 	uoff_t offset;
 
 	input = fs_read_stream(_file->parent, max_buffer_size);
-	if (!fs_random_fail_range(_file->fs, FS_OP_READ, &offset))
+	if (!fs_random_fail_range(_file->fs, _file->event, FS_OP_READ, &offset))
 		return input;
 	input2 = i_stream_create_failure_at(input, offset, EIO, RANDOMFAIL_ERROR);
 	i_stream_unref(&input);
@@ -347,7 +348,7 @@ static void fs_randomfail_write_stream(struct fs_file *_file)
 	i_assert(_file->output == NULL);
 
 	file->super_output = fs_write_stream(_file->parent);
-	if (!fs_random_fail_range(_file->fs, FS_OP_WRITE, &offset))
+	if (!fs_random_fail_range(_file->fs, _file->event, FS_OP_WRITE, &offset))
 		_file->output = file->super_output;
 	else {
 		_file->output = o_stream_create_failure_at(file->super_output, offset,
@@ -368,7 +369,7 @@ static int fs_randomfail_write_stream_finish(struct fs_file *_file, bool success
 			fs_write_stream_abort_parent(_file, &file->super_output);
 			return -1;
 		}
-		if (fs_random_fail(_file->fs, 1, FS_OP_WRITE)) {
+		if (fs_random_fail(_file->fs, _file->event, 1, FS_OP_WRITE)) {
 			fs_write_stream_abort_error(_file->parent, &file->super_output, RANDOMFAIL_ERROR);
 			return -1;
 		}
@@ -379,7 +380,7 @@ static int fs_randomfail_write_stream_finish(struct fs_file *_file, bool success
 static int
 fs_randomfail_lock(struct fs_file *_file, unsigned int secs, struct fs_lock **lock_r)
 {
-	if (fs_random_fail(_file->fs, 1, FS_OP_LOCK))
+	if (fs_random_fail(_file->fs, _file->event, 1, FS_OP_LOCK))
 		return -1;
 	return fs_lock(_file->parent, secs, lock_r);
 }
@@ -473,7 +474,7 @@ fs_randomfail_iter_init(struct fs_iter *_iter, const char *path,
 	uoff_t pos;
 
 	iter->super = fs_iter_init_parent(_iter, path, flags);
-	if (fs_random_fail_range(_iter->fs, FS_OP_ITER, &pos))
+	if (fs_random_fail_range(_iter->fs, _iter->event, FS_OP_ITER, &pos))
 		iter->fail_pos = pos + 1;
 }
 
@@ -499,15 +500,15 @@ static const char *fs_randomfail_iter_next(struct fs_iter *_iter)
 static int fs_randomfail_iter_deinit(struct fs_iter *_iter)
 {
 	struct randomfail_fs_iter *iter = (struct randomfail_fs_iter *)_iter;
+	const char *error;
 	int ret;
 
-	ret = fs_iter_deinit(&iter->super);
+	if ((ret = fs_iter_deinit(&iter->super, &error)) < 0)
+		fs_set_error_errno(_iter->event, "%s", error);
 	if (iter->fail_pos == 1) {
-		fs_set_error(_iter->fs, RANDOMFAIL_ERROR);
-		errno = EIO;
+		fs_set_error(_iter->event, EIO, RANDOMFAIL_ERROR);
 		ret = -1;
 	}
-	i_free(iter);
 	return ret;
 }
 

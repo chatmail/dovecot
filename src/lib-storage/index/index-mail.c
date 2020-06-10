@@ -77,12 +77,22 @@ static int index_mail_write_body_snippet(struct index_mail *mail);
 int index_mail_cache_lookup_field(struct index_mail *mail, buffer_t *buf,
 				  unsigned int field_idx)
 {
+	struct mail *_mail = &mail->mail.mail;
 	int ret;
 
 	ret = mail_cache_lookup_field(mail->mail.mail.transaction->cache_view,
 				      buf, mail->data.seq, field_idx);
 	if (ret > 0)
 		mail->mail.mail.transaction->stats.cache_hit_count++;
+
+	/* If the request was lazy mark the field as cache wanted. */
+	if (_mail->lookup_abort == MAIL_LOOKUP_ABORT_NOT_IN_CACHE_START_CACHING &&
+	    mail_cache_field_get_decision(_mail->box->cache, field_idx) ==
+	    MAIL_CACHE_DECISION_NO) {
+		mail_cache_decision_add(_mail->transaction->cache_view,
+					_mail->seq, field_idx);
+	}
+
 	return ret;
 }
 
@@ -929,8 +939,8 @@ static void index_mail_cache_sizes(struct index_mail *mail)
 		size is not cached or
 		cached size differs
 	*/
-	if ((mail_index_map_get_ext_idx(view->map, _mail->box->mail_vsize_ext_id, &idx) ||
-	     mail_index_map_get_ext_idx(view->map, _mail->box->vsize_hdr_ext_id, &idx)) &&
+	if ((mail_index_map_get_ext_idx(view->index->map, _mail->box->mail_vsize_ext_id, &idx) ||
+	     mail_index_map_get_ext_idx(view->index->map, _mail->box->vsize_hdr_ext_id, &idx)) &&
 	    (sizes[0] != (uoff_t)-1 &&
 	     sizes[0] < (uint32_t)-1)) {
 		const uint32_t *vsize_ext =
@@ -1216,7 +1226,7 @@ static int index_mail_parse_body(struct index_mail *mail,
 					  mail->mail.data_pool);
 	} else {
 		message_parser_parse_body(data->parser_ctx,
-			*null_message_part_header_callback, (void *)NULL);
+			*null_message_part_header_callback, NULL);
 	}
 	ret = index_mail_stream_check_failure(mail);
 	if (index_mail_parse_body_finish(mail, field, TRUE) < 0)
@@ -1591,6 +1601,7 @@ int index_mail_get_special(struct mail *_mail,
 	case MAIL_FETCH_HEADER_MD5:
 	case MAIL_FETCH_POP3_ORDER:
 	case MAIL_FETCH_REFCOUNT:
+	case MAIL_FETCH_REFCOUNT_ID:
 		*value_r = "";
 		return 0;
 	case MAIL_FETCH_MAILBOX_NAME:
@@ -1998,7 +2009,7 @@ void index_mail_set_seq(struct mail *_mail, uint32_t seq, bool saving)
 		return;
 	}
 
-	if (!mail->search_mail) {
+	if (!mail->mail.search_mail) {
 		index_mail_update_access_parts_pre(_mail);
 		index_mail_update_access_parts_post(_mail);
 	} else {
@@ -2111,10 +2122,6 @@ void index_mail_set_uid_cache_updates(struct mail *_mail, bool set)
 void index_mail_free(struct mail *_mail)
 {
 	struct index_mail *mail = INDEX_MAIL(_mail);
-
-	/* make sure mailbox_search_*() users don't try to free the mail
-	   directly */
-	i_assert(!mail->search_mail);
 
 	mail->freeing = TRUE;
 	mail->mail.v.close(_mail);

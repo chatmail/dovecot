@@ -129,7 +129,6 @@ client_log_ctx(struct log_connection *log,
 	switch (ctx->type) {
 	case LOG_TYPE_DEBUG:
 	case LOG_TYPE_INFO:
-	case LOG_TYPE_COUNT:
 	case LOG_TYPE_OPTION:
 		break;
 	case LOG_TYPE_WARNING:
@@ -143,6 +142,8 @@ client_log_ctx(struct log_connection *log,
 		err.text = text;
 		log_error_buffer_add(log->errorbuf, &err);
 		break;
+	case LOG_TYPE_COUNT:
+		i_unreached();
 	}
 	/* log_prefix overrides the global prefix. Don't bother changing the
 	   global prefix in that case. */

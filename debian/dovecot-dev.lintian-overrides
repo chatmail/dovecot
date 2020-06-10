@@ -1,0 +1,2 @@
+# plugins probably need the package name
+dovecot-dev: package-name-defined-in-config-h usr/include/dovecot/config.h

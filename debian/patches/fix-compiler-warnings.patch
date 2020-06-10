@@ -1,0 +1,92 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Sun, 31 May 2020 01:34:20 +0200
+Subject: fix compiler warnings:
+
+* passing null to format argument
+* -Wstringop-truncation
+---
+ src/lib-http/http-server-private.h | 4 ++--
+ src/lib-imap/test-imap-url.c       | 3 +--
+ src/lib-master/master-instance.c   | 2 +-
+ src/lib-ntlm/ntlm-encrypt.c        | 3 ++-
+ src/master/sd-daemon.c             | 4 ++--
+ 5 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/lib-http/http-server-private.h b/src/lib-http/http-server-private.h
+index a51bff7..9cdb735 100644
+--- a/src/lib-http/http-server-private.h
++++ b/src/lib-http/http-server-private.h
+@@ -183,8 +183,8 @@ int http_server_response_send_more(struct http_server_response *resp);
+ static inline const char *
+ http_server_request_label(struct http_server_request *req)
+ {
+-	if (req->req.method == NULL) {
+-		if (req->req.target_raw == NULL)
++	if (req->req.target_raw == NULL) {
++		if (req->req.method == NULL)
+ 			return t_strdup_printf("[Req%u: <NEW>]", req->id);
+ 		return t_strdup_printf("[Req%u: %s <INCOMPLETE>]",
+ 			req->id, req->req.method);
+diff --git a/src/lib-imap/test-imap-url.c b/src/lib-imap/test-imap-url.c
+index 5fbe559..300454e 100644
+--- a/src/lib-imap/test-imap-url.c
++++ b/src/lib-imap/test-imap-url.c
+@@ -697,8 +697,7 @@ static void test_imap_url_valid(void)
+ 			}
+ 			if (urlt->uauth_rumpurl != NULL) {
+ 				if (urlp->uauth_rumpurl == NULL) {
+-					test_out_quiet(t_strdup_printf(
+-							       "url->uauth_rumpurl = %s", urlp->uauth_rumpurl), FALSE);
++					test_out_quiet("url->uauth_rumpurl = NULL", FALSE);
+ 				} else {
+ 					test_out_quiet(t_strdup_printf(
+ 							       "url->uauth_rumpurl = %s", urlp->uauth_rumpurl),
+diff --git a/src/lib-master/master-instance.c b/src/lib-master/master-instance.c
+index ebef611..709c057 100644
+--- a/src/lib-master/master-instance.c
++++ b/src/lib-master/master-instance.c
+@@ -121,7 +121,7 @@ static int master_instance_list_refresh(struct master_instance_list *list)
+ 			i_error("Invalid line in %s: %s", list->path, line);
+ 	} T_END;
+ 	if (input->stream_errno != 0) {
+-		i_error("read(%s) failed: %s", line, i_stream_get_error(input));
++		i_error("read(%s) failed: %s", list->path, i_stream_get_error(input));
+ 		ret = -1;
+ 	}
+ 	i_stream_destroy(&input);
+diff --git a/src/lib-ntlm/ntlm-encrypt.c b/src/lib-ntlm/ntlm-encrypt.c
+index dcc6a8f..0678469 100644
+--- a/src/lib-ntlm/ntlm-encrypt.c
++++ b/src/lib-ntlm/ntlm-encrypt.c
+@@ -39,7 +39,8 @@ void lm_hash(const char *passwd, unsigned char hash[LM_HASH_SIZE])
+ 	unsigned char buffer[14];
+ 	unsigned int i;
+ 
+-	strncpy((char *)buffer, passwd, sizeof(buffer));
++	i_zero(&buffer);
++	memcpy(buffer, passwd, I_MIN(sizeof(buffer), strlen(passwd)));
+ 
+ 	for (i = 0; i < sizeof(buffer); i++)
+ 		buffer[i] = i_toupper(buffer[i]);
+diff --git a/src/master/sd-daemon.c b/src/master/sd-daemon.c
+index 012a8f7..47dc4ba 100644
+--- a/src/master/sd-daemon.c
++++ b/src/master/sd-daemon.c
+@@ -344,7 +344,7 @@ int sd_notify(int unset_environment, const char *state) {
+                 return 0;
+ 
+         /* Must be an abstract socket, or an absolute path */
+-        if ((e[0] != '@' && e[0] != '/') || e[1] == 0) {
++        if ((e[0] != '@' && e[0] != '/') || e[1] == 0 || strlen(e) > (sizeof(sockaddr.un.sun_path)-1)) {
+                 r = -EINVAL;
+                 goto finish;
+         }
+@@ -356,7 +356,7 @@ int sd_notify(int unset_environment, const char *state) {
+ 
+         memset(&sockaddr, 0, sizeof(sockaddr));
+         sockaddr.sa.sa_family = AF_UNIX;
+-        strncpy(sockaddr.un.sun_path, e, sizeof(sockaddr.un.sun_path));
++        strncpy(sockaddr.un.sun_path, e, sizeof(sockaddr.un.sun_path)-1);
+ 
+         if (sockaddr.un.sun_path[0] == '@')
+                 sockaddr.un.sun_path[0] = 0;

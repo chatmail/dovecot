@@ -1,3 +1,21 @@
+dovecot (1:2.3.10.1+dfsg1-1) UNRELEASED; urgency=medium
+
+  * New upstream release addresses multiple security issues
+    - CVE-2020-10957
+    - CVE-2020-10958
+    - CVE-2020-10967
+    (Closes: #960963)
+  * Refresh patches
+  * Strip non-DFSG-compliant docs from .orig archives
+  * Incorporate a number of improvements to debian/ metadata contributed by
+    Christian Göttsche <cgzones@googlemail.com>
+  * Add noahm@debian.org to Uploaders
+  * Work around flakiness in autopkgtest suite
+  * Suppress library-not-linked-against-libc lintian warnings some plugins as
+    false-positives
+
+ -- Noah Meyerhans <noahm@debian.org>  Thu, 21 May 2020 19:20:58 -0700
+
 dovecot (1:2.3.7.2-1) unstable; urgency=medium
 
   * [dcaf24e] New upstream version 2.3.7.2
@@ -2601,4 +2619,3 @@ dovecot (0.99.4-1) unstable; urgency=low
   * Initial Release.
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Wed, 18 Dec 2002 09:44:39 -0500
-

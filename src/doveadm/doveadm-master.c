@@ -5,6 +5,8 @@
 #include "strescape.h"
 #include "istream.h"
 #include "write-full.h"
+#include "master-service.h"
+#include "sleep.h"
 #include "doveadm.h"
 #include "doveadm-print.h"
 
@@ -67,14 +69,14 @@ void doveadm_master_send_signal(int signo)
 
 	if (signo == SIGTERM) {
 		/* wait for a while for the process to die */
-		usleep(1000);
+		i_sleep_msecs(1);
 		for (i = 0; i < 30; i++) {
 			if (kill(pid, 0) < 0) {
 				if (errno != ESRCH)
 					i_error("kill() failed: %m");
 				break;
 			}
-			usleep(100000);
+			i_sleep_msecs(100);
 		}
 	}
 }
@@ -91,7 +93,8 @@ static void cmd_reload(int argc ATTR_UNUSED, char *argv[] ATTR_UNUSED)
 
 static struct istream *master_service_send_cmd(const char *cmd)
 {
-	const char *path;
+	struct istream *input;
+	const char *path, *line;
 
 	path = t_strconcat(doveadm_settings->base_dir, "/master", NULL);
 	int fd = net_connect_unix(path);
@@ -102,8 +105,18 @@ static struct istream *master_service_send_cmd(const char *cmd)
 	const char *str =
 		t_strdup_printf("VERSION\tmaster-client\t1\t0\n%s\n", cmd);
 	if (write_full(fd, str, strlen(str)) < 0)
-		i_error("write(%s) failed: %m", path);
-	return i_stream_create_fd_autoclose(&fd, IO_BLOCK_SIZE);
+		i_fatal("write(%s) failed: %m", path);
+
+	input = i_stream_create_fd_autoclose(&fd, IO_BLOCK_SIZE);
+	alarm(5);
+	if ((line = i_stream_read_next_line(input)) == NULL)
+		i_fatal("read(%s) failed: %m", path);
+	if (!version_string_verify(line, "master-server", 1)) {
+		i_fatal_status(EX_PROTOCOL,
+			"%s is not a compatible master socket", path);
+	}
+	alarm(0);
+	return input;
 }
 
 static struct istream *
@@ -132,8 +145,7 @@ static void cmd_service_stop(struct doveadm_cmd_context *cctx)
 		master_service_send_cmd_with_args("STOP", services);
 
 	alarm(5);
-	if (i_stream_read_next_line(input) == NULL ||
-	    (line = i_stream_read_next_line(input)) == NULL) {
+	if ((line = i_stream_read_next_line(input)) == NULL) {
 		i_error("read(%s) failed: %s", i_stream_get_name(input),
 			i_stream_get_error(input));
 		doveadm_exit_code = EX_TEMPFAIL;
@@ -152,6 +164,7 @@ static void cmd_service_stop(struct doveadm_cmd_context *cctx)
 static void cmd_service_status(struct doveadm_cmd_context *cctx)
 {
 	const char *line, *const *services;
+	unsigned int fields_count;
 
 	if (!doveadm_cmd_param_array(cctx, "service", &services))
 		services = NULL;
@@ -171,6 +184,8 @@ static void cmd_service_status(struct doveadm_cmd_context *cctx)
 	doveadm_print_header_simple("listen_pending");
 	doveadm_print_header_simple("listening");
 	doveadm_print_header_simple("doveadm_stop");
+	doveadm_print_header_simple("process_total");
+	fields_count = doveadm_print_get_headers_count();
 
 	alarm(5);
 	while ((line = i_stream_read_next_line(input)) != NULL) {
@@ -178,11 +193,14 @@ static void cmd_service_status(struct doveadm_cmd_context *cctx)
 			break;
 		T_BEGIN {
 			const char *const *args = t_strsplit_tabescaped(line);
-			if (str_array_length(args) >= 12 &&
+			if (args[0] != NULL &&
 			    (services == NULL ||
 			     str_array_find(services, args[0]))) {
-				for (unsigned int i = 0; i < 12; i++)
+				unsigned int i;
+				for (i = 0; i < fields_count && args[i] != NULL; i++)
 					doveadm_print(args[i]);
+				for (; i < fields_count; i++)
+					doveadm_print("");
 			}
 		} T_END;
 	}

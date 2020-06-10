@@ -1,5 +1,8 @@
 # watch control file for uscan
-version=3
-# Site                                      Version Script
-opts="pgpsigurlmangle=s/$/.sig/" \
-	https://dovecot.org/releases/2.3/dovecot-(.*\.[0-9]+)\.tar\.gz debian uupdate
+version=4
+# core
+opts="pgpmode=auto, dversionmangle=s/\+dfsg//, oversionmangle=s/\+dfsg\d*$//" \
+	https://dovecot.org/releases/2.3/dovecot-([\.0-9]+)\.tar\.gz debian
+# pigeonhole
+opts="pgpmode=auto, dversionmangle=s/\+dfsg//, oversionmangle=s/\+dfsg\d*$//, component=pigeonhole" \
+	https://pigeonhole.dovecot.org/releases/2.3/dovecot-2\.3-pigeonhole-([\.0-9]+)\.tar\.gz ignore uupdate

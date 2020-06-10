@@ -141,6 +141,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
+	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
 	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -173,10 +174,10 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__EXEEXT_1 = test-smtp-address$(EXEEXT) test-smtp-params$(EXEEXT) \
-	test-smtp-reply$(EXEEXT) test-smtp-command-parser$(EXEEXT) \
-	test-smtp-payload$(EXEEXT) test-smtp-submit$(EXEEXT) \
-	test-smtp-client-errors$(EXEEXT) \
+am__EXEEXT_1 = test-smtp-syntax$(EXEEXT) test-smtp-address$(EXEEXT) \
+	test-smtp-params$(EXEEXT) test-smtp-reply$(EXEEXT) \
+	test-smtp-command-parser$(EXEEXT) test-smtp-payload$(EXEEXT) \
+	test-smtp-submit$(EXEEXT) test-smtp-client-errors$(EXEEXT) \
 	test-smtp-server-errors$(EXEEXT)
 am__EXEEXT_2 =
 PROGRAMS = $(noinst_PROGRAMS)
@@ -242,6 +243,8 @@ test_smtp_submit_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(test_smtp_submit_LDFLAGS) $(LDFLAGS) \
 	-o $@
+am_test_smtp_syntax_OBJECTS = test-smtp-syntax.$(OBJEXT)
+test_smtp_syntax_OBJECTS = $(am_test_smtp_syntax_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -281,13 +284,13 @@ SOURCES = $(libsmtp_la_SOURCES) $(test_smtp_address_SOURCES) \
 	$(test_smtp_command_parser_SOURCES) \
 	$(test_smtp_params_SOURCES) $(test_smtp_payload_SOURCES) \
 	$(test_smtp_reply_SOURCES) $(test_smtp_server_errors_SOURCES) \
-	$(test_smtp_submit_SOURCES)
+	$(test_smtp_submit_SOURCES) $(test_smtp_syntax_SOURCES)
 DIST_SOURCES = $(libsmtp_la_SOURCES) $(test_smtp_address_SOURCES) \
 	$(test_smtp_client_errors_SOURCES) \
 	$(test_smtp_command_parser_SOURCES) \
 	$(test_smtp_params_SOURCES) $(test_smtp_payload_SOURCES) \
 	$(test_smtp_reply_SOURCES) $(test_smtp_server_errors_SOURCES) \
-	$(test_smtp_submit_SOURCES)
+	$(test_smtp_submit_SOURCES) $(test_smtp_syntax_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -377,6 +380,7 @@ CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DICT_LIBS = @DICT_LIBS@
+DLLIB = @DLLIB@
 DLLTOOL = @DLLTOOL@
 DSYMUTIL = @DSYMUTIL@
 DUMPBIN = @DUMPBIN@
@@ -426,6 +430,8 @@ LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
 LIBTIRPC_CFLAGS = @LIBTIRPC_CFLAGS@
 LIBTIRPC_LIBS = @LIBTIRPC_LIBS@
 LIBTOOL = @LIBTOOL@
+LIBUNWIND_CFLAGS = @LIBUNWIND_CFLAGS@
+LIBUNWIND_LIBS = @LIBUNWIND_LIBS@
 LIBWRAP_LIBS = @LIBWRAP_LIBS@
 LINKED_STORAGE_LDADD = @LINKED_STORAGE_LDADD@
 LIPO = @LIPO@
@@ -619,6 +625,7 @@ headers = \
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 test_programs = \
+	test-smtp-syntax \
 	test-smtp-address \
 	test-smtp-params \
 	test-smtp-reply \
@@ -661,6 +668,9 @@ test_deps = \
 	../lib/liblib.la
 
 test_libs_ssl = $(am__append_1)
+test_smtp_syntax_SOURCES = test-smtp-syntax.c
+test_smtp_syntax_LDADD = $(test_libs)
+test_smtp_syntax_DEPENDENCIES = $(test_deps)
 test_smtp_address_SOURCES = test-smtp-address.c
 test_smtp_address_LDFLAGS = -export-dynamic
 test_smtp_address_LDADD = $(test_libs)
@@ -782,6 +792,10 @@ test-smtp-submit$(EXEEXT): $(test_smtp_submit_OBJECTS) $(test_smtp_submit_DEPEND
 	@rm -f test-smtp-submit$(EXEEXT)
 	$(AM_V_CCLD)$(test_smtp_submit_LINK) $(test_smtp_submit_OBJECTS) $(test_smtp_submit_LDADD) $(LIBS)
 
+test-smtp-syntax$(EXEEXT): $(test_smtp_syntax_OBJECTS) $(test_smtp_syntax_DEPENDENCIES) $(EXTRA_test_smtp_syntax_DEPENDENCIES) 
+	@rm -f test-smtp-syntax$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_smtp_syntax_OBJECTS) $(test_smtp_syntax_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -827,6 +841,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-smtp-reply.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-smtp-server-errors.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-smtp-submit.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-smtp-syntax.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

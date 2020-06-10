@@ -5,8 +5,8 @@
 
 /* <settings checks> */
 enum submission_client_workarounds {
-	WORKAROUND_WHITESPACE_BEFORE_PATH	= BIT(0),
-	WORKAROUND_MAILBOX_FOR_PATH		= BIT(1),
+	SUBMISSION_WORKAROUND_WHITESPACE_BEFORE_PATH	= BIT(0),
+	SUBMISSION_WORKAROUND_MAILBOX_FOR_PATH		= BIT(1),
 };
 /* </settings checks> */
 
@@ -19,8 +19,10 @@ struct submission_settings {
 	const char *login_greeting;
 	const char *login_trusted_networks;
 
+	const char *recipient_delimiter;
+
 	/* submission: */
-	size_t submission_max_mail_size;
+	uoff_t submission_max_mail_size;
 	unsigned int submission_max_recipients;
 	const char *submission_client_workarounds;
 	const char *submission_logout_format;

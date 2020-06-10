@@ -296,7 +296,7 @@ sqlpool_add_connection(struct sqlpool_db *db, struct sqlpool_host *host,
 	if (ret < 0)
 		i_fatal("sqlpool: %s", error);
 
-	i_array_init(&conndb->module_contexts, 5);
+	sql_init_common(conndb);
 
 	conndb->state_change_callback = sqlpool_state_changed;
 	conndb->state_change_context = db;
@@ -548,7 +548,7 @@ static void driver_sqlpool_deinit(struct sql_db *_db)
 	struct sqlpool_connection *conn;
 
 	array_foreach_modifiable(&db->all_connections, conn)
-		sql_deinit(&conn->db);
+		sql_unref(&conn->db);
 	array_clear(&db->all_connections);
 
 	driver_sqlpool_abort_requests(db);

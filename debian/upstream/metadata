@@ -1,0 +1,5 @@
+Name: dovecot
+Repository: https://github.com/dovecot/core
+Repository-Browse: https://github.com/dovecot/core
+Contact: Dovecot Mailing List <dovecot at dovecot.org>
+Bug-Submit: Dovecot Mailing List <dovecot at dovecot.org>

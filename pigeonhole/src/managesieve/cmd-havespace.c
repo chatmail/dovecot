@@ -21,31 +21,39 @@ bool cmd_havespace(struct client_command_context *cmd)
 	uoff_t size;
 
 	/* <scriptname> <size> */
-	if ( !client_read_args(cmd, 2, 0, TRUE, &args) )
-	  return FALSE;
+	if (!client_read_args(cmd, 2, 0, TRUE, &args))
+		return FALSE;
 
-	if ( !managesieve_arg_get_string(&args[0], &scriptname) ) {
+	if (!managesieve_arg_get_string(&args[0], &scriptname)) {
 		client_send_no(client, "Invalid string for scriptname.");
 		return TRUE;
 	}
 
-	if ( !managesieve_arg_get_number(&args[1], &size) ) {
+	if (!managesieve_arg_get_number(&args[1], &size)) {
 		client_send_no(client, "Invalid scriptsize argument.");
 		return TRUE;
 	}
 
-	if ( !sieve_script_name_is_valid(scriptname) ) {
+	if (!sieve_script_name_is_valid(scriptname)) {
 		client_send_no(client, "Invalid script name.");
 		return TRUE;
 	}
 
-	if ( size == 0 ) {
+	if (size == 0) {
 		client_send_no(client, "Cannot upload empty script.");
 		return TRUE;
 	}
 
-	if ( !managesieve_quota_check_all(client, scriptname, size) )
+	event_add_str(cmd->event, "script_name", scriptname);
+	event_add_int(cmd->event, "script_size", size);
+
+	if (!managesieve_quota_check_all(cmd, scriptname, size))
 		return TRUE;
+
+	struct event_passthrough *e =
+		client_command_create_finish_event(cmd);
+	e_debug(e->event(), "Quota is within limits for script `%s' "
+		"with size %"PRIuSIZE_T, scriptname, size);
 
 	client_send_ok(client, "Putscript would succeed.");
 	return TRUE;

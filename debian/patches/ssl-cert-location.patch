@@ -10,8 +10,10 @@ Bug: #608719
  doc/mkcert.sh                         | 4 ++--
  2 files changed, 5 insertions(+), 5 deletions(-)
 
---- a/doc/example-config/conf.d/10-ssl.conf
-+++ b/doc/example-config/conf.d/10-ssl.conf
+Index: dovecot/doc/example-config/conf.d/10-ssl.conf
+===================================================================
+--- dovecot.orig/doc/example-config/conf.d/10-ssl.conf
++++ dovecot/doc/example-config/conf.d/10-ssl.conf
 @@ -3,14 +3,14 @@
  ##
  
@@ -30,18 +32,19 @@ Bug: #608719
  
  # If key file is password protected, give the password here. Alternatively
  # give it when starting dovecot with -p parameter. Since this file is often
-@@ -31,7 +31,7 @@
- # submission service). The directory is usually /etc/ssl/certs in
- # Debian-based systems and the file is /etc/pki/tls/cert.pem in
- # RedHat-based systems.
--#ssl_client_ca_dir =
+@@ -33,6 +33,7 @@ ssl_key = </etc/ssl/private/dovecot.pem
+ # RedHat-based systems. Note that ssl_client_ca_file isn't recommended with
+ # large CA bundles, because it leads to excessive memory usage.
+ #ssl_client_ca_dir =
 +ssl_client_ca_dir = /etc/ssl/certs
  #ssl_client_ca_file =
  
  # Require valid cert when connecting to a remote server
---- a/doc/mkcert.sh
-+++ b/doc/mkcert.sh
-@@ -8,19 +8,19 @@
+Index: dovecot/doc/mkcert.sh
+===================================================================
+--- dovecot.orig/doc/mkcert.sh
++++ dovecot/doc/mkcert.sh
+@@ -8,19 +8,19 @@ OPENSSL=${OPENSSL-openssl}
  SSLDIR=${SSLDIR-/etc/ssl}
  OPENSSLCONFIG=${OPENSSLCONFIG-dovecot-openssl.cnf}
  

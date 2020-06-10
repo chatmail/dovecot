@@ -141,6 +141,7 @@ extern const struct sieve_extension_def spamtest_extension;
 extern const struct sieve_extension_def spamtestplus_extension;
 extern const struct sieve_extension_def virustest_extension;
 extern const struct sieve_extension_def editheader_extension;
+extern const struct sieve_extension_def special_use_extension;
 
 extern const struct sieve_extension_def vnd_debug_extension;
 extern const struct sieve_extension_def vnd_environment_extension;
@@ -150,6 +151,7 @@ const struct sieve_extension_def *sieve_extra_extensions[] = {
 	&vacation_seconds_extension, &spamtest_extension, &spamtestplus_extension,
 	&virustest_extension, &editheader_extension,
 	&mboxmetadata_extension, &servermetadata_extension,
+	&special_use_extension,
 
 	/* vnd.dovecot. */
 	&vnd_debug_extension, &vnd_environment_extension, &vnd_report_extension
@@ -318,8 +320,9 @@ static bool _sieve_extension_load(struct sieve_extension *ext)
 	/* Call load handler */
 	if ( ext->def != NULL && ext->def->load != NULL &&
 		!ext->def->load(ext, &ext->context) ) {
-		sieve_sys_error(ext->svinst,
-			"failed to load '%s' extension support.", ext->def->name);
+		e_error(ext->svinst->event,
+			"failed to load '%s' extension support.",
+			ext->def->name);
 		return FALSE;
 	}
 
@@ -694,9 +697,9 @@ void sieve_extensions_set_string
 					ext = hash_table_lookup(ext_reg->extension_index, name);
 
 				if ( ext == NULL || ext->def == NULL ) {
-					sieve_sys_warning(svinst,
-						"ignored unknown extension '%s' while configuring "
-						"available extensions", name);
+					e_warning(svinst->event,
+						  "ignored unknown extension '%s' while configuring "
+						  "available extensions", name);
 					continue;
 				}
 

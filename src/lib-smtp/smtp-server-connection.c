@@ -293,20 +293,28 @@ smtp_server_connection_handle_command(struct smtp_server_connection *conn,
 {
 	struct smtp_server_connection *tmp_conn = conn;
 	struct smtp_server_command *cmd;
+	bool finished;
+
+	cmd = smtp_server_command_new(tmp_conn, cmd_name);
+
+	smtp_server_command_ref(cmd);
 
 	smtp_server_connection_ref(tmp_conn);
-	cmd = smtp_server_command_new(tmp_conn, cmd_name, cmd_params);
+	smtp_server_command_execute(cmd, cmd_params);
 	if (!smtp_server_connection_unref(&tmp_conn)) {
 		/* the command start callback managed to get this connection
 		   destroyed */
+		smtp_server_command_unref(&cmd);
 		return FALSE;
 	}
 
-	if (cmd != NULL && conn->command_queue_head == cmd)
+	if (conn->command_queue_head == cmd)
 		(void)smtp_server_command_next_to_reply(&cmd);
 
 	smtp_server_connection_timeout_update(conn);
-	return (cmd == NULL || !cmd->input_locked);
+
+	finished = !cmd->input_locked;
+	return (!smtp_server_command_unref(&cmd) || finished);
 }
 
 static int
@@ -864,7 +872,7 @@ smtp_server_connection_alloc(struct smtp_server *server,
 				p_strarray_dup(pool, set->rcpt_param_extensions);
 		}
 		if (set->xclient_extensions != NULL) {
-			server->set.xclient_extensions =
+			conn->set.xclient_extensions =
 				p_strarray_dup(pool, set->xclient_extensions);
 		}
 
@@ -881,6 +889,9 @@ smtp_server_connection_alloc(struct smtp_server *server,
 			conn->set.tls_required || set->tls_required;
 		conn->set.auth_optional =
 			conn->set.auth_optional || set->auth_optional;
+		conn->set.mail_path_allow_broken =
+			conn->set.mail_path_allow_broken ||
+				set->mail_path_allow_broken;
 		conn->set.rcpt_domain_optional =
 			conn->set.rcpt_domain_optional ||
 				set->rcpt_domain_optional;
@@ -1230,6 +1241,31 @@ void smtp_server_connection_start(struct smtp_server_connection *conn)
 {
 	smtp_server_connection_start_pending(conn);
 	smtp_server_connection_resume(conn);
+}
+
+void smtp_server_connection_abort(struct smtp_server_connection **_conn,
+				  unsigned int status, const char *enh_code,
+				  const char *reason)
+{
+	struct smtp_server_connection *conn = *_conn;
+	const char **reason_lines;
+
+	if (conn == NULL)
+		return;
+	*_conn = NULL;
+
+	i_assert(!conn->started);
+	conn->started = TRUE;
+
+	if (conn->authenticated) {
+		reason_lines = t_strsplit_spaces(reason, "\r\n");
+		smtp_server_connection_reply_lines(
+			conn, status, enh_code, reason_lines);
+		smtp_server_connection_terminate(
+			&conn, "4.3.2", "Shutting down due to fatal error");
+	} else {
+		smtp_server_connection_terminate(&conn, enh_code, reason);
+	}
 }
 
 void smtp_server_connection_halt(struct smtp_server_connection *conn)

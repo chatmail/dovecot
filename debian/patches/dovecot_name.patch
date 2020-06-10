@@ -1,20 +1,28 @@
-Description: Update Dovecot name to include Distribution in login greeting
- message.  This patch was found at: https://blueprints.launchpad.net/ubuntu/+spec/servercloud-s-server-app-banner-updates
- and originally provided by Ubuntu for their 2.1.7 package.  The original
- author is  Yolanda Robla <yolanda.robla@canonical.com>.  I updated it
- for Debian's 2.2.5 package.
-Author: Jaldhar H. Vyas <jaldhar@debian.org>
-Last-Update: 2018-07-04
----
- configure.ac                      |    7 ++++++-
- src/config/all-settings.c         |    4 ++--
- src/lmtp/lmtp-settings.c          |    2 +-
- src/login-common/login-settings.c |    2 +-
- 4 files changed, 10 insertions(+), 5 deletions(-)
+From: "Jaldhar H. Vyas" <jaldhar@debian.org>
+Date: Sat, 7 Sep 2013 01:16:14 -0400
+Subject: Update Dovecot name to include Distribution in login greeting
+ message
 
+This patch was found at: https://blueprints.launchpad.net/ubuntu/+spec/servercloud-s-server-app-banner-updates
+and originally provided by Ubuntu for their 2.1.7 package.  The original
+author is  Yolanda Robla <yolanda.robla@canonical.com>.  I updated it
+for Debian's 2.2.5 package.
+
+Last-Update: 2020-05-23
+---
+ configure.ac                         | 7 ++++++-
+ src/config/all-settings.c            | 6 +++---
+ src/lib-smtp/smtp-server.c           | 2 +-
+ src/lmtp/lmtp-settings.c             | 2 +-
+ src/login-common/login-settings.c    | 2 +-
+ src/submission/submission-settings.c | 2 +-
+ 6 files changed, 13 insertions(+), 8 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 00baa68..8424ce2 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -295,7 +295,12 @@
+@@ -300,7 +300,12 @@ AM_ICONV
  # SIZE_MAX is missing without this
  CXXFLAGS="$CXXFLAGS -D__STDC_LIMIT_MACROS"
  
@@ -24,24 +32,24 @@ Last-Update: 2018-07-04
 +else
 +    DOVECOT_DISTRIBUTION=""
 +fi
-+AC_DEFINE_UNQUOTED(DOVECOT_NAME, "$PACKAGE_NAME$DOVECOT_DISTRIBUTION", Dovecot name)
++AC_DEFINE_UNQUOTED(DOVECOT_NAME, "$PACKAGE_NAME$DOVECOT_DISTRIBUTION", [Dovecot name])
  AC_DEFINE_UNQUOTED(DOVECOT_STRING, "$PACKAGE_STRING", [Dovecot string])
  AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", [Dovecot version])
  
---- a/src/lmtp/lmtp-settings.c
-+++ b/src/lmtp/lmtp-settings.c
-@@ -85,7 +85,7 @@
- 	.lmtp_rawlog_dir = "",
- 	.lmtp_proxy_rawlog_dir = "",
+diff --git a/src/config/all-settings.c b/src/config/all-settings.c
+index cb93fa2..40cde51 100644
+--- a/src/config/all-settings.c
++++ b/src/config/all-settings.c
+@@ -2259,7 +2259,7 @@ static const struct submission_settings submission_default_settings = {
+ 
+ 	.hostname = "",
  
 -	.login_greeting = PACKAGE_NAME" ready.",
 +	.login_greeting = DOVECOT_NAME" ready.",
  	.login_trusted_networks = "",
  
- 	.mail_plugins = "",
---- a/src/login-common/login-settings.c
-+++ b/src/login-common/login-settings.c
-@@ -48,7 +48,7 @@
+ 	.recipient_delimiter = "+",
+@@ -3849,7 +3849,7 @@ static const struct setting_define login_setting_defines[] = {
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
@@ -50,9 +58,20 @@ Last-Update: 2018-07-04
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
+@@ -4059,7 +4059,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+ 
+ 	.lmtp_client_workarounds = "",
+ 
+-	.login_greeting = PACKAGE_NAME" ready.",
++	.login_greeting = DOVECOT_NAME" ready.",
+ 	.login_trusted_networks = "",
+ 
+ 	.mail_plugins = "",
+diff --git a/src/lib-smtp/smtp-server.c b/src/lib-smtp/smtp-server.c
+index cf5ea43..5aed46e 100644
 --- a/src/lib-smtp/smtp-server.c
 +++ b/src/lib-smtp/smtp-server.c
-@@ -47,7 +47,7 @@
+@@ -47,7 +47,7 @@ struct smtp_server *smtp_server_init(const struct smtp_server_settings *set)
  	if (set->login_greeting != NULL && *set->login_greeting != '\0')
  		server->set.login_greeting = p_strdup(pool, set->login_greeting);
  	else
@@ -61,9 +80,37 @@ Last-Update: 2018-07-04
  	if (set->capabilities == 0) {
  		server->set.capabilities = SMTP_SERVER_DEFAULT_CAPABILITIES;
  	} else  {
+diff --git a/src/lmtp/lmtp-settings.c b/src/lmtp/lmtp-settings.c
+index d6da86e..e408032 100644
+--- a/src/lmtp/lmtp-settings.c
++++ b/src/lmtp/lmtp-settings.c
+@@ -91,7 +91,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+ 
+ 	.lmtp_client_workarounds = "",
+ 
+-	.login_greeting = PACKAGE_NAME" ready.",
++	.login_greeting = DOVECOT_NAME" ready.",
+ 	.login_trusted_networks = "",
+ 
+ 	.mail_plugins = "",
+diff --git a/src/login-common/login-settings.c b/src/login-common/login-settings.c
+index cb52247..60a47e1 100644
+--- a/src/login-common/login-settings.c
++++ b/src/login-common/login-settings.c
+@@ -48,7 +48,7 @@ static const struct setting_define login_setting_defines[] = {
+ static const struct login_settings login_default_settings = {
+ 	.login_trusted_networks = "",
+ 	.login_source_ips = "",
+-	.login_greeting = PACKAGE_NAME" ready.",
++	.login_greeting = DOVECOT_NAME" ready.",
+ 	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
+ 	.login_log_format = "%$: %s",
+ 	.login_access_sockets = "",
+diff --git a/src/submission/submission-settings.c b/src/submission/submission-settings.c
+index ab41165..c3f5b37 100644
 --- a/src/submission/submission-settings.c
 +++ b/src/submission/submission-settings.c
-@@ -101,7 +101,7 @@
+@@ -103,7 +103,7 @@ static const struct submission_settings submission_default_settings = {
  
  	.hostname = "",
  
@@ -71,4 +118,4 @@ Last-Update: 2018-07-04
 +	.login_greeting = DOVECOT_NAME" ready.",
  	.login_trusted_networks = "",
  
- 	.submission_max_mail_size = 40*1024*1024,
+ 	.recipient_delimiter = "+",

@@ -50,7 +50,6 @@ struct server_connection {
 	struct istream *log_input;
 	struct ostream *output;
 	struct ssl_iostream *ssl_iostream;
-	struct timeout *to_input;
 
 	struct istream *cmd_input;
 	struct ostream *cmd_output;
@@ -64,6 +63,7 @@ struct server_connection {
 	bool authenticate_sent:1;
 	bool authenticated:1;
 	bool streaming:1;
+	bool ssl_done:1;
 };
 
 static struct server_connection *printing_conn = NULL;
@@ -71,6 +71,8 @@ static ARRAY(struct doveadm_server *) print_pending_servers = ARRAY_INIT;
 
 static void server_connection_input(struct server_connection *conn);
 static bool server_connection_input_one(struct server_connection *conn);
+static int server_connection_init_ssl(struct server_connection *conn,
+				      const char **error_r);
 
 static void server_set_print_pending(struct doveadm_server *server)
 {
@@ -97,8 +99,7 @@ static void server_print_connection_released(struct doveadm_server *server)
 
 		conns[i]->io = io_add(conns[i]->fd, IO_READ,
 				      server_connection_input, conns[i]);
-		conns[i]->to_input = timeout_add_short(0,
-			server_connection_input, conns[i]);
+		io_set_pending(conns[i]->io);
 	}
 }
 
@@ -343,8 +344,7 @@ static void server_connection_start_multiplex(struct server_connection *conn)
 static void server_connection_input(struct server_connection *conn)
 {
 	const char *line;
-
-	timeout_remove(&conn->to_input);
+	const char *error;
 
 	if (i_stream_read(conn->input) < 0) {
 		/* disconnected */
@@ -386,6 +386,24 @@ static void server_connection_input(struct server_connection *conn)
 					line+1);
 				server_connection_destroy(&conn);
 				return;
+			}
+			if (!conn->ssl_done &&
+			    (conn->server->ssl_flags & PROXY_SSL_FLAG_STARTTLS) != 0) {
+				io_remove(&conn->io);
+				if (conn->minor < 2) {
+					i_error("doveadm STARTTLS failed: Server does not support it");
+					server_connection_destroy(&conn);
+					return;
+				}
+				/* send STARTTLS */
+				o_stream_nsend_str(conn->output, "STARTTLS\n");
+				if (server_connection_init_ssl(conn, &error) < 0) {
+					i_error("doveadm STARTTLS failed: %s", error);
+					server_connection_destroy(&conn);
+					return;
+				}
+				conn->ssl_done = TRUE;
+				conn->io = io_add_istream(conn->input, server_connection_input, conn);
 			}
 			if (server_connection_authenticate(conn) < 0) {
 				server_connection_destroy(&conn);
@@ -496,12 +514,24 @@ static int server_connection_init_ssl(struct server_connection *conn,
 	struct ssl_iostream_settings ssl_set;
 	const char *error;
 
-	if (conn->server->ssl_ctx == NULL)
+	if (conn->server->ssl_flags == 0)
 		return 0;
 
-	doveadm_get_ssl_settings(&ssl_set, conn->pool);
+	doveadm_get_ssl_settings(&ssl_set, pool_datastack_create());
+
+	if ((conn->server->ssl_flags & PROXY_SSL_FLAG_ANY_CERT) != 0)
+		ssl_set.allow_invalid_cert = TRUE;
 	if (ssl_set.allow_invalid_cert)
 		ssl_set.verbose_invalid_cert = TRUE;
+
+	if (conn->server->ssl_ctx == NULL &&
+	    ssl_iostream_client_context_cache_get(&ssl_set,
+						  &conn->server->ssl_ctx,
+						  &error) < 0) {
+		*error_r = t_strdup_printf(
+			"Couldn't initialize SSL client: %s", error);
+		return -1;
+	}
 
 	if (io_stream_create_ssl_client(conn->server->ssl_ctx,
 					conn->server->hostname, &ssl_set,
@@ -524,6 +554,7 @@ int server_connection_create(struct doveadm_server *server,
 			     struct server_connection **conn_r,
 			     const char **error_r)
 {
+	const char *target;
 	struct server_connection *conn;
 	pool_t pool;
 
@@ -531,7 +562,12 @@ int server_connection_create(struct doveadm_server *server,
 	conn = p_new(pool, struct server_connection, 1);
 	conn->pool = pool;
 	conn->server = server;
-	conn->fd = doveadm_connect_with_default_port(server->name,
+	if (server->ip.family != 0) {
+		(void)net_ipport2str(&server->ip, server->port, &target);
+	} else {
+		target = server->name;
+	}
+	conn->fd = doveadm_connect_with_default_port(target,
 						     doveadm_settings->doveadm_port);
 	net_set_nonblock(conn->fd, TRUE);
 	conn->input = i_stream_create_fd(conn->fd, MAX_INBUF_SIZE);
@@ -545,7 +581,8 @@ int server_connection_create(struct doveadm_server *server,
 	array_push_back(&conn->server->connections, &conn);
 
 	if (server_connection_read_settings(conn, error_r) < 0 ||
-	    server_connection_init_ssl(conn, error_r) < 0) {
+	    ((server->ssl_flags & PROXY_SSL_FLAG_STARTTLS) == 0 &&
+	     server_connection_init_ssl(conn, error_r) < 0)) {
 		server_connection_destroy(&conn);
 		return -1;
 	}
@@ -588,7 +625,6 @@ void server_connection_destroy(struct server_connection **_conn)
 	if (printing_conn == conn)
 		print_connection_released();
 
-	timeout_remove(&conn->to_input);
 	i_stream_destroy(&conn->input);
 	o_stream_destroy(&conn->output);
 	i_stream_destroy(&conn->cmd_input);

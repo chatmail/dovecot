@@ -462,7 +462,7 @@ doveadm_mail_next_user(struct doveadm_mail_cmd_context *ctx,
 	if (ctx->v.run(ctx, ctx->cur_mail_user) < 0) {
 		i_assert(ctx->exit_code != 0);
 	}
-	mail_user_unref(&ctx->cur_mail_user);
+	mail_user_deinit(&ctx->cur_mail_user);
 	mail_storage_service_user_unref(&ctx->cur_service_user);
 	return 1;
 }
@@ -1080,6 +1080,11 @@ doveadm_cmd_ver2_to_mail_cmd_wrapper(struct doveadm_cmd_context *cctx)
 			}
 			mctx->cmd_input = arg->value.v_istream;
 			i_stream_ref(mctx->cmd_input);
+
+		} else if (strcmp(arg->name, "trans-flags") == 0) {
+			/* This parameter allows to set additional
+			 * mailbox transaction flags. */
+			mctx->transaction_flags = arg->value.v_int64;
 
 		/* Keep all named special parameters above this line */
 

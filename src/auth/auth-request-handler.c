@@ -182,7 +182,13 @@ auth_str_append_extra_fields(struct auth_request *request, string_t *dest)
 	if (request->master_user != NULL &&
 	    !auth_fields_exists(request->extra_fields, "auth_user"))
 		auth_str_add_keyvalue(dest, "auth_user", request->master_user);
-
+	if (*request->set->anonymous_username != '\0' &&
+	    null_strcmp(request->user, request->set->anonymous_username) == 0) {
+		/* this is an anonymous login, either via ANONYMOUS
+		   SASL mechanism or simply logging in as the anonymous
+		   user via another mechanism */
+		str_append(dest, "\tanonymous");
+	}
 	if (!request->auth_only &&
 	    auth_fields_exists(request->extra_fields, "proxy")) {
 		/* we're proxying */
@@ -245,7 +251,7 @@ auth_request_handle_failure(struct auth_request *request, const char *reply)
 	if (to_auth_failures == NULL) {
 		to_auth_failures =
 			timeout_add_short(AUTH_FAILURE_DELAY_CHECK_MSECS,
-					  auth_failure_timeout, (void *)NULL);
+					  auth_failure_timeout, NULL);
 	}
 }
 
@@ -703,6 +709,7 @@ static void auth_str_append_userdb_extra_fields(struct auth_request *request,
 		auth_str_add_keyvalue(dest, "master_user",
 				      request->master_user);
 	}
+	auth_str_add_keyvalue(dest, "auth_mech", request->mech->mech_name);
 	if (*request->set->anonymous_username != '\0' &&
 	    strcmp(request->user, request->set->anonymous_username) == 0) {
 		/* this is an anonymous login, either via ANONYMOUS

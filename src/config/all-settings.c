@@ -389,6 +389,7 @@ extern const struct setting_parser_info master_service_setting_parser_info;
 struct master_service_settings {
 	const char *base_dir;
 	const char *state_dir;
+	const char *instance_name;
 	const char *log_path;
 	const char *info_log_path;
 	const char *debug_log_path;
@@ -650,6 +651,8 @@ static bool mailbox_special_use_exists(const char *name)
 	if (strcasecmp(name, "Drafts") == 0)
 		return TRUE;
 	if (strcasecmp(name, "Flagged") == 0)
+		return TRUE;
+	if (strcasecmp(name, "Important") == 0)
 		return TRUE;
 	if (strcasecmp(name, "Junk") == 0)
 		return TRUE;
@@ -1518,8 +1521,8 @@ const struct setting_parser_info lda_setting_parser_info = {
 extern const struct setting_parser_info submission_setting_parser_info;
 /* <settings checks> */
 enum submission_client_workarounds {
-	WORKAROUND_WHITESPACE_BEFORE_PATH	= BIT(0),
-	WORKAROUND_MAILBOX_FOR_PATH		= BIT(1),
+	SUBMISSION_WORKAROUND_WHITESPACE_BEFORE_PATH	= BIT(0),
+	SUBMISSION_WORKAROUND_MAILBOX_FOR_PATH		= BIT(1),
 };
 /* </settings checks> */
 struct submission_settings {
@@ -1531,8 +1534,10 @@ struct submission_settings {
 	const char *login_greeting;
 	const char *login_trusted_networks;
 
+	const char *recipient_delimiter;
+
 	/* submission: */
-	size_t submission_max_mail_size;
+	uoff_t submission_max_mail_size;
 	unsigned int submission_max_recipients;
 	const char *submission_client_workarounds;
 	const char *submission_logout_format;
@@ -1570,7 +1575,7 @@ struct submission_login_settings {
 	const char *hostname;
 
 	/* submission: */
-	size_t submission_max_mail_size;
+	uoff_t submission_max_mail_size;
 	const char *submission_backend_capabilities;
 };
 /* ../../src/stats/stats-settings.h */
@@ -1634,6 +1639,7 @@ struct stats_exporter_settings {
 	const char *name;
 	const char *transport;
 	const char *transport_args;
+	unsigned int transport_timeout;
 	const char *format;
 	const char *format_args;
 
@@ -1646,6 +1652,7 @@ struct stats_metric_settings {
 	const char *source_location;
 	const char *categories;
 	const char *fields;
+	const char *group_by;
 	ARRAY(const char *) filter;
 
 	unsigned int parsed_source_linenum;
@@ -1796,15 +1803,23 @@ enum lmtp_hdr_delivery_address {
 	LMTP_HDR_DELIVERY_ADDRESS_FINAL,
 	LMTP_HDR_DELIVERY_ADDRESS_ORIGINAL
 };
+
+enum lmtp_client_workarounds {
+	LMTP_WORKAROUND_WHITESPACE_BEFORE_PATH	= BIT(0),
+	LMTP_WORKAROUND_MAILBOX_FOR_PATH	= BIT(1),
+};
 /* </settings checks> */
 struct lmtp_settings {
 	bool lmtp_proxy;
 	bool lmtp_save_to_detail_mailbox;
 	bool lmtp_rcpt_check_quota;
+	bool lmtp_add_received_header;
 	unsigned int lmtp_user_concurrency_limit;
 	const char *lmtp_hdr_delivery_address;
 	const char *lmtp_rawlog_dir;
 	const char *lmtp_proxy_rawlog_dir;
+
+	const char *lmtp_client_workarounds;
 
 	const char *login_greeting;
 	const char *login_trusted_networks;
@@ -1813,6 +1828,8 @@ struct lmtp_settings {
 	const char *mail_plugin_dir;
 
 	enum lmtp_hdr_delivery_address parsed_lmtp_hdr_delivery_address;
+
+	enum lmtp_client_workarounds parsed_workarounds;
 };
 /* ../../src/imap/imap-settings.h */
 extern const struct setting_parser_info imap_setting_parser_info;
@@ -1900,11 +1917,13 @@ struct doveadm_settings {
 	const char *libexec_dir;
 	const char *mail_plugins;
 	const char *mail_plugin_dir;
+	const char *mail_temp_dir;
 	bool auth_debug;
 	const char *auth_socket_path;
 	const char *doveadm_socket_path;
 	unsigned int doveadm_worker_count;
 	in_port_t doveadm_port;
+	const char *doveadm_ssl;
 	const char *doveadm_username;
 	const char *doveadm_password;
 	const char *doveadm_allowed_commands;
@@ -2067,6 +2086,31 @@ struct service_settings tcpwrap_service_settings = {
 	.inet_listeners = ARRAY_INIT
 };
 #endif
+/* ../../src/util/health-check-settings.c */
+struct service_settings health_check_service_settings = {
+	.name = "health-check",
+	.protocol = "",
+	.type = "",
+	.executable = "script -p health-check.sh",
+	.user = "$default_internal_user",
+	.group = "",
+	.privileged_group = "",
+	.extra_groups = "",
+	.chroot = "",
+
+	.drop_priv_before_exec = TRUE,
+
+	.process_min_avail = 0,
+	.process_limit = 0,
+	.client_limit = 1,
+	.service_count = 0,
+	.idle_kill = 0,
+	.vsz_limit = (uoff_t)-1,
+
+	.unix_listeners = ARRAY_INIT,
+	.fifo_listeners = ARRAY_INIT,
+	.inet_listeners = ARRAY_INIT
+};
 /* ../../src/submission/submission-settings.c */
 /* <settings checks> */
 static struct file_listener_settings submission_unix_listeners_array[] = {
@@ -2087,8 +2131,10 @@ struct submission_client_workaround_list {
 
 static const struct submission_client_workaround_list
 submission_client_workaround_list[] = {
-	{ "whitespace-before-path", WORKAROUND_WHITESPACE_BEFORE_PATH },
-	{ "mailbox-for-path", WORKAROUND_MAILBOX_FOR_PATH },
+	{ "whitespace-before-path",
+	  SUBMISSION_WORKAROUND_WHITESPACE_BEFORE_PATH },
+	{ "mailbox-for-path",
+	  SUBMISSION_WORKAROUND_MAILBOX_FOR_PATH },
 	{ NULL, 0 }
 };
 
@@ -2176,6 +2222,8 @@ static const struct setting_define submission_setting_defines[] = {
 	DEF(SET_STR, login_greeting),
 	DEF(SET_STR, login_trusted_networks),
 
+	DEF(SET_STR, recipient_delimiter),
+
 	DEF(SET_SIZE, submission_max_mail_size),
 	DEF(SET_UINT, submission_max_recipients),
 	DEF(SET_STR, submission_client_workarounds),
@@ -2213,6 +2261,8 @@ static const struct submission_settings submission_default_settings = {
 
 	.login_greeting = PACKAGE_NAME" ready.",
 	.login_trusted_networks = "",
+
+	.recipient_delimiter = "+",
 
 	.submission_max_mail_size = 40*1024*1024,
 	.submission_max_recipients = 0,
@@ -2540,7 +2590,7 @@ struct service_settings stats_service_settings = {
 	.group = "",
 	.privileged_group = "",
 	.extra_groups = "",
-	.chroot = "empty",
+	.chroot = "",
 
 	.drop_priv_before_exec = FALSE,
 
@@ -2562,6 +2612,7 @@ static const struct setting_define stats_exporter_setting_defines[] = {
 	DEF(SET_STR, name),
 	DEF(SET_STR, transport),
 	DEF(SET_STR, transport_args),
+	DEF(SET_TIME_MSECS, transport_timeout),
 	DEF(SET_STR, format),
 	DEF(SET_STR, format_args),
 	SETTING_DEFINE_LIST_END
@@ -2570,6 +2621,7 @@ static const struct stats_exporter_settings stats_exporter_default_settings = {
 	.name = "",
 	.transport = "",
 	.transport_args = "",
+	.transport_timeout = 250, /* ms */
 	.format = "",
 	.format_args = "",
 };
@@ -2592,18 +2644,20 @@ static const struct setting_define stats_metric_setting_defines[] = {
 	DEF(SET_STR, source_location),
 	DEF(SET_STR, categories),
 	DEF(SET_STR, fields),
+	DEF(SET_STR, group_by),
 	{ SET_STRLIST, "filter", offsetof(struct stats_metric_settings, filter), NULL },
 	DEF(SET_STR, exporter),
 	DEF(SET_STR, exporter_include),
 	SETTING_DEFINE_LIST_END
 };
-const struct stats_metric_settings stats_metric_default_settings = {
+static const struct stats_metric_settings stats_metric_default_settings = {
 	.name = "",
 	.event_name = "",
 	.source_location = "",
 	.categories = "",
 	.fields = "",
 	.exporter = "",
+	.group_by = "",
 	.exporter_include = "name hostname timestamps categories fields",
 };
 const struct setting_parser_info stats_metric_setting_parser_info = {
@@ -3880,10 +3934,53 @@ static buffer_t lmtp_unix_listeners_buf = {
 };
 /* </settings checks> */
 /* <settings checks> */
+struct lmtp_client_workaround_list {
+	const char *name;
+	enum lmtp_client_workarounds num;
+};
+
+static const struct lmtp_client_workaround_list
+lmtp_client_workaround_list[] = {
+	{ "whitespace-before-path", LMTP_WORKAROUND_WHITESPACE_BEFORE_PATH },
+	{ "mailbox-for-path", LMTP_WORKAROUND_MAILBOX_FOR_PATH },
+	{ NULL, 0 }
+};
+
+static int
+lmtp_settings_parse_workarounds(struct lmtp_settings *set,
+				const char **error_r)
+{
+	enum lmtp_client_workarounds client_workarounds = 0;
+        const struct lmtp_client_workaround_list *list;
+	const char *const *str;
+
+        str = t_strsplit_spaces(set->lmtp_client_workarounds, " ,");
+	for (; *str != NULL; str++) {
+		list = lmtp_client_workaround_list;
+		for (; list->name != NULL; list++) {
+			if (strcasecmp(*str, list->name) == 0) {
+				client_workarounds |= list->num;
+				break;
+			}
+		}
+		if (list->name == NULL) {
+			*error_r = t_strdup_printf(
+				"lmtp_client_workarounds: "
+				"Unknown workaround: %s", *str);
+			return -1;
+		}
+	}
+	set->parsed_workarounds = client_workarounds;
+	return 0;
+}
+
 static bool lmtp_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 				const char **error_r)
 {
 	struct lmtp_settings *set = _set;
+
+	if (lmtp_settings_parse_workarounds(set, error_r) < 0)
+		return FALSE;
 
 	if (strcmp(set->lmtp_hdr_delivery_address, "none") == 0) {
 		set->parsed_lmtp_hdr_delivery_address =
@@ -3934,10 +4031,13 @@ static const struct setting_define lmtp_setting_defines[] = {
 	DEF(SET_BOOL, lmtp_proxy),
 	DEF(SET_BOOL, lmtp_save_to_detail_mailbox),
 	DEF(SET_BOOL, lmtp_rcpt_check_quota),
+	DEF(SET_BOOL, lmtp_add_received_header),
 	DEF(SET_UINT, lmtp_user_concurrency_limit),
 	DEF(SET_ENUM, lmtp_hdr_delivery_address),
 	DEF(SET_STR_VARS, lmtp_rawlog_dir),
 	DEF(SET_STR_VARS, lmtp_proxy_rawlog_dir),
+
+	DEF(SET_STR, lmtp_client_workarounds),
 
 	DEF(SET_STR_VARS, login_greeting),
 	DEF(SET_STR, login_trusted_networks),
@@ -3951,10 +4051,13 @@ static const struct lmtp_settings lmtp_default_settings = {
 	.lmtp_proxy = FALSE,
 	.lmtp_save_to_detail_mailbox = FALSE,
 	.lmtp_rcpt_check_quota = FALSE,
+	.lmtp_add_received_header = TRUE,
 	.lmtp_user_concurrency_limit = 0,
 	.lmtp_hdr_delivery_address = "final:none:original",
 	.lmtp_rawlog_dir = "",
 	.lmtp_proxy_rawlog_dir = "",
+
+	.lmtp_client_workarounds = "",
 
 	.login_greeting = PACKAGE_NAME" ready.",
 	.login_trusted_networks = "",
@@ -4697,12 +4800,14 @@ static const struct setting_define doveadm_setting_defines[] = {
 	DEF(SET_STR, libexec_dir),
 	DEF(SET_STR, mail_plugins),
 	DEF(SET_STR, mail_plugin_dir),
+	DEF(SET_STR_VARS, mail_temp_dir),
 	DEF(SET_BOOL, auth_debug),
 	DEF(SET_STR, auth_socket_path),
 	DEF(SET_STR, doveadm_socket_path),
 	DEF(SET_UINT, doveadm_worker_count),
 	DEF(SET_IN_PORT, doveadm_port),
 	{ SET_ALIAS, "doveadm_proxy_port", 0, NULL },
+	DEF(SET_ENUM, doveadm_ssl),
 	DEF(SET_STR, doveadm_username),
 	DEF(SET_STR, doveadm_password),
 	DEF(SET_STR, doveadm_allowed_commands),
@@ -4724,11 +4829,13 @@ const struct doveadm_settings doveadm_default_settings = {
 	.libexec_dir = PKG_LIBEXECDIR,
 	.mail_plugins = "",
 	.mail_plugin_dir = MODULEDIR,
+	.mail_temp_dir = "/tmp",
 	.auth_debug = FALSE,
 	.auth_socket_path = "auth-userdb",
 	.doveadm_socket_path = "doveadm-server",
 	.doveadm_worker_count = 0,
 	.doveadm_port = 0,
+	.doveadm_ssl = "no:ssl:starttls",
 	.doveadm_username = "doveadm",
 	.doveadm_password = "",
 	.doveadm_allowed_commands = "",
@@ -4762,10 +4869,12 @@ const struct setting_parser_info doveadm_setting_parser_info = {
 /* ../../src/dns/dns-client-settings.c */
 /* <settings checks> */
 static struct file_listener_settings dns_client_unix_listeners_array[] = {
-	{ "dns-client", 0666, "", "" }
+	{ "dns-client", 0666, "", "" },
+	{ "login/dns-client", 0666, "", "" },
 };
 static struct file_listener_settings *dns_client_unix_listeners[] = {
-	&dns_client_unix_listeners_array[0]
+	&dns_client_unix_listeners_array[0],
+        &dns_client_unix_listeners_array[1],
 };
 static buffer_t dns_client_unix_listeners_buf = {
 	dns_client_unix_listeners, sizeof(dns_client_unix_listeners), { NULL, }
@@ -5580,6 +5689,7 @@ static struct service_settings *config_all_services[] = {
 #ifdef HAVE_LIBWRAP
 	&tcpwrap_service_settings,
 #endif
+	&health_check_service_settings,
 	&submission_service_settings,
 	&submission_login_service_settings,
 	&stats_service_settings,

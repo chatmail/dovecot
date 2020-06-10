@@ -13,6 +13,9 @@
 #include "iostream-openssl.h"
 #endif
 
+#include <fcntl.h>
+#include <unistd.h>
+
 struct http_test_request {
 	struct io *io;
 	struct istream *payload;
@@ -368,14 +371,19 @@ int main(int argc, char *argv[])
 	   safe-memset.lo directly causes them to fail.) If safe_memset() isn't
 	   included, libssl-iostream plugin loading fails. */
 	i_zero_safe(&dns_set);
-	dns_set.dns_client_socket_path = "/var/run/dovecot/dns-client";
+	dns_set.dns_client_socket_path = PKG_RUNDIR"/dns-client";
 	dns_set.timeout_msecs = 30*1000;
 	dns_set.idle_timeout_msecs = UINT_MAX;
-	dns_client = dns_client_init(&dns_set);
 
-	if (dns_client_connect(dns_client, &error) < 0)
-		i_fatal("Couldn't initialize DNS client: %s", error);
+	/* check if there is a DNS client */
+	if (access(dns_set.dns_client_socket_path, R_OK|W_OK) == 0) {
+		dns_client = dns_client_init(&dns_set);
 
+		if (dns_client_connect(dns_client, &error) < 0)
+			i_fatal("Couldn't initialize DNS client: %s", error);
+	} else {
+		dns_client = NULL;
+	}
 	i_zero(&ssl_set);
 	ssl_set.allow_invalid_cert = TRUE;
 	if (stat("/etc/ssl/certs", &st) == 0 && S_ISDIR(st.st_mode))
@@ -452,7 +460,8 @@ int main(int argc, char *argv[])
 
 	http_client_context_unref(&http_cctx);
 
-	dns_client_deinit(&dns_client);
+	if (dns_client != NULL)
+		dns_client_deinit(&dns_client);
 
 	io_loop_destroy(&ioloop);
 	ssl_iostream_context_cache_free();

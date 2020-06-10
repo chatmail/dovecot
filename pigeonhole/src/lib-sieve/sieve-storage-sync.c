@@ -36,8 +36,7 @@ int sieve_storage_sync_init
 		return 0;
 	}
 
-	sieve_storage_sys_debug(storage, "sync: "
-		"Synchronization active");
+	e_debug(storage->event, "sync: Synchronization active");
 
 	storage->sync_inbox_ns = mail_namespace_find_inbox(user->namespaces);
 	return 0;
@@ -66,9 +65,9 @@ static int sieve_storage_sync_transaction_begin
 
 	inbox = mailbox_alloc(ns->list, "INBOX", mflags);
 	if (mailbox_open(inbox) < 0) {
-		sieve_storage_sys_warning(storage, "sync: "
-			"Failed to open user INBOX for attribute modifications: %s",
-			mailbox_get_last_error(inbox, &error));
+		e_warning(storage->event, "sync: "
+			  "Failed to open user INBOX for attribute modifications: %s",
+			  mailbox_get_last_error(inbox, &error));
 		mailbox_free(&inbox);
 		return -1;
 	}
@@ -90,9 +89,10 @@ static int sieve_storage_sync_transaction_finish
 	if ((ret=mailbox_transaction_commit(trans)) < 0) {
 		enum mail_error error;
 		
-		sieve_storage_sys_warning(storage, "sync: "
-			"Failed to update INBOX attributes: %s",
-			mail_storage_get_last_error(mailbox_get_storage(inbox), &error));
+		e_warning(storage->event, "sync: "
+			  "Failed to update INBOX attributes: %s",
+			   mail_storage_get_last_error(
+				mailbox_get_storage(inbox), &error));
 	}
 
 	mailbox_free(&inbox);

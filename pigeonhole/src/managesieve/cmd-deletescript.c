@@ -17,23 +17,26 @@ bool cmd_deletescript(struct client_command_context *cmd)
 	const char *scriptname;
 	struct sieve_script *script;
 
-	/* <scrip name>*/
-	if ( !client_read_string_args(cmd, TRUE, 1, &scriptname) )
+	/* <script name>*/
+	if (!client_read_string_args(cmd, TRUE, 1, &scriptname))
 		return FALSE;
 
-	script = sieve_storage_open_script
-		(storage, scriptname, NULL);
-	if ( script == NULL ) {
-		client_send_storage_error(client, storage);
+	event_add_str(cmd->event, "script_name", scriptname);
+
+	script = sieve_storage_open_script(storage, scriptname, NULL);
+	if (script == NULL || sieve_script_delete(script, FALSE) < 0) {
+		client_command_storage_error(
+			cmd, "Failed to delete script `%s'", scriptname);
+		sieve_script_unref(&script);
 		return TRUE;
 	}
 
-	if ( sieve_script_delete(script, FALSE) < 0 ) {
-		client_send_storage_error(client, storage);
-	} else {
-		client->deleted_count++;
-		client_send_ok(client, "Deletescript completed.");
-	}
+	struct event_passthrough *e =
+		client_command_create_finish_event(cmd);
+	e_debug(e->event(), "Deleted script `%s'", scriptname);
+
+	client->deleted_count++;
+	client_send_ok(client, "Deletescript completed.");
 
 	sieve_script_unref(&script);
 	return TRUE;

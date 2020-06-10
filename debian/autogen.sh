@@ -1,3 +1,6 @@
 #!/bin/sh
-autoreconf -f -i
-(cd pigeonhole && autoreconf -f -i)
+
+set -eu
+
+autoreconf -f -i -v -Wall
+(cd pigeonhole && autoreconf -f -i -v -Wall)

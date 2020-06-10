@@ -387,7 +387,7 @@ void index_storage_mailbox_alloc(struct mailbox *box, const char *vname,
 	box->index_prefix = p_strdup(box->pool, index_prefix);
 	box->event = event_create(box->storage->event);
 	event_add_category(box->event, &event_category_mailbox);
-	event_add_str(box->event, "name", box->vname);
+	event_add_str(box->event, "mailbox", box->vname);
 	event_set_append_log_prefix(box->event,
 		t_strdup_printf("Mailbox %s: ", box->vname));
 
@@ -937,6 +937,8 @@ bool index_storage_is_inconsistent(struct mailbox *box)
 void index_save_context_free(struct mail_save_context *ctx)
 {
 	index_mail_save_finish(ctx);
+	if (ctx->data.keywords != NULL)
+		mailbox_keywords_unref(&ctx->data.keywords);
 	i_free_and_null(ctx->data.from_envelope);
 	i_free_and_null(ctx->data.guid);
 	i_free_and_null(ctx->data.pop3_uidl);
@@ -1013,19 +1015,16 @@ static void
 index_copy_vsize_extension(struct mail_save_context *ctx,
 			   struct mail *src_mail, uint32_t dest_seq)
 {
-	struct index_mail *src_imail = INDEX_MAIL(src_mail);
-	unsigned int idx;
+	const uint32_t *vsizep;
 	bool expunged ATTR_UNUSED;
 
-	(void)index_mail_get_vsize_extension(src_mail);
-	if (src_imail->data.virtual_size == (uoff_t)-1)
+	vsizep = index_mail_get_vsize_extension(src_mail);
+	if (vsizep == NULL || *vsizep == 0)
 		return;
+	uint32_t vsize = *vsizep;
 
-	if (mail_index_map_get_ext_idx(ctx->transaction->view->map,
-				       ctx->transaction->box->mail_vsize_ext_id,
-				       &idx) &&
-	    src_imail->data.virtual_size < (uint32_t)-1) {
-		uint32_t vsize = src_imail->data.virtual_size+1;
+	if (vsize < (uint32_t)-1) {
+		/* copy the vsize record to the destination index */
 		mail_index_update_ext(ctx->transaction->itrans, dest_seq,
 				      ctx->transaction->box->mail_vsize_ext_id,
 				      &vsize, NULL);

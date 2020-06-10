@@ -1,2 +1,0 @@
-dovecot-lucene: hardening-no-fortify-functions usr/lib/dovecot/modules/lib21_fts_lucene_plugin.so
-

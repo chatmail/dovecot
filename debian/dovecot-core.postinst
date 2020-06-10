@@ -80,13 +80,4 @@ if [ "$1" = "triggered" ]; then
     fi
 fi
 
-# Stop and disable the systemd socket on upgrade if dovecot.service is enabled as well
-# (see #803915 and #814999). This will be attempted only once, to allow admins
-# to re-enable dovecot.socket if they wish.
-if [ "$1" = "configure" ] && [ -n "$2" ] && dpkg --compare-versions "$2" lt "1:2.2.21-1~"; then
-    if deb-systemd-helper --quiet was-enabled dovecot.service; then
-        deb-systemd-helper disable dovecot.socket
-    fi
-fi
-
 #DEBHELPER#

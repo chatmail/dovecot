@@ -9,6 +9,7 @@
 #include "istream-chain.h"
 #include "ostream.h"
 #include "time-util.h"
+#include "sleep.h"
 #include "unlink-directory.h"
 #include "write-full.h"
 #include "connection.h"
@@ -759,13 +760,17 @@ test_client_denied_second_rcpt(const struct smtp_submit_settings *submit_set)
 	smtp_submit_set.submission_timeout = 1000;
 
 	i_zero(&smtp_input);
-	smtp_submit = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
-		SMTP_ADDRESS_LITERAL("sender", "example.com"));
+	smtp_submit = smtp_submit_init_simple(
+		&smtp_input, &smtp_submit_set,
+		&((struct smtp_address){.localpart = "sender",
+					.domain = "example.com"}));
 
 	smtp_submit_add_rcpt(smtp_submit,
-		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
+		&((struct smtp_address){.localpart = "rcpt",
+					.domain = "example.com"}));
 	smtp_submit_add_rcpt(smtp_submit,
-		SMTP_ADDRESS_LITERAL("rcpt2", "example.com"));
+		&((struct smtp_address){.localpart = "rcpt2",
+					.domain = "example.com"}));
 	output = smtp_submit_send(smtp_submit);
 	o_stream_nsend_str(output, test_message1);
 
@@ -853,7 +858,7 @@ test_denied_data_input(struct server_connection *conn)
 			continue;
 		case DENIED_DATA_STATE_DATA:
 			o_stream_nsend_str(conn->conn.output,
-				"500 5.0.0 Unacceptabe recipients\r\n");
+				"500 5.0.0 Unacceptable recipients\r\n");
 			server_connection_deinit(&conn);
 			return;
 		}
@@ -1474,11 +1479,14 @@ test_client_parallel_delivery(const struct smtp_submit_settings *submit_set)
 	i_zero(&smtp_input);
 	smtp_submit_set.submission_host =
 		t_strdup_printf("127.0.0.1:%u",  bind_ports[0]);
-	smtp_submit1 = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
-		SMTP_ADDRESS_LITERAL("sender", "example.com"));
+	smtp_submit1 = smtp_submit_init_simple(
+		&smtp_input, &smtp_submit_set,
+		&((struct smtp_address){.localpart = "sender",
+					.domain = "example.com"}));
 
 	smtp_submit_add_rcpt(smtp_submit1,
-		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
+		&((struct smtp_address){.localpart = "rcpt",
+					.domain = "example.com"}));
 	output = smtp_submit_send(smtp_submit1);
 	o_stream_nsend_str(output, test_message1);
 
@@ -1490,10 +1498,12 @@ test_client_parallel_delivery(const struct smtp_submit_settings *submit_set)
 	smtp_submit_set.submission_host =
 		t_strdup_printf("127.0.0.1:%u",  bind_ports[1]);
 	smtp_submit2 = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
-		SMTP_ADDRESS_LITERAL("sender", "example.com"));
+		&((struct smtp_address){.localpart = "sender",
+					.domain = "example.com"}));
 
 	smtp_submit_add_rcpt(smtp_submit2,
-		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
+		&((struct smtp_address){.localpart = "rcpt",
+					.domain = "example.com"}));
 	output = smtp_submit_send(smtp_submit2);
 	o_stream_nsend_str(output, test_message2);
 
@@ -1566,10 +1576,12 @@ test_client_failed_sendmail(const struct smtp_submit_settings *submit_set)
 
 	i_zero(&smtp_input);
 	smtp_submit = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
-		SMTP_ADDRESS_LITERAL("sender", "example.com"));
+		&((struct smtp_address){.localpart = "sender",
+					.domain = "example.com"}));
 
 	smtp_submit_add_rcpt(smtp_submit,
-		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
+		&((struct smtp_address){.localpart = "rcpt",
+					.domain = "example.com"}));
 	output = smtp_submit_send(smtp_submit);
 	o_stream_nsend_str(output, test_message1);
 
@@ -1623,10 +1635,12 @@ test_client_successful_sendmail(const struct smtp_submit_settings *submit_set)
 
 	i_zero(&smtp_input);
 	smtp_submit = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
-		SMTP_ADDRESS_LITERAL("sender", "example.com"));
+		&((struct smtp_address){.localpart = "sender",
+					.domain = "example.com"}));
 
 	smtp_submit_add_rcpt(smtp_submit,
-		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
+		&((struct smtp_address){.localpart = "rcpt",
+					.domain = "example.com"}));
 	output = smtp_submit_send(smtp_submit);
 	o_stream_nsend_str(output, test_message1);
 
@@ -1708,11 +1722,14 @@ test_client_parallel_sendmail(const struct smtp_submit_settings *submit_set)
 	/* submit 1 */
 	i_zero(&smtp_input);
 	smtp_submit_set.sendmail_path = sendmail_path1;
-	smtp_submit1 = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
-		SMTP_ADDRESS_LITERAL("sender", "example.com"));
+	smtp_submit1 = smtp_submit_init_simple(
+		&smtp_input, &smtp_submit_set,
+		&((struct smtp_address){.localpart = "sender",
+					.domain = "example.com"}));
 
 	smtp_submit_add_rcpt(smtp_submit1,
-		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
+		&((struct smtp_address){.localpart = "rcpt",
+					.domain = "example.com"}));
 	output = smtp_submit_send(smtp_submit1);
 	o_stream_nsend_str(output, test_message1);
 
@@ -1722,11 +1739,14 @@ test_client_parallel_sendmail(const struct smtp_submit_settings *submit_set)
 	/* submit 2 */
 	i_zero(&smtp_input);
 	smtp_submit_set.sendmail_path = sendmail_path2;
-	smtp_submit2 = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
-		SMTP_ADDRESS_LITERAL("sender", "example.com"));
+	smtp_submit2 = smtp_submit_init_simple(
+		&smtp_input, &smtp_submit_set,
+		&((struct smtp_address){.localpart = "sender",
+					.domain = "example.com"}));
 
 	smtp_submit_add_rcpt(smtp_submit2,
-		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
+		&((struct smtp_address){.localpart = "rcpt",
+					.domain = "example.com"}));
 	output = smtp_submit_send(smtp_submit2);
 	o_stream_nsend_str(output, test_message2);
 
@@ -1822,11 +1842,14 @@ test_client_smtp_send_simple(const struct smtp_submit_settings *smtp_set,
 	smtp_submit_set.submission_host = host,
 
 	i_zero(&smtp_input);
-	smtp_submit = smtp_submit_init_simple(&smtp_input, &smtp_submit_set,
-		SMTP_ADDRESS_LITERAL("sender", "example.com"));
+	smtp_submit = smtp_submit_init_simple(
+		&smtp_input, &smtp_submit_set,
+		&((struct smtp_address){.localpart = "sender",
+					.domain = "example.com"}));
 
 	smtp_submit_add_rcpt(smtp_submit,
-		SMTP_ADDRESS_LITERAL("rcpt", "example.com"));
+		&((struct smtp_address){.localpart = "rcpt",
+					.domain = "example.com"}));
 	output = smtp_submit_send(smtp_submit);
 	o_stream_nsend_str(output, message);
 
@@ -1940,7 +1963,7 @@ static void test_server_run(unsigned int index)
 
 	/* open server socket */
 	io_listen = io_add(fd_listen,
-		IO_READ, server_connection_accept, (void *)NULL);
+		IO_READ, server_connection_accept, NULL);
 
 	server_conn_list = connection_list_init
 		(&server_connection_set, &server_connection_vfuncs);
@@ -2115,7 +2138,7 @@ static void test_run_client_server(
 
 	/* parent: client */
 
-	usleep(100000); /* wait a little for server setup */
+	i_sleep_msecs(100); /* wait a little for server setup */
 	server_port = 0;
 
 	ioloop = io_loop_create();

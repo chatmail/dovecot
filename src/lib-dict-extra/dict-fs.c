@@ -158,8 +158,8 @@ static bool fs_dict_iterate(struct dict_iterate_context *ctx,
 
 	*key_r = fs_iter_next(iter->fs_iter);
 	if (*key_r == NULL) {
-		if (fs_iter_deinit(&iter->fs_iter) < 0) {
-			iter->error = i_strdup(fs_last_error(dict->fs));
+		if (fs_iter_deinit(&iter->fs_iter, &error) < 0) {
+			iter->error = i_strdup(error);
 			return FALSE;
 		}
 		if (iter->paths[++iter->path_idx] == NULL)
@@ -168,12 +168,13 @@ static bool fs_dict_iterate(struct dict_iterate_context *ctx,
 		iter->fs_iter = fs_iter_init(dict->fs, path, 0);
 		return fs_dict_iterate(ctx, key_r, value_r);
 	}
+	path = t_strconcat(iter->paths[iter->path_idx], *key_r, NULL);
 	if ((iter->flags & DICT_ITERATE_FLAG_NO_VALUE) != 0) {
+		*key_r = path;
 		*value_r = NULL;
 		return TRUE;
 	}
 	p_clear(iter->value_pool);
-	path = t_strconcat(iter->paths[iter->path_idx], *key_r, NULL);
 	if ((ret = fs_dict_lookup(ctx->dict, iter->value_pool, path, value_r, &error)) < 0) {
 		/* I/O error */
 		iter->error = i_strdup(error);
@@ -182,6 +183,7 @@ static bool fs_dict_iterate(struct dict_iterate_context *ctx,
 		/* file was just deleted, just skip to next one */
 		return fs_dict_iterate(ctx, key_r, value_r);
 	}
+	*key_r = path;
 	return TRUE;
 }
 
@@ -190,11 +192,11 @@ static int fs_dict_iterate_deinit(struct dict_iterate_context *ctx,
 {
 	struct fs_dict_iterate_context *iter =
 		(struct fs_dict_iterate_context *)ctx;
-	struct fs_dict *dict = (struct fs_dict *)ctx->dict;
+	const char *error;
 	int ret;
 
-	if (fs_iter_deinit(&iter->fs_iter) < 0 && iter->error == NULL)
-		iter->error = i_strdup(fs_last_error(dict->fs));
+	if (fs_iter_deinit(&iter->fs_iter, &error) < 0 && iter->error == NULL)
+		iter->error = i_strdup(error);
 
 	ret = iter->error != NULL ? -1 : 0;
 	*error_r = t_strdup(iter->error);

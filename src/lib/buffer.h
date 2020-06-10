@@ -52,11 +52,19 @@ void buffer_append(buffer_t *buf, const void *data, size_t data_size);
 /* Append character to buffer. */
 void buffer_append_c(buffer_t *buf, unsigned char chr);
 
-/* Insert data to buffer. */
+/* Insert the provided data into the buffer at position pos. If pos points past
+   the current buffer size, the gap is zero-filled. */
 void buffer_insert(buffer_t *buf, size_t pos,
 		   const void *data, size_t data_size);
-/* Delete data from buffer. */
+/* Delete data with the indicated size from the buffer at position pos. The
+   deleted block may cross the current buffer size boundary, which is ignored.
+ */
 void buffer_delete(buffer_t *buf, size_t pos, size_t size);
+/* Replace the data in the buffer with the indicated size at position pos with
+   the provided data. This is a more optimized version of
+   buffer_delete(buf, pos, size); buffer_insert(buf, pos, data, data_size); */
+void buffer_replace(buffer_t *buf, size_t pos, size_t size,
+		    const void *data, size_t data_size);
 
 /* Fill buffer with zero bytes. */
 void buffer_write_zero(buffer_t *buf, size_t pos, size_t data_size);
@@ -99,6 +107,9 @@ size_t buffer_get_size(const buffer_t *buf) ATTR_PURE;
    With dynamic buffers this is buffer_get_size()-1, because the extra 1 byte
    is reserved for str_c()'s NUL. */
 size_t buffer_get_writable_size(const buffer_t *buf) ATTR_PURE;
+/* Returns the maximum number of bytes we can append to the buffer. If the
+   buffer is dynamic, this is always near SIZE_MAX. */
+size_t buffer_get_avail_size(const buffer_t *buf) ATTR_PURE;
 
 /* Returns TRUE if buffer contents are identical. */
 bool buffer_cmp(const buffer_t *buf1, const buffer_t *buf2);

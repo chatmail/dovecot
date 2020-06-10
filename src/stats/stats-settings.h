@@ -61,6 +61,7 @@ struct stats_exporter_settings {
 	const char *name;
 	const char *transport;
 	const char *transport_args;
+	unsigned int transport_timeout;
 	const char *format;
 	const char *format_args;
 
@@ -74,6 +75,7 @@ struct stats_metric_settings {
 	const char *source_location;
 	const char *categories;
 	const char *fields;
+	const char *group_by;
 	ARRAY(const char *) filter;
 
 	unsigned int parsed_source_linenum;

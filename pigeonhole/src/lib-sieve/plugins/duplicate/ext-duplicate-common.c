@@ -28,23 +28,20 @@
 #define EXT_DUPLICATE_DEFAULT_PERIOD (12*60*60)
 #define EXT_DUPLICATE_DEFAULT_MAX_PERIOD (2*24*60*60)
 
-bool ext_duplicate_load
-(const struct sieve_extension *ext, void **context)
+bool ext_duplicate_load(const struct sieve_extension *ext, void **context)
 {
 	struct sieve_instance *svinst = ext->svinst;
 	struct ext_duplicate_config *config;
 	sieve_number_t default_period, max_period;
 
-	if ( *context != NULL )
+	if (*context != NULL)
 		ext_duplicate_unload(ext);
 
-	if ( !sieve_setting_get_duration_value
-		(svinst, "sieve_duplicate_default_period", &default_period) ) {
+	if (!sieve_setting_get_duration_value(
+		svinst, "sieve_duplicate_default_period", &default_period))
 		default_period = EXT_DUPLICATE_DEFAULT_PERIOD;
-	}
-
-	if ( !sieve_setting_get_duration_value
-		(svinst, "sieve_duplicate_max_period", &max_period) ) {
+	if (!sieve_setting_get_duration_value(
+		svinst, "sieve_duplicate_max_period", &max_period)) {
 		max_period = EXT_DUPLICATE_DEFAULT_MAX_PERIOD;
 	}
 
@@ -56,11 +53,10 @@ bool ext_duplicate_load
 	return TRUE;
 }
 
-void ext_duplicate_unload
-(const struct sieve_extension *ext)
+void ext_duplicate_unload(const struct sieve_extension *ext)
 {
 	struct ext_duplicate_config *config =
-		(struct ext_duplicate_config *) ext->context;
+		(struct ext_duplicate_config *)ext->context;
 
 	i_free(config);
 }
@@ -76,12 +72,13 @@ struct act_duplicate_mark_data {
 	bool last:1;
 };
 
-static void act_duplicate_mark_print
-	(const struct sieve_action *action,
-		const struct sieve_result_print_env *rpenv, bool *keep);
-static void act_duplicate_mark_finish
-	(const struct sieve_action *action,
-		const struct sieve_action_exec_env *aenv, void *tr_context, int status);
+static void
+act_duplicate_mark_print(const struct sieve_action *action,
+			 const struct sieve_result_print_env *rpenv,
+			 bool *keep);
+static void
+act_duplicate_mark_finish(const struct sieve_action_exec_env *aenv,
+			  void *tr_context, int status);
 
 static const struct sieve_action_def act_duplicate_mark = {
 	.name = "duplicate_mark",
@@ -89,38 +86,41 @@ static const struct sieve_action_def act_duplicate_mark = {
 	.finish = act_duplicate_mark_finish
 };
 
-static void act_duplicate_mark_print
-(const struct sieve_action *action,
-	const struct sieve_result_print_env *rpenv, bool *keep ATTR_UNUSED)
+static void
+act_duplicate_mark_print(const struct sieve_action *action,
+			 const struct sieve_result_print_env *rpenv,
+			 bool *keep ATTR_UNUSED)
 {
 	struct act_duplicate_mark_data *data =
-		(struct act_duplicate_mark_data *) action->context;
+		(struct act_duplicate_mark_data *)action->context;
 	const char *last = (data->last ? " last" : "");
 
 	if (data->handle != NULL) {
-		sieve_result_action_printf(rpenv, "track%s duplicate with handle: %s",
+		sieve_result_action_printf(
+			rpenv, "track%s duplicate with handle: %s",
 			last, str_sanitize(data->handle, 128));
 	} else {
 		sieve_result_action_printf(rpenv, "track%s duplicate", last);
 	}
 }
 
-static void act_duplicate_mark_finish
-(const struct sieve_action *action,
-	const struct sieve_action_exec_env *aenv,
-	void *tr_context ATTR_UNUSED, int status)
+static void
+act_duplicate_mark_finish(const struct sieve_action_exec_env *aenv,
+			  void *tr_context ATTR_UNUSED, int status)
 {
-	const struct sieve_script_env *senv = aenv->scriptenv;
+	const struct sieve_execute_env *eenv = aenv->exec_env;
+	const struct sieve_script_env *senv = eenv->scriptenv;
 	struct act_duplicate_mark_data *data =
-		(struct act_duplicate_mark_data *) action->context;
+		(struct act_duplicate_mark_data *)aenv->action->context;
 
-	if ( status == SIEVE_EXEC_OK ) {
+	if (status == SIEVE_EXEC_OK) {
 		/* Message was handled successfully, so track duplicate for this
 		 * message.
 		 */
-		aenv->exec_status->significant_action_executed = TRUE;
-		sieve_action_duplicate_mark
-			(senv, data->hash, sizeof(data->hash), ioloop_time + data->period);
+		eenv->exec_status->significant_action_executed = TRUE;
+		sieve_action_duplicate_mark(senv, data->hash,
+					    sizeof(data->hash),
+					    ioloop_time + data->period);
 	}
 }
 
@@ -134,16 +134,18 @@ struct ext_duplicate_handle {
 	bool duplicate:1;
 };
 
-struct ext_duplicate_context {
+struct ext_duplicate_hash {
+	unsigned char hash[MD5_RESULTLEN];
 	ARRAY(struct ext_duplicate_handle) handles;
-
-	bool nohandle_duplicate:1;
-	bool nohandle_checked:1;
 };
 
-static void ext_duplicate_hash
-(string_t *handle, const char *value, size_t value_len, bool last,
-	unsigned char hash_r[])
+struct ext_duplicate_context {
+	ARRAY(struct ext_duplicate_hash) hashes;
+};
+
+static void
+ext_duplicate_hash(string_t *handle, const char *value, size_t value_len,
+		   bool last, unsigned char hash_r[])
 {
 	static const char *id = "sieve duplicate";
 	struct md5_context md5ctx;
@@ -164,49 +166,62 @@ static void ext_duplicate_hash
 	md5_final(&md5ctx, hash_r);
 }
 
-int ext_duplicate_check
-(const struct sieve_runtime_env *renv, string_t *handle,
-	const char *value, size_t value_len, sieve_number_t period,
-	bool last)
+int ext_duplicate_check(const struct sieve_runtime_env *renv, string_t *handle,
+			const char *value, size_t value_len,
+			sieve_number_t period, bool last)
 {
+	const struct sieve_execute_env *eenv = renv->exec_env;
 	const struct sieve_extension *this_ext = renv->oprtn->ext;
-	const struct sieve_script_env *senv = renv->scriptenv;
+	const struct sieve_script_env *senv = eenv->scriptenv;
 	struct ext_duplicate_context *rctx;
 	bool duplicate = FALSE;
 	pool_t msg_pool = NULL, result_pool = NULL;
+	unsigned char hash[MD5_RESULTLEN];
+	struct ext_duplicate_hash *hash_record = NULL;
+	struct ext_duplicate_handle *handle_record = NULL;
 	struct act_duplicate_mark_data *act;
 
-	if ( !sieve_action_duplicate_check_available(senv) ) {
-		sieve_runtime_warning(renv, NULL, "duplicate test: "
+	if (!sieve_action_duplicate_check_available(senv)) {
+		sieve_runtime_warning(
+			renv, NULL, "duplicate test: "
 			"duplicate checking not available in this context");
 		return 0;
 	}
-		
-	if ( value == NULL )
+
+	if (value == NULL)
 		return 0;
+
+	/* Create hash */
+	ext_duplicate_hash(handle, value, value_len, last, hash);
 
 	/* Get context; find out whether duplicate was checked earlier */
 	rctx = (struct ext_duplicate_context *)
 		sieve_message_context_extension_get(renv->msgctx, this_ext);
 
-	if ( rctx == NULL ) {
+	if (rctx == NULL) {
 		/* Create context */
 		msg_pool = sieve_message_context_pool(renv->msgctx);
 		rctx = p_new(msg_pool, struct ext_duplicate_context, 1);
-		sieve_message_context_extension_set(renv->msgctx, this_ext, (void *)rctx);
-	} else {
-		if ( handle == NULL ) {
-			if ( rctx->nohandle_checked  ) {
-				/* Already checked for duplicate */
-				return ( rctx->nohandle_duplicate ? 1 : 0 );
+		sieve_message_context_extension_set(renv->msgctx, this_ext,
+						    (void *)rctx);
+	} else if (array_is_created(&rctx->hashes)) {
+		struct ext_duplicate_hash *record;
+
+		array_foreach_modifiable(&rctx->hashes, record) {
+			if (memcmp(record->hash, hash, MD5_RESULTLEN) == 0) {
+				hash_record = record;
+				break;
 			}
-		} else if ( array_is_created(&rctx->handles) ) {
-			const struct ext_duplicate_handle *record;
-			array_foreach (&rctx->handles, record) {
-				if ( strcmp(record->handle, str_c(handle)) == 0 &&
-					record->last == last )
-					return ( record->duplicate ? 1 : 0 );
-			}
+		}
+	}
+	if (hash_record != NULL) {
+		const struct ext_duplicate_handle *rhandle;
+		array_foreach(&hash_record->handles, rhandle) {
+			const char *handle_str =
+				(handle == NULL ? NULL : str_c(handle));
+			if (null_strcmp(rhandle->handle, handle_str) == 0 &&
+			    rhandle->last == last)
+				return (rhandle->duplicate ? 1 : 0);
 		}
 	}
 
@@ -215,20 +230,19 @@ int ext_duplicate_check
 	if (handle != NULL)
 		act->handle = p_strdup(result_pool, str_c(handle));
 	act->period = period;
+	memcpy(act->hash, hash, MD5_RESULTLEN);
 	act->last = last;
 
-	/* Create hash */
-	ext_duplicate_hash(handle, value, value_len, last, act->hash);
-
 	/* Check duplicate */
-	duplicate = sieve_action_duplicate_check(senv, act->hash, sizeof(act->hash));
-
+	duplicate = sieve_action_duplicate_check(senv, hash, sizeof(hash));
 	if (!duplicate && last) {
 		unsigned char no_last_hash[MD5_RESULTLEN];
 
 		/* Check for entry without :last */
-		ext_duplicate_hash(handle, value, value_len, FALSE, no_last_hash);
-		sieve_action_duplicate_check(senv, no_last_hash, sizeof(no_last_hash));
+		ext_duplicate_hash(handle, value, value_len,
+				   FALSE, no_last_hash);
+		sieve_action_duplicate_check(senv, no_last_hash,
+					     sizeof(no_last_hash));
 	}
 
 	/* We may only mark the message as duplicate when Sieve script executes
@@ -236,27 +250,28 @@ int ext_duplicate_check
 	 * execution.
 	 */
 	if (!duplicate || last) {
-		if ( sieve_result_add_action
-			(renv, NULL, &act_duplicate_mark, NULL, (void *) act, 0, FALSE) < 0 )
+		if (sieve_result_add_action(renv, NULL, NULL,
+					    &act_duplicate_mark,
+					    NULL, (void *) act, 0, FALSE) < 0)
 			return -1;
 	}
 
 	/* Cache result */
-	if ( handle == NULL ) {
-		rctx->nohandle_duplicate = duplicate;
-		rctx->nohandle_checked = TRUE;
-	} else {
-		struct ext_duplicate_handle *record;
-
-		if ( msg_pool == NULL )
-			msg_pool = sieve_message_context_pool(renv->msgctx);
-		if ( !array_is_created(&rctx->handles) )
-			p_array_init(&rctx->handles, msg_pool, 64);
-		record = array_append_space(&rctx->handles);
-		record->handle = p_strdup(msg_pool, str_c(handle));
-		record->last = last;
-		record->duplicate = duplicate;
+	if (msg_pool == NULL)
+		msg_pool = sieve_message_context_pool(renv->msgctx);
+	if (hash_record == NULL) {
+		if (!array_is_created(&rctx->hashes))
+			p_array_init(&rctx->hashes, msg_pool, 64);
+		hash_record = array_append_space(&rctx->hashes);
+		memcpy(hash_record->hash, hash, MD5_RESULTLEN);
+		p_array_init(&hash_record->handles, msg_pool, 64);
 	}
+
+	handle_record = array_append_space(&hash_record->handles);
+	if (handle != NULL)
+		handle_record->handle = p_strdup(msg_pool, str_c(handle));
+	handle_record->last = last;
+	handle_record->duplicate = duplicate;
 
 	return ( duplicate ? 1 : 0 );
 }

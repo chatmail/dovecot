@@ -5,6 +5,7 @@
 #include "time-util.h"
 #include "lib-event-private.h"
 #include "str.h"
+#include "sleep.h"
 #include "ioloop.h"
 #include "connection.h"
 #include "ostream.h"
@@ -194,16 +195,10 @@ static void stats_conn_input(struct connection *_conn)
 static void wait_for_signal(const char *signal_file)
 {
 	struct timeval start, now;
-	if (gettimeofday(&start, NULL) < 0) {
-		kill_stats_child();
-		i_fatal("gettimeofday() failed %m");
-	}
+	i_gettimeofday(&start);
 	while (access(signal_file, F_OK) < 0) {
-		usleep(10000);
-		if (gettimeofday(&now, NULL) < 0) {
-			kill_stats_child();
-			i_fatal("gettimeofday() failed %m");
-		}
+		i_sleep_msecs(10);
+		i_gettimeofday(&now);
 		if (timeval_diff_usecs(&now, &start) > 10000000) {
 			kill_stats_child();
 			i_fatal("wait_for_signal has timed out");
@@ -346,7 +341,8 @@ static void test_no_merging2(void)
 		compare_test_stats_to(
 			"EVENT	%"PRIu64"	1	0	0"
 			"	stest-event-stats.c	%d"
-			"	l0	0	ctest2\n", id, l));
+			"	l0	0	ctest2\n"
+			"END	9\n", id, l));
 	test_end();
 }
 
@@ -439,7 +435,8 @@ static void test_merge_events2(void)
 			"	stest-event-stats.c	%d	l0	0"
 			"	ctest3	ctest2	ctest1	Tkey3"
 			"	10	0	Ikey2	20"
-			"	Skey1	str1\n", id, l));
+			"	Skey1	str1\n"
+			"END	16\n", id, l));
 	test_end();
 }
 

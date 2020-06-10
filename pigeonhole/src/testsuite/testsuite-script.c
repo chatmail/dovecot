@@ -31,30 +31,31 @@ void testsuite_script_deinit(void)
 {
 }
 
-static struct sieve_binary *_testsuite_script_compile
-(const struct sieve_runtime_env *renv, const char *script)
+static struct sieve_binary *
+_testsuite_script_compile(const struct sieve_runtime_env *renv,
+			  const char *script)
 {
 	struct sieve_instance *svinst = testsuite_sieve_instance;
 	struct sieve_binary *sbin;
 	const char *script_path;
 
-	sieve_runtime_trace(renv, SIEVE_TRLVL_TESTS, "compile script `%s'", script);
+	sieve_runtime_trace(renv, SIEVE_TRLVL_TESTS,
+			    "compile script `%s'", script);
 
 	script_path = sieve_file_script_get_dirpath(renv->script);
-	if ( script_path == NULL )
+	if (script_path == NULL)
 		return NULL;
 
 	script_path = t_strconcat(script_path, "/", script, NULL);
-
-	if ( (sbin = sieve_compile
-		(svinst, script_path, NULL, testsuite_log_ehandler, 0, NULL)) == NULL )
+	if ((sbin = sieve_compile(svinst, script_path, NULL,
+				  testsuite_log_ehandler, 0, NULL)) == NULL)
 		return NULL;
 
 	return sbin;
 }
 
-bool testsuite_script_compile
-(const struct sieve_runtime_env *renv, const char *script)
+bool testsuite_script_compile(const struct sieve_runtime_env *renv,
+			      const char *script)
 {
 	struct testsuite_interpreter_context *ictx =
 		testsuite_interpreter_context_get(renv->interp, testsuite_ext);
@@ -63,12 +64,11 @@ bool testsuite_script_compile
 	i_assert(ictx != NULL);
 	testsuite_log_clear_messages();
 
-	if ( (sbin=_testsuite_script_compile(renv, script)) == NULL )
+	if ((sbin = _testsuite_script_compile(renv, script)) == NULL)
 		return FALSE;
 
-	if ( ictx->compiled_script != NULL ) {
+	if (ictx->compiled_script != NULL)
 		sieve_binary_unref(&ictx->compiled_script);
-	}
 
 	ictx->compiled_script = sbin;
 	return TRUE;
@@ -80,39 +80,44 @@ bool testsuite_script_is_subtest(const struct sieve_runtime_env *renv)
 		testsuite_interpreter_context_get(renv->interp, testsuite_ext);
 
 	i_assert(ictx != NULL);
-	if ( ictx->compiled_script == NULL )
+	if (ictx->compiled_script == NULL)
 		return FALSE;
 
-	return ( sieve_binary_extension_get_index
-		(ictx->compiled_script, testsuite_ext) >= 0 );
+	return (sieve_binary_extension_get_index(ictx->compiled_script,
+						 testsuite_ext) >= 0);
 }
 
 bool testsuite_script_run(const struct sieve_runtime_env *renv)
 {
-	const struct sieve_script_env *senv = renv->scriptenv;
+	const struct sieve_execute_env *eenv = renv->exec_env;
+	const struct sieve_script_env *senv = eenv->scriptenv;
 	struct testsuite_interpreter_context *ictx =
 		testsuite_interpreter_context_get(renv->interp, testsuite_ext);
 	struct sieve_script_env scriptenv;
+	struct sieve_exec_status exec_status;
 	struct sieve_result *result;
 	struct sieve_interpreter *interp;
+	pool_t pool;
+	struct sieve_execute_env exec_env;
 	const char *error;
 	int ret;
 
 	i_assert(ictx != NULL);
 
-	if ( ictx->compiled_script == NULL ) {
-		sieve_runtime_error(renv, NULL,
-			"testsuite: trying to run script, but no script compiled yet");
+	if (ictx->compiled_script == NULL) {
+		sieve_runtime_error(renv, NULL, "testsuite: "
+			"trying to run script, but no script compiled yet");
 		return FALSE;
 	}
 
 	testsuite_log_clear_messages();
 
+	i_zero(&exec_status);
+
 	/* Compose script execution environment */
 	if (sieve_script_env_init(&scriptenv, senv->user, &error) < 0) {
-		sieve_runtime_error(renv, NULL,
-			"testsuite: failed to initialize script execution: %s",
-			error);
+		sieve_runtime_error(renv, NULL,	"testsuite: "
+			"failed to initialize script execution: %s", error);
 		return FALSE;
 	}
 	scriptenv.default_mailbox = "INBOX";
@@ -123,27 +128,37 @@ bool testsuite_script_run(const struct sieve_runtime_env *renv)
 	scriptenv.smtp_finish = testsuite_smtp_finish;
 	scriptenv.duplicate_mark = NULL;
 	scriptenv.duplicate_check = NULL;
-	scriptenv.trace_log = renv->scriptenv->trace_log;
-	scriptenv.trace_config = renv->scriptenv->trace_config;
+	scriptenv.trace_log = eenv->scriptenv->trace_log;
+	scriptenv.trace_config = eenv->scriptenv->trace_config;
 
 	result = testsuite_result_get();
 
-	/* Execute the script */
-	interp=sieve_interpreter_create(ictx->compiled_script,
-		NULL, renv->msgdata, &scriptenv, testsuite_log_ehandler, 0);
+	pool = pool_alloconly_create("sieve execution", 4096);
+	sieve_execute_init(&exec_env, eenv->svinst, pool, eenv->msgdata,
+			   &scriptenv, eenv->flags);
+	pool_unref(&pool);
 
-	if ( interp == NULL )
+	/* Execute the script */
+	interp = sieve_interpreter_create(ictx->compiled_script, NULL,
+					  &exec_env, testsuite_log_ehandler);
+
+	if (interp == NULL) {
+		sieve_execute_deinit(&exec_env);
 		return FALSE;
+	}
 
 	ret = sieve_interpreter_run(interp, result);
 
 	sieve_interpreter_free(&interp);
+	sieve_execute_deinit(&exec_env);
 
-	return ( ret > 0 || sieve_binary_extension_get_index
-                (ictx->compiled_script, testsuite_ext) >= 0 );
+	return (ret > 0 ||
+		sieve_binary_extension_get_index(ictx->compiled_script,
+						 testsuite_ext) >= 0);
 }
 
-struct sieve_binary *testsuite_script_get_binary(const struct sieve_runtime_env *renv)
+struct sieve_binary *
+testsuite_script_get_binary(const struct sieve_runtime_env *renv)
 {
 	struct testsuite_interpreter_context *ictx =
 		testsuite_interpreter_context_get(renv->interp, testsuite_ext);
@@ -152,17 +167,16 @@ struct sieve_binary *testsuite_script_get_binary(const struct sieve_runtime_env 
 	return ictx->compiled_script;
 }
 
-void testsuite_script_set_binary
-(const struct sieve_runtime_env *renv, struct sieve_binary *sbin)
+void testsuite_script_set_binary(const struct sieve_runtime_env *renv,
+				 struct sieve_binary *sbin)
 {
 	struct testsuite_interpreter_context *ictx =
 		testsuite_interpreter_context_get(renv->interp, testsuite_ext);
 
 	i_assert(ictx != NULL);
 
-	if ( ictx->compiled_script != NULL ) {
+	if (ictx->compiled_script != NULL)
 		sieve_binary_unref(&ictx->compiled_script);
-	}
 
 	ictx->compiled_script = sbin;
 	sieve_binary_ref(sbin);
@@ -172,12 +186,14 @@ void testsuite_script_set_binary
  * Multiscript
  */
 
-bool testsuite_script_multiscript
-(const struct sieve_runtime_env *renv, ARRAY_TYPE (const_string) *scriptfiles)
+bool testsuite_script_multiscript(const struct sieve_runtime_env *renv,
+				  ARRAY_TYPE (const_string) *scriptfiles)
 {
 	struct sieve_instance *svinst = testsuite_sieve_instance;
-	const struct sieve_script_env *senv = renv->scriptenv;
+	const struct sieve_execute_env *eenv = renv->exec_env;
+	const struct sieve_script_env *senv = eenv->scriptenv;
 	struct sieve_script_env scriptenv;
+	struct sieve_exec_status exec_status;
 	struct sieve_multiscript *mscript;
 	const char *const *scripts;
 	const char *error;
@@ -202,37 +218,40 @@ bool testsuite_script_multiscript
 	scriptenv.smtp_finish = testsuite_smtp_finish;
 	scriptenv.duplicate_mark = NULL;
 	scriptenv.duplicate_check = NULL;
-	scriptenv.trace_log = renv->scriptenv->trace_log;
-	scriptenv.trace_config = renv->scriptenv->trace_config;
+	scriptenv.trace_log = eenv->scriptenv->trace_log;
+	scriptenv.trace_config = eenv->scriptenv->trace_config;
+	scriptenv.exec_status = &exec_status;
 
 	/* Start execution */
 
-	mscript = sieve_multiscript_start_execute(svinst, renv->msgdata, &scriptenv);
+	mscript = sieve_multiscript_start_execute(svinst, eenv->msgdata,
+						  &scriptenv);
 
 	/* Execute scripts before main script */
 
 	scripts = array_get(scriptfiles, &count);
-
-	for ( i = 0; i < count && more; i++ ) {
+	for (i = 0; i < count && more; i++) {
 		struct sieve_binary *sbin = NULL;
 		const char *script = scripts[i];
 
 		/* Open */
-		if ( (sbin=_testsuite_script_compile(renv, script)) == NULL ) {
+		if ((sbin = _testsuite_script_compile(renv, script)) == NULL) {
 			result = FALSE;
 			break;
 		}
 
 		/* Execute */
 
-		sieve_runtime_trace(renv, SIEVE_TRLVL_TESTS, "run script `%s'", script);
+		sieve_runtime_trace(renv, SIEVE_TRLVL_TESTS,
+				    "run script `%s'", script);
 
 		more = sieve_multiscript_run(mscript, sbin,
-			testsuite_log_ehandler, testsuite_log_ehandler, 0);
+					     testsuite_log_ehandler,
+					     testsuite_log_ehandler, 0);
 
 		sieve_close(&sbin);
 	}
 
-	return ( sieve_multiscript_finish
-		(&mscript, testsuite_log_ehandler, 0, NULL) > 0	&& result );
+	return (sieve_multiscript_finish(&mscript, testsuite_log_ehandler,
+					 0, NULL) > 0 && result);
 }

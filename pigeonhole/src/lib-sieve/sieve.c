@@ -42,13 +42,17 @@
 #include <stdio.h>
 #include <dirent.h>
 
+struct event_category event_category_sieve = {
+	.name = "sieve",
+};
+
 /*
  * Main Sieve library interface
  */
 
-struct sieve_instance *sieve_init
-(const struct sieve_environment *env,
-	const struct sieve_callbacks *callbacks, void *context, bool debug)
+struct sieve_instance *sieve_init(const struct sieve_environment *env,
+				  const struct sieve_callbacks *callbacks,
+				  void *context, bool debug)
 {
 	struct sieve_instance *svinst;
 	const char *domain;
@@ -69,18 +73,25 @@ struct sieve_instance *sieve_init
 	svinst->env_location = env->location;
 	svinst->delivery_phase = env->delivery_phase;
 
+	svinst->event = event_create(env->event_parent);
+	event_add_category(svinst->event, &event_category_sieve);
+	event_set_forced_debug(svinst->event, debug);
+	event_set_append_log_prefix(svinst->event, "sieve: ");
+	event_add_str(svinst->event, "user", env->username);
+
 	/* Determine domain */
-	if ( env->domainname != NULL && *(env->domainname) != '\0' ) {
+	if (env->domainname != NULL && *(env->domainname) != '\0')
 		domain = env->domainname;
-	} else {
+	else {
 		/* Fall back to parsing username localpart@domain */
 		domain = svinst->username == NULL ? NULL :
 			strchr(svinst->username, '@');
-		if ( domain == NULL || *(domain+1) == '\0' ) {
+		if (domain == NULL || *(domain+1) == '\0') {
 			/* Fall back to parsing hostname host.domain */
-			domain = ( env->hostname != NULL ? strchr(env->hostname, '.') : NULL );
-			if ( domain == NULL || *(domain+1) == '\0'
-				|| strchr(domain+1, '.') == NULL ) {
+			domain = (env->hostname != NULL ?
+				  strchr(env->hostname, '.') : NULL);
+			if (domain == NULL || *(domain+1) == '\0' ||
+			    strchr(domain+1, '.') == NULL) {
 				/* Fall back to bare hostname */
 				domain = env->hostname;
 			} else {
@@ -95,17 +106,15 @@ struct sieve_instance *sieve_init
 
 	sieve_errors_init(svinst);
 
-	if ( debug ) {
-		sieve_sys_debug(svinst, "%s version %s initializing",
-			PIGEONHOLE_NAME, PIGEONHOLE_VERSION_FULL);
-	}
+	e_debug(svinst->event, "%s version %s initializing",
+		PIGEONHOLE_NAME, PIGEONHOLE_VERSION_FULL);
 
 	/* Read configuration */
 
 	sieve_settings_load(svinst);
 
 	/* Initialize extensions */
-	if ( !sieve_extensions_init(svinst) ) {
+	if (!sieve_extensions_init(svinst)) {
 		sieve_deinit(&svinst);
 		return NULL;
 	}
@@ -131,83 +140,87 @@ void sieve_deinit(struct sieve_instance **_svinst)
 	sieve_extensions_deinit(svinst);
 	sieve_errors_deinit(svinst);
 
+	event_unref(&svinst->event);
+
 	pool_unref(&(svinst)->pool);
 	*_svinst = NULL;
 }
 
-void sieve_set_extensions
-(struct sieve_instance *svinst, const char *extensions)
+void sieve_set_extensions(struct sieve_instance *svinst, const char *extensions)
 {
 	sieve_extensions_set_string(svinst, extensions, FALSE, FALSE);
 }
 
-const char *sieve_get_capabilities
-(struct sieve_instance *svinst, const char *name)
+const char *sieve_get_capabilities(struct sieve_instance *svinst,
+				   const char *name)
 {
-	if ( name == NULL || *name == '\0' )
+	if (name == NULL || *name == '\0')
 		return sieve_extensions_get_string(svinst);
 
 	return sieve_extension_capabilities_get_string(svinst, name);
+}
+
+struct event *sieve_get_event(struct sieve_instance *svinst)
+{
+	return svinst->event;
 }
 
 /*
  * Low-level compiler functions
  */
 
-struct sieve_ast *sieve_parse
-(struct sieve_script *script, struct sieve_error_handler *ehandler,
-	enum sieve_error *error_r)
+struct sieve_ast *sieve_parse(struct sieve_script *script,
+			      struct sieve_error_handler *ehandler,
+			      enum sieve_error *error_r)
 {
 	struct sieve_parser *parser;
 	struct sieve_ast *ast = NULL;
 
 	/* Parse */
-	if ( (parser = sieve_parser_create(script, ehandler, error_r)) == NULL )
+	if ((parser = sieve_parser_create(script, ehandler, error_r)) == NULL)
 		return NULL;
 
- 	if ( !sieve_parser_run(parser, &ast) ) {
+ 	if (!sieve_parser_run(parser, &ast))
  		ast = NULL;
- 	} else
+ 	else
 		sieve_ast_ref(ast);
 
 	sieve_parser_free(&parser);
 
-	if ( error_r != NULL ) {
-		if ( ast == NULL )
+	if (error_r != NULL) {
+		if (ast == NULL)
 			*error_r = SIEVE_ERROR_NOT_VALID;
 		else
 			*error_r = SIEVE_ERROR_NONE;
 	}
-
 	return ast;
 }
 
-bool sieve_validate
-(struct sieve_ast *ast, struct sieve_error_handler *ehandler,
-	enum sieve_compile_flags flags, enum sieve_error *error_r)
+bool sieve_validate(struct sieve_ast *ast, struct sieve_error_handler *ehandler,
+		    enum sieve_compile_flags flags, enum sieve_error *error_r)
 {
 	bool result = TRUE;
 	struct sieve_validator *validator =
 		sieve_validator_create(ast, ehandler, flags);
 
-	if ( !sieve_validator_run(validator) )
+	if (!sieve_validator_run(validator))
 		result = FALSE;
 
 	sieve_validator_free(&validator);
 
-	if ( error_r != NULL ) {
-		if ( !result )
+	if (error_r != NULL) {
+		if (!result)
 			*error_r = SIEVE_ERROR_NOT_VALID;
 		else
 			*error_r = SIEVE_ERROR_NONE;
 	}
-
 	return result;
 }
 
-static struct sieve_binary *sieve_generate
-(struct sieve_ast *ast, struct sieve_error_handler *ehandler,
-	enum sieve_compile_flags flags, enum sieve_error *error_r)
+static struct sieve_binary *sieve_generate(struct sieve_ast *ast,
+					   struct sieve_error_handler *ehandler,
+					   enum sieve_compile_flags flags,
+					   enum sieve_error *error_r)
 {
 	struct sieve_generator *generator =
 		sieve_generator_create(ast, ehandler, flags);
@@ -217,13 +230,12 @@ static struct sieve_binary *sieve_generate
 
 	sieve_generator_free(&generator);
 
-	if ( error_r != NULL ) {
-		if ( sbin == NULL )
+	if (error_r != NULL) {
+		if (sbin == NULL)
 			*error_r = SIEVE_ERROR_NOT_VALID;
 		else
 			*error_r = SIEVE_ERROR_NONE;
 	}
-
 	return sbin;
 }
 
@@ -231,49 +243,50 @@ static struct sieve_binary *sieve_generate
  * Sieve compilation
  */
 
-struct sieve_binary *sieve_compile_script
-(struct sieve_script *script, struct sieve_error_handler *ehandler,
-	enum sieve_compile_flags flags, enum sieve_error *error_r)
+struct sieve_binary *sieve_compile_script(struct sieve_script *script,
+					  struct sieve_error_handler *ehandler,
+					  enum sieve_compile_flags flags,
+					  enum sieve_error *error_r)
 {
 	struct sieve_ast *ast;
 	struct sieve_binary *sbin;
 	enum sieve_error error, *errorp;
 
-	if ( error_r != NULL )
+	if (error_r != NULL)
 		errorp = error_r;
 	else
 		errorp = &error;
 	*errorp = SIEVE_ERROR_NONE;
 
 	/* Parse */
-	if ( (ast = sieve_parse(script, ehandler, errorp)) == NULL ) {
-		switch ( *errorp ) {
+	if ((ast = sieve_parse(script, ehandler, errorp)) == NULL) {
+		switch (*errorp) {
 		case SIEVE_ERROR_NOT_FOUND:
 			if (error_r == NULL) {
 				sieve_error(ehandler, sieve_script_name(script),
-					"script not found");
+					    "script not found");
 			}
 			break;
 		default:
 			sieve_error(ehandler, sieve_script_name(script),
-				"parse failed");
+				    "parse failed");
 		}
 		return NULL;
 	}
 
 	/* Validate */
-	if ( !sieve_validate(ast, ehandler, flags, errorp) ) {
+	if (!sieve_validate(ast, ehandler, flags, errorp)) {
 		sieve_error(ehandler, sieve_script_name(script),
-			"validation failed");
+			    "validation failed");
 
  		sieve_ast_unref(&ast);
  		return NULL;
  	}
 
 	/* Generate */
-	if ( (sbin=sieve_generate(ast, ehandler, flags, errorp)) == NULL ) {
+	if ((sbin = sieve_generate(ast, ehandler, flags, errorp)) == NULL) {
 		sieve_error(ehandler, sieve_script_name(script),
-			"code generation failed");
+			    "code generation failed");
 		sieve_ast_unref(&ast);
 		return NULL;
 	}
@@ -283,38 +296,42 @@ struct sieve_binary *sieve_compile_script
 	return sbin;
 }
 
-struct sieve_binary *sieve_compile
-(struct sieve_instance *svinst, const char *script_location,
-	const char *script_name, struct sieve_error_handler *ehandler,
-	enum sieve_compile_flags flags, enum sieve_error *error_r)
+struct sieve_binary *sieve_compile(struct sieve_instance *svinst,
+				   const char *script_location,
+				   const char *script_name,
+				   struct sieve_error_handler *ehandler,
+				   enum sieve_compile_flags flags,
+				   enum sieve_error *error_r)
 {
 	struct sieve_script *script;
 	struct sieve_binary *sbin;
 	enum sieve_error error;
 
-	if ( (script = sieve_script_create_open
-		(svinst, script_location, script_name, &error)) == NULL ) {
+	if ((script = sieve_script_create_open(svinst, script_location,
+					       script_name, &error)) == NULL) {
 		if (error_r != NULL)
 			*error_r = error;
-		switch ( error ) {
+		switch (error) {
 		case SIEVE_ERROR_NOT_FOUND:
 			sieve_error(ehandler, script_name, "script not found");
 			break;
 		default:
-			sieve_internal_error(ehandler, script_name, "failed to open script");
+			sieve_internal_error(ehandler, script_name,
+					     "failed to open script");
 		}
 		return NULL;
 	}
 
 	sbin = sieve_compile_script(script, ehandler, flags, error_r);
 
-	if ( svinst->debug && sbin != NULL ) {
-		sieve_sys_debug(svinst, "Script `%s' from %s successfully compiled",
-			sieve_script_name(script), sieve_script_location(script));
+	if (sbin != NULL) {
+		e_debug(svinst->event,
+			"Script `%s' from %s successfully compiled",
+			sieve_script_name(script),
+			sieve_script_location(script));
 	}
 
 	sieve_script_unref(&script);
-
 	return sbin;
 }
 
@@ -322,31 +339,20 @@ struct sieve_binary *sieve_compile
  * Sieve runtime
  */
 
-static int sieve_run
-(struct sieve_binary *sbin, struct sieve_result **result,
-	const struct sieve_message_data *msgdata, const struct sieve_script_env *senv,
-	struct sieve_error_handler *ehandler, enum sieve_execute_flags flags)
+static int sieve_run(struct sieve_binary *sbin, struct sieve_result *result,
+		     struct sieve_execute_env *eenv,
+		     struct sieve_error_handler *ehandler)
 {
 	struct sieve_interpreter *interp;
 	int ret = 0;
 
 	/* Create the interpreter */
-	if ( (interp=sieve_interpreter_create
-		(sbin, NULL, msgdata, senv, ehandler, flags)) == NULL )
+	if ((interp = sieve_interpreter_create(
+		sbin, NULL, eenv, ehandler)) == NULL)
 		return SIEVE_EXEC_BIN_CORRUPT;
 
-	/* Reset execution status */
-	if ( senv->exec_status != NULL )
-		i_zero(senv->exec_status);
-
-	/* Create result object */
-	if ( *result == NULL ) {
-		*result = sieve_result_create
-			(sieve_binary_svinst(sbin), msgdata, senv);
-	}
-
 	/* Run the interpreter */
-	ret = sieve_interpreter_run(interp, *result);
+	ret = sieve_interpreter_run(interp, result);
 
 	/* Free the interpreter */
 	sieve_interpreter_free(&interp);
@@ -358,15 +364,17 @@ static int sieve_run
  * Reading/writing sieve binaries
  */
 
-struct sieve_binary *sieve_load
-(struct sieve_instance *svinst, const char *bin_path, enum sieve_error *error_r)
+struct sieve_binary *sieve_load(struct sieve_instance *svinst,
+				const char *bin_path,
+				enum sieve_error *error_r)
 {
 	return sieve_binary_open(svinst, bin_path, NULL, error_r);
 }
 
-struct sieve_binary *sieve_open_script
-(struct sieve_script *script, struct sieve_error_handler *ehandler,
-	enum sieve_compile_flags flags, enum sieve_error *error_r)
+struct sieve_binary *sieve_open_script(struct sieve_script *script,
+				       struct sieve_error_handler *ehandler,
+				       enum sieve_compile_flags flags,
+				       enum sieve_error *error_r)
 {
 	struct sieve_instance *svinst = sieve_script_svinst(script);
 	struct sieve_binary *sbin;
@@ -377,12 +385,11 @@ struct sieve_binary *sieve_open_script
 
 		if (sbin != NULL) {
 			/* Ok, it exists; now let's see if it is up to date */
-			if ( !sieve_binary_up_to_date(sbin, flags) ) {
+			if (!sieve_binary_up_to_date(sbin, flags)) {
 				/* Not up to date */
-				if ( svinst->debug ) {
-					sieve_sys_debug(svinst, "Script binary %s is not up-to-date",
-						sieve_binary_path(sbin));
-				}
+				e_debug(svinst->event,
+					"Script binary %s is not up-to-date",
+					sieve_binary_path(sbin));
 
 				sieve_binary_unref(&sbin);
 				sbin = NULL;
@@ -392,22 +399,19 @@ struct sieve_binary *sieve_open_script
 		/* If the binary does not exist or is not up-to-date, we need
 		 * to (re-)compile.
 		 */
-		if ( sbin != NULL ) {
-			if ( svinst->debug ) {
-				sieve_sys_debug(svinst,
-					"Script binary %s successfully loaded",
-					sieve_binary_path(sbin));
-			}
-
+		if (sbin != NULL) {
+			e_debug(svinst->event,
+				"Script binary %s successfully loaded",
+				sieve_binary_path(sbin));
 		} else {
-			sbin = sieve_compile_script(script, ehandler, flags, error_r);
+			sbin = sieve_compile_script(script, ehandler,
+						    flags, error_r);
 
-			if ( sbin != NULL ) {
-				if ( svinst->debug ) {
-					sieve_sys_debug(svinst,
-						"Script `%s' from %s successfully compiled",
-						sieve_script_name(script), sieve_script_location(script));
-				}
+			if (sbin != NULL) {
+				e_debug(svinst->event,
+					"Script `%s' from %s successfully compiled",
+					sieve_script_name(script),
+					sieve_script_location(script));
 			}
 		}
 	} T_END;
@@ -415,27 +419,30 @@ struct sieve_binary *sieve_open_script
 	return sbin;
 }
 
-struct sieve_binary *sieve_open
-(struct sieve_instance *svinst, const char *script_location,
-	const char *script_name, struct sieve_error_handler *ehandler,
-	enum sieve_compile_flags flags, enum sieve_error *error_r)
+struct sieve_binary *sieve_open(struct sieve_instance *svinst,
+				const char *script_location,
+				const char *script_name,
+				struct sieve_error_handler *ehandler,
+				enum sieve_compile_flags flags,
+				enum sieve_error *error_r)
 {
 	struct sieve_script *script;
 	struct sieve_binary *sbin;
 	enum sieve_error error;
 
 	/* First open the scriptfile itself */
-	if ( (script=sieve_script_create_open
-		(svinst, script_location, script_name, &error)) == NULL ) {
+	if ((script = sieve_script_create_open(svinst, script_location,
+					       script_name, &error)) == NULL) {
 		/* Failed */
 		if (error_r != NULL)
 			*error_r = error;
-		switch ( error ) {
+		switch (error) {
 		case SIEVE_ERROR_NOT_FOUND:
 			sieve_error(ehandler, script_name, "script not found");
 			break;
 		default:
-			sieve_internal_error(ehandler, script_name, "failed to open script");
+			sieve_internal_error(ehandler, script_name,
+					     "failed to open script");
 		}
 		return NULL;
 	}
@@ -460,24 +467,22 @@ bool sieve_is_loaded(struct sieve_binary *sbin)
 	return sieve_binary_loaded(sbin);
 }
 
-int sieve_save_as
-(struct sieve_binary *sbin, const char *bin_path, bool update,
-	mode_t save_mode, enum sieve_error *error_r)
+int sieve_save_as(struct sieve_binary *sbin, const char *bin_path, bool update,
+		  mode_t save_mode, enum sieve_error *error_r)
 {
-	if  ( bin_path == NULL )
+	if (bin_path == NULL)
 		return sieve_save(sbin, update, error_r);
 
 	return sieve_binary_save(sbin, bin_path, update, save_mode, error_r);
 }
 
-int sieve_save
-(struct sieve_binary *sbin, bool update, enum sieve_error *error_r)
+int sieve_save(struct sieve_binary *sbin, bool update,
+	       enum sieve_error *error_r)
 {
 	struct sieve_script *script = sieve_binary_script(sbin);
 
-	if ( script == NULL ) {
+	if (script == NULL)
 		return sieve_binary_save(sbin, NULL, update, 0600, error_r);
-	}
 
 	return sieve_script_binary_save(script, sbin, update, error_r);
 }
@@ -491,8 +496,7 @@ void sieve_close(struct sieve_binary **sbin)
  * Debugging
  */
 
-void sieve_dump
-(struct sieve_binary *sbin, struct ostream *stream, bool verbose)
+void sieve_dump(struct sieve_binary *sbin, struct ostream *stream, bool verbose)
 {
 	struct sieve_binary_dumper *dumpr = sieve_binary_dumper_create(sbin);
 
@@ -501,8 +505,7 @@ void sieve_dump
 	sieve_binary_dumper_free(&dumpr);
 }
 
-void sieve_hexdump
-(struct sieve_binary *sbin, struct ostream *stream)
+void sieve_hexdump(struct sieve_binary *sbin, struct ostream *stream)
 {
 	struct sieve_binary_dumper *dumpr = sieve_binary_dumper_create(sbin);
 
@@ -511,30 +514,42 @@ void sieve_hexdump
 	sieve_binary_dumper_free(&dumpr);
 }
 
-int sieve_test
-(struct sieve_binary *sbin, const struct sieve_message_data *msgdata,
-	const struct sieve_script_env *senv, struct sieve_error_handler *ehandler,
-	struct ostream *stream, enum sieve_execute_flags flags, bool *keep)
+int sieve_test(struct sieve_binary *sbin,
+	       const struct sieve_message_data *msgdata,
+	       const struct sieve_script_env *senv,
+	       struct sieve_error_handler *ehandler, struct ostream *stream,
+	       enum sieve_execute_flags flags, bool *keep)
 {
-	struct sieve_result *result = NULL;
+	struct sieve_instance *svinst = sieve_binary_svinst(sbin);
+	struct sieve_result *result;
+	struct sieve_execute_env eenv;
+	pool_t pool;
 	int ret;
 
-	if ( keep != NULL ) *keep = FALSE;
+	pool = pool_alloconly_create("sieve execution", 4096);
+	sieve_execute_init(&eenv, svinst, pool, msgdata, senv, flags);
+
+	if (keep != NULL) *keep = FALSE;
+
+	/* Create result object */
+	result = sieve_result_create(svinst, pool, &eenv);
 
 	/* Run the script */
-	ret = sieve_run(sbin, &result, msgdata, senv, ehandler, flags);
+	ret = sieve_run(sbin, result, &eenv, ehandler);
 
 	/* Print result if successful */
-	if ( ret > 0 ) {
-		ret = ( sieve_result_print(result, senv, stream, keep) ?
-			SIEVE_EXEC_OK : SIEVE_EXEC_FAILURE );
-	} else if ( ret == 0 ) {
-		if ( keep != NULL ) *keep = TRUE;
+	if (ret > 0) {
+		ret = (sieve_result_print(result, senv, stream, keep) ?
+		       SIEVE_EXEC_OK : SIEVE_EXEC_FAILURE);
+	} else if (ret == 0) {
+		if (keep != NULL) *keep = TRUE;
 	}
 
 	/* Cleanup */
-	if ( result != NULL )
+	if (result != NULL)
 		sieve_result_unref(&result);
+	sieve_execute_deinit(&eenv);
+	pool_unref(&pool);
 
 	return ret;
 }
@@ -543,8 +558,8 @@ int sieve_test
  * Script execution
  */
 
-int sieve_script_env_init(struct sieve_script_env *senv,
-	struct mail_user *user, const char **error_r)
+int sieve_script_env_init(struct sieve_script_env *senv, struct mail_user *user,
+			  const char **error_r)
 {
 	const struct message_address *postmaster;
 	const char *error;
@@ -561,35 +576,46 @@ int sieve_script_env_init(struct sieve_script_env *senv,
 	return 0;
 }
 
-int sieve_execute
-(struct sieve_binary *sbin, const struct sieve_message_data *msgdata,
-	const struct sieve_script_env *senv,
-	struct sieve_error_handler *exec_ehandler,
-	struct sieve_error_handler *action_ehandler,
-	enum sieve_execute_flags flags, bool *keep)
+int sieve_execute(struct sieve_binary *sbin,
+		  const struct sieve_message_data *msgdata,
+		  const struct sieve_script_env *senv,
+		  struct sieve_error_handler *exec_ehandler,
+		  struct sieve_error_handler *action_ehandler,
+		  enum sieve_execute_flags flags, bool *keep)
 {
+	struct sieve_instance *svinst = sieve_binary_svinst(sbin);
 	struct sieve_result *result = NULL;
+	struct sieve_execute_env eenv;
+	pool_t pool;
 	int ret;
 
-	if ( keep != NULL ) *keep = FALSE;
+	pool = pool_alloconly_create("sieve execution", 4096);
+	sieve_execute_init(&eenv, svinst, pool, msgdata, senv, flags);
+
+	if (keep != NULL) *keep = FALSE;
+
+	/* Create result object */
+	result = sieve_result_create(svinst, pool, &eenv);
 
 	/* Run the script */
-	ret = sieve_run(sbin, &result, msgdata, senv, exec_ehandler, flags);
+	ret = sieve_run(sbin, result, &eenv, exec_ehandler);
 
 	/* Evaluate status and execute the result:
-	 *   Strange situations, e.g. currupt binaries, must be handled by the caller.
-	 *   In that case no implicit keep is attempted, because the situation may be
-	 *   resolved.
+	   Strange situations, e.g. currupt binaries, must be handled by the
+	   caller. In that case no implicit keep is attempted, because the
+	   situation may be resolved.
 	 */
-	if ( ret > 0 ) {
+	if (ret > 0) {
 		/* Execute result */
-		ret = sieve_result_execute(result, keep, action_ehandler, flags);
-	} else if ( ret == SIEVE_EXEC_FAILURE ) {
-		/* Perform implicit keep if script failed with a normal runtime error */
-		switch ( sieve_result_implicit_keep
-			(result, action_ehandler, flags, FALSE) ) {
+		ret = sieve_result_execute(result, keep, action_ehandler);
+	} else if (ret == SIEVE_EXEC_FAILURE) {
+		/* Perform implicit keep if script failed with a normal runtime
+		   error
+		 */
+		switch (sieve_result_implicit_keep(result, action_ehandler,
+						   FALSE)) {
 		case SIEVE_EXEC_OK:
-			if ( keep != NULL ) *keep = TRUE;
+			if (keep != NULL) *keep = TRUE;
 			break;
 		case SIEVE_EXEC_TEMP_FAILURE:
 			ret = SIEVE_EXEC_TEMP_FAILURE;
@@ -600,8 +626,10 @@ int sieve_execute
 	}
 
 	/* Cleanup */
-	if ( result != NULL )
+	if (result != NULL)
 		sieve_result_unref(&result);
+	sieve_execute_deinit(&eenv);
+	pool_unref(&pool);
 
 	return ret;
 }
@@ -611,10 +639,9 @@ int sieve_execute
  */
 
 struct sieve_multiscript {
-	struct sieve_instance *svinst;
+	pool_t pool;
+	struct sieve_execute_env exec_env;
 	struct sieve_result *result;
-	const struct sieve_message_data *msgdata;
-	const struct sieve_script_env *scriptenv;
 
 	int status;
 	bool keep;
@@ -625,24 +652,24 @@ struct sieve_multiscript {
 	bool discard_handled:1;
 };
 
-struct sieve_multiscript *sieve_multiscript_start_execute
-(struct sieve_instance *svinst,	const struct sieve_message_data *msgdata,
-	const struct sieve_script_env *senv)
+struct sieve_multiscript *
+sieve_multiscript_start_execute(struct sieve_instance *svinst,
+				const struct sieve_message_data *msgdata,
+				const struct sieve_script_env *senv)
 {
 	pool_t pool;
 	struct sieve_result *result;
 	struct sieve_multiscript *mscript;
 
-	result = sieve_result_create(svinst, msgdata, senv);
-	pool = sieve_result_pool(result);
-
-	sieve_result_set_keep_action(result, NULL, NULL);
-
+	pool = pool_alloconly_create("sieve execution", 4096);
 	mscript = p_new(pool, struct sieve_multiscript, 1);
-	mscript->svinst = svinst;
+	mscript->pool = pool;
+	sieve_execute_init(&mscript->exec_env, svinst, pool, msgdata, senv, 0);
+
+	result = sieve_result_create(svinst, pool, &mscript->exec_env);
+	sieve_result_set_keep_action(result, NULL, NULL);
 	mscript->result = result;
-	mscript->msgdata = msgdata;
-	mscript->scriptenv = senv;
+
 	mscript->status = SIEVE_EXEC_OK;
 	mscript->active = TRUE;
 	mscript->keep = TRUE;
@@ -650,9 +677,11 @@ struct sieve_multiscript *sieve_multiscript_start_execute
 	return mscript;
 }
 
-struct sieve_multiscript *sieve_multiscript_start_test
-(struct sieve_instance *svinst, const struct sieve_message_data *msgdata,
-	const struct sieve_script_env *senv, struct ostream *stream)
+struct sieve_multiscript *
+sieve_multiscript_start_test(struct sieve_instance *svinst,
+			     const struct sieve_message_data *msgdata,
+			     const struct sieve_script_env *senv,
+			     struct ostream *stream)
 {
 	struct sieve_multiscript *mscript =
 		sieve_multiscript_start_execute(svinst, msgdata, senv);
@@ -662,63 +691,69 @@ struct sieve_multiscript *sieve_multiscript_start_test
 	return mscript;
 }
 
-static void sieve_multiscript_test
-(struct sieve_multiscript *mscript, bool *keep)
+static void
+sieve_multiscript_test(struct sieve_multiscript *mscript, bool *keep)
 {
-	if ( mscript->status > 0 ) {
-		mscript->status = ( sieve_result_print(mscript->result,
-			mscript->scriptenv, mscript->teststream, keep) ?
-				SIEVE_EXEC_OK : SIEVE_EXEC_FAILURE );
+	const struct sieve_script_env *senv = mscript->exec_env.scriptenv;
+
+	if (mscript->status > 0) {
+		mscript->status =
+			(sieve_result_print(mscript->result, senv,
+					    mscript->teststream, keep) ?
+			 SIEVE_EXEC_OK : SIEVE_EXEC_FAILURE);
 	} else {
-		if ( keep != NULL ) *keep = TRUE;
+		if (keep != NULL) *keep = TRUE;
 	}
 
 	sieve_result_mark_executed(mscript->result);
 }
 
-static void sieve_multiscript_execute
-(struct sieve_multiscript *mscript,
-	struct sieve_error_handler *ehandler,
-	enum sieve_execute_flags flags, bool *keep)
+static void sieve_multiscript_execute(struct sieve_multiscript *mscript,
+				      struct sieve_error_handler *ehandler,
+				      enum sieve_execute_flags flags,
+				      bool *keep)
 {
-	if ( mscript->status > 0 ) {
-		mscript->status = sieve_result_execute
-			(mscript->result, keep, ehandler, flags);
+	mscript->exec_env.flags = flags;
+
+	if (mscript->status > 0) {
+		mscript->status = sieve_result_execute(mscript->result, keep,
+						       ehandler);
 	} else {
-		if ( sieve_result_implicit_keep
-			(mscript->result, ehandler, flags, FALSE) <= 0 )
+		if (sieve_result_implicit_keep(mscript->result, ehandler,
+					       FALSE) <= 0)
 			mscript->status = SIEVE_EXEC_KEEP_FAILED;
 		else
-			if ( keep != NULL ) *keep = TRUE;
+			if (keep != NULL) *keep = TRUE;
 	}
 }
 
-bool sieve_multiscript_run
-(struct sieve_multiscript *mscript, struct sieve_binary *sbin,
-	struct sieve_error_handler *exec_ehandler,
-	struct sieve_error_handler *action_ehandler,
-	enum sieve_execute_flags flags)
+bool sieve_multiscript_run(struct sieve_multiscript *mscript,
+			   struct sieve_binary *sbin,
+			   struct sieve_error_handler *exec_ehandler,
+			   struct sieve_error_handler *action_ehandler,
+			   enum sieve_execute_flags flags)
 {
-	if ( !mscript->active ) return FALSE;
+	if (!mscript->active) return FALSE;
 
 	/* Run the script */
-	mscript->status = sieve_run(sbin, &mscript->result, mscript->msgdata,
-		mscript->scriptenv, exec_ehandler, flags);
+	mscript->exec_env.flags = flags;
+	mscript->status = sieve_run(sbin, mscript->result, &mscript->exec_env,
+				    exec_ehandler);
 
-	if ( mscript->status >= 0 ) {
+	if (mscript->status >= 0) {
 		mscript->keep = FALSE;
 
-		if ( mscript->teststream != NULL ) {
+		if (mscript->teststream != NULL)
 			sieve_multiscript_test(mscript, &mscript->keep);
-		} else {
-			sieve_multiscript_execute(mscript,
-				action_ehandler, flags, &mscript->keep);
+		else {
+			sieve_multiscript_execute(mscript, action_ehandler,
+						  flags, &mscript->keep);
 		}
-		if ( !mscript->keep )
+		if (!mscript->keep)
 			mscript->active = FALSE;
 	}
 
-	if ( !mscript->active || mscript->status <= 0 ) {
+	if (!mscript->active || mscript->status <= 0) {
 		mscript->active = FALSE;
 		return FALSE;
 	}
@@ -726,39 +761,38 @@ bool sieve_multiscript_run
 	return TRUE;
 }
 
-bool sieve_multiscript_will_discard
-(struct sieve_multiscript *mscript)
+bool sieve_multiscript_will_discard(struct sieve_multiscript *mscript)
 {
-	return ( !mscript->active && mscript->status == SIEVE_EXEC_OK &&
-		!sieve_result_executed_delivery(mscript->result) );
+	return (!mscript->active && mscript->status == SIEVE_EXEC_OK &&
+		!sieve_result_executed_delivery(mscript->result));
 }
 
-void sieve_multiscript_run_discard
-(struct sieve_multiscript *mscript, struct sieve_binary *sbin,
-	struct sieve_error_handler *exec_ehandler,
-	struct sieve_error_handler *action_ehandler,
-	enum sieve_execute_flags flags)
+void sieve_multiscript_run_discard(struct sieve_multiscript *mscript,
+				   struct sieve_binary *sbin,
+				   struct sieve_error_handler *exec_ehandler,
+				   struct sieve_error_handler *action_ehandler,
+				   enum sieve_execute_flags flags)
 {
-	if ( !sieve_multiscript_will_discard(mscript) )
+	if (!sieve_multiscript_will_discard(mscript))
 		return;
-	i_assert( !mscript->discard_handled );
+	i_assert(!mscript->discard_handled);
 
-	sieve_result_set_keep_action
-		(mscript->result, NULL, &act_store);
+	sieve_result_set_keep_action(mscript->result, NULL, &act_store);
 
 	/* Run the discard script */
 	flags |= SIEVE_EXECUTE_FLAG_DEFER_KEEP;
-	mscript->status = sieve_run(sbin, &mscript->result, mscript->msgdata,
-		mscript->scriptenv, exec_ehandler, flags);
+	mscript->exec_env.flags = flags;
+	mscript->status = sieve_run(sbin, mscript->result, &mscript->exec_env,
+				    exec_ehandler);
 
-	if ( mscript->status >= 0 ) {
+	if (mscript->status >= 0) {
 		mscript->keep = FALSE;
 
-		if ( mscript->teststream != NULL ) {
+		if (mscript->teststream != NULL)
 			sieve_multiscript_test(mscript, &mscript->keep);
-		} else {
-			sieve_multiscript_execute(mscript,
-				action_ehandler, flags, &mscript->keep);
+		else {
+			sieve_multiscript_execute(mscript, action_ehandler,
+						  flags, &mscript->keep);
 		}
 		if (mscript->status == SIEVE_EXEC_FAILURE)
 			mscript->status = SIEVE_EXEC_KEEP_FAILED;
@@ -774,25 +808,26 @@ int sieve_multiscript_status(struct sieve_multiscript *mscript)
 }
 
 int sieve_multiscript_tempfail(struct sieve_multiscript **_mscript,
-	struct sieve_error_handler *action_ehandler,
-	enum sieve_execute_flags flags)
+			       struct sieve_error_handler *action_ehandler,
+			       enum sieve_execute_flags flags)
 {
 	struct sieve_multiscript *mscript = *_mscript;
 	struct sieve_result *result = mscript->result;
 	int ret = mscript->status;
 
-	sieve_result_set_keep_action
-		(mscript->result, NULL, &act_store);
+	mscript->exec_env.flags = flags;
+	sieve_result_set_keep_action(mscript->result, NULL, &act_store);
 
-	if ( mscript->active ) {
+	if (mscript->active) {
 		ret = SIEVE_EXEC_TEMP_FAILURE;
 
-		if ( mscript->teststream == NULL && sieve_result_executed(result) ) {
-			/* Part of the result is already executed, need to fall back to
-			 * to implicit keep (FIXME)
+		if (mscript->teststream == NULL &&
+		    sieve_result_executed(result)) {
+			/* Part of the result is already executed, need to fall
+			   back to to implicit keep (FIXME)
 			 */
-			switch ( sieve_result_implicit_keep
-				(result, action_ehandler, flags, FALSE) ) {
+			switch (sieve_result_implicit_keep(
+				result, action_ehandler, FALSE)) {
 			case SIEVE_EXEC_OK:
 				ret = SIEVE_EXEC_FAILURE;
 				break;
@@ -804,28 +839,30 @@ int sieve_multiscript_tempfail(struct sieve_multiscript **_mscript,
 
 	/* Cleanup */
 	sieve_result_unref(&result);
+	sieve_execute_deinit(&mscript->exec_env);
+	pool_unref(&mscript->pool);
 	*_mscript = NULL;
 
 	return ret;
 }
 
 int sieve_multiscript_finish(struct sieve_multiscript **_mscript,
-	struct sieve_error_handler *action_ehandler,
-	enum sieve_execute_flags flags, bool *keep)
+			     struct sieve_error_handler *action_ehandler,
+			     enum sieve_execute_flags flags, bool *keep)
 {
 	struct sieve_multiscript *mscript = *_mscript;
 	struct sieve_result *result = mscript->result;
 	int ret = mscript->status;
 
-	sieve_result_set_keep_action
-		(mscript->result, NULL, &act_store);
+	mscript->exec_env.flags = flags;
+	sieve_result_set_keep_action(mscript->result, NULL, &act_store);
 
-	if ( mscript->active ) {
-		if ( mscript->teststream != NULL ) {
+	if (mscript->active) {
+		if (mscript->teststream != NULL)
 			mscript->keep = TRUE;
-		} else {
-			switch ( sieve_result_implicit_keep
-				(result, action_ehandler, flags, TRUE) ) {
+		else {
+			switch (sieve_result_implicit_keep(
+				result, action_ehandler, TRUE)) {
 			case SIEVE_EXEC_OK:
 				mscript->keep = TRUE;
 				break;
@@ -841,10 +878,12 @@ int sieve_multiscript_finish(struct sieve_multiscript **_mscript,
 		}
 	}
 
-	if ( keep != NULL ) *keep = mscript->keep;
+	if (keep != NULL) *keep = mscript->keep;
 
 	/* Cleanup */
 	sieve_result_unref(&result);
+	sieve_execute_deinit(&mscript->exec_env);
+	pool_unref(&mscript->pool);
 	*_mscript = NULL;
 	return ret;
 }
@@ -872,34 +911,35 @@ size_t sieve_max_script_size(struct sieve_instance *svinst)
  * User log
  */
 
-const char *sieve_user_get_log_path
-(struct sieve_instance *svinst,
-	struct sieve_script *user_script)
+const char *sieve_user_get_log_path(struct sieve_instance *svinst,
+				    struct sieve_script *user_script)
 {
 	const char *log_path = NULL;
 
 	/* Determine user log file path */
-	if ( (log_path=sieve_setting_get
-		(svinst, "sieve_user_log")) == NULL ) {
+	if ((log_path=sieve_setting_get(svinst, "sieve_user_log")) == NULL) {
 		const char *path;
 
-		if ( user_script == NULL ||
-			(path=sieve_file_script_get_path(user_script)) == NULL ) {
+		if (user_script == NULL ||
+		    (path = sieve_file_script_get_path(user_script)) == NULL) {
 			/* Default */
-			if ( svinst->home_dir != NULL ) {
-				log_path = t_strconcat
-					(svinst->home_dir, "/.dovecot.sieve.log", NULL);
+			if (svinst->home_dir != NULL) {
+				log_path = t_strconcat(
+					svinst->home_dir, "/.dovecot.sieve.log",
+					NULL);
 			}
 		} else {
 			/* Use script file as a base (legacy behavior) */
 			log_path = t_strconcat(path, ".log", NULL);
 		}
-	} else if ( svinst->home_dir != NULL ) {
+	} else if (svinst->home_dir != NULL) {
 		/* Expand home dir if necessary */
-		if ( log_path[0] == '~' ) {
-			log_path = home_expand_tilde(log_path, svinst->home_dir);
-		} else if ( log_path[0] != '/' ) {
-			log_path = t_strconcat(svinst->home_dir, "/", log_path, NULL);
+		if (log_path[0] == '~') {
+			log_path = home_expand_tilde(log_path,
+						     svinst->home_dir);
+		} else if (log_path[0] != '/') {
+			log_path = t_strconcat(svinst->home_dir, "/",
+					       log_path, NULL);
 		}
 	}
 	return log_path;
@@ -913,9 +953,8 @@ struct sieve_trace_log {
 	struct ostream *output;
 };
 
-int sieve_trace_log_create
-(struct sieve_instance *svinst, const char *path,
-	struct sieve_trace_log **trace_log_r)
+int sieve_trace_log_create(struct sieve_instance *svinst, const char *path,
+			   struct sieve_trace_log **trace_log_r)
 {
 	struct sieve_trace_log *trace_log;
 	struct ostream *output;
@@ -923,12 +962,12 @@ int sieve_trace_log_create
 
 	*trace_log_r = NULL;
 
-	if ( path == NULL ) {
+	if (path == NULL)
 		output = o_stream_create_fd(1, 0);
-	} else {
+	else {
 		fd = open(path, O_CREAT | O_APPEND | O_WRONLY, 0600);
-		if ( fd == -1 ) {
-			sieve_sys_error(svinst, "trace: "
+		if (fd == -1) {
+			e_error(svinst->event, "trace: "
 				"creat(%s) failed: %m", path);
 			return -1;
 		}
@@ -943,9 +982,8 @@ int sieve_trace_log_create
 	return 0;
 }
 
-int sieve_trace_log_create_dir
-(struct sieve_instance *svinst, const char *dir,
-	const char *label, struct sieve_trace_log **trace_log_r)
+int sieve_trace_log_create_dir(struct sieve_instance *svinst, const char *dir,
+			       struct sieve_trace_log **trace_log_r)
 {
 	static unsigned int counter = 0;
 	const char *timestamp, *prefix;
@@ -955,7 +993,7 @@ int sieve_trace_log_create_dir
 
 	if (stat(dir, &st) < 0) {
 		if (errno != ENOENT && errno != EACCES) {
-			sieve_sys_error(svinst, "trace: "
+			e_error(svinst->event, "trace: "
 				"stat(%s) failed: %m", dir);
 		}
 		return -1;
@@ -964,19 +1002,14 @@ int sieve_trace_log_create_dir
 	timestamp = t_strflocaltime("%Y%m%d-%H%M%S", ioloop_time);
 
 	counter++;
-	if ( label != NULL ) {
-		prefix = t_strdup_printf("%s/%s.%s.%s.%u.trace",
-			dir, label, timestamp, my_pid, counter);
-	} else {
-		prefix = t_strdup_printf("%s/%s.%s.%u.trace",
-			dir, timestamp, my_pid, counter);
-	}
+
+	prefix = t_strdup_printf("%s/%s.%s.%u.trace",
+				 dir, timestamp, my_pid, counter);
 	return sieve_trace_log_create(svinst, prefix, trace_log_r);
 }
 
-int sieve_trace_log_open
-(struct sieve_instance *svinst, const char *label,
-	struct sieve_trace_log **trace_log_r)
+int sieve_trace_log_open(struct sieve_instance *svinst,
+			 struct sieve_trace_log **trace_log_r)
 {
 	const char *trace_dir =
 		sieve_setting_get(svinst, "sieve_trace_dir");
@@ -985,21 +1018,22 @@ int sieve_trace_log_open
 	if (trace_dir == NULL)
 		return -1;
 
-	if ( svinst->home_dir != NULL ) {
+	if (svinst->home_dir != NULL) {
 		/* Expand home dir if necessary */
-		if ( trace_dir[0] == '~' ) {
-			trace_dir = home_expand_tilde(trace_dir, svinst->home_dir);
-		} else if ( trace_dir[0] != '/' ) {
-			trace_dir = t_strconcat(svinst->home_dir, "/", trace_dir, NULL);
+		if (trace_dir[0] == '~') {
+			trace_dir = home_expand_tilde(trace_dir,
+						      svinst->home_dir);
+		} else if (trace_dir[0] != '/') {
+			trace_dir = t_strconcat(svinst->home_dir, "/",
+						trace_dir, NULL);
 		}
 	}
 
-	return sieve_trace_log_create_dir
-		(svinst, trace_dir, label, trace_log_r)	;
+	return sieve_trace_log_create_dir(svinst, trace_dir, trace_log_r);
 }
 
-void sieve_trace_log_write_line
-(struct sieve_trace_log *trace_log, const string_t *line)
+void sieve_trace_log_write_line(struct sieve_trace_log *trace_log,
+				const string_t *line)
 {
 	struct const_iovec iov[2];
 
@@ -1014,6 +1048,19 @@ void sieve_trace_log_write_line
 	iov[1].iov_base = "\n";
 	iov[1].iov_len = 1;
 	o_stream_nsendv(trace_log->output, iov, 2);
+}
+
+void sieve_trace_log_printf(struct sieve_trace_log *trace_log,
+			    const char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+	T_BEGIN {
+		o_stream_nsend_str(trace_log->output,
+				   t_strdup_vprintf(fmt, args));
+	} T_END;
+	va_end(args);
 }
 
 void sieve_trace_log_free(struct sieve_trace_log **_trace_log)
@@ -1032,7 +1079,7 @@ void sieve_trace_log_free(struct sieve_trace_log **_trace_log)
 }
 
 int sieve_trace_config_get(struct sieve_instance *svinst,
-	struct sieve_trace_config *tr_config)
+			   struct sieve_trace_config *tr_config)
 {
 	const char *tr_level =
 		sieve_setting_get(svinst, "sieve_trace_level");
@@ -1040,30 +1087,29 @@ int sieve_trace_config_get(struct sieve_instance *svinst,
 
 	i_zero(tr_config);
 
-	if ( tr_level == NULL || *tr_level == '\0' ||
-		strcasecmp(tr_level, "none") == 0 )
+	if (tr_level == NULL || *tr_level == '\0' ||
+	    strcasecmp(tr_level, "none") == 0)
 		return -1;
 
-	if ( strcasecmp(tr_level, "actions") == 0 ) {
+	if (strcasecmp(tr_level, "actions") == 0)
 		tr_config->level = SIEVE_TRLVL_ACTIONS;
-	} else if ( strcasecmp(tr_level, "commands") == 0 ) {
+	else if (strcasecmp(tr_level, "commands") == 0)
 		tr_config->level = SIEVE_TRLVL_COMMANDS;
-	} else if ( strcasecmp(tr_level, "tests") == 0 ) {
+	else if (strcasecmp(tr_level, "tests") == 0)
 		tr_config->level = SIEVE_TRLVL_TESTS;
-	} else if ( strcasecmp(tr_level, "matching") == 0 ) {
+	else if (strcasecmp(tr_level, "matching") == 0)
 		tr_config->level = SIEVE_TRLVL_MATCHING;
-	} else {
-		sieve_sys_error(svinst,
-			"Unknown trace level: %s", tr_level);
+	else {
+		e_error(svinst->event, "Unknown trace level: %s", tr_level);
 		return -1;
 	}
 
 	tr_debug = FALSE;
-	(void)sieve_setting_get_bool_value
-		(svinst, "sieve_trace_debug", &tr_debug);
+	(void)sieve_setting_get_bool_value(svinst, "sieve_trace_debug",
+					   &tr_debug);
 	tr_addresses = FALSE;
-	(void)sieve_setting_get_bool_value
-		(svinst, "sieve_trace_addresses", &tr_addresses);
+	(void)sieve_setting_get_bool_value(svinst, "sieve_trace_addresses",
+					   &tr_addresses);
 
 	if (tr_debug)
 		tr_config->flags |= SIEVE_TRFLG_DEBUG;
@@ -1076,8 +1122,7 @@ int sieve_trace_config_get(struct sieve_instance *svinst,
  * User e-mail address
  */
 
-const struct smtp_address *sieve_get_user_email
-(struct sieve_instance *svinst)
+const struct smtp_address *sieve_get_user_email(struct sieve_instance *svinst)
 {
 	struct smtp_address *address;
 	const char *username = svinst->username;
@@ -1087,15 +1132,15 @@ const struct smtp_address *sieve_get_user_email
 	if (svinst->user_email != NULL)
 		return svinst->user_email;
 
-	if (smtp_address_parse_mailbox(svinst->pool, username,
-		0, &address, NULL) >= 0) {
+	if (smtp_address_parse_mailbox(svinst->pool, username, 0,
+				       &address, NULL) >= 0) {
 		svinst->user_email_implicit = address;
 		return svinst->user_email_implicit;
 	}
 
-	if ( svinst->domainname != NULL ) {
-		svinst->user_email_implicit = smtp_address_create(svinst->pool,
-			username, svinst->domainname);
+	if (svinst->domainname != NULL) {
+		svinst->user_email_implicit = smtp_address_create(
+			svinst->pool, username, svinst->domainname);
 		return svinst->user_email_implicit;
 	}
 	return NULL;
@@ -1124,8 +1169,7 @@ sieve_get_postmaster_smtp(const struct sieve_script_env *senv)
 	return addr;
 }
 
-const char *
-sieve_get_postmaster_address(const struct sieve_script_env *senv)
+const char *sieve_get_postmaster_address(const struct sieve_script_env *senv)
 {
 	const struct message_address *postmaster =
 		sieve_get_postmaster(senv);
@@ -1134,4 +1178,3 @@ sieve_get_postmaster_address(const struct sieve_script_env *senv)
 	message_address_write(addr, postmaster);
 	return str_c(addr);
 }
-

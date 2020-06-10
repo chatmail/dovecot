@@ -70,7 +70,6 @@ struct master_login_auth {
 	bool request_auth_token:1;
 };
 
-static void master_login_auth_connected(struct connection *_conn, bool success);
 static int
 master_login_auth_input_args(struct connection *_conn, const char *const *args);
 static int
@@ -84,7 +83,6 @@ static const struct connection_vfuncs master_login_auth_vfuncs = {
 	.destroy = master_login_auth_destroy,
 	.handshake_line = master_login_auth_handshake_line,
 	.input_args = master_login_auth_input_args,
-	.client_connected = master_login_auth_connected,
 };
 
 static const struct connection_settings master_login_auth_set = {
@@ -98,6 +96,9 @@ static const struct connection_settings master_login_auth_set = {
 	.output_max_size = (size_t)-1,
 	.client = TRUE,
 };
+
+static int
+master_login_auth_connect(struct master_login_auth *auth);
 
 struct master_login_auth *
 master_login_auth_init(const char *auth_socket_path, bool request_auth_token)
@@ -127,6 +128,7 @@ master_login_auth_init(const char *auth_socket_path, bool request_auth_token)
 				    auth->auth_socket_path);
 
 	auth->timeout_msecs = 1000 * MASTER_AUTH_LOOKUP_TIMEOUT_SECS;
+	master_login_auth_connect(auth);
 	return auth;
 }
 
@@ -488,17 +490,6 @@ master_login_auth_input_args(struct connection *_conn, const char *const *args)
 	return 1;
 }
 
-static void master_login_auth_connected(struct connection *_conn, bool success)
-{
-	struct master_login_auth *auth =
-		container_of(_conn, struct master_login_auth, conn);
-
-	/* Cannot get here unless connect() was successful */
-	i_assert(success);
-
-	auth->connected = TRUE;
-}
-
 static int
 master_login_auth_connect(struct master_login_auth *auth)
 {
@@ -511,12 +502,18 @@ master_login_auth_connect(struct master_login_auth *auth)
 						 auth->auth_socket_path));
 		} else {
 			e_error(auth->event, "connect(%s) failed: %m",
-				auth->auth_socket_path);;
+				auth->auth_socket_path);
 		}
 		return -1;
 	}
 	io_loop_time_refresh();
 	auth->connect_time = ioloop_timeval;
+	auth->connected = TRUE;
+
+	o_stream_nsend_str(auth->conn.output,
+		t_strdup_printf("VERSION\t%u\t%u\n",
+				AUTH_MASTER_PROTOCOL_MAJOR_VERSION,
+				AUTH_MASTER_PROTOCOL_MINOR_VERSION));
 	return 0;
 }
 
@@ -557,7 +554,7 @@ master_login_auth_send_request(struct master_login_auth *auth,
 		master_login_auth_request_remove(auth, req);
 		req->callback(NULL, MASTER_AUTH_ERRMSG_INTERNAL_FAILURE,
 			      req->context);
-		i_free(req);
+		request_free(&req);
 		return;
 	}
 
@@ -589,10 +586,6 @@ void master_login_auth_request(struct master_login_auth *auth,
 				 context);
 			return;
 		}
-		o_stream_nsend_str(auth->conn.output,
-			t_strdup_printf("VERSION\t%u\t%u\n",
-					AUTH_MASTER_PROTOCOL_MAJOR_VERSION,
-					AUTH_MASTER_PROTOCOL_MINOR_VERSION));
 	}
 
 	id = ++auth->id_counter;
