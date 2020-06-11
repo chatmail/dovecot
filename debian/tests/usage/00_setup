@@ -29,17 +29,6 @@ chown nobody:nogroup /srv/dovecot-dep8
 echo "Restarting the service"
 systemctl restart dovecot
 
-echo "Waiting for the service to be available"
-c=0
-while ! nc -z -U /run/dovecot/auth-userdb; do
-    c=$((c+1))
-    sleep 2
-    if [ $c -gt 30 ]; then
-        echo "Timed out waiting for the service to be available" >&2
-        exit 1
-    fi
-done
-
 echo "Sending a test message via the LDA"
 /usr/lib/dovecot/dovecot-lda -f "test@example.com" -d dep8 <<EOF
 Return-Path: <test@example.com>

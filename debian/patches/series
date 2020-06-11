@@ -10,3 +10,4 @@ ssl-dh-params-location.patch
 skip-rfc-subdir.patch
 Correct-misspellings.patch
 fix-compiler-warnings.patch
+systemd-sd-notify-support.patch
