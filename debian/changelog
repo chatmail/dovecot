@@ -1,3 +1,9 @@
+dovecot (1:2.3.10.1+dfsg1-2) UNRELEASED; urgency=medium
+
+  * Add libunwind-dev to build-deps (Closes: #962630)
+
+ -- Noah Meyerhans <noahm@debian.org>  Thu, 11 Jun 2020 09:48:31 -0700
+
 dovecot (1:2.3.10.1+dfsg1-1) unstable; urgency=medium
 
   * New upstream release addresses multiple security issues
