@@ -1,0 +1,83 @@
+From: Nis Martensen <nis.martensen@web.de>
+Subject: [PATCH 1/2] systemd integration: notify service manager when ready
+Bug-Debian: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=951722
+Forwarded: no
+
+With Type=simple or Type=forking, systemd does not really know when the
+service is ready to accept connections and might start depending
+services too early. Use Type=notify to explicitly tell the service
+manager when the service is ready.
+
+For a real problem caused by assuming readiness too early, please see
+https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=951722
+
+For the meaning of the service type and details of the readiness
+protocol, see also the following links:
+https://www.freedesktop.org/software/systemd/man/systemd.service.html#Type=
+https://www.freedesktop.org/software/systemd/man/sd_notify.html
+
+As discussed in the last link, more elaborate state notifications are
+possible. This patch only implements the most basic part.
+
+Original patch prepared by Michael Biebl, with slight modification.
+---
+ dovecot.service.in                       | 3 +--
+ src/lib-master/master-service-settings.c | 2 +-
+ src/master/main.c                        | 6 ++++++
+ 3 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/dovecot.service.in b/dovecot.service.in
+index 5c45f590b..a1df992c5 100644
+--- a/dovecot.service.in
++++ b/dovecot.service.in
+@@ -14,9 +14,8 @@ Documentation=http://wiki2.dovecot.org/
+ After=local-fs.target network-online.target
+ 
+ [Service]
+-Type=simple
++Type=notify
+ ExecStart=@sbindir@/dovecot -F
+-PIDFile=@rundir@/master.pid
+ ExecReload=@bindir@/doveadm reload
+ ExecStop=@bindir@/doveadm stop
+ PrivateTmp=true
+diff --git a/src/lib-master/master-service-settings.c b/src/lib-master/master-service-settings.c
+index 657ef66bc..c7b8b369c 100644
+--- a/src/lib-master/master-service-settings.c
++++ b/src/lib-master/master-service-settings.c
+@@ -62,7 +62,7 @@ static const struct setting_define master_service_setting_defines[] = {
+ 
+ /* <settings checks> */
+ #ifdef HAVE_SYSTEMD
+-#  define ENV_SYSTEMD " LISTEN_PID LISTEN_FDS"
++#  define ENV_SYSTEMD " LISTEN_PID LISTEN_FDS NOTIFY_SOCKET"
+ #else
+ #  define ENV_SYSTEMD ""
+ #endif
+diff --git a/src/master/main.c b/src/master/main.c
+index 6e0e68fe7..08bea05ed 100644
+--- a/src/master/main.c
++++ b/src/master/main.c
+@@ -26,6 +26,9 @@
+ #include "service-process.h"
+ #include "service-log.h"
+ #include "dovecot-version.h"
++#ifdef HAVE_SYSTEMD
++#include "sd-daemon.h"
++#endif
+ 
+ #include <stdio.h>
+ #include <unistd.h>
+@@ -544,6 +547,9 @@ static void main_init(const struct master_settings *set)
+ 	master_clients_init();
+ 
+ 	services_monitor_start(services);
++#ifdef HAVE_SYSTEMD
++	sd_notify(0, "READY=1");
++#endif
+ 	startup_finished = TRUE;
+ }
+ 
+-- 
+2.20.1
+
