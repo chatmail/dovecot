@@ -9,6 +9,7 @@ dovecot (1:2.3.10.1+dfsg1-1) unstable; urgency=medium
   * Strip non-DFSG-compliant docs from .orig archives
   * Incorporate a number of improvements to debian/ metadata contributed by
     Christian Göttsche <cgzones@googlemail.com>
+  * Move pid file to /run (Closes: #925443)
   * Add noahm@debian.org to Uploaders
   * Work around flakiness in autopkgtest suite
   * Suppress library-not-linked-against-libc lintian warnings some plugins as
