@@ -1,6 +1,8 @@
 dovecot (1:2.3.10.1+dfsg1-2) UNRELEASED; urgency=medium
 
   * Support sd_notify with systemd (Closes: #951722)
+  * Add necessary CFLAGS and LDFLAGS settings to ensure functional backtrace
+    generation.  (Closes: #962630)
 
  -- Noah Meyerhans <noahm@debian.org>  Thu, 11 Jun 2020 11:21:31 -0700
 
