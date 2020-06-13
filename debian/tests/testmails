@@ -20,7 +20,7 @@ def random_string(length):
 
     s = ''
     maxind = len(string.ascii_letters)-1
-    for l in range(length):
+    for _ in range(length):
         s += string.ascii_letters[random.randint(0, maxind)]
     return s.lower()
 
@@ -50,7 +50,7 @@ class TestUser:
 
         self.login = None
 
-        while(True):
+        while True:
             login = random_string(8)
             if not login_exists(login):
                 break
@@ -191,7 +191,7 @@ Get cracking!''')
         # list mailboxes
         status, imlist = imap.list()
         self.assertEqual(status, 'OK')
-        self.assert_(imlist[0].decode().endswith('INBOX'))
+        self.assertTrue(imlist[0].decode().endswith('INBOX'))
 
         # check mails
         imap.select()
@@ -207,7 +207,7 @@ Get cracking!''')
 
         self.assertEqual(imap.fetch('1', '(RFC822)')[1],
                          [(b'1 (RFC822 {163}',
-                          b'''Date: Thu, 16 Nov 2006 17:12:23 -0800\r
+                           b'''Date: Thu, 16 Nov 2006 17:12:23 -0800\r
 From: Test User 1 <test1@test1.com>\r
 To: Dovecot tester <dovecot@test.com>\r
 Subject: Test 1\r
@@ -223,7 +223,7 @@ Some really important news.\r
         # old mail 2 is mail 1 now
         self.assertEqual(imap.fetch('1', '(RFC822)')[1],
                          [(b'1 (RFC822 {161}',
-                          b'''Date: Tue, 28 Nov 2006 11:29:34 +0100\r
+                           b'''Date: Tue, 28 Nov 2006 11:29:34 +0100\r
 From: Test User 2 <test2@test2.com>\r
 To: Dovecot tester <dovecot@test.com>\r
 Subject: Test 2\r
