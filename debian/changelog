@@ -4,6 +4,14 @@ dovecot (1:2.3.10.1+dfsg1-2) UNRELEASED; urgency=medium
   * Add necessary CFLAGS and LDFLAGS settings to ensure functional backtrace
     generation.  (Closes: #962630)
 
+  [ Andreas Hasenack ]
+  * d/t/control, d/t/testmails: cherry-pick updated autopkgtests from
+    Ubuntu's 1:2.2.35-2ubuntu1:
+    - d/t/testmails: dropped the hardcoded "Ubuntu" name from the banner
+      text and made it distribution agnostic
+    - d/t/control: added lsb-release to test dependencies, used to get the
+      distribution name
+
  -- Noah Meyerhans <noahm@debian.org>  Thu, 11 Jun 2020 11:21:31 -0700
 
 dovecot (1:2.3.10.1+dfsg1-1) unstable; urgency=medium
