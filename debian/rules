@@ -13,6 +13,13 @@ ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
   export DEB_LDFLAGS_MAINT_STRIP = -Wl,-Bsymbolic-functions
 endif
 
+# Ensure that stacktrace generation works:
+export DEB_LDFLAGS_MAINT_APPEND = -rdynamic
+include /usr/share/dpkg/architecture.mk
+ifneq ($(filter armel armhf, $(DEB_HOST_ARCH)),)
+  export DEB_CFLAGS_MAINT_APPEND = -funwind-tables
+endif
+
 # Macros to help move files to the module packages
 CORE_DIR=$(CURDIR)/debian/dovecot-core
 PKG_DIR=$(CURDIR)/debian/dovecot-PKG
