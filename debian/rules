@@ -114,7 +114,12 @@ override_dh_auto_configure:
 	            --disable-rpath \
 	            --with-systemdsystemunitdir=/lib/systemd/system \
 	            --disable-static
+	
 	$(MAKE) dovecot-config
+	# remove unreproducible '-ffile-prefix-map=/build/1st/dovecot-2.3.10.1+dfsg1=.'
+	#                       '-fdebug-prefix-map=/build/dovecot-O55xqn/dovecot-2.3.10.1+dfsg1=.'
+	sed -i 's/\s\+-ffile-prefix-map=\S\+=.\s\+/ /g' dovecot-config
+	sed -i 's/\s\+-fdebug-prefix-map=\S\+=.\s\+/ /g' dovecot-config
 	
 	# Pigeonhole
 	touch $(PIGEONHOLE_DIR)/stamp.h.in
