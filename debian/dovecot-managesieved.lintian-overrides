@@ -4,3 +4,4 @@ dovecot-managesieved: shared-library-lacks-prerequisites usr/lib/dovecot/modules
 # ignore executable-in-usr-lib, maybe move to libexec at some point
 dovecot-managesieved: executable-in-usr-lib usr/lib/dovecot/managesieve
 dovecot-managesieved: executable-in-usr-lib usr/lib/dovecot/managesieve-login
+dovecot-managesieved: library-not-linked-against-libc usr/lib/dovecot/modules/settings/libmanagesieve_settings.so

@@ -3,6 +3,8 @@ dovecot (1:2.3.10.1+dfsg1-2) UNRELEASED; urgency=medium
   * Support sd_notify with systemd (Closes: #951722)
   * Add necessary CFLAGS and LDFLAGS settings to ensure functional backtrace
     generation.  (Closes: #962630)
+  * Suppress additional library-not-linked-against-libc lintian warnings some
+    plugins as false-positives, observed on armel systems
 
   [ Andreas Hasenack ]
   * d/t/control, d/t/testmails: cherry-pick updated autopkgtests from
