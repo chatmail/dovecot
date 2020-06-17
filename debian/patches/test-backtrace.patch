@@ -1,3 +1,11 @@
+From: Noah Meyerhans <noahm@debian.org>
+Date: Fri, 12 Jun 2020 16:51:06 -0700
+Subject: Updates the symbol to check for in the backtrace unit tests
+
+Updates the symbol to check for in the backtrace unit tests to
+something that appears in all the traces on the platforms we support.
+---
+
 Index: dovecot/src/lib/test-backtrace.c
 ===================================================================
 --- dovecot.orig/src/lib/test-backtrace.c
