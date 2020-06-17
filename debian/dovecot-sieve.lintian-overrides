@@ -2,4 +2,4 @@
 dovecot-sieve: shared-library-lacks-prerequisites usr/lib/dovecot/modules/sieve/lib90_sieve_imapsieve_plugin.so
 # ignore extra man page
 dovecot-sieve: manpage-without-executable usr/share/man/man1/sieved.1.gz
-dovecot-sieve: library-not-linked-against-libc usr/lib/dovecot/modules/sieve/lib90_sieve_imapsieve_plugin.so
+dovecot-sieve [armel]: library-not-linked-against-libc usr/lib/dovecot/modules/sieve/lib90_sieve_imapsieve_plugin.so

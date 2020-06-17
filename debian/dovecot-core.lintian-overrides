@@ -13,7 +13,7 @@ dovecot-core: package-contains-empty-directory usr/lib/dovecot/modules/dict/
 dovecot-core: spelling-error-in-readme-debian dovenull dovenull (duplicate word) dovenull
 dovecot-core: library-not-linked-against-libc usr/lib/dovecot/modules/old-stats/libold_stats_mail.so
 dovecot-core: library-not-linked-against-libc usr/lib/dovecot/modules/old-stats/libstats_auth.so
-dovecot-core: library-not-linked-against-libc usr/lib/dovecot/modules/lib20_listescape_plugin.so
+dovecot-core [armel]: library-not-linked-against-libc usr/lib/dovecot/modules/lib20_listescape_plugin.so
 # ignore internal libraries without dependency information
 dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/lib20_listescape_plugin.so
 dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/settings/libpigeonhole_settings.so
