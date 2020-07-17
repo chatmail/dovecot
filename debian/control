@@ -14,13 +14,13 @@ Build-Depends: debhelper-compat (= 13),
                libcap-dev,
                libclucene-dev,
                libdb-dev,
-               libicu-dev,
                libexpat-dev,
                libexttextcat-dev,
+               libicu-dev,
                libldap2-dev,
+               liblua5.3-dev,
                liblz4-dev,
                liblzma-dev,
-               liblua5.3-dev,
                libpam0g-dev,
                libpq-dev,
                libsasl2-dev,
@@ -285,9 +285,7 @@ Description: secure POP3/IMAP server - mail submission agent
 
 Package: dovecot-auth-lua
 Architecture: any
-Depends: dovecot-core (= ${binary:Version}),
-         ${misc:Depends},
-         ${shlibs:Depends}
+Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Description: secure POP3/IMAP server - Lua authentication plugin
  Dovecot is a mail server whose major goals are security and extreme
  reliability. It tries very hard to handle all error conditions and verify
