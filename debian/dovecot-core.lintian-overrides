@@ -18,8 +18,7 @@ dovecot-core [armel]: library-not-linked-against-libc usr/lib/dovecot/modules/li
 dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/lib20_listescape_plugin.so
 dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/settings/libpigeonhole_settings.so
 # this is a nasty hack, hopefully to be removed at some point (see #696382)
-dovecot-core: uses-dpkg-database-directly postinst (line 72)
-dovecot-core: uses-dpkg-database-directly postinst (line 73)
+dovecot-core: uses-dpkg-database-directly postinst
 # hardening flags are set and blhc succeeds; might need some investigation
 dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/libdovecot-storage.so.0.0.0
 dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib20_fts_plugin.so
