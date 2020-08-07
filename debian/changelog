@@ -1,3 +1,15 @@
+dovecot (1:2.3.4.1-5+deb10u3) buster-security; urgency=high
+
+  * Fix CVE-2020-12100 - Receiving mail with deeply nested MIME parts leads to
+    resource exhaustion as Dovecot attempts to parse it.
+  * CVE-2020-12673 - Dovecot's NTLM implementation does not correctly check
+    message buffer size, which leads to reading past allocation which can lead
+    to crash.
+  * CVE-2020-12674 - Dovecot's RPA mechanism implementation accepts zero-length
+    message, which leads to assert-crash later on.
+
+ -- Noah Meyerhans <noahm@debian.org>  Mon, 10 Aug 2020 18:03:03 -0700
+
 dovecot (1:2.3.4.1-5+deb10u2) buster-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
