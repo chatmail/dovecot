@@ -50,3 +50,4 @@ CVE-2020-12100/0014-lib-mail-message-parser-Support-limiting-max-number-.patch
 CVE-2020-12100/0015-lib-mail-message-parser-Support-limiting-max-number-.patch
 CVE-2020-12100/0016-lib-mail-Fix-handling-trailing-in-MIME-boundaries.patch
 CVE-2020-12673.patch
+CVE-2020-12674/0001-auth-mech-rpa-Fail-on-zero-len-buffer.patch
