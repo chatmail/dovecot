@@ -49,3 +49,4 @@ CVE-2020-12100/0013-lib-mail-global-message_parser_init-Convert-flags-to.patch
 CVE-2020-12100/0014-lib-mail-message-parser-Support-limiting-max-number-.patch
 CVE-2020-12100/0015-lib-mail-message-parser-Support-limiting-max-number-.patch
 CVE-2020-12100/0016-lib-mail-Fix-handling-trailing-in-MIME-boundaries.patch
+CVE-2020-12673.patch
