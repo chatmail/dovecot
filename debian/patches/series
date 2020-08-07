@@ -32,3 +32,4 @@ CVE-2020-10957_CVE-2020-10958_CVE-2020-10967/0014-lib-smtp-test-smtp-server-erro
 CVE-2020-10957_CVE-2020-10958_CVE-2020-10967/0015-lib-smtp-smtp-address-Don-t-return-NULL-from-smtp_ad.patch
 CVE-2020-10957_CVE-2020-10958_CVE-2020-10967/0016-lib-smtp-smtp-address-Don-t-recognize-an-address-wit.patch
 CVE-2020-10957_CVE-2020-10958_CVE-2020-10967/0017-lmtp-lmtp-commands-Explicity-prohibit-empty-RCPT-pat.patch
+internal-api-updates.patch

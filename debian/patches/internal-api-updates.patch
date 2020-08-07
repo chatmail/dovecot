@@ -1,0 +1,24 @@
+Description: Backport some internal APIs
+ Recent security patches make use of some internal library functions and macros
+ that were added in more recent versions of dovecot.  This patch brings those
+ definitions back to 2.3.4.1 in order to make application of the security
+ patches easier.
+Origin: backport
+Forwarded: not-needed
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+Index: dovecot/src/lib/array.h
+===================================================================
+--- dovecot.orig/src/lib/array.h
++++ dovecot/src/lib/array.h
+@@ -227,6 +227,10 @@ array_get_i(const struct array *array, u
+ #define array_get(array, count) \
+ 	ARRAY_TYPE_CAST_CONST(array)array_get_i(&(array)->arr, count)
+ 
++#define array_back(array) array_idx(array, array_count(array)-1)
++#define array_pop_back(array) array_delete(array, array_count(array)-1, 1);
++#define array_push_back(array, item) array_append(array, (item), 1)
++
+ /* Re: i_assert() vs. pure: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=51971#c1 */
+ static inline const void * ATTR_PURE
+ array_idx_i(const struct array *array, unsigned int idx)
