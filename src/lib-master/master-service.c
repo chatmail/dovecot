@@ -5,6 +5,7 @@
 #include "lib-event-private.h"
 #include "event-filter.h"
 #include "ioloop.h"
+#include "hostpid.h"
 #include "path-util.h"
 #include "array.h"
 #include "strescape.h"
@@ -191,8 +192,8 @@ static void master_service_init_socket_listeners(struct master_service *service)
 			}
 		}
 	}
-	service->want_ssl_settings = have_ssl_sockets ||
-		(service->flags & MASTER_SERVICE_FLAG_USE_SSL_SETTINGS) != 0;
+	service->want_ssl_server = have_ssl_sockets ||
+		(service->flags & MASTER_SERVICE_FLAG_HAVE_STARTTLS) != 0;
 }
 
 struct master_service *
@@ -202,7 +203,7 @@ master_service_init(const char *name, enum master_service_flags flags,
 	struct master_service *service;
 	data_stack_frame_t datastack_frame_id = 0;
 	unsigned int count;
-	const char *value;
+	const char *service_configured_name, *value;
 
 	i_assert(name != NULL);
 
@@ -227,9 +228,22 @@ master_service_init(const char *name, enum master_service_flags flags,
 	/* NOTE: we start rooted, so keep the code minimal until
 	   restrict_access_by_env() is called */
 	lib_init();
+	/* Get the service name from environment. This usually differs from the
+	   service name parameter if the executable is used for multiple
+	   services. For example "auth" vs "auth-worker". It can also be a
+	   service with slightly different settings, like "lmtp" vs
+	   "lmtp-no-quota". We don't want to use the configured name as the
+	   service's primary name, because that could break some lookups (e.g.
+	   auth would suddenly see service=lmtp-no-quota. However, this can be
+	   very useful in events to differentiate e.g. auth master and
+	   auth-worker events which might otherwise look very similar. It's
+	   also useful in log prefixes. */
+	service_configured_name = getenv(MASTER_SERVICE_ENV);
+	if (service_configured_name == NULL)
+		service_configured_name = name;
 	/* Set a logging prefix temporarily. This will be ignored once the log
 	   is properly initialized */
-	i_set_failure_prefix("%s(init): ", name);
+	i_set_failure_prefix("%s(init): ", service_configured_name);
 
 	/* make sure all the data stack allocations during init will be freed
 	   before we get to ioloop. the corresponding t_pop() is in
@@ -247,10 +261,17 @@ master_service_init(const char *name, enum master_service_flags flags,
 
 	process_title_init(*argc, argv);
 
+	/* process_title_init() might destroy all environments.
+	   Need to look this up again. */
+	service_configured_name = getenv(MASTER_SERVICE_ENV);
+	if (service_configured_name == NULL)
+		service_configured_name = name;
+
 	service = i_new(struct master_service, 1);
 	service->argc = *argc;
 	service->argv = *argv;
 	service->name = i_strdup(name);
+	service->configured_name = i_strdup(service_configured_name);
 	/* keep getopt_str first in case it contains "+" */
 	service->getopt_str = *getopt_str == '\0' ?
 		i_strdup(master_service_getopt_string()) :
@@ -281,6 +302,8 @@ master_service_init(const char *name, enum master_service_flags flags,
 	T_BEGIN {
 		master_service_init_socket_listeners(service);
 	} T_END;
+	service->want_ssl_settings = service->want_ssl_server ||
+		(service->flags & MASTER_SERVICE_FLAG_USE_SSL_SETTINGS) != 0;
 
 #ifdef HAVE_SSL
 	/* load SSL module if necessary */
@@ -296,13 +319,15 @@ master_service_init(const char *name, enum master_service_flags flags,
 	   we want to log */
 	if (getenv("LOG_SERVICE") != NULL)
 		i_set_failure_internal();
-	if (getenv("USER") != NULL)
-		i_set_failure_prefix("%s(%s): ", name, getenv("USER"));
-	else
-		i_set_failure_prefix("%s: ", name);
+	if (getenv("USER") != NULL) {
+		i_set_failure_prefix("%s(%s): ", service->configured_name,
+				     getenv("USER"));
+	} else {
+		i_set_failure_prefix("%s: ", service->configured_name);
+	}
 
 	master_service_category_name =
-		i_strdup_printf("service:%s", service->name);
+		i_strdup_printf("service:%s", service->configured_name);
 	master_service_category.name = master_service_category_name;
 	event_register_callback(master_service_event_callback);
 
@@ -368,7 +393,7 @@ master_service_init(const char *name, enum master_service_flags flags,
 	if ((flags & MASTER_SERVICE_FLAG_DONT_SEND_STATS) == 0) {
 		/* Initialize stats-client early so it can see all events. */
 		value = getenv(DOVECOT_STATS_WRITER_SOCKET_PATH);
-		if (value != NULL)
+		if (value != NULL && value[0] != '\0')
 			service->stats_client = stats_client_init(value, FALSE);
 	}
 
@@ -478,8 +503,14 @@ master_service_try_init_log(struct master_service *service,
 	return TRUE;
 }
 
-void master_service_init_log(struct master_service *service,
-			     const char *prefix)
+void master_service_init_log(struct master_service *service)
+{
+	master_service_init_log_with_prefix(service, t_strdup_printf(
+		"%s: ", service->configured_name));
+}
+
+void master_service_init_log_with_prefix(struct master_service *service,
+					 const char *prefix)
 {
 	if (service->log_initialized) {
 		/* change only the prefix */
@@ -488,6 +519,12 @@ void master_service_init_log(struct master_service *service,
 	}
 	if (master_service_try_init_log(service, prefix))
 		service->log_initialized = TRUE;
+}
+
+void master_service_init_log_with_pid(struct master_service *service)
+{
+	master_service_init_log_with_prefix(service, t_strdup_printf(
+		"%s(%s): ", service->configured_name, my_pid));
 }
 
 void master_service_init_stats_client(struct master_service *service,
@@ -639,7 +676,7 @@ void master_service_init_finish(struct master_service *service)
 		lib_signals_set_handler(SIGQUIT, 0, sig_close_listeners, service);
 	}
 	master_service_io_listeners_add(service);
-	if (service->want_ssl_settings &&
+	if (service->want_ssl_server &&
 	    (service->flags & MASTER_SERVICE_FLAG_NO_SSL_INIT) == 0)
 		master_service_ssl_ctx_init(service);
 
@@ -800,6 +837,11 @@ const char *master_service_get_version_string(struct master_service *service)
 const char *master_service_get_name(struct master_service *service)
 {
 	return service->name;
+}
+
+const char *master_service_get_configured_name(struct master_service *service)
+{
+	return service->configured_name;
 }
 
 void master_service_run(struct master_service *service,
@@ -1069,6 +1111,7 @@ void master_service_deinit(struct master_service **_service)
 		i_free(service->listeners[i].name);
 	i_free(service->listeners);
 	i_free(service->getopt_str);
+	i_free(service->configured_name);
 	i_free(service->name);
 	i_free(service->config_path);
 	i_free(service);

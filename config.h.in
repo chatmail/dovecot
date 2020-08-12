@@ -127,6 +127,9 @@
 /* Build with ECDSA_SIG_set0 support */
 #undef HAVE_ECDSA_SIG_SET0
 
+/* Build with EC_GROUP_order_bits support */
+#undef HAVE_EC_GROUP_order_bits
+
 /* Build with EVP_MD_CTX_new() support */
 #undef HAVE_EVP_MD_CTX_NEW
 
@@ -643,6 +646,9 @@
 /* Define if you have zlib library */
 #undef HAVE_ZLIB
 
+/* Define if you have ZSTD library */
+#undef HAVE_ZSTD
+
 /* Define to 1 if the system has the type `_Bool'. */
 #undef HAVE__BOOL
 
@@ -756,9 +762,6 @@
 
 /* printf() fmt for dec time_t */
 #undef PRIdTIME_T
-
-/* printf() format for size_t */
-#undef PRIuSIZE_T
 
 /* printf() format for uoff_t */
 #undef PRIuUOFF_T

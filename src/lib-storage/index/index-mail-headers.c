@@ -16,11 +16,11 @@
 #include "index-storage.h"
 #include "index-mail.h"
 
-static const enum message_header_parser_flags hdr_parser_flags =
-	MESSAGE_HEADER_PARSER_FLAG_SKIP_INITIAL_LWSP |
-	MESSAGE_HEADER_PARSER_FLAG_DROP_CR;
-static const enum message_parser_flags msg_parser_flags =
-	MESSAGE_PARSER_FLAG_SKIP_BODY_BLOCK;
+static const struct message_parser_settings msg_parser_set = {
+	.hdr_flags = MESSAGE_HEADER_PARSER_FLAG_SKIP_INITIAL_LWSP |
+		MESSAGE_HEADER_PARSER_FLAG_DROP_CR,
+	.flags = MESSAGE_PARSER_FLAG_SKIP_BODY_BLOCK,
+};
 
 static int header_line_cmp(const struct index_mail_line *l1,
 			   const struct index_mail_line *l2)
@@ -138,14 +138,16 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 }
 
 static unsigned int
-get_header_field_idx(struct mailbox *box, const char *field,
-		     enum mail_cache_decision_type decision)
+get_header_field_idx(struct mailbox *box, const char *field)
 {
 	struct mail_cache_field header_field;
 
 	i_zero(&header_field);
 	header_field.type = MAIL_CACHE_FIELD_HEADER;
-	header_field.decision = decision;
+	/* Always register with NO decision. The field should be added soon
+	   with mail_cache_add(), which changes the decision to TEMP. Most
+	   importantly doing it this way emits mail_cache_decision event. */
+	header_field.decision = MAIL_CACHE_DECISION_NO;
 	T_BEGIN {
 		header_field.name = t_strconcat("hdr.", field, NULL);
 		mail_cache_register_fields(box->cache, &header_field, 1);
@@ -241,8 +243,7 @@ void index_mail_parse_header_init(struct index_mail *mail,
 	   Date: header. if we have Date field's index set at this point we
 	   know that we want it. otherwise add it and remember that we don't
 	   want it cached. */
-	field_idx = get_header_field_idx(mail->mail.mail.box, "Date",
-					 MAIL_CACHE_DECISION_NO);
+	field_idx = get_header_field_idx(mail->mail.mail.box, "Date");
 	match = array_get(&mail->header_match, &match_count);
 	if (field_idx < match_count &&
 	    match[field_idx] == mail->header_match_value) {
@@ -398,7 +399,7 @@ index_mail_cache_parse_init(struct mail *_mail, struct istream *input)
 	mail->data.parser_input = input;
 	mail->data.parser_ctx =
 		message_parser_init(mail->mail.data_pool, input,
-				    hdr_parser_flags, msg_parser_flags);
+				    &msg_parser_set);
 	i_stream_unref(&input);
 	return input2;
 }
@@ -427,14 +428,12 @@ static void index_mail_init_parser(struct index_mail *mail)
 		data->parser_input = data->stream;
 		data->parser_ctx = message_parser_init(mail->mail.data_pool,
 						       data->stream,
-						       hdr_parser_flags,
-						       msg_parser_flags);
+						       &msg_parser_set);
 	} else {
 		data->parser_ctx =
 			message_parser_init_from_parts(data->parts,
 						       data->stream,
-						       hdr_parser_flags,
-						       msg_parser_flags);
+						       &msg_parser_set);
 	}
 }
 
@@ -467,7 +466,7 @@ int index_mail_parse_headers(struct index_mail *mail,
 		i_assert(!data->save_bodystructure_body ||
 			 data->parser_ctx != NULL);
 		message_parse_header(data->stream, &data->hdr_size,
-				     hdr_parser_flags,
+				     msg_parser_set.hdr_flags,
 				     index_mail_parse_header_cb, mail);
 	}
 	if (index_mail_stream_check_failure(mail) < 0)
@@ -525,7 +524,7 @@ int index_mail_headers_get_envelope(struct index_mail *mail)
 	if (mail->data.envelope == NULL) {
 		/* we got the headers from cache - parse them to get the
 		   envelope */
-		message_parse_header(stream, NULL, hdr_parser_flags,
+		message_parse_header(stream, NULL, msg_parser_set.hdr_flags,
 				     imap_envelope_parse_callback, mail);
 		if (stream->stream_errno != 0) {
 			index_mail_stream_log_failure_for(mail, stream);
@@ -644,8 +643,7 @@ index_mail_get_raw_headers(struct index_mail *mail, const char *field,
 
 	i_assert(field != NULL);
 
-	field_idx = get_header_field_idx(_mail->box, field,
-					 MAIL_CACHE_DECISION_TEMP);
+	field_idx = get_header_field_idx(_mail->box, field);
 
 	dest = t_str_new(128);
 	if (mail_cache_lookup_headers(_mail->transaction->cache_view, dest,

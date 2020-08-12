@@ -27,9 +27,10 @@ enum master_service_flags {
 	/* Show number of connections in process title
 	   (only if verbose_proctitle setting is enabled) */
 	MASTER_SERVICE_FLAG_UPDATE_PROCTITLE	= 0x100,
-	/* SSL settings are always looked up when we have ssl listeners.
-	   This flag enables looking up SSL settings even without ssl
-	   listeners (i.e. the service does STARTTLS). */
+	/* Always read SSL settings into memory, even if there are no ssl
+	   listeners or _HAVE_STARTTLS flag hasn't been set. This is mainly
+	   intended to be used when SSL client settings are wanted to be
+	   accessed via lib-master. */
 	MASTER_SERVICE_FLAG_USE_SSL_SETTINGS	= 0x200,
 	/* Don't initialize SSL context automatically. */
 	MASTER_SERVICE_FLAG_NO_SSL_INIT		= 0x400,
@@ -38,7 +39,10 @@ enum master_service_flags {
 	   initialization doesn't unnecessarily use up memory in data stack. */
 	MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME = 0x800,
 	/* Don't connect at startup to the stats process. */
-	MASTER_SERVICE_FLAG_DONT_SEND_STATS	= 0x1000
+	MASTER_SERVICE_FLAG_DONT_SEND_STATS	= 0x1000,
+	/* Service supports STARTTLS-like feature. SSL server must be
+	   initialized even if there are no ssl=yes listeners. */
+	MASTER_SERVICE_FLAG_HAVE_STARTTLS	= 0x2000,
 };
 
 struct master_service_connection_proxy {
@@ -125,8 +129,12 @@ void master_service_env_clean(void);
 
 /* Initialize logging. Only the first call changes the actual logging
    functions. The following calls change the log prefix. */
-void master_service_init_log(struct master_service *service,
-			     const char *prefix);
+void master_service_init_log(struct master_service *service);
+/* Initialize/change log prefix to the given log prefix. */
+void master_service_init_log_with_prefix(struct master_service *service,
+					 const char *prefix);
+/* Initialize/change log prefix to "configured_name(my_pid): " */
+void master_service_init_log_with_pid(struct master_service *service);
 /* Initialize stats client (if it's not already initialized). This is called
    automatically if MASTER_SERVICE_FLAG_SEND_STATS is enabled. If
    silent_notfound_errors is set, connect() errors aren't logged if they're
@@ -189,6 +197,10 @@ const char *master_service_get_config_path(struct master_service *service);
 const char *master_service_get_version_string(struct master_service *service);
 /* Returns name of the service, as given in name parameter to _init(). */
 const char *master_service_get_name(struct master_service *service);
+/* Returns name of the service, as given in the configuration file. For example
+   service name=auth, but configured_name=auth-worker. This is preferred in
+   e.g. log prefixes. */
+const char *master_service_get_configured_name(struct master_service *service);
 
 /* Start the service. Blocks until finished */
 void master_service_run(struct master_service *service,

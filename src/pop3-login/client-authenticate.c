@@ -76,46 +76,58 @@ void pop3_client_auth_result(struct client *client,
 	}
 }
 
-bool cmd_auth(struct pop3_client *pop3_client, const char *args)
+int cmd_auth(struct pop3_client *pop3_client)
 {
+	/* NOTE: This command's input is handled specially because the
+	   SASL-IR can be large. */
 	struct client *client = &pop3_client->common;
-	const struct auth_mech_desc *mech;
-	const char *mech_name, *init_resp, *p;
+	const unsigned char *data;
+	size_t i, size;
+	int ret;
 
-	if (*args == '\0') {
-		/* Old-style SASL discovery, used by MS Outlook */
-		unsigned int i, count;
-
-		client_send_raw(client, "+OK\r\n");
-		mech = sasl_server_get_advertised_mechs(client, &count);
-		for (i = 0; i < count; i++) {
-			client_send_raw(client, mech[i].name);
-			client_send_raw(client, "\r\n");
+	/* <auth mechanism name> [<initial SASL response>] */
+	if (!pop3_client->auth_mech_name_parsed) {
+		data = i_stream_get_data(client->input, &size);
+		for (i = 0; i < size; i++) {
+			if (data[i] == ' ' ||
+			    data[i] == '\r' || data[i] == '\n')
+				break;
 		}
- 		client_send_raw(client, ".\r\n");
- 		return TRUE;
+		if (i == size)
+			return 0;
+		if (i == 0) {
+			/* Old-style SASL discovery, used by MS Outlook */
+			unsigned int i, count;
+			const struct auth_mech_desc *mech;
+
+			client_send_raw(client, "+OK\r\n");
+			mech = sasl_server_get_advertised_mechs(client, &count);
+			for (i = 0; i < count; i++) {
+				client_send_raw(client, mech[i].name);
+				client_send_raw(client, "\r\n");
+			}
+			client_send_raw(client, ".\r\n");
+			(void)i_stream_read_next_line(client->input);
+			return 1;
+		}
+		i_free(client->auth_mech_name);
+		client->auth_mech_name = i_strndup(data, i);
+		pop3_client->auth_mech_name_parsed = TRUE;
+		if (data[i] == ' ')
+			i++;
+		i_stream_skip(client->input, i);
 	}
 
-	/* <mechanism name> <initial response> */
-	p = strchr(args, ' ');
-	if (p == NULL) {
-		mech_name = args;
-		/* no initial response */
-		init_resp = NULL;
-	} else {
-		mech_name = t_strdup_until(args, p);
-		init_resp = p + 1;
-		if (*init_resp == '\0') {
-			/* no initial response */
-			init_resp = NULL;
-		} else if (strcmp(init_resp, "=") == 0) {
-			/* empty initial response */
-			init_resp = "";
-		}
-	}
+	/* get SASL-IR, if any */
+	if ((ret = client_auth_read_line(client)) <= 0)
+		return ret;
 
-	(void)client_auth_begin(client, mech_name, init_resp);
-	return TRUE;
+	const char *ir = NULL;
+	if (client->auth_response->used > 0)
+		ir = t_strdup(str_c(client->auth_response));
+
+	pop3_client->auth_mech_name_parsed = FALSE;
+	return client_auth_begin(client, t_strdup(client->auth_mech_name), ir);
 }
 
 bool cmd_user(struct pop3_client *pop3_client, const char *args)
@@ -174,7 +186,7 @@ bool cmd_apop(struct pop3_client *pop3_client, const char *args)
 
 	if (pop3_client->apop_challenge == NULL) {
 		if (client->set->auth_verbose)
-			client_log(client, "APOP failed: APOP not enabled");
+			e_info(client->event, "APOP failed: APOP not enabled");
 		client_send_reply(client, POP3_CMD_REPLY_ERROR,
 				  "APOP not enabled.");
 		return TRUE;
@@ -184,7 +196,7 @@ bool cmd_apop(struct pop3_client *pop3_client, const char *args)
 	p = strchr(args, ' ');
 	if (p == NULL || strlen(p+1) != 32) {
 		if (client->set->auth_verbose)
-			client_log(client, "APOP failed: Invalid parameters");
+			e_info(client->event, "APOP failed: Invalid parameters");
 		client_send_reply(client, POP3_CMD_REPLY_ERROR,
 				  "Invalid parameters.");
 		return TRUE;
@@ -199,8 +211,8 @@ bool cmd_apop(struct pop3_client *pop3_client, const char *args)
 
 	if (hex_to_binary(p+1, apop_data) < 0) {
 		if (client->set->auth_verbose) {
-			client_log(client, "APOP failed: "
-				   "Invalid characters in MD5 response");
+			e_info(client->event, "APOP failed: "
+			       "Invalid characters in MD5 response");
 		}
 		client_send_reply(client, POP3_CMD_REPLY_ERROR,
 				  "Invalid characters in MD5 response.");

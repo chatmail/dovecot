@@ -97,7 +97,7 @@ static int script_contents_read(struct mail_user *user)
 		}
 
 		content = array_append_space(&suser->content);
-		content->content_type = args[0];
+		content->content_type = str_lcase(args[0]);
 		content->extensions = (const void *)(args+1);
 	}
 	if (input->stream_errno != 0) {
@@ -138,7 +138,7 @@ static bool script_support_content(struct mail_user *user,
 		extension = strrchr(filename, '.');
 		if (extension == NULL)
 			return FALSE;
-		extension = filename + 1;
+		extension = extension + 1;
 
 		array_foreach(&suser->content, content) {
 			if (content->extensions != NULL &&

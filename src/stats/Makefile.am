@@ -17,12 +17,16 @@ stats_LDADD = \
 	$(noinst_LTLIBRARIES) \
 	$(LIBDOVECOT) \
 	$(DOVECOT_SSL_LIBS) \
-	$(BINARY_LDFLAGS)
+	$(BINARY_LDFLAGS) \
+	-lm
 
 stats_DEPENDENCIES = \
 	$(noinst_LTLIBRARIES) \
 	$(DOVECOT_SSL_LIBS) \
 	$(LIBDOVECOT_DEPS)
+
+stats_services = \
+	stats-service-openmetrics.c
 
 stats_SOURCES = \
 	main.c
@@ -30,6 +34,7 @@ stats_SOURCES = \
 libstats_local_la_SOURCES = \
 	client-reader.c \
 	client-writer.c \
+	client-http.c \
 	event-exporter-fmt.c \
 	event-exporter-fmt-json.c \
 	event-exporter-fmt-none.c \
@@ -37,14 +42,20 @@ libstats_local_la_SOURCES = \
 	event-exporter-transport-drop.c \
 	event-exporter-transport-http-post.c \
 	event-exporter-transport-log.c \
+	$(stats_services) \
+	stats-service.c \
 	stats-event-category.c \
 	stats-metrics.c \
 	stats-settings.c
 
 noinst_HEADERS = \
+	stats-common.h \
 	client-reader.h \
 	client-writer.h \
+	client-http.h\
 	event-exporter.h \
+	stats-service.h \
+	stats-service-private.h \
 	stats-event-category.h \
 	stats-metrics.h \
 	stats-settings.h \
@@ -54,7 +65,8 @@ test_libs = \
 	$(noinst_LTLIBRARIES) \
 	$(DOVECOT_SSL_LIBS) \
 	$(LIBDOVECOT) \
-	$(BINARY_LDFLAGS)
+	$(BINARY_LDFLAGS) \
+	-lm
 
 test_deps = \
 	$(noinst_LTLIBRARIES) \

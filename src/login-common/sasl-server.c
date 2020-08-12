@@ -289,6 +289,26 @@ sasl_server_check_login(struct client *client)
 	return TRUE;
 }
 
+static bool args_parse_user(struct client *client, const char *arg)
+{
+	if (str_begins(arg, "user=")) {
+		i_free(client->virtual_user);
+		i_free_and_null(client->virtual_user_orig);
+		i_free_and_null(client->virtual_auth_user);
+		client->virtual_user = i_strdup(arg + 5);
+		event_add_str(client->event, "user", client->virtual_user);
+	} else if (str_begins(arg, "original_user=")) {
+		i_free(client->virtual_user_orig);
+		client->virtual_user_orig = i_strdup(arg + 14);
+	} else if (str_begins(arg, "auth_user=")) {
+		i_free(client->virtual_auth_user);
+		client->virtual_auth_user = i_strdup(arg + 10);
+	} else {
+		return FALSE;
+	}
+	return TRUE;
+}
+
 static void
 authenticate_callback(struct auth_client_request *request,
 		      enum auth_request_status status, const char *data_base64,
@@ -321,19 +341,9 @@ authenticate_callback(struct auth_client_request *request,
 
 		nologin = FALSE;
 		for (i = 0; args[i] != NULL; i++) {
-			if (str_begins(args[i], "user=")) {
-				i_free(client->virtual_user);
-				i_free_and_null(client->virtual_user_orig);
-				i_free_and_null(client->virtual_auth_user);
-				client->virtual_user = i_strdup(args[i] + 5);
-			} else if (str_begins(args[i], "original_user=")) {
-				i_free(client->virtual_user_orig);
-				client->virtual_user_orig = i_strdup(args[i] + 14);
-			} else if (str_begins(args[i], "auth_user=")) {
-				i_free(client->virtual_auth_user);
-				client->virtual_auth_user =
-					i_strdup(args[i] + 10);
-			} else if (str_begins(args[i], "postlogin_socket=")) {
+			if (args_parse_user(client, args[i]))
+				;
+			else if (str_begins(args[i], "postlogin_socket=")) {
 				client->postlogin_socket_path =
 					p_strdup(client->pool, args[i] + 17);
 			} else if (strcmp(args[i], "nologin") == 0 ||
@@ -368,23 +378,8 @@ authenticate_callback(struct auth_client_request *request,
 
 		if (args != NULL) {
 			/* parse our username if it's there */
-			for (i = 0; args[i] != NULL; i++) {
-				if (str_begins(args[i], "user=")) {
-					i_free(client->virtual_user);
-					i_free_and_null(client->virtual_user_orig);
-					i_free_and_null(client->virtual_auth_user);
-					client->virtual_user =
-						i_strdup(args[i] + 5);
-				} else if (str_begins(args[i], "original_user=")) {
-					i_free(client->virtual_user_orig);
-					client->virtual_user_orig =
-						i_strdup(args[i] + 14);
-				} else if (str_begins(args[i], "auth_user=")) {
-					i_free(client->virtual_auth_user);
-					client->virtual_auth_user =
-						i_strdup(args[i] + 10);
-				}
-			}
+			for (i = 0; args[i] != NULL; i++)
+				(void)args_parse_user(client, args[i]);
 		}
 
 		client->authenticating = FALSE;
@@ -477,8 +472,8 @@ void sasl_server_auth_begin(struct client *client,
 	info.session_id = client_get_session_id(client);
 
 	if (!get_cert_username(client, &info.cert_username, &error)) {
-		client_log_err(client, t_strdup_printf("Cannot get username "
-						       "from certificate: %s", error));
+		e_error(client->event,
+			"Cannot get username from certificate: %s", error);
 		sasl_server_auth_failed(client,
 			"Unable to validate certificate",
 			AUTH_CLIENT_FAIL_CODE_AUTHZFAILED);
@@ -523,8 +518,8 @@ sasl_server_auth_cancel(struct client *client, const char *reason,
 	if (client->set->auth_verbose && reason != NULL) {
 		const char *auth_name =
 			str_sanitize(client->auth_mech_name, MAX_MECH_NAME);
-		client_log(client, t_strdup_printf(
-			"Authenticate %s failed: %s", auth_name, reason));
+		e_info(client->event, "Authenticate %s failed: %s",
+		       auth_name, reason);
 	}
 
 	client->authenticating = FALSE;

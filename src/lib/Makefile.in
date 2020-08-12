@@ -142,7 +142,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -187,9 +188,9 @@ am_liblib_la_OBJECTS = array.lo aqueue.lo askpass.lo \
 	nfs-workarounds.lo numpack.lo ostream.lo ostream-buffer.lo \
 	ostream-failure-at.lo ostream-file.lo ostream-hash.lo \
 	ostream-multiplex.lo ostream-null.lo ostream-rawlog.lo \
-	ostream-unix.lo path-util.lo pkcs5.lo primes.lo \
-	printf-format-fix.lo process-title.lo priorityq.lo randgen.lo \
-	rand.lo read-full.lo restrict-access.lo \
+	ostream-unix.lo ostream-wrapper.lo path-util.lo pkcs5.lo \
+	primes.lo printf-format-fix.lo process-title.lo priorityq.lo \
+	randgen.lo rand.lo read-full.lo restrict-access.lo \
 	restrict-process-size.lo safe-memset.lo safe-mkdir.lo \
 	safe-mkstemp.lo sendfile-util.lo seq-range-array.lo sha1.lo \
 	sha2.lo sha3.lo sleep.lo sort.lo stats-dist.lo str.lo \
@@ -520,6 +521,8 @@ SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VALGRIND = @VALGRIND@
 VERSION = @VERSION@
+ZSTD_CFLAGS = @ZSTD_CFLAGS@
+ZSTD_LIBS = @ZSTD_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -702,6 +705,7 @@ liblib_la_SOURCES = \
 	ostream-null.c \
 	ostream-rawlog.c \
 	ostream-unix.c \
+	ostream-wrapper.c \
 	path-util.c \
 	pkcs5.c \
 	primes.c \
@@ -855,6 +859,7 @@ headers = \
 	ostream-null.h \
 	ostream-rawlog.h \
 	ostream-unix.h \
+	ostream-wrapper.h \
 	path-util.h \
 	pkcs5.h \
 	primes.h \
@@ -1180,6 +1185,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-null.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-unix.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-wrapper.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/path-util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pkcs5.Plo@am__quote@

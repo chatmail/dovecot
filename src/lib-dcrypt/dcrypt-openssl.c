@@ -181,6 +181,18 @@ dcrypt_openssl_key_string_get_info(const char *key_data,
 	const char **encryption_key_hash_r, const char **key_hash_r,
 	const char **error_r);
 
+#ifndef HAVE_EC_GROUP_order_bits
+static int EC_GROUP_order_bits(const EC_GROUP *grp)
+{
+	int bits;
+	BIGNUM *bn = BN_new();
+	(void)EC_GROUP_get_order(grp, bn, NULL);
+	bits = BN_num_bits(bn);
+	BN_free(bn);
+	return bits;
+}
+#endif
+
 static bool dcrypt_openssl_error(const char **error_r)
 {
 	unsigned long ec;
@@ -2750,12 +2762,12 @@ dcrypt_openssl_key_string_get_info(
 				*error_r = "Invalid JWK key: Missing kty parameter";
 			return FALSE;
 		} else if (strcmp(value, "RSA") == 0) {
-			if ((node = json_tree_find_key(root, "d")) != NULL)
+			if (json_tree_find_key(root, "d") != NULL)
 				kind = DCRYPT_KEY_KIND_PRIVATE;
 			else
 				kind = DCRYPT_KEY_KIND_PUBLIC;
 		} else if (strcmp(value, "EC") == 0) {
-			if ((node = json_tree_find_key(root, "d")) != NULL)
+			if (json_tree_find_key(root, "d") != NULL)
 				kind = DCRYPT_KEY_KIND_PRIVATE;
 			else
 				kind = DCRYPT_KEY_KIND_PUBLIC;
@@ -3206,6 +3218,7 @@ dcrypt_openssl_sign_ecdsa(struct dcrypt_private_key *key, const char *algorithm,
 	EVP_PKEY *pkey = key->key;
 	EC_KEY *ec_key = EVP_PKEY_get0_EC_KEY(pkey);
 	bool ret;
+	int rs_len = EC_GROUP_order_bits(EC_KEY_get0_group(ec_key)) / 8;
 
 	/* digest data */
 	buffer_t *digest = t_buffer_create(64);
@@ -3223,15 +3236,18 @@ dcrypt_openssl_sign_ecdsa(struct dcrypt_private_key *key, const char *algorithm,
 
 	ECDSA_SIG_get0(ec_sig, &r, &s);
 
+	int r_len = BN_num_bytes(r);
+	i_assert(rs_len >= r_len);
+
 	/* write r */
-	int bytes = BN_num_bytes(r);
-	unsigned char *buf = buffer_append_space_unsafe(signature_r, bytes);
-	if (BN_bn2bin(r, buf) != bytes) {
+	unsigned char *buf = buffer_append_space_unsafe(signature_r, rs_len);
+	if (BN_bn2bin(r, buf + (rs_len - r_len)) != r_len) {
 		ret = dcrypt_openssl_error(error_r);
 	} else {
-		bytes = BN_num_bytes(s);
-		buf = buffer_append_space_unsafe(signature_r, bytes);
-		if (BN_bn2bin(s, buf) != bytes) {
+		buf = buffer_append_space_unsafe(signature_r, rs_len);
+		int s_len = BN_num_bytes(s);
+		i_assert(rs_len >= s_len);
+		if (BN_bn2bin(s, buf + (rs_len - s_len)) != s_len) {
 			ret = dcrypt_openssl_error(error_r);
 		} else {
 			ret = TRUE;
@@ -3315,6 +3331,12 @@ dcrypt_openssl_verify_ecdsa(struct dcrypt_public_key *key, const char *algorithm
 			    const unsigned char *signature, size_t signature_len,
 			    bool *valid_r, const char **error_r)
 {
+        if ((signature_len % 2) != 0) {
+                if (error_r != NULL)
+                        *error_r = "Truncated signature";
+                return FALSE;
+        }
+
 	EVP_PKEY *pkey = key->key;
 	EC_KEY *ec_key = EVP_PKEY_get0_EC_KEY(pkey);
 	int ec;

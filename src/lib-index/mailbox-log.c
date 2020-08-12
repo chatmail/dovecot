@@ -23,6 +23,7 @@
 struct mailbox_log {
 	char *filepath, *filepath2;
 	int fd;
+	struct event *event;
 	time_t open_timestamp;
 
 	mode_t mode;
@@ -44,11 +45,13 @@ struct mailbox_log_iter {
 
 static void mailbox_log_close(struct mailbox_log *log);
 
-struct mailbox_log *mailbox_log_alloc(const char *path)
+struct mailbox_log *
+mailbox_log_alloc(struct event *parent_event, const char *path)
 {
 	struct mailbox_log *log;
 
 	log = i_new(struct mailbox_log, 1);
+	log->event = event_create(parent_event);
 	log->filepath = i_strdup(path);
 	log->filepath2 = i_strconcat(path, ".2", NULL);
 	log->mode = 0644;
@@ -64,6 +67,7 @@ void mailbox_log_free(struct mailbox_log **_log)
 	*_log = NULL;
 
 	mailbox_log_close(log);
+	event_unref(&log->event);
 	i_free(log->gid_origin);
 	i_free(log->filepath);
 	i_free(log->filepath2);
@@ -102,18 +106,22 @@ static int mailbox_log_open(struct mailbox_log *log)
 
 	if (log->fd == -1) {
 		if (errno != EACCES)
-			i_error("creat(%s) failed: %m", log->filepath);
+			e_error(log->event, "creat(%s) failed: %m",
+				log->filepath);
 		else
-			i_error("%s", eacces_error_get("creat", log->filepath));
+			e_error(log->event, "%s",
+				eacces_error_get("creat", log->filepath));
 		return -1;
 	}
 	if (fchown(log->fd, (uid_t)-1, log->gid) < 0) {
 		if (errno != EPERM)
-			i_error("fchown(%s) failed: %m", log->filepath);
+			e_error(log->event, "fchown(%s) failed: %m",
+				log->filepath);
 		else {
-			i_error("%s", eperm_error_get_chgrp("fchown",
-						log->filepath, log->gid,
-						log->gid_origin));
+			e_error(log->event, "%s",
+				eperm_error_get_chgrp("fchown",
+						      log->filepath, log->gid,
+						      log->gid_origin));
 		}
 	}
 	return 0;
@@ -124,7 +132,7 @@ static int mailbox_log_rotate_if_needed(struct mailbox_log *log)
 	struct stat st;
 
 	if (fstat(log->fd, &st) < 0) {
-		i_error("fstat(%s) failed: %m", log->filepath);
+		e_error(log->event, "fstat(%s) failed: %m", log->filepath);
 		return -1;
 	}
 
@@ -132,7 +140,7 @@ static int mailbox_log_rotate_if_needed(struct mailbox_log *log)
 		return 0;
 
 	if (rename(log->filepath, log->filepath2) < 0 && errno != ENOENT) {
-		i_error("rename(%s, %s) failed: %m",
+		e_error(log->event, "rename(%s, %s) failed: %m",
 			log->filepath, log->filepath2);
 		return -1;
 	}
@@ -175,14 +183,14 @@ int mailbox_log_append(struct mailbox_log *log,
 	   This whole log isn't supposed to be super-reliable anyway. */
 	ret = write(log->fd, rec, sizeof(*rec));
 	if (ret < 0) {
-		i_error("write(%s) failed: %m", log->filepath);
+		e_error(log->event, "write(%s) failed: %m", log->filepath);
 		return -1;
 	} else if (ret != sizeof(*rec)) {
-		i_error("write(%s) wrote %d/%u bytes", log->filepath,
+		e_error(log->event, "write(%s) wrote %d/%u bytes", log->filepath,
 			(int)ret, (unsigned int)sizeof(*rec));
 		if (fstat(log->fd, &st) == 0) {
 			if (ftruncate(log->fd, st.st_size - ret) < 0) {
-				i_error("ftruncate(%s) failed: %m",
+				e_error(log->event, "ftruncate(%s) failed: %m",
 					log->filepath);
 			}
 		}
@@ -210,7 +218,7 @@ static bool mailbox_log_iter_open_next(struct mailbox_log_iter *iter)
 		if (iter->filepath == iter->log->filepath2)
 			return mailbox_log_iter_open_next(iter);
 	} else {
-		i_error("open(%s) failed: %m", iter->filepath);
+		e_error(iter->log->event, "open(%s) failed: %m", iter->filepath);
 		iter->failed = TRUE;
 	}
 	return FALSE;
@@ -241,7 +249,8 @@ mailbox_log_iter_next(struct mailbox_log_iter *iter)
 		ret = pread(iter->fd, iter->buf, sizeof(iter->buf),
 			    iter->offset);
 		if (ret < 0) {
-			i_error("pread(%s) failed: %m", iter->filepath);
+			e_error(iter->log->event, "pread(%s) failed: %m",
+				iter->filepath);
 			iter->failed = TRUE;
 			return NULL;
 		}
@@ -261,7 +270,8 @@ mailbox_log_iter_next(struct mailbox_log_iter *iter)
 	    rec->type > MAILBOX_LOG_RECORD_UNSUBSCRIBE) {
 		offset = iter->offset -
 			(iter->count - iter->idx) * sizeof(iter->buf[0]);
-		i_error("Corrupted mailbox log %s at offset %"PRIuUOFF_T": "
+		e_error(iter->log->event,
+			"Corrupted mailbox log %s at offset %"PRIuUOFF_T": "
 			"type=%d", iter->filepath, offset, rec->type);
 		i_unlink(iter->filepath);
 		return NULL;

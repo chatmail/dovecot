@@ -1,6 +1,6 @@
 /* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
 
-#include "lib.h"
+#include "stats-common.h"
 #include "array.h"
 #include "str.h"
 #include "stats-dist.h"
@@ -13,17 +13,15 @@
 
 struct reader_client {
 	struct connection conn;
-	struct stats_metrics *metrics;
 };
 
 static struct connection_list *reader_clients = NULL;
 
-void client_reader_create(int fd, struct stats_metrics *metrics)
+void client_reader_create(int fd)
 {
 	struct reader_client *client;
 
 	client = i_new(struct reader_client, 1);
-	client->metrics = metrics;
 	connection_init_server(reader_clients, &client->conn,
 			       "stats-reader", fd, fd);
 }
@@ -79,6 +77,23 @@ static void reader_client_dump_metric(string_t *str, const struct metric *metric
 }
 
 static void
+reader_client_append_sub_name(string_t *str, const char *sub_name)
+{
+	for (; *sub_name != '\0'; sub_name++) {
+		switch (*sub_name) {
+		case '\t':
+		case '\n':
+		case '\r':
+		case ' ':
+			str_append_c(str, '_');
+			break;
+		default:
+			str_append_c(str, *sub_name);
+		}
+	}
+}
+
+static void
 reader_client_dump_sub_metrics(struct ostream *output, const struct metric *metric,
 			       const char *sub_name, const char *const *fields)
 {
@@ -87,13 +102,13 @@ reader_client_dump_sub_metrics(struct ostream *output, const struct metric *metr
 	if (!array_is_created(&metric->sub_metrics))
 		return;
 	string_t *str = t_str_new(128);
-	str_append_tabescaped(str, sub_name);
+	reader_client_append_sub_name(str, sub_name);
 	str_append_c(str, '_');
 	root_pos = str->used;
 
 	array_foreach(&metric->sub_metrics, sub_metrics) {
 		str_truncate(str, root_pos);
-		str_append_tabescaped(str, (*sub_metrics)->sub_name);
+		reader_client_append_sub_name(str, (*sub_metrics)->sub_name);
 		name_pos = str->used;
 		reader_client_dump_metric(str, *sub_metrics, fields);
 		o_stream_nsend(output, str_data(str), str_len(str));
@@ -110,7 +125,7 @@ reader_client_input_dump(struct reader_client *client, const char *const *args)
 	const struct metric *metric;
 
 	o_stream_cork(client->conn.output);
-	iter = stats_metrics_iterate_init(client->metrics);
+	iter = stats_metrics_iterate_init(stats_metrics);
 	while ((metric = stats_metrics_iterate(iter)) != NULL) T_BEGIN {
 		string_t *str = t_str_new(128);
 		str_append_tabescaped(str, metric->name);
@@ -130,7 +145,7 @@ reader_client_input_dump_reset(struct reader_client *client,
 			       const char *const *args)
 {
 	(void)reader_client_input_dump(client, args);
-	stats_metrics_reset(client->metrics);
+	stats_metrics_reset(stats_metrics);
 	return 1;
 }
 

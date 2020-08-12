@@ -142,7 +142,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -153,21 +154,26 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 liboauth2_la_LIBADD =
-am_liboauth2_la_OBJECTS = oauth2.lo oauth2-request.lo
+am_liboauth2_la_OBJECTS = oauth2.lo oauth2-request.lo oauth2-jwt.lo \
+	oauth2-key-cache.lo
 liboauth2_la_OBJECTS = $(am_liboauth2_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__EXEEXT_1 = test-oauth2-json$(EXEEXT)
+am__EXEEXT_1 = test-oauth2-json$(EXEEXT) test-oauth2-jwt$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am_test_oauth2_json_OBJECTS = test-oauth2-json.$(OBJEXT)
 test_oauth2_json_OBJECTS = $(am_test_oauth2_json_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = $(noinst_LTLIBRARIES) ../lib-http/libhttp.la \
-	../lib-dns/libdns.la ../lib-ssl-iostream/libssl_iostream.la \
-	../lib-master/libmaster.la ../lib-settings/libsettings.la \
+am__DEPENDENCIES_2 = $(noinst_LTLIBRARIES) ../lib-dcrypt/libdcrypt.la \
+	../lib-http/libhttp.la ../lib-dns/libdns.la \
+	../lib-ssl-iostream/libssl_iostream.la \
+	../lib-master/libmaster.la ../lib-auth/libauth.la \
+	../lib-dict/libdict.la ../lib-settings/libsettings.la \
 	../lib-test/libtest.la ../lib/liblib.la $(am__DEPENDENCIES_1)
+am_test_oauth2_jwt_OBJECTS = test-oauth2-jwt.$(OBJEXT)
+test_oauth2_jwt_OBJECTS = $(am_test_oauth2_jwt_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -202,8 +208,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(liboauth2_la_SOURCES) $(test_oauth2_json_SOURCES)
-DIST_SOURCES = $(liboauth2_la_SOURCES) $(test_oauth2_json_SOURCES)
+SOURCES = $(liboauth2_la_SOURCES) $(test_oauth2_json_SOURCES) \
+	$(test_oauth2_jwt_SOURCES)
+DIST_SOURCES = $(liboauth2_la_SOURCES) $(test_oauth2_json_SOURCES) \
+	$(test_oauth2_jwt_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -405,6 +413,8 @@ SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VALGRIND = @VALGRIND@
 VERSION = @VERSION@
+ZSTD_CFLAGS = @ZSTD_CFLAGS@
+ZSTD_LIBS = @ZSTD_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -470,6 +480,8 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-http \
+	-I$(top_srcdir)/src/lib-dcrypt \
+	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-settings
 
 noinst_LTLIBRARIES = liboauth2.la
@@ -482,17 +494,23 @@ noinst_HEADERS = \
 
 liboauth2_la_SOURCES = \
 	oauth2.c \
-	oauth2-request.c
+	oauth2-request.c \
+	oauth2-jwt.c \
+	oauth2-key-cache.c
 
 test_programs = \
-	test-oauth2-json
+	test-oauth2-json \
+	test-oauth2-jwt
 
 test_libs = \
 	$(noinst_LTLIBRARIES) \
+	../lib-dcrypt/libdcrypt.la \
 	../lib-http/libhttp.la \
 	../lib-dns/libdns.la \
 	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-master/libmaster.la \
+	../lib-auth/libauth.la \
+	../lib-dict/libdict.la \
 	../lib-settings/libsettings.la \
 	../lib-test/libtest.la \
 	../lib/liblib.la \
@@ -500,10 +518,13 @@ test_libs = \
 
 test_deps = \
 	$(noinst_LTLIBRARIES) \
+	../lib-dcrypt/libdcrypt.la \
 	../lib-http/libhttp.la \
 	../lib-dns/libdns.la \
 	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-master/libmaster.la \
+	../lib-auth/libauth.la \
+	../lib-dict/libdict.la \
 	../lib-settings/libsettings.la \
 	../lib-test/libtest.la \
 	../lib/liblib.la
@@ -511,6 +532,9 @@ test_deps = \
 test_oauth2_json_SOURCES = test-oauth2-json.c
 test_oauth2_json_LDADD = $(test_libs)
 test_oauth2_json_DEPENDENCIES = $(test_deps)
+test_oauth2_jwt_SOURCES = test-oauth2-jwt.c
+test_oauth2_jwt_LDADD = $(test_libs)
+test_oauth2_jwt_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -572,15 +596,22 @@ test-oauth2-json$(EXEEXT): $(test_oauth2_json_OBJECTS) $(test_oauth2_json_DEPEND
 	@rm -f test-oauth2-json$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_oauth2_json_OBJECTS) $(test_oauth2_json_LDADD) $(LIBS)
 
+test-oauth2-jwt$(EXEEXT): $(test_oauth2_jwt_OBJECTS) $(test_oauth2_jwt_DEPENDENCIES) $(EXTRA_test_oauth2_jwt_DEPENDENCIES) 
+	@rm -f test-oauth2-jwt$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_oauth2_jwt_OBJECTS) $(test_oauth2_jwt_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/oauth2-jwt.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/oauth2-key-cache.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/oauth2-request.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/oauth2.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-oauth2-json.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-oauth2-jwt.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

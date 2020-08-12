@@ -14,10 +14,11 @@ enum search_return_options {
 	SEARCH_RETURN_UPDATE		= 0x0080,
 	SEARCH_RETURN_PARTIAL		= 0x0100,
 	SEARCH_RETURN_RELEVANCY		= 0x0200
-/* Options that don't return any seq/uid results */
+/* Options that don't return any seq/uid results, and also don't affect
+   SEARCHRES $ when combined with MIN/MAX. */
 #define SEARCH_RETURN_NORESULTS \
 	(SEARCH_RETURN_ESEARCH | SEARCH_RETURN_MODSEQ | SEARCH_RETURN_SAVE | \
-	 SEARCH_RETURN_UPDATE)
+	 SEARCH_RETURN_UPDATE | SEARCH_RETURN_RELEVANCY)
 };
 
 struct imap_search_context {
@@ -36,6 +37,7 @@ struct imap_search_context {
 	struct timeout *to;
 	ARRAY_TYPE(seq_range) result;
 	unsigned int result_count;
+	uint32_t min_id, max_update_seq, max_seq, max_uid;
 
 	ARRAY(float) relevancy_scores;
 	float min_relevancy, max_relevancy;

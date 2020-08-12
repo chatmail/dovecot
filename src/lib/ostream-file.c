@@ -16,6 +16,7 @@
 #ifdef HAVE_SYS_UIO_H
 #  include <sys/uio.h>
 #endif
+#include <fcntl.h>
 
 /* try to keep the buffer size within 4k..128k. ReiserFS may actually return
    128k as optimal size. */
@@ -776,8 +777,13 @@ io_stream_sendfile(struct ostream_private *outstream,
 		ret = safe_sendfile(foutstream->fd, in_fd, &offset,
 				    MAX_SSIZE_T(send_size));
 		if (ret <= 0) {
-			if (ret == 0)
-				break;
+			if (ret == 0) {
+				/* Unexpectedly early EOF at input */
+				i_stream_seek(instream, v_offset);
+				instream->eof = TRUE;
+				*res_r = OSTREAM_SEND_ISTREAM_RESULT_FINISHED;
+				return TRUE;
+			}
 			if (foutstream->file) {
 				if (errno == EINTR) {
 					/* automatically retry */
@@ -1116,4 +1122,18 @@ struct ostream *o_stream_create_fd_file_autoclose(int *fd, uoff_t offset)
 	output = o_stream_create_fd_file(*fd, offset, TRUE);
 	*fd = -1;
 	return output;
+}
+
+struct ostream *o_stream_create_file(const char *path, uoff_t offset, mode_t mode,
+				     enum ostream_create_file_flags flags)
+{
+	int fd;
+	int open_flags = O_WRONLY|O_CREAT;
+	if (HAS_ANY_BITS(flags, OSTREAM_CREATE_FILE_FLAG_APPEND))
+		open_flags |= O_APPEND;
+	else
+		open_flags |= O_TRUNC;
+	if ((fd = open(path, open_flags, mode)) < 0)
+		return o_stream_create_error(errno);
+	return o_stream_create_fd_file_autoclose(&fd, offset);
 }

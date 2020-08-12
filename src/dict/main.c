@@ -5,7 +5,6 @@
 #include "ioloop.h"
 #include "randgen.h"
 #include "str.h"
-#include "hostpid.h"
 #include "stats-dist.h"
 #include "process-title.h"
 #include "env-util.h"
@@ -20,6 +19,8 @@
 #include "dict-settings.h"
 #include "main.h"
 
+#include <math.h>
+
 static struct module *modules;
 static struct timeout *to_proctitle;
 static bool proctitle_updated;
@@ -27,10 +28,19 @@ static bool proctitle_updated;
 static void
 add_stats_string(string_t *str, struct stats_dist *stats, const char *name)
 {
-	str_printfa(str, ", %u %s:%"PRIu64"/%.02f/%"PRIu64"/%"PRIu64,
+	uint64_t min, max, p95;
+	double avg;
+
+	min = stats_dist_get_min(stats);
+	avg = stats_dist_get_avg(stats);
+	p95 = stats_dist_get_95th(stats);
+	max = stats_dist_get_max(stats);
+
+	str_printfa(str, ", %u %s:%llu/%lld/%llu/%llu",
 		    stats_dist_get_count(stats), name,
-		    stats_dist_get_min(stats)/1000, stats_dist_get_avg(stats)/1000,
-		    stats_dist_get_95th(stats)/1000, stats_dist_get_max(stats)/1000);
+		    (unsigned long long)min/1000, llrint(avg/1000),
+		    (unsigned long long)p95/1000,
+		    (unsigned long long)max/1000);
 	stats_dist_reset(stats);
 }
 
@@ -112,6 +122,9 @@ static void main_init(void)
 	dict_drivers_register_all();
 	dict_commands_init();
 	dict_connections_init();
+
+	if (dict_settings->verbose_proctitle)
+		dict_proctitle_update(NULL);
 }
 
 static void main_deinit(void)
@@ -148,7 +161,7 @@ int main(int argc, char *argv[])
 						&error) < 0)
 		i_fatal("Error reading configuration: %s", error);
 
-	master_service_init_log(master_service, t_strdup_printf("dict(%s): ", my_pid));
+	master_service_init_log_with_pid(master_service);
 	main_preinit();
 	master_service_set_die_callback(master_service, dict_die);
 

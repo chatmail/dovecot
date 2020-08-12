@@ -38,9 +38,11 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-oauth2 \
 	-I$(top_srcdir)/src/lib-ssl-iostream \
 	-I$(top_srcdir)/src/lib-lua \
+	-I$(top_srcdir)/src/lib-dcrypt \
 	-DAUTH_MODULE_DIR=\""$(auth_moduledir)"\" \
 	-DPKG_LIBEXECDIR=\""$(pkglibexecdir)"\" \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
+	-DSYSCONFDIR=\""$(sysconfdir)/dovecot"\" \
 	$(LUA_CFLAGS) \
 	$(AUTH_CFLAGS)
 
@@ -164,11 +166,13 @@ headers = \
 	auth-master-connection.h \
 	mech-otp-skey-common.h \
 	mech-plain-common.h \
+	mech-digest-md5-private.h \
 	mech-scram.h \
 	auth-penalty.h \
 	auth-policy.h \
 	auth-request.h \
 	auth-request-handler.h \
+	auth-request-handler-private.h \
 	auth-request-stats.h \
 	auth-request-var-expand.h \
 	auth-settings.h \
@@ -247,7 +251,8 @@ libstats_auth_la_SOURCES = auth-stats.c
 test_programs = \
 	test-libpassword \
 	test-auth-cache \
-	test-auth
+	test-auth \
+	test-mech
 
 noinst_PROGRAMS = $(test_programs)
 
@@ -286,6 +291,13 @@ test_auth_SOURCES = \
 
 test_auth_LDADD = $(test_libs) $(auth_libs) $(AUTH_LIBS)
 test_auth_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
+
+test_mech_SOURCES = \
+	test-mock.c \
+	test-mech.c
+
+test_mech_LDADD = $(test_libs) $(auth_libs) $(AUTH_LIBS)
+test_mech_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 
 check-local:
 	for bin in $(test_programs); do \

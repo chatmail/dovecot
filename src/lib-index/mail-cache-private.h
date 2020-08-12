@@ -11,6 +11,8 @@
 #define MAIL_CACHE_LOCK_TIMEOUT 10
 #define MAIL_CACHE_LOCK_CHANGE_TIMEOUT 300
 
+#define MAIL_CACHE_MAX_WRITE_BUFFER (1024*256)
+
 #define MAIL_CACHE_IS_UNUSABLE(cache) \
 	((cache)->hdr == NULL)
 
@@ -80,12 +82,12 @@ struct mail_cache_field_private {
 
 	/* Unused fields aren't written to cache file */
 	bool used:1;
-	bool adding:1;
 	bool decision_dirty:1;
 };
 
 struct mail_cache {
 	struct mail_index *index;
+	struct event *event;
 	uint32_t ext_id;
 
 	char *filepath;
@@ -96,6 +98,7 @@ struct mail_cache {
 
 	time_t last_mmap_error_time;
 
+	uoff_t last_stat_size;
 	size_t mmap_length;
 	/* a) mmaping the whole file */
 	void *mmap_base;
@@ -106,6 +109,8 @@ struct mail_cache {
 	buffer_t *read_buf;
 	/* mail_cache_map() increases this always. */
 	unsigned int remap_counter;
+
+	struct mail_cache_view *views;
 
 	struct dotlock_settings dotlock_settings;
 	struct file_lock *file_lock;
@@ -126,9 +131,9 @@ struct mail_cache {
 	HASH_TABLE(char *, void *) field_name_hash; /* name -> idx */
 	uint32_t last_field_header_offset;
 
-	/* 0 is no need for compression, otherwise the file sequence number
-	   which we want compressed. */
-	uint32_t need_compress_file_seq;
+	/* 0 is no need for purging, otherwise the file sequence number
+	   which we want purged. */
+	uint32_t need_purge_file_seq;
 
 	unsigned int *file_field_map;
 	unsigned int file_fields_count;
@@ -138,7 +143,7 @@ struct mail_cache {
 	bool last_lock_failed:1;
 	bool hdr_modified:1;
 	bool field_header_write_pending:1;
-	bool compressing:1;
+	bool purging:1;
 	bool map_with_read:1;
 };
 
@@ -159,6 +164,7 @@ struct mail_cache_missing_reason_cache {
 
 struct mail_cache_view {
 	struct mail_cache *cache;
+	struct mail_cache_view *prev, *next;
 	struct mail_index_view *view, *trans_view;
 
 	struct mail_cache_transaction_ctx *transaction;
@@ -199,14 +205,17 @@ struct mail_cache_lookup_iterate_ctx {
 	bool failed:1;
 	bool memory_appends_checked:1;
 	bool disk_appends_checked:1;
+	bool inmemory_field_idx:1;
 };
 
 /* Explicitly lock the cache file. Returns -1 if error / timed out,
    1 if ok, 0 if cache is broken/doesn't exist */
 int mail_cache_lock(struct mail_cache *cache);
-int mail_cache_try_lock(struct mail_cache *cache);
-/* Returns -1 if cache is / just got corrupted, 0 if ok. */
-int mail_cache_unlock(struct mail_cache *cache);
+/* Flush pending header updates and unlock. Returns -1 if cache is / just got
+   corrupted, 0 if ok. */
+int mail_cache_flush_and_unlock(struct mail_cache *cache);
+/* Unlock the cache without any header updates. */
+void mail_cache_unlock(struct mail_cache *cache);
 
 int mail_cache_write(struct mail_cache *cache, const void *data, size_t size,
 		     uoff_t offset);
@@ -242,11 +251,19 @@ const struct mail_cache_record *
 mail_cache_transaction_lookup_rec(struct mail_cache_transaction_ctx *ctx,
 				  unsigned int seq,
 				  unsigned int *trans_next_idx);
+bool mail_cache_transactions_have_changes(struct mail_cache *cache);
 
+/* Return data from the specified position in the cache file. Returns 1 if
+   successful, 0 if offset/size points outside the cache file, -1 if I/O
+   error. */
 int mail_cache_map(struct mail_cache *cache, size_t offset, size_t size,
 		   const void **data_r);
+/* Map the whole cache file into memory. Returns 1 if ok, 0 if corrupted
+   (and deleted), -1 if I/O error. */
+int mail_cache_map_all(struct mail_cache *cache);
 void mail_cache_file_close(struct mail_cache *cache);
 int mail_cache_reopen(struct mail_cache *cache);
+int mail_cache_sync_reset_id(struct mail_cache *cache);
 
 /* Notify the decision handling code that field was looked up for seq.
    This should be called even for fields that aren't currently in cache file.
@@ -254,6 +271,10 @@ int mail_cache_reopen(struct mail_cache *cache);
    in the cache file. */
 void mail_cache_decision_state_update(struct mail_cache_view *view,
 				      uint32_t seq, unsigned int field);
+const char *mail_cache_decision_to_string(enum mail_cache_decision_type dec);
+struct event_passthrough *
+mail_cache_decision_changed_event(struct mail_cache *cache, struct event *event,
+				  unsigned int field);
 
 int mail_cache_expunge_handler(struct mail_index_sync_map_ctx *sync_ctx,
 			       uint32_t seq, const void *data,

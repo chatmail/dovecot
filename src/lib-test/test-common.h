@@ -29,13 +29,25 @@ void test_begin(const char *name);
  * in strcmp().
  */
 #define test_assert_strcmp(s1, s2) STMT_START { \
-		if ((null_strcmp(s1,s2) != 0)) test_assert_failed_strcmp("strcmp(" #s1 ","  #s2 ")", __FILE__, __LINE__, s1, s2); \
+		test_assert_strcmp_idx(s1, s2, LLONG_MIN); \
+	} STMT_END
+
+/* Same as test_assert_strcmp expect that it takes an additional i as input.
+ * When i is greater than or equals 0 it is used to identify the barrage of
+ * tests failed like in test_assert_idx.
+*/
+#define test_assert_strcmp_idx(_s1, _s2, i) STMT_START { \
+		const char *_temp_s1 = (_s1); \
+		const char *_temp_s2 = (_s2); \
+		if ((null_strcmp(_temp_s1,_temp_s2) != 0)) \
+			test_assert_failed_strcmp_idx("strcmp(" #_s1 ","  #_s2 ")", \
+						      __FILE__, __LINE__, _temp_s1, _temp_s2, i); \
 	} STMT_END
 
 void test_assert_failed(const char *code, const char *file, unsigned int line);
 void test_assert_failed_idx(const char *code, const char *file, unsigned int line, long long i);
-void test_assert_failed_strcmp(const char *code, const char *file, unsigned int line,
-				const char * src, const char * dst);
+void test_assert_failed_strcmp_idx(const char *code, const char *file, unsigned int line,
+				   const char * src, const char * dst, long long i);
 bool test_has_failed(void);
 /* If you're testing nasty cases which you want to warn, surround the noisy op with these */
 void test_expect_errors(unsigned int expected);

@@ -241,9 +241,8 @@ lmtp_local_rcpt_anvil_finish(struct lmtp_local_recipient *llrcpt)
 {
 	struct smtp_server_recipient *rcpt = llrcpt->rcpt->rcpt;
 	struct smtp_server_cmd_ctx *cmd = rcpt->cmd;
-	int ret;
 
-	if ((ret = lmtp_local_rcpt_check_quota(llrcpt)) < 0)
+	if (lmtp_local_rcpt_check_quota(llrcpt) < 0)
 		return FALSE;
 
 	smtp_server_cmd_rcpt_reply_success(cmd);
@@ -471,6 +470,7 @@ lmtp_local_deliver(struct lmtp_local *local,
 	io_loop_time_refresh();
 	lldctx.delivery_time_started = ioloop_timeval;
 
+	client_update_data_state(client, username);
 	i_set_failure_prefix("lmtp(%s, %s): ", my_pid, username);
 	if (mail_storage_service_next(storage_service, service_user,
 				      &rcpt_user, &error) < 0) {
@@ -533,6 +533,47 @@ lmtp_local_deliver(struct lmtp_local *local,
 	return ret;
 }
 
+static int
+lmtp_local_default_do_deliver(struct lmtp_local *local,
+			      struct lmtp_local_recipient *llrcpt,
+			      struct lmtp_local_deliver_context *lldctx,
+			      struct mail_deliver_context *dctx)
+{
+	struct smtp_server_recipient *rcpt = llrcpt->rcpt->rcpt;
+	enum mail_deliver_error error_code;
+	const char *error;
+
+	if (mail_deliver(dctx, &error_code, &error) == 0) {
+		if (dctx->dest_mail != NULL) {
+			i_assert(local->first_saved_mail == NULL);
+			local->first_saved_mail = dctx->dest_mail;
+		}
+		smtp_server_recipient_reply(rcpt, 250, "2.0.0", "%s Saved",
+					    lldctx->session_id);
+		return 0;
+	}
+
+	switch (error_code) {
+	case MAIL_DELIVER_ERROR_NONE:
+		i_unreached();
+	case MAIL_DELIVER_ERROR_TEMPORARY:
+		smtp_server_recipient_reply(rcpt, 451, "4.2.0", "%s", error);
+		break;
+	case MAIL_DELIVER_ERROR_REJECTED:
+		smtp_server_recipient_reply(rcpt, 552, "5.2.0", "%s", error);
+		break;
+	case MAIL_DELIVER_ERROR_NOQUOTA:
+		lmtp_local_rcpt_reply_overquota(llrcpt, error);
+		break;
+	case MAIL_DELIVER_ERROR_INTERNAL:
+		/* This shouldn't happen */
+		smtp_server_recipient_reply(rcpt, 451, "4.3.0", "%s", error);
+		break;
+	}
+
+	return -1;
+}
+
 int lmtp_local_default_deliver(struct client *client,
 			       struct lmtp_recipient *lrcpt,
 			       struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
@@ -545,10 +586,7 @@ int lmtp_local_default_deliver(struct client *client,
 	struct smtp_address *rcpt_to = rcpt->path;
 	struct mail_deliver_input dinput;
 	struct mail_deliver_context dctx;
-	struct mail_storage *storage;
 	struct event *event;
-	enum mail_error mail_error;
-	const char *error;
 	int ret;
 
 	event = event_create(rcpt->event);
@@ -590,34 +628,7 @@ int lmtp_local_default_deliver(struct client *client,
 	dinput.delivery_time_started = lldctx->delivery_time_started;
 
 	mail_deliver_init(&dctx, &dinput);
-	if (mail_deliver(&dctx, &storage) == 0) {
-		if (dctx.dest_mail != NULL) {
-			i_assert(local->first_saved_mail == NULL);
-			local->first_saved_mail = dctx.dest_mail;
-		}
-		smtp_server_recipient_reply(rcpt, 250, "2.0.0", "%s Saved",
-					    lldctx->session_id);
-		ret = 0;
-	} else if (dctx.tempfail_error != NULL) {
-		smtp_server_recipient_reply(rcpt, 451, "4.2.0", "%s",
-					    dctx.tempfail_error);
-		ret = -1;
-	} else if (storage != NULL) {
-		error = mail_storage_get_last_error(storage, &mail_error);
-		if (mail_error == MAIL_ERROR_NOQUOTA) {
-			lmtp_local_rcpt_reply_overquota(llrcpt, error);
-		} else {
-			smtp_server_recipient_reply(rcpt, 451, "4.2.0", "%s",
-						    error);
-		}
-		ret = -1;
-	} else {
-		/* This shouldn't happen */
-		e_error(rcpt->event, "BUG: Saving failed to unknown storage");
-		smtp_server_recipient_reply(rcpt, 451, "4.3.0",
-					    "Temporary internal error");
-		ret = -1;
-	}
+	ret = lmtp_local_default_do_deliver(local, llrcpt, lldctx, &dctx);
 	mail_deliver_deinit(&dctx);
 	event_unref(&event);
 
@@ -630,6 +641,7 @@ lmtp_local_deliver_to_rcpts(struct lmtp_local *local,
 			    struct smtp_server_transaction *trans,
 			    struct mail_deliver_session *session)
 {
+	struct client *client = local->client;
 	uid_t first_uid = (uid_t)-1;
 	struct mail *src_mail;
 	struct lmtp_local_recipient *const *llrcpts;
@@ -653,6 +665,7 @@ lmtp_local_deliver_to_rcpts(struct lmtp_local *local,
 
 		ret = lmtp_local_deliver(local, cmd,
 			trans, llrcpt, src_mail, session);
+		client_update_data_state(client, NULL);
 		i_set_failure_prefix("lmtp(%s): ", my_pid);
 
 		/* succeeded and mail_user is not saved in first_saved_mail */

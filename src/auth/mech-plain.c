@@ -24,13 +24,14 @@ mech_plain_auth_continue(struct auth_request *request,
 		if (data[i] == '\0') {
 			if (++count == 1)
 				authenid = (const char *) data + i+1;
-			else {
+			else if (count == 2) {
 				i++;
 				len = data_size - i;
 				pass = p_strndup(unsafe_data_stack_pool,
 						 data+i, len);
-				break;
 			}
+			else
+				break;
 		}
 	}
 
@@ -77,7 +78,7 @@ static struct auth_request *mech_plain_auth_new(void)
 const struct mech_module mech_plain = {
 	"PLAIN",
 
-	.flags = MECH_SEC_PLAINTEXT,
+	.flags = MECH_SEC_PLAINTEXT | MECH_SEC_ALLOW_NULS,
 	.passdb_need = MECH_PASSDB_NEED_VERIFY_PLAIN,
 
 	mech_plain_auth_new,

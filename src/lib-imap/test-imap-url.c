@@ -697,8 +697,7 @@ static void test_imap_url_valid(void)
 			}
 			if (urlt->uauth_rumpurl != NULL) {
 				if (urlp->uauth_rumpurl == NULL) {
-					test_out_quiet(t_strdup_printf(
-							       "url->uauth_rumpurl = %s", urlp->uauth_rumpurl), FALSE);
+					test_out_quiet("url->uauth_rumpurl = NULL", FALSE);
 				} else {
 					test_out_quiet(t_strdup_printf(
 							       "url->uauth_rumpurl = %s", urlp->uauth_rumpurl),
@@ -743,7 +742,7 @@ static void test_imap_url_valid(void)
 					bool equal = urlp->uauth_token_size == urlt->uauth_token_size;
 					size_t i;
 					test_out_quiet(t_strdup_printf(
-							       "url->uauth_token_size = %"PRIuSIZE_T, urlp->uauth_token_size),
+							       "url->uauth_token_size = %zu", urlp->uauth_token_size),
 						       equal);
 
 					if (equal) {

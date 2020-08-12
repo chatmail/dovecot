@@ -118,7 +118,7 @@ mail_deliver_fields_update(struct mail_deliver_fields *fields, pool_t pool,
 		return;
 	fields->filled = TRUE;
 
-	if (mail_get_first_header(mail, "Message-ID", &message_id) > 0)
+	if (mail_get_message_id(mail, &message_id) > 0)
 		message_id = str_sanitize(message_id, 200);
 	update_str_field(pool, &fields->message_id, message_id);
 
@@ -568,11 +568,15 @@ mail_do_deliver(struct mail_deliver_context *ctx,
 }
 
 int mail_deliver(struct mail_deliver_context *ctx,
-		 struct mail_storage **storage_r)
+		 enum mail_deliver_error *error_code_r,
+		 const char **error_r)
 {
 	struct mail_deliver_user *muser =
 		MAIL_DELIVER_USER_CONTEXT(ctx->rcpt_user);
 	struct event_passthrough *e;
+	struct mail_storage *storage = NULL;
+	enum mail_deliver_error error_code = MAIL_DELIVER_ERROR_NONE;
+	const char *error = NULL;
 	int ret;
 
 	i_assert(muser->deliver_ctx == NULL);
@@ -589,14 +593,42 @@ int mail_deliver(struct mail_deliver_context *ctx,
 		set_name("mail_delivery_started");
 	e_debug(e->event(), "Local delivery started");
 
-	ret = mail_do_deliver(ctx, storage_r);
+	ret = mail_do_deliver(ctx, &storage);
+
+	if (ret >= 0)
+		i_assert(ret == 0); /* ret > 0 has no defined meaning */
+	else if (ctx->tempfail_error != NULL) {
+		error = ctx->tempfail_error;
+		error_code = MAIL_DELIVER_ERROR_TEMPORARY;
+	} else if (storage != NULL) {
+		enum mail_error mail_error;
+
+		error = mail_storage_get_last_error(storage, &mail_error);
+		if (mail_error == MAIL_ERROR_NOQUOTA) {
+			error_code = MAIL_DELIVER_ERROR_NOQUOTA;
+		} else {
+			error_code = MAIL_DELIVER_ERROR_TEMPORARY;
+		}
+	} else {
+		/* This shouldn't happen */
+		e_error(ctx->event, "BUG: Saving failed to unknown storage");
+		error = "Temporary internal error";
+		error_code = MAIL_DELIVER_ERROR_INTERNAL;
+	}
 
 	e = event_create_passthrough(ctx->event)->
 		set_name("mail_delivery_finished");
-	e_debug(e->event(), "Local delivery finished");
+	if (ret == 0) {
+		e_debug(e->event(), "Local delivery finished successfully");
+	} else {
+		e->add_str("error", error);
+		e_debug(e->event(), "Local delivery failed: %s", error);
+	}
 
 	muser->deliver_ctx = NULL;
 
+	*error_code_r = error_code;
+	*error_r = error;
 	return ret;
 }
 

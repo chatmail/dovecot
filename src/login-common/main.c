@@ -39,7 +39,7 @@ static struct event_category event_category_auth = {
 	.name = "auth",
 };
 
-const struct login_binary *login_binary;
+struct login_binary *login_binary;
 struct auth_client *auth_client;
 struct master_auth *master_auth;
 bool closing_down, login_debug;
@@ -501,13 +501,14 @@ static void main_deinit(void)
 	event_unref(&event_auth);
 }
 
-int login_binary_run(const struct login_binary *binary,
+int login_binary_run(struct login_binary *binary,
 		     int argc, char *argv[])
 {
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN |
 		MASTER_SERVICE_FLAG_TRACK_LOGIN_STATE |
 		MASTER_SERVICE_FLAG_USE_SSL_SETTINGS |
+		MASTER_SERVICE_FLAG_HAVE_STARTTLS |
 		MASTER_SERVICE_FLAG_NO_SSL_INIT;
 	pool_t set_pool;
 	const char *login_socket;
@@ -521,8 +522,7 @@ int login_binary_run(const struct login_binary *binary,
 	master_service = master_service_init(login_binary->process_name,
 					     service_flags, &argc, &argv,
 					     "Dl:R:S");
-	master_service_init_log(master_service, t_strconcat(
-		login_binary->process_name, ": ", NULL));
+	master_service_init_log(master_service);
 
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
