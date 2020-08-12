@@ -1,3 +1,16 @@
+dovecot (1:2.3.11.3+dfsg1-1) UNRELEASED; urgency=high
+
+  * New upstream release fixes security issues (Closes: #968302)
+    - CVE-2020-12100 - Receiving mail with deeply nested MIME parts leads to
+      resource exhaustion as Dovecot attempts to parse it.
+    - CVE-2020-12673 - Dovecot's NTLM implementation does not correctly check
+      message buffer size, which leads to reading past allocation which can
+      lead to crash.
+    - CVE-2020-12674 - Dovecot's RPA mechanism implementation accepts
+      zero-length message, which leads to assert-crash later on.
+
+ -- Noah Meyerhans <noahm@debian.org>  Wed, 12 Aug 2020 10:41:17 -0700
+
 dovecot (1:2.3.10.1+dfsg1-2) unstable; urgency=medium
 
   * Support sd_notify with systemd (Closes: #951722)
