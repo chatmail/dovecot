@@ -341,6 +341,11 @@ old_settings_handle_root(struct config_parser_context *ctx,
 		set_rename(ctx, key, "mdbox_rotate_size", value);
 		return TRUE;
 	}
+	if (str_begins(key, "mail_cache_compress_")) {
+		const char *new_key = t_strconcat("mail_cache_purge_", key+20, NULL);
+		set_rename(ctx, key, new_key, value);
+		return TRUE;
+	}
 	if (strcmp(key, "imap_client_workarounds") == 0) {
 		char **args, **arg;
 
@@ -767,6 +772,12 @@ bool old_settings_handle(struct config_parser_context *ctx,
 			obsolete(ctx, "protocol managesieve {} has been replaced by protocol sieve { }");
 			config_parser_apply_line(ctx, CONFIG_LINE_TYPE_SECTION_BEGIN,
 						 "protocol", "sieve");
+			return TRUE;
+		} else if (ctx->pathlen == 0 && strcmp(key, "service") == 0 &&
+			   strcmp(value, "dns_client") == 0) {
+			obsolete(ctx, "service dns_client {} has been replaced by service dns-client { }");
+			config_parser_apply_line(ctx, CONFIG_LINE_TYPE_SECTION_BEGIN,
+						 "service", "dns-client");
 			return TRUE;
 		}
 		break;

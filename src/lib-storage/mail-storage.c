@@ -1502,14 +1502,6 @@ static bool mailbox_try_undelete(struct mailbox *box)
 
 int mailbox_open(struct mailbox *box)
 {
-	/* check that the storage supports stubs if require them */
-	if (((box->flags & MAILBOX_FLAG_USE_STUBS) != 0) &&
-	    ((box->storage->storage_class->class_flags & MAIL_STORAGE_CLASS_FLAG_STUBS) == 0)) {
-		mail_storage_set_error(box->storage, MAIL_ERROR_NOTPOSSIBLE,
-				       "Mailbox does not support mail stubs");
-		return -1;
-	}
-
 	if (mailbox_open_full(box, NULL) < 0) {
 		if (!box->mailbox_deleted || box->mailbox_undeleting)
 			return -1;
@@ -1547,7 +1539,8 @@ static int mailbox_alloc_index_pvt(struct mailbox *box)
 	if (mailbox_create_missing_dir(box, MAILBOX_LIST_PATH_TYPE_INDEX_PRIVATE) < 0)
 		return -1;
 
-	box->index_pvt = mail_index_alloc_cache_get(box->storage->event,
+	/* Note that this may cause box->event to live longer than box */
+	box->index_pvt = mail_index_alloc_cache_get(box->event,
 		NULL, index_dir, t_strconcat(box->index_prefix, ".pvt", NULL));
 	mail_index_set_fsync_mode(box->index_pvt,
 				  box->storage->set->parsed_fsync_mode, 0);
@@ -1692,14 +1685,8 @@ static void mailbox_copy_cache_decisions_from_inbox(struct mailbox *box)
 	    existence != MAILBOX_EXISTENCE_NONE &&
 	    mailbox_open(inbox) == 0 &&
 	    mailbox_open(box) == 0) {
-		struct mail_index_transaction *dit =
-			mail_index_transaction_begin(box->view,
-						     MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
-
-		mail_cache_decisions_copy(dit, inbox->cache, box->cache);
-
 		/* we can't do much about errors here */
-		(void)mail_index_transaction_commit(&dit);
+		(void)mail_cache_decisions_copy(inbox->cache, box->cache);
 	}
 
 	mailbox_free(&inbox);
@@ -2361,9 +2348,6 @@ mailbox_transaction_begin(struct mailbox *box,
 {
 	struct mailbox_transaction_context *trans;
 
-	i_assert((flags & MAILBOX_TRANSACTION_FLAG_FILL_IN_STUB) == 0 ||
-		 (box->flags & MAILBOX_FLAG_USE_STUBS) != 0);
-
 	i_assert(box->opened);
 
 	box->transaction_count++;
@@ -2540,11 +2524,6 @@ void mailbox_save_set_from_envelope(struct mail_save_context *ctx,
 void mailbox_save_set_uid(struct mail_save_context *ctx, uint32_t uid)
 {
 	ctx->data.uid = uid;
-	if ((ctx->transaction->flags & MAILBOX_TRANSACTION_FLAG_FILL_IN_STUB) != 0) {
-		if (!mail_index_lookup_seq(ctx->transaction->view, uid,
-					   &ctx->data.stub_seq))
-			i_panic("Trying to fill in stub for nonexistent UID %u", uid);
-	}
 }
 
 void mailbox_save_set_guid(struct mail_save_context *ctx, const char *guid)
@@ -2587,11 +2566,6 @@ int mailbox_save_begin(struct mail_save_context **ctx, struct istream *input)
 		mailbox_save_cancel(ctx);
 		return -1;
 	}
-
-	/* if we're filling in a stub, we must have set UID already
-	   (which in turn sets stub_seq) */
-	i_assert(((*ctx)->transaction->flags & MAILBOX_TRANSACTION_FLAG_FILL_IN_STUB) == 0 ||
-		 (*ctx)->data.stub_seq != 0);
 
 	/* make sure parts get parsed early on */
 	const struct mail_storage_settings *mail_set =

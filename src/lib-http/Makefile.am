@@ -27,9 +27,11 @@ libhttp_la_SOURCES = \
 	http-client-queue.c \
 	http-client-host.c \
 	http-client.c \
+	http-server-ostream.c \
 	http-server-response.c \
 	http-server-request.c \
 	http-server-connection.c \
+	http-server-resource.c \
 	http-server.c
 
 headers = \
@@ -141,6 +143,7 @@ test_http_libs = \
 	../lib-dns/libdns.la \
 	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-master/libmaster.la \
+	../lib-auth/libauth.la \
 	../lib-settings/libsettings.la \
 	$(test_libs)
 test_http_deps = \
@@ -148,6 +151,7 @@ test_http_deps = \
 	../lib-dns/libdns.la \
 	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-master/libmaster.la \
+	../lib-auth/libauth.la \
 	../lib-settings/libsettings.la \
 	$(test_deps)
 

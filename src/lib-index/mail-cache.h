@@ -8,12 +8,11 @@
 struct mail_cache;
 struct mail_cache_view;
 struct mail_cache_transaction_ctx;
-struct mail_cache_compress_lock;
 
 enum mail_cache_decision_type {
 	/* Not needed currently */
 	MAIL_CACHE_DECISION_NO		= 0x00,
-	/* Needed only for new mails. Drop when compressing. */
+	/* Needed only for new mails. Drop when purging. */
 	MAIL_CACHE_DECISION_TEMP	= 0x01,
 	/* Needed. */
 	MAIL_CACHE_DECISION_YES		= 0x02,
@@ -65,23 +64,25 @@ struct mail_cache_field *
 mail_cache_register_get_list(struct mail_cache *cache, pool_t pool,
 			     unsigned int *count_r);
 
-/* Returns TRUE if cache should be compressed. */
-bool mail_cache_need_compress(struct mail_cache *cache);
-/* Compress cache file. Offsets are updated to given transaction. The cache
-   compression lock should be kept until the transaction is committed.
-   mail_cache_compress_unlock() needs to be called afterwards. The lock doesn't
-   prevent updates to the cache while it's held, it only prevents another cache
-   compression. */
-int mail_cache_compress(struct mail_cache *cache,
-			struct mail_index_transaction *trans,
-			struct mail_cache_compress_lock **lock_r);
-int mail_cache_compress_forced(struct mail_cache *cache,
-			       struct mail_index_transaction *trans,
-			       struct mail_cache_compress_lock **lock_r);
-void mail_cache_compress_unlock(struct mail_cache_compress_lock **lock);
+/* Returns TRUE if cache should be purged. */
+bool mail_cache_need_purge(struct mail_cache *cache);
+/* Purge cache file. Offsets are updated to given transaction.
+   The transaction log must already be exclusively locked.
+
+   The cache purging is done only if the current cache file's file_seq
+   matches purge_file_seq. The idea is that purging isn't done if
+   another process had just purged it. 0 means the cache file is created
+   only if it didn't already exist. (uint32_t)-1 means that purging is
+   done always regardless of file_seq. */
+int mail_cache_purge_with_trans(struct mail_cache *cache,
+				struct mail_index_transaction *trans,
+				uint32_t purge_file_seq, const char *reason);
+int mail_cache_purge(struct mail_cache *cache, uint32_t purge_file_seq,
+		     const char *reason);
 /* Returns TRUE if there is at least something in the cache. */
 bool mail_cache_exists(struct mail_cache *cache);
-/* Open and read cache header. Returns 0 if ok, -1 if error/corrupted. */
+/* Open and read cache header. Returns 1 if ok, 0 if cache doesn't exist or it
+   was corrupted and just got deleted, -1 if I/O error. */
 int mail_cache_open_and_verify(struct mail_cache *cache);
 
 struct mail_cache_view *
@@ -93,10 +94,9 @@ void mail_cache_view_close(struct mail_cache_view **view);
 void mail_cache_view_update_cache_decisions(struct mail_cache_view *view,
 					    bool update);
 
-/* Copy caching decisions */
-void mail_cache_decisions_copy(struct mail_index_transaction *itrans,
-			       struct mail_cache *src,
-			       struct mail_cache *dst);
+/* Copy caching decisions. This is expected to be called only for a newly
+   created empty mailbox. */
+int mail_cache_decisions_copy(struct mail_cache *src, struct mail_cache *dst);
 
 /* Get index transaction specific cache transaction. */
 struct mail_cache_transaction_ctx *
@@ -148,7 +148,7 @@ int mail_cache_lookup_field(struct mail_cache_view *view, buffer_t *dest_buf,
 /* Return specified cached headers. Returns 1 if all fields were found,
    0 if not, -1 if error. dest is updated only if all fields were found. */
 int mail_cache_lookup_headers(struct mail_cache_view *view, string_t *dest,
-			      uint32_t seq, unsigned int field_idxs[],
+			      uint32_t seq, const unsigned int field_idxs[],
 			      unsigned int fields_count);
 
 /* "Error in index cache file %s: ...". */
@@ -156,8 +156,6 @@ void mail_cache_set_corrupted(struct mail_cache *cache, const char *fmt, ...)
 	ATTR_FORMAT(2, 3);
 void mail_cache_set_seq_corrupted_reason(struct mail_cache_view *cache_view,
 					 uint32_t seq, const char *reason);
-/* Delete the cache file. */
-void mail_cache_reset(struct mail_cache *cache);
 
 /* Returns human-readable reason for why a cached field is missing for
    the specified mail. This is mainly for debugging purposes, so the exact

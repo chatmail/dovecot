@@ -226,48 +226,51 @@ lda_set_rcpt_to(struct mail_deliver_input *dinput,
 static int
 lda_do_deliver(struct mail_deliver_context *ctx, bool stderr_rejection)
 {
-	struct mail_storage *storage;
-	enum mail_error error;
-	const char *errstr;
+	enum mail_deliver_error error_code;
+	const char *error;
 	int ret;
 
-	if (mail_deliver(ctx, &storage) >= 0)
+	if (mail_deliver(ctx, &error_code, &error) >= 0)
 		return EX_OK;
 
-	if (ctx->tempfail_error != NULL) {
-		errstr = ctx->tempfail_error;
-		error = MAIL_ERROR_TEMP;
-	} else if (storage != NULL) {
-		errstr = mail_storage_get_last_error(storage, &error);
-	} else {
+	if (error_code == MAIL_DELIVER_ERROR_INTERNAL) {
 		/* This shouldn't happen */
-		i_error("BUG: Saving failed to unknown storage");
 		return EX_TEMPFAIL;
 	}
 
 	if (stderr_rejection) {
 		/* write to stderr also for tempfails so that MTA
 		   can log the reason if it wants to. */
-		fprintf(stderr, "%s\n", errstr);
+		fprintf(stderr, "%s\n", error);
 	}
 
-	if (error != MAIL_ERROR_NOQUOTA ||
-	    ctx->set->quota_full_tempfail) {
-		/* Saving to INBOX should always work unless
-		   we're over quota. If it didn't, it's probably a
-		   configuration problem. */
+	switch (error_code) {
+	case MAIL_DELIVER_ERROR_NONE:
+		i_unreached();
+	case MAIL_DELIVER_ERROR_TEMPORARY:
 		return EX_TEMPFAIL;
+	case MAIL_DELIVER_ERROR_REJECTED:
+		break;
+	case MAIL_DELIVER_ERROR_NOQUOTA:
+		if (ctx->set->quota_full_tempfail)
+			return EX_TEMPFAIL;
+		ctx->mailbox_full = TRUE;
+		break;
+	case MAIL_DELIVER_ERROR_INTERNAL:
+		i_unreached();
 	}
-	ctx->mailbox_full = TRUE;
+
+	/* Rejected */
+
 	ctx->dsn = TRUE;
 
 	/* we'll have to reply with permanent failure */
 	mail_deliver_log(ctx, "rejected: %s",
-			 str_sanitize(errstr, 512));
+			 str_sanitize(error, 512));
 
 	if (stderr_rejection)
 		return EX_NOPERM;
-	ret = mail_send_rejection(ctx, ctx->rcpt_to, errstr);
+	ret = mail_send_rejection(ctx, ctx->rcpt_to, error);
 	if (ret != 0)
 		return ret < 0 ? EX_TEMPFAIL : ret;
 	/* ok, rejection sent */
@@ -521,6 +524,7 @@ int main(int argc, char *argv[])
 	dinput.mail_from = mail_from;
 	dinput.rcpt_to = final_rcpt_to;
 
+	event_add_str(event, "protocol", "lda");
 	event_add_str(event, "user", user);
 	if (mail_from != NULL) {
 		event_add_str(event, "mail_from",

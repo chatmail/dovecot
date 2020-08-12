@@ -1081,10 +1081,10 @@ static int sieve_message_parts_add_missing
 	struct sieve_message_context *msgctx = renv->msgctx;
 	pool_t pool = msgctx->context_pool;
 	struct mail *mail = sieve_message_get_mail(renv->msgctx);
-	enum message_parser_flags mparser_flags =
-		MESSAGE_PARSER_FLAG_INCLUDE_MULTIPART_BLOCKS;
-	enum message_header_parser_flags hparser_flags =
-		MESSAGE_HEADER_PARSER_FLAG_SKIP_INITIAL_LWSP;
+	struct message_parser_settings mparser_set = {
+		.hdr_flags = MESSAGE_HEADER_PARSER_FLAG_SKIP_INITIAL_LWSP,
+		.flags = MESSAGE_PARSER_FLAG_INCLUDE_MULTIPART_BLOCKS,
+	};
 	ARRAY(struct sieve_message_header) headers;
 	struct sieve_message_part *body_part, *header_part, *last_part;
 	struct message_parser_ctx *parser;
@@ -1096,7 +1096,6 @@ static int sieve_message_parts_add_missing
 	unsigned int idx = 0;
 	bool save_body = FALSE, have_all;
 	string_t *hdr_content = NULL;
-	int ret;
 
 	/* First check whether any are missing */
 	if ( !iter_all && sieve_message_body_get_return_parts
@@ -1121,7 +1120,7 @@ static int sieve_message_parts_add_missing
 	if (iter_all) {
 		t_array_init(&headers, 64);
 		hdr_content = t_str_new(512);
-		hparser_flags |= MESSAGE_HEADER_PARSER_FLAG_CLEAN_ONELINE;
+		mparser_set.hdr_flags |= MESSAGE_HEADER_PARSER_FLAG_CLEAN_ONELINE;
 	} else {
 		i_zero(&headers);
 	}
@@ -1133,9 +1132,8 @@ static int sieve_message_parts_add_missing
 		//parser = message_parser_init_from_parts(parts, input,
 		// hparser_flags, mparser_flags);
 	parser = message_parser_init(pool_datastack_create(),
-		input, hparser_flags, mparser_flags);
-	while ( (ret=message_parser_parse_next_block
-		(parser, &block)) > 0 ) {
+		input, &mparser_set);
+	while ( message_parser_parse_next_block(parser, &block) > 0 ) {
 		struct sieve_message_part **body_part_idx;
 		struct message_header_line *hdr = block.hdr;
 		struct sieve_message_header *header;

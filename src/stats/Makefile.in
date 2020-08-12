@@ -142,7 +142,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -153,13 +154,16 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libstats_local_la_LIBADD =
+am__objects_1 = stats-service-openmetrics.lo
 am_libstats_local_la_OBJECTS = client-reader.lo client-writer.lo \
-	event-exporter-fmt.lo event-exporter-fmt-json.lo \
-	event-exporter-fmt-none.lo event-exporter-fmt-tab-text.lo \
+	client-http.lo event-exporter-fmt.lo \
+	event-exporter-fmt-json.lo event-exporter-fmt-none.lo \
+	event-exporter-fmt-tab-text.lo \
 	event-exporter-transport-drop.lo \
 	event-exporter-transport-http-post.lo \
-	event-exporter-transport-log.lo stats-event-category.lo \
-	stats-metrics.lo stats-settings.lo
+	event-exporter-transport-log.lo $(am__objects_1) \
+	stats-service.lo stats-event-category.lo stats-metrics.lo \
+	stats-settings.lo
 libstats_local_la_OBJECTS = $(am_libstats_local_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -397,6 +401,8 @@ SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VALGRIND = @VALGRIND@
 VERSION = @VERSION@
+ZSTD_CFLAGS = @ZSTD_CFLAGS@
+ZSTD_LIBS = @ZSTD_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -472,12 +478,16 @@ stats_LDADD = \
 	$(noinst_LTLIBRARIES) \
 	$(LIBDOVECOT) \
 	$(DOVECOT_SSL_LIBS) \
-	$(BINARY_LDFLAGS)
+	$(BINARY_LDFLAGS) \
+	-lm
 
 stats_DEPENDENCIES = \
 	$(noinst_LTLIBRARIES) \
 	$(DOVECOT_SSL_LIBS) \
 	$(LIBDOVECOT_DEPS)
+
+stats_services = \
+	stats-service-openmetrics.c
 
 stats_SOURCES = \
 	main.c
@@ -485,6 +495,7 @@ stats_SOURCES = \
 libstats_local_la_SOURCES = \
 	client-reader.c \
 	client-writer.c \
+	client-http.c \
 	event-exporter-fmt.c \
 	event-exporter-fmt-json.c \
 	event-exporter-fmt-none.c \
@@ -492,14 +503,20 @@ libstats_local_la_SOURCES = \
 	event-exporter-transport-drop.c \
 	event-exporter-transport-http-post.c \
 	event-exporter-transport-log.c \
+	$(stats_services) \
+	stats-service.c \
 	stats-event-category.c \
 	stats-metrics.c \
 	stats-settings.c
 
 noinst_HEADERS = \
+	stats-common.h \
 	client-reader.h \
 	client-writer.h \
+	client-http.h\
 	event-exporter.h \
+	stats-service.h \
+	stats-service-private.h \
 	stats-event-category.h \
 	stats-metrics.h \
 	stats-settings.h \
@@ -509,7 +526,8 @@ test_libs = \
 	$(noinst_LTLIBRARIES) \
 	$(DOVECOT_SSL_LIBS) \
 	$(LIBDOVECOT) \
-	$(BINARY_LDFLAGS)
+	$(BINARY_LDFLAGS) \
+	-lm
 
 test_deps = \
 	$(noinst_LTLIBRARIES) \
@@ -663,6 +681,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-http.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-reader.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/client-writer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/event-exporter-fmt-json.Plo@am__quote@
@@ -675,6 +694,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stats-event-category.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stats-metrics.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stats-service-openmetrics.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stats-service.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stats-settings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-client-reader.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-client-writer.Po@am__quote@

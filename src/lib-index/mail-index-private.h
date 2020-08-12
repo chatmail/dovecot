@@ -174,6 +174,7 @@ struct mail_index {
 	int fd;
 
 	struct mail_index_map *map;
+	char *need_recreate;
 
 	time_t last_mmap_error_time;
 
@@ -218,16 +219,16 @@ struct mail_index {
 	bool readonly:1;
 	bool mapping:1;
 	bool syncing:1;
-	bool need_recreate:1;
 	bool index_min_write:1;
 	bool modseqs_enabled:1;
 	bool initial_create:1;
 	bool initial_mapped:1;
+	bool reopen_main_index:1;
 	bool fscked:1;
 };
 
 extern struct mail_index_module_register mail_index_module_register;
-extern struct event_category event_category_index;
+extern struct event_category event_category_mail_index;
 
 /* Add/replace sync handler for specified extra record. */
 void mail_index_register_expunge_handler(struct mail_index *index,
@@ -249,7 +250,8 @@ void mail_index_close_file(struct mail_index *index);
 int mail_index_reopen_if_changed(struct mail_index *index,
 				 const char **reason_r);
 /* Update/rewrite the main index file from index->map */
-void mail_index_write(struct mail_index *index, bool want_rotate);
+void mail_index_write(struct mail_index *index, bool want_rotate,
+		      const char *reason);
 
 void mail_index_flush_read_cache(struct mail_index *index, const char *path,
 				 int fd, bool locked);

@@ -42,6 +42,8 @@ struct login_client_module_hooks {
 
 static ARRAY(struct login_client_module_hooks) module_hooks = ARRAY_INIT;
 
+static const char *client_get_log_str(struct client *client, const char *msg);
+
 void login_client_hooks_add(struct module *module,
 			    const struct login_client_hooks *hooks)
 {
@@ -95,7 +97,7 @@ static void client_idle_disconnect_timeout(struct client *client)
 		user_reason = "Timeout while finishing login.";
 		destroy_reason = t_strdup_printf(
 			"Timeout while finishing login (waited %u secs)", secs);
-		client_log_err(client, destroy_reason);
+		e_error(client->event, "%s", destroy_reason);
 	} else if (client->auth_request != NULL) {
 		user_reason =
 			"Disconnected for inactivity during authentication.";
@@ -105,12 +107,11 @@ static void client_idle_disconnect_timeout(struct client *client)
 		secs = ioloop_time - client->created;
 		user_reason = "Timeout while finishing login.";
 		destroy_reason = t_strdup_printf(
-			"proxy: Logging in to %s:%u timed out "
+			"Logging in timed out "
 			"(state=%s, duration=%us)",
-			login_proxy_get_host(client->login_proxy),
-			login_proxy_get_port(client->login_proxy),
 			client_proxy_get_state(client), secs);
-		client_log_err(client, destroy_reason);
+		e_error(login_proxy_get_event(client->login_proxy),
+			"%s", destroy_reason);
 	} else {
 		user_reason = "Disconnected for inactivity.";
 		destroy_reason = "Disconnected: Inactivity";
@@ -132,6 +133,14 @@ static void client_open_streams(struct client *client)
 	}
 }
 
+static const char *
+client_log_msg_callback(struct client *client,
+			enum log_type log_type ATTR_UNUSED,
+			const char *message)
+{
+	return client_get_log_str(client, message);
+}
+
 static bool client_is_trusted(struct client *client)
 {
 	const char *const *net;
@@ -144,7 +153,7 @@ static bool client_is_trusted(struct client *client)
 	net = t_strsplit_spaces(client->set->login_trusted_networks, ", ");
 	for (; *net != NULL; net++) {
 		if (net_parse_range(*net, &net_ip, &bits) < 0) {
-			i_error("login_trusted_networks: "
+			e_error(client->event, "login_trusted_networks: "
 				"Invalid network '%s'", *net);
 			break;
 		}
@@ -204,6 +213,16 @@ client_alloc(int fd, pool_t pool,
 			net_ip_compare(&conn->real_remote_ip, &conn->real_local_ip);
 	}
 	client->proxy_ttl = LOGIN_PROXY_TTL;
+
+	client->event = event_create(NULL);
+	event_add_category(client->event, &login_binary->event_category);
+	event_add_str(client->event, "local_ip", net_ip2addr(&conn->local_ip));
+	event_add_int(client->event, "local_port", conn->local_port);
+	event_add_str(client->event, "remote_ip", net_ip2addr(&conn->remote_ip));
+	event_add_int(client->event, "remote_port", conn->remote_port);
+	event_set_log_message_callback(client->event, client_log_msg_callback,
+				       client);
+
 	client_open_streams(client);
 	return client;
 }
@@ -244,8 +263,12 @@ void client_disconnect(struct client *client, const char *reason)
 		if (extra_reason[0] != '\0')
 			reason = t_strconcat(reason, " ", extra_reason, NULL);
 	}
-	if (reason != NULL)
-		client_log(client, reason);
+	if (reason != NULL) {
+		struct event *event = client->login_proxy == NULL ?
+			client->event :
+			login_proxy_get_event(client->login_proxy);
+		e_info(event, "%s", reason);
+	}
 
 	if (client->output != NULL)
 		o_stream_uncork(client->output);
@@ -353,6 +376,7 @@ bool client_unref(struct client **_client)
 		i_stream_unref(&client->input);
 		o_stream_unref(&client->output);
 		pool_unref(&client->preproxy_pool);
+		event_unref(&client->event);
 		pool_unref(&client->pool);
 		return FALSE;
 	}
@@ -373,6 +397,7 @@ bool client_unref(struct client **_client)
 	i_stream_unref(&client->input);
 	o_stream_unref(&client->output);
 	i_close_fd(&client->fd);
+	event_unref(&client->event);
 
 	i_free(client->proxy_user);
 	i_free(client->proxy_master_user);
@@ -476,7 +501,7 @@ int client_init_ssl(struct client *client)
 	i_assert(client->fd != -1);
 
 	if (strcmp(client->ssl_set->ssl, "no") == 0) {
-		client_log(client, "SSL is disabled (ssl=no)");
+		e_info(client->event, "SSL is disabled (ssl=no)");
 		return -1;
 	}
 
@@ -487,15 +512,15 @@ int client_init_ssl(struct client *client)
 	   command. */
 	ssl_set.allow_invalid_cert = TRUE;
 	if (ssl_iostream_server_context_cache_get(&ssl_set, &ssl_ctx, &error) < 0) {
-		client_log_err(client, t_strdup_printf(
-			"Failed to initialize SSL server context: %s", error));
+		e_error(client->event,
+			"Failed to initialize SSL server context: %s", error);
 		return -1;
 	}
 	if (io_stream_create_ssl_server(ssl_ctx, &ssl_set,
 					&client->input, &client->output,
 					&client->ssl_iostream, &error) < 0) {
-		client_log_err(client, t_strdup_printf(
-			"Failed to initialize SSL connection: %s", error));
+		e_error(client->event,
+			"Failed to initialize SSL connection: %s", error);
 		ssl_iostream_context_unref(&ssl_ctx);
 		return -1;
 	}
@@ -608,7 +633,7 @@ int client_get_plaintext_fd(struct client *client, int *fd_r, bool *close_fd_r)
 	   disconnects. Create a socketpair where login process is proxying on
 	   one side and the other side is sent to the post-login process. */
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) < 0) {
-		client_log_err(client, t_strdup_printf("socketpair() failed: %m"));
+		e_error(client->event, "socketpair() failed: %m");
 		return -1;
 	}
 	fd_set_nonblock(fds[0], TRUE);
@@ -872,6 +897,8 @@ client_get_log_str(struct client *client, const char *msg)
 		if (var_expand_with_funcs(str, *e, var_expand_table,
 					  func_table, client, &error) <= 0 &&
 		    !expand_error_logged) {
+			/* NOTE: Don't log via client->event - it would cause
+			   recursion */
 			i_error("Failed to expand log_format_elements=%s: %s",
 				*e, error);
 			expand_error_logged = TRUE;
@@ -907,32 +934,13 @@ client_get_log_str(struct client *client, const char *msg)
 
 	str_truncate(str, 0);
 	if (var_expand(str, client->set->login_log_format, tab, &error) <= 0) {
+		/* NOTE: Don't log via client->event - it would cause
+		   recursion */
 		i_error("Failed to expand login_log_format=%s: %s",
 			client->set->login_log_format, error);
 		expand_error_logged = TRUE;
 	}
 	return str_c(str);
-}
-
-void client_log(struct client *client, const char *msg)
-{
-	T_BEGIN {
-		i_info("%s", client_get_log_str(client, msg));
-	} T_END;
-}
-
-void client_log_err(struct client *client, const char *msg)
-{
-	T_BEGIN {
-		i_error("%s", client_get_log_str(client, msg));
-	} T_END;
-}
-
-void client_log_warn(struct client *client, const char *msg)
-{
-	T_BEGIN {
-		i_warning("%s", client_get_log_str(client, msg));
-	} T_END;
 }
 
 bool client_is_tls_enabled(struct client *client)

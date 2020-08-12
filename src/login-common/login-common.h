@@ -30,6 +30,8 @@ struct login_binary {
 	/* if value is NULL, LOGIN_DEFAULT_SOCKET is used as the default */
 	const char *default_login_socket;
 
+	struct event_category event_category;
+
 	const struct client_vfuncs *client_vfuncs;
 	void (*preinit)(void);
 	void (*init)(void);
@@ -44,7 +46,7 @@ struct login_module_register {
 };
 extern struct login_module_register login_module_register;
 
-extern const struct login_binary *login_binary;
+extern struct login_binary *login_binary;
 extern struct auth_client *auth_client;
 extern struct master_auth *master_auth;
 extern bool closing_down, login_debug;
@@ -71,7 +73,7 @@ void login_client_destroyed(void);
 /* Call to guarantee that the "anvil" global variable is initialized. */
 void login_anvil_init(void);
 
-int login_binary_run(const struct login_binary *binary,
+int login_binary_run(struct login_binary *binary,
 		     int argc, char *argv[]);
 
 #endif

@@ -16,6 +16,7 @@
 #include "auth-cache.h"
 #include "auth-request.h"
 #include "auth-request-handler.h"
+#include "auth-request-handler-private.h"
 #include "auth-request-stats.h"
 #include "auth-client-connection.h"
 #include "auth-master-connection.h"
@@ -66,9 +67,6 @@ static void get_log_identifier(string_t *str, struct auth_request *auth_request)
 static void
 auth_request_userdb_import(struct auth_request *request, const char *args);
 
-static
-void auth_request_verify_plain_continue(struct auth_request *request,
-					verify_plain_callback_t *callback);
 static
 void auth_request_lookup_credentials_policy_continue(struct auth_request *request,
 						     lookup_credentials_callback_t *callback);
@@ -192,14 +190,12 @@ void auth_request_success(struct auth_request *request,
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
 
 	if (!request->set->policy_check_after_auth) {
-		buffer_t buf;
-		buffer_create_from_const_data(&buf, "", 0);
-		struct auth_policy_check_ctx ctx = {
-			.success_data = &buf,
-			.request = request,
-			.type = AUTH_POLICY_CHECK_TYPE_SUCCESS,
-		};
-		auth_request_policy_check_callback(0, &ctx);
+		struct auth_policy_check_ctx *ctx =
+			p_new(request->pool, struct auth_policy_check_ctx, 1);
+		ctx->success_data = buffer_create_dynamic(request->pool, 1);
+		ctx->request = request;
+		ctx->type = AUTH_POLICY_CHECK_TYPE_SUCCESS;
+		auth_request_policy_check_callback(0, ctx);
 		return;
 	}
 
@@ -217,16 +213,11 @@ auth_request_finished_event(struct auth_request *request, struct event *event)
 {
 	struct event_passthrough *e = event_create_passthrough(event);
 
-	if (request->user != NULL)
-		e->add_str("user", request->user);
-	if (request->original_username != NULL)
-		e->add_str("original_username", request->original_username);
-	if (request->translated_username != NULL)
-		e->add_str("translated_username", request->translated_username);
-	if (request->master_user != NULL) {
-		e->add_str("login_user", request->requested_login_user);
-		e->add_str("master_user", request->master_user);
-	}
+	e->add_str("user", request->user);
+	e->add_str("orig_user", request->original_username);
+	e->add_str("translated_user", request->translated_username);
+	e->add_str("login_user", request->requested_login_user);
+	e->add_str("master_user", request->master_user);
 	if (request->failed) {
 		if (request->internal_failure) {
 			e->add_str("error", "internal failure");
@@ -252,12 +243,8 @@ auth_request_finished_event(struct auth_request *request, struct event *event)
 	if (request->userdb_lookup) {
 		return e;
 	}
-	if (request->mech != NULL)
-		e->add_str("mechanism", request->mech->mech_name);
-	if (request->credentials_scheme != NULL)
-		e->add_str("credentials_scheme", request->credentials_scheme);
-	if (request->realm != NULL)
-		e->add_str("realm", request->realm);
+	e->add_str("credentials_scheme", request->credentials_scheme);
+	e->add_str("realm", request->realm);
 	if (request->policy_penalty > 0)
 		e->add_int("policy_penalty", request->policy_penalty);
 	if (request->policy_refusal) {
@@ -318,10 +305,12 @@ void auth_request_success_continue(struct auth_policy_check_ctx *ctx)
 		return;
 	}
 
-	stats = auth_request_stats_get(request);
-	stats->auth_success_count++;
-	if (request->master_user != NULL)
-		stats->auth_master_success_count++;
+	if (request->set->stats) {
+		stats = auth_request_stats_get(request);
+		stats->auth_success_count++;
+		if (request->master_user != NULL)
+			stats->auth_master_success_count++;
+	}
 
 	auth_request_set_state(request, AUTH_REQUEST_STATE_FINISHED);
 	auth_request_refresh_last_access(request);
@@ -335,8 +324,10 @@ void auth_request_fail(struct auth_request *request)
 
 	i_assert(request->state == AUTH_REQUEST_STATE_MECH_CONTINUE);
 
-	stats = auth_request_stats_get(request);
-	stats->auth_failure_count++;
+	if (request->set->stats) {
+		stats = auth_request_stats_get(request);
+		stats->auth_failure_count++;
+	}
 
 	auth_request_set_state(request, AUTH_REQUEST_STATE_FINISHED);
 	auth_request_refresh_last_access(request);
@@ -639,11 +630,29 @@ bool auth_request_import(struct auth_request *request,
 	return TRUE;
 }
 
+static bool auth_request_fail_on_nuls(struct auth_request *request,
+			       const unsigned char *data, size_t data_size)
+{
+	if ((request->mech->flags & MECH_SEC_ALLOW_NULS) != 0)
+		return FALSE;
+	if (memchr(data, '\0', data_size) != NULL) {
+		e_debug(request->mech_event, "Unexpected NUL in auth data");
+		auth_request_fail(request);
+		return TRUE;
+	}
+	return FALSE;
+}
+
 void auth_request_initial(struct auth_request *request)
 {
 	i_assert(request->state == AUTH_REQUEST_STATE_NEW);
 
 	auth_request_set_state(request, AUTH_REQUEST_STATE_MECH_CONTINUE);
+
+	if (auth_request_fail_on_nuls(request, request->initial_response,
+				      request->initial_response_len))
+		return;
+
 	request->mech->auth_initial(request, request->initial_response,
 				    request->initial_response_len);
 }
@@ -657,6 +666,9 @@ void auth_request_continue(struct auth_request *request,
 		auth_request_success(request, "", 0);
 		return;
 	}
+
+	if (auth_request_fail_on_nuls(request, data, data_size))
+		return;
 
 	auth_request_refresh_last_access(request);
 	request->mech->auth_continue(request, data, data_size);
@@ -1235,7 +1247,7 @@ void auth_request_policy_penalty_finish(void *context)
 
 	switch(ctx->type) {
 	case AUTH_POLICY_CHECK_TYPE_PLAIN:
-		auth_request_verify_plain_continue(ctx->request, ctx->callback_plain);
+		ctx->request->handler->verify_plain_continue_callback(ctx->request, ctx->callback_plain);
 		return;
 	case AUTH_POLICY_CHECK_TYPE_LOOKUP:
 		auth_request_lookup_credentials_policy_continue(ctx->request, ctx->callback_lookup);
@@ -1254,6 +1266,9 @@ void auth_request_policy_check_callback(int result, void *context)
 	struct auth_policy_check_ctx *ctx = context;
 
 	ctx->request->policy_processed = TRUE;
+	/* It's possible that multiple policy lookups return a penalty.
+	   Sum them all up to the event. */
+	ctx->request->policy_penalty += result < 0 ? 0 : result;
 
 	if (ctx->request->set->policy_log_only && result != 0) {
 		auth_request_policy_penalty_finish(context);
@@ -1286,7 +1301,8 @@ void auth_request_verify_plain(struct auth_request *request,
 	request->user_changed_by_lookup = FALSE;
 
 	if (request->policy_processed || !request->set->policy_check_before_auth) {
-		auth_request_verify_plain_continue(request, callback);
+		request->handler->verify_plain_continue_callback(request,
+								 callback);
 	} else {
 		ctx = p_new(request->pool, struct auth_policy_check_ctx, 1);
 		ctx->request = request;
@@ -1296,10 +1312,9 @@ void auth_request_verify_plain(struct auth_request *request,
 	}
 }
 
-static
-void auth_request_verify_plain_continue(struct auth_request *request,
-					verify_plain_callback_t *callback) {
-
+void auth_request_default_verify_plain_continue(struct auth_request *request,
+						verify_plain_callback_t *callback)
+{
 	struct auth_passdb *passdb;
 	enum passdb_result result;
 	const char *cache_key, *error;

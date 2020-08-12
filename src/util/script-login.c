@@ -112,7 +112,7 @@ static void client_connected(struct master_service_connection *conn)
 	}
 	env_put(t_strconcat(ENV_USERDB_KEYS"=", str_c(keys), NULL));
 
-	master_service_init_log(master_service,
+	master_service_init_log_with_prefix(master_service,
 		t_strdup_printf("script-login(%s): ", input.username));
 
 	if (drop_to_userdb_privileges) {
@@ -214,7 +214,7 @@ int main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	master_service_init_log(master_service, "script-login: ");
+	master_service_init_log(master_service);
 
 	if (!drop_to_userdb_privileges &&
 	    (flags & MASTER_SERVICE_FLAG_STANDALONE) == 0) {

@@ -1,11 +1,167 @@
-2020-03-04 09:58:45 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (bf8ef1c2)
+2020-06-30 11:53:28 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (6c69c917)
 
-    Released 0.5.10
+    NEWS: Add news for 0.5.11
+
+
+M	NEWS
+
+2020-06-30 11:51:26 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (ebadd718)
+
+    configure.ac: Update version
 
 
 M	configure.ac
 
-2020-03-03 13:59:43 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (d63d7f99)
+2020-05-19 15:40:04 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (cb631066)
+
+    lib-sieve: Adjust to message_parser_init() API change
+
+
+M	src/lib-sieve/plugins/notify/ext-notify-common.c
+M	src/lib-sieve/sieve-message.c
+
+2020-02-18 23:27:03 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (038274fe)
+
+    global: Properly parse Message-ID header.
+
+    Use mail_get_message_id() instead of just mail_get_first_header().
+
+M	src/lib-sieve/plugins/duplicate/tst-duplicate.c
+M	src/plugins/imap-filter-sieve/imap-filter-sieve.c
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+M	src/sieve-tools/sieve-filter.c
+M	src/sieve-tools/sieve-test.c
+M	src/testsuite/testsuite-message.c
+
+2020-04-21 18:31:13 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (72bed3a5)
+
+    testsuite: testsuite-message - Give all global variables a "testsuite_"
+    prefix.
+
+
+M	src/testsuite/testsuite-message.c
+
+2020-04-21 18:27:33 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (06b29fd6)
+
+    testsuite: Reformat testsuite-message.h.
+
+
+M	src/testsuite/testsuite-message.h
+
+2020-04-21 18:25:38 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (6b2bc756)
+
+    testsuite: Reformat testsuite-message.c.
+
+
+M	src/testsuite/testsuite-message.c
+
+2020-04-21 23:15:52 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (1bcf28c8)
+
+    managesieve: Fix debug event's printf format type
+
+
+M	src/managesieve/cmd-havespace.c
+
+2020-04-24 13:05:01 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (6c81309a)
+
+    managesieve-login: Correctly adjust to core login-common API changes.
+
+    Previous commit was accidentally for an earlier version of the API change.
+
+M	src/managesieve-login/client.c
+
+2020-04-10 01:02:50 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (568c72e7)
+
+    managesieve-login: Adjust to core login-common API changes.
+
+
+M	src/managesieve-login/client.c
+M	src/managesieve-login/managesieve-proxy.c
+
+2020-04-05 01:25:02 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (464a0f92)
+
+    lib-sieve: Use "sieve" category as parent for "sieve-*" categories
+
+
+M	src/lib-sieve/sieve-common.h
+M	src/lib-sieve/sieve-execute.c
+M	src/lib-sieve/sieve-interpreter.c
+M	src/lib-sieve/sieve-result.c
+M	src/lib-sieve/sieve-storage.c
+
+2020-03-11 15:43:47 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (7b97795e)
+
+    managesieve: Change managesieve_max_line_length setting type to "size"
+
+
+M	src/managesieve/managesieve-settings.c
+M	src/managesieve/managesieve-settings.h
+
+2020-03-24 17:59:18 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (ff7d9089)
+
+    global: Remove dead assignments
+
+    Found by latest clang scan-build.
+
+M	src/lib-sieve/plugins/vnd.dovecot/report/cmd-report.c
+M	src/lib-sieve/sieve-message.c
+M	src/plugins/sieve-extprograms/sieve-extprograms-common.c
+
+2020-03-24 17:56:20 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (da702576)
+
+    plugins: imap-filter-sieve: SIEVE SCRIPT - Reorder if checks to remove
+    unnecessary indenting
+
+    Nothing changes in the code logic.
+
+M	src/plugins/imap-filter-sieve/cmd-filter-sieve.c
+
+2020-03-24 17:44:18 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (f69f9fe1)
+
+    plugins: imap-filter-sieve: SIEVE SCRIPT - Cleanup istream return value
+    checking
+
+    The old code seems to have worked correctly already, but now it's a bit 
+    clearer how it was intended to work.
+
+M	src/plugins/imap-filter-sieve/cmd-filter-sieve.c
+
+2020-03-24 17:40:28 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (919704e7)
+
+    lib-sieve: plugins: body: Fix compiler warning
+
+    Fixes "warning: cast to smaller integer type" with new clang.
+
+M	src/lib-sieve/plugins/body/tst-body.c
+
+2020-03-17 09:33:24 -0400 Josef 'Jeff' Sipek <jeff.sipek@open-xchange.com> (301a5c44)
+
+    global: use %zu directly instead of PRIuSIZE_T
+
+
+M	src/lib-managesieve/managesieve-arg.c
+M	src/lib-managesieve/managesieve-quote.c
+M	src/lib-sieve/plugins/editheader/cmd-addheader.c
+M	src/lib-sieve/plugins/editheader/ext-editheader-common.c
+M	src/lib-sieve/plugins/variables/ext-variables-common.c
+M	src/lib-sieve/sieve-binary-dumper.c
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-lexer.c
+M	src/lib-sieve/storage/ldap/sieve-ldap-db.c
+M	src/managesieve/cmd-havespace.c
+M	src/managesieve/managesieve-quota.c
+M	src/plugins/imap-filter-sieve/cmd-filter-sieve.c
+M	src/plugins/imap-filter-sieve/imap-filter.c
+
+2020-03-09 14:54:04 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (5992e367)
+
+    NEWS: Fix news for 0.5.10
+
+
+M	NEWS
+
+2020-03-03 13:59:43 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (2e6a4515)
 
     NEWS: Add news for v0.5.10
 

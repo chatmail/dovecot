@@ -560,7 +560,7 @@ static char *i_stream_next_line_finish(struct istream_private *stream, size_t i)
 	char *ret;
 	size_t end;
 
-	if (i > 0 && stream->buffer[i-1] == '\r') {
+	if (i > stream->skip && stream->buffer[i-1] == '\r') {
 		end = i - 1;
 		stream->line_crlf = TRUE;
 	} else {
@@ -568,7 +568,8 @@ static char *i_stream_next_line_finish(struct istream_private *stream, size_t i)
 		stream->line_crlf = FALSE;
 	}
 
-	if (stream->buffer == stream->w_buffer) {
+	if (stream->buffer == stream->w_buffer &&
+	    end < stream->buffer_size) {
 		/* modify the buffer directly */
 		stream->w_buffer[end] = '\0';
 		ret = (char *)stream->w_buffer + stream->skip;
@@ -577,8 +578,9 @@ static char *i_stream_next_line_finish(struct istream_private *stream, size_t i)
 		if (stream->line_str == NULL)
 			stream->line_str = str_new(default_pool, 256);
 		str_truncate(stream->line_str, 0);
-		str_append_data(stream->line_str, stream->buffer + stream->skip,
-				end - stream->skip);
+		if (stream->skip < end)
+			str_append_data(stream->line_str, stream->buffer + stream->skip,
+					end - stream->skip);
 		ret = str_c_modifiable(stream->line_str);
 	}
 
@@ -629,7 +631,7 @@ char *i_stream_read_next_line(struct istream *stream)
 		switch (i_stream_read(stream)) {
 		case -2:
 			io_stream_set_error(&stream->real_stream->iostream,
-				"Line is too long (over %"PRIuSIZE_T
+				"Line is too long (over %zu"
 				" bytes at offset %"PRIuUOFF_T")",
 				i_stream_get_data_size(stream), stream->v_offset);
 			stream->stream_errno = errno = ENOBUFS;
@@ -887,13 +889,13 @@ void *i_stream_alloc(struct istream_private *stream, size_t size)
 {
 	size_t old_size, avail_size;
 
-	i_stream_try_alloc(stream, size, &avail_size);
+	(void)i_stream_try_alloc(stream, size, &avail_size);
 	if (avail_size < size) {
 		old_size = stream->buffer_size;
 		stream->buffer_size = nearest_power(stream->pos + size);
 		i_stream_w_buffer_realloc(stream, old_size);
 
-		i_stream_try_alloc(stream, size, &avail_size);
+		(void)i_stream_try_alloc(stream, size, &avail_size);
 		i_assert(avail_size >= size);
 	}
 	return stream->w_buffer + stream->pos;
@@ -905,7 +907,7 @@ bool i_stream_add_data(struct istream *_stream, const unsigned char *data,
 	struct istream_private *stream = _stream->real_stream;
 	size_t size2;
 
-	i_stream_try_alloc(stream, size, &size2);
+	(void)i_stream_try_alloc(stream, size, &size2);
 	if (size > size2)
 		return FALSE;
 

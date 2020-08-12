@@ -80,30 +80,31 @@ static int
 mail_cache_lookup_offset(struct mail_cache *cache, struct mail_index_view *view,
 			 uint32_t seq, uint32_t *offset_r)
 {
-	uint32_t offset, reset_id;
-	int i, ret;
+	uint32_t offset, reset_id, reset_id2;
+	int ret;
 
 	offset = mail_cache_lookup_cur_offset(view, seq, &reset_id);
 	if (offset == 0)
 		return 0;
 
-	/* reset_id must match file_seq or the offset is for a different cache
-	   file. if this happens, try if reopening the cache helps. if not,
-	   it was probably for an old cache file that's already lost by now. */
-	i = 0;
 	while (cache->hdr->file_seq != reset_id) {
-		if (++i == 2 || reset_id < cache->hdr->file_seq)
-			return 0;
-
-		if (cache->locked) {
-			/* we're probably compressing */
-			return 0;
-		}
-
-		if ((ret = mail_cache_reopen(cache)) <= 0) {
-			/* error / we already have the latest file open */
+		/* reset_it doesn't match - sync the index/cache */
+		if ((ret = mail_cache_sync_reset_id(cache)) <= 0)
 			return ret;
+
+		/* lookup again after syncing */
+		offset = mail_cache_lookup_cur_offset(view, seq, &reset_id2);
+		if (offset == 0)
+			return 0;
+		if (cache->hdr->file_seq == reset_id2)
+			break; /* match - all good */
+		if (reset_id == reset_id2) {
+			/* reset_id didn't change after sync. This means it's
+			   pointing to an old already deleted cache file. */
+			return 0;
 		}
+		/* reset_id changed - try again */
+		reset_id = reset_id2;
 	}
 
 	*offset_r = offset;
@@ -171,6 +172,7 @@ mail_cache_lookup_iter_transaction(struct mail_cache_lookup_iterate_ctx *ctx)
 	if (ctx->rec == NULL)
 		return FALSE;
 
+	ctx->inmemory_field_idx = TRUE;
 	ctx->remap_counter = ctx->view->cache->remap_counter;
 	ctx->pos = sizeof(*ctx->rec);
 	ctx->rec_size = ctx->rec->size;
@@ -225,6 +227,7 @@ mail_cache_lookup_iter_next_record(struct mail_cache_lookup_iterate_ctx *ctx)
 					 "record list is circular");
 		return -1;
 	}
+	ctx->inmemory_field_idx = FALSE;
 	ctx->remap_counter = view->cache->remap_counter;
 
 	ctx->pos = sizeof(*ctx->rec);
@@ -232,35 +235,22 @@ mail_cache_lookup_iter_next_record(struct mail_cache_lookup_iterate_ctx *ctx)
 	return 1;
 }
 
-int mail_cache_lookup_iter_next(struct mail_cache_lookup_iterate_ctx *ctx,
-				struct mail_cache_iterate_field *field_r)
+static int
+mail_cache_lookup_rec_get_field(struct mail_cache_lookup_iterate_ctx *ctx,
+				unsigned int *field_idx_r)
 {
 	struct mail_cache *cache = ctx->view->cache;
-	unsigned int field_idx;
-	unsigned int data_size;
 	uint32_t file_field;
-	int ret;
 
-	i_assert(ctx->remap_counter == cache->remap_counter);
-
-	if (ctx->pos + sizeof(uint32_t) > ctx->rec_size) {
-		if (ctx->pos != ctx->rec_size) {
-			mail_cache_set_corrupted(cache,
-				"record has invalid size");
-			return -1;
-		}
-
-		if ((ret = mail_cache_lookup_iter_next_record(ctx)) <= 0)
-			return ret;
-	}
-
-	/* return the next field */
 	file_field = *((const uint32_t *)CONST_PTR_OFFSET(ctx->rec, ctx->pos));
-	ctx->pos += sizeof(uint32_t);
+	if (ctx->inmemory_field_idx) {
+		*field_idx_r = file_field;
+		return 0;
+	}
 
 	if (file_field >= cache->file_fields_count) {
 		/* new field, have to re-read fields header to figure
-		   out its size. don't do this if we're compressing. */
+		   out its size. don't do this if we're purging. */
 		if (!cache->locked) {
 			if (mail_cache_header_fields_read(cache) < 0)
 				return -1;
@@ -279,7 +269,36 @@ int mail_cache_lookup_iter_next(struct mail_cache_lookup_iterate_ctx *ctx,
 		ctx->remap_counter = cache->remap_counter;
 	}
 
-	field_idx = cache->file_field_map[file_field];
+	*field_idx_r = cache->file_field_map[file_field];
+	return 0;
+}
+
+int mail_cache_lookup_iter_next(struct mail_cache_lookup_iterate_ctx *ctx,
+				struct mail_cache_iterate_field *field_r)
+{
+	struct mail_cache *cache = ctx->view->cache;
+	unsigned int field_idx;
+	unsigned int data_size;
+	int ret;
+
+	i_assert(ctx->remap_counter == cache->remap_counter);
+
+	if (ctx->pos + sizeof(uint32_t) > ctx->rec_size) {
+		if (ctx->pos != ctx->rec_size) {
+			mail_cache_set_corrupted(cache,
+				"record has invalid size");
+			return -1;
+		}
+
+		if ((ret = mail_cache_lookup_iter_next_record(ctx)) <= 0)
+			return ret;
+	}
+
+	/* return the next field */
+	if (mail_cache_lookup_rec_get_field(ctx, &field_idx) < 0)
+		return -1;
+	ctx->pos += sizeof(uint32_t);
+
 	data_size = cache->fields[field_idx].field.field_size;
 	if (data_size == UINT_MAX &&
 	    ctx->pos + sizeof(uint32_t) <= ctx->rec->size) {
@@ -326,13 +345,6 @@ static int mail_cache_seq(struct mail_cache_view *view, uint32_t seq)
 	return ret;
 }
 
-static bool
-mail_cache_file_has_field(struct mail_cache *cache, unsigned int field)
-{
-	i_assert(field < cache->fields_count);
-	return cache->field_file_map[field] != (uint32_t)-1;
-}
-
 int mail_cache_field_exists(struct mail_cache_view *view, uint32_t seq,
 			    unsigned int field)
 {
@@ -340,11 +352,9 @@ int mail_cache_field_exists(struct mail_cache_view *view, uint32_t seq,
 
 	i_assert(seq > 0);
 
-	if (!view->cache->opened)
-		(void)mail_cache_open_and_verify(view->cache);
-
-	if (!mail_cache_file_has_field(view->cache, field))
-		return 0;
+	/* NOTE: view might point to a non-committed transaction that has
+	   fields that don't yet exist in the cache file. So don't add any
+	   fast-paths checking whether the field exists in the file. */
 
 	/* FIXME: we should discard the cache if view has been synced */
 	if (view->cached_exists_seq != seq) {
@@ -498,10 +508,9 @@ static int header_lookup_line_cmp(const struct header_lookup_line *l1,
 
 static int
 mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
-			       uint32_t seq, unsigned int field_idxs[],
+			       uint32_t seq, const unsigned int field_idxs[],
 			       unsigned int fields_count, pool_t *pool_r)
 {
-	struct mail_cache *cache = view->cache;
 	struct mail_cache_lookup_iterate_ctx iter;
 	struct mail_cache_iterate_field field;
 	struct header_lookup_context ctx;
@@ -519,9 +528,6 @@ mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 	if (fields_count == 0)
 		return 1;
 
-	if (!view->cache->opened)
-		(void)mail_cache_open_and_verify(view->cache);
-
 	/* update the decision state regardless of whether the fields
 	   actually exist or not. */
 	for (i = 0; i < fields_count; i++)
@@ -530,9 +536,6 @@ mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 	/* mark all the fields we want to find. */
 	buf = t_buffer_create(32);
 	for (i = 0; i < fields_count; i++) {
-		if (!mail_cache_file_has_field(cache, field_idxs[i]))
-			return 0;
-
 		if (field_idxs[i] > max_field)
 			max_field = field_idxs[i];
 
@@ -596,7 +599,7 @@ mail_cache_lookup_headers_real(struct mail_cache_view *view, string_t *dest,
 }
 
 int mail_cache_lookup_headers(struct mail_cache_view *view, string_t *dest,
-			      uint32_t seq, unsigned int field_idxs[],
+			      uint32_t seq, const unsigned int field_idxs[],
 			      unsigned int fields_count)
 {
 	pool_t pool = NULL;
@@ -652,6 +655,9 @@ const char *
 mail_cache_get_missing_reason(struct mail_cache_view *view, uint32_t seq)
 {
 	uint32_t offset, reset_id;
+
+	if (mail_index_is_expunged(view->view, seq))
+		return "Mail is already expunged";
 
 	if (MAIL_CACHE_IS_UNUSABLE(view->cache))
 		return "Cache file is unusable";

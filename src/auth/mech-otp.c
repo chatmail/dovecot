@@ -113,7 +113,7 @@ mech_otp_auth_phase1(struct auth_request *auth_request,
 		}
 	}
 
-	if ((count < 1) || (count > 2)) {
+	if (count != 1) {
 		e_error(request->auth_request.mech_event,
 			"invalid input");
 		auth_request_fail(auth_request);
@@ -250,7 +250,7 @@ static struct auth_request *mech_otp_auth_new(void)
 const struct mech_module mech_otp = {
 	"OTP",
 
-	.flags = MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE,
+	.flags = MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE | MECH_SEC_ALLOW_NULS,
 	.passdb_need = MECH_PASSDB_NEED_SET_CREDENTIALS,
 
 	mech_otp_auth_new,

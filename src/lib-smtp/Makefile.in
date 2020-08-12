@@ -143,7 +143,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
@@ -188,7 +189,7 @@ am__DEPENDENCIES_2 = $(noinst_LTLIBRARIES) \
 	../lib-program-client/libprogram_client.la \
 	../lib-dns/libdns.la ../lib-mail/libmail.la \
 	../lib-charset/libcharset.la ../lib-master/libmaster.la \
-	../lib-ssl-iostream/libssl_iostream.la \
+	../lib-auth/libauth.la ../lib-ssl-iostream/libssl_iostream.la \
 	../lib-settings/libsettings.la ../lib-sasl/libsasl.la \
 	../lib-test/libtest.la ../lib/liblib.la $(am__DEPENDENCIES_1)
 test_smtp_address_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
@@ -492,6 +493,8 @@ SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VALGRIND = @VALGRIND@
 VERSION = @VERSION@
+ZSTD_CFLAGS = @ZSTD_CFLAGS@
+ZSTD_LIBS = @ZSTD_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -647,6 +650,7 @@ test_libs = \
 	../lib-mail/libmail.la \
 	../lib-charset/libcharset.la \
 	../lib-master/libmaster.la \
+	../lib-auth/libauth.la \
 	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-settings/libsettings.la \
 	../lib-sasl/libsasl.la \
@@ -661,6 +665,7 @@ test_deps = \
 	../lib-mail/libmail.la \
 	../lib-charset/libcharset.la \
 	../lib-master/libmaster.la \
+	../lib-auth/libauth.la \
 	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-settings/libsettings.la \
 	../lib-sasl/libsasl.la \

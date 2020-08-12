@@ -35,6 +35,14 @@ static bool search_args_have_searchres(struct mail_search_arg *sargs)
 	return FALSE;
 }
 
+static void imap_search_saved_uidset_clear(struct client_command_context *cmd)
+{
+	if (array_is_created(&cmd->client->search_saved_uidset))
+		array_clear(&cmd->client->search_saved_uidset);
+	else
+		i_array_init(&cmd->client->search_saved_uidset, 128);
+}
+
 int imap_search_args_build(struct client_command_context *cmd,
 			   const struct imap_arg *args, const char *charset,
 			   struct mail_search_args **search_args_r)
@@ -55,8 +63,10 @@ int imap_search_args_build(struct client_command_context *cmd,
 	mail_search_parser_deinit(&parser);
 	if (ret < 0) {
 		if (charset == NULL) {
+			if (cmd->search_save_result)
+				imap_search_saved_uidset_clear(cmd);
 			client_send_tagline(cmd, t_strconcat(
-				"BAD [BADCHARSET] ", client_error, NULL));
+				"NO [BADCHARSET] ", client_error, NULL));
 		} else {
 			client_send_command_error(cmd, client_error);
 		}
@@ -70,6 +80,11 @@ int imap_search_args_build(struct client_command_context *cmd,
 
 	mail_search_args_init(sargs, cmd->client->mailbox, TRUE,
 			      &cmd->client->search_saved_uidset);
+	if (cmd->search_save_result) {
+		/* clear the SAVE resultset only after potentially using $
+		   in the search args themselves */
+		imap_search_saved_uidset_clear(cmd);
+	}
 	*search_args_r = sargs;
 	return 1;
 }
@@ -295,14 +310,14 @@ void imap_search_seqset_iter_deinit(struct imap_search_seqset_iter **_iter)
 
 bool imap_search_seqset_iter_next(struct imap_search_seqset_iter *iter)
 {
-	if (!array_is_created(&iter->seqset_left))
+	if (!array_is_created(&iter->seqset_left) ||
+	    array_count(&iter->seqset_left) == 0)
 		return FALSE;
 
 	/* remove the last batch of searched mails from seqset_left */
-	seq_range_array_invert(&iter->search_args->args->value.seqset,
-			       1, UINT32_MAX);
-	seq_range_array_intersect(&iter->seqset_left,
-				  &iter->search_args->args->value.seqset);
+	if (seq_range_array_remove_seq_range(&iter->seqset_left,
+			&iter->search_args->args->value.seqset) == 0)
+		i_unreached();
 	imap_search_seqset_next_batch(iter);
 	return array_count(&iter->search_args->args->value.seqset) > 0;
 }

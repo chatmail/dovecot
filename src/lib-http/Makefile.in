@@ -143,7 +143,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
@@ -161,8 +162,9 @@ am_libhttp_la_OBJECTS = http-date.lo http-url.lo http-parser.lo \
 	http-response-parser.lo http-client-request.lo \
 	http-client-connection.lo http-client-peer.lo \
 	http-client-queue.lo http-client-host.lo http-client.lo \
-	http-server-response.lo http-server-request.lo \
-	http-server-connection.lo http-server.lo
+	http-server-ostream.lo http-server-response.lo \
+	http-server-request.lo http-server-connection.lo \
+	http-server-resource.lo http-server.lo
 libhttp_la_OBJECTS = $(am_libhttp_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -186,8 +188,8 @@ am_test_http_client_OBJECTS = test-http-client.$(OBJEXT)
 test_http_client_OBJECTS = $(am_test_http_client_OBJECTS)
 am__DEPENDENCIES_3 = libhttp.la ../lib-dns/libdns.la \
 	../lib-ssl-iostream/libssl_iostream.la \
-	../lib-master/libmaster.la ../lib-settings/libsettings.la \
-	$(am__DEPENDENCIES_2)
+	../lib-master/libmaster.la ../lib-auth/libauth.la \
+	../lib-settings/libsettings.la $(am__DEPENDENCIES_2)
 test_http_client_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(test_http_client_LDFLAGS) $(LDFLAGS) \
@@ -499,6 +501,8 @@ SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VALGRIND = @VALGRIND@
 VERSION = @VERSION@
+ZSTD_CFLAGS = @ZSTD_CFLAGS@
+ZSTD_LIBS = @ZSTD_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -588,9 +592,11 @@ libhttp_la_SOURCES = \
 	http-client-queue.c \
 	http-client-host.c \
 	http-client.c \
+	http-server-ostream.c \
 	http-server-response.c \
 	http-server-request.c \
 	http-server-connection.c \
+	http-server-resource.c \
 	http-server.c
 
 headers = \
@@ -696,6 +702,7 @@ test_http_libs = \
 	../lib-dns/libdns.la \
 	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-master/libmaster.la \
+	../lib-auth/libauth.la \
 	../lib-settings/libsettings.la \
 	$(test_libs)
 
@@ -704,6 +711,7 @@ test_http_deps = \
 	../lib-dns/libdns.la \
 	../lib-ssl-iostream/libssl_iostream.la \
 	../lib-master/libmaster.la \
+	../lib-auth/libauth.la \
 	../lib-settings/libsettings.la \
 	$(test_deps)
 
@@ -890,7 +898,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-response-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-response.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-server-connection.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-server-ostream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-server-request.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-server-resource.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-server-response.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-server.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http-transfer-chunked.Plo@am__quote@

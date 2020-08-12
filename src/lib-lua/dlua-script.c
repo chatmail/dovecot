@@ -4,6 +4,7 @@
 #include "llist.h"
 #include "istream.h"
 #include "sha1.h"
+#include "str.h"
 #include "hex-binary.h"
 #include "eacces-error.h"
 #include "dlua-script-private.h"
@@ -121,6 +122,13 @@ int dlua_script_init(struct dlua_script *script, const char **error_r)
 	return ret;
 }
 
+static int dlua_atpanic(lua_State *L)
+{
+	struct dlua_script *script = dlua_script_from_state(L);
+	const char *error = lua_tostring(script->L, -1);
+	i_panic("Lua script '%s': %s", script->filename, error);
+}
+
 static struct dlua_script *dlua_create_script(const char *name,
 					      struct event *event_parent)
 {
@@ -134,6 +142,7 @@ static struct dlua_script *dlua_create_script(const char *name,
 	script->L = lua_newstate(dlua_alloc, script);
 	i_assert(script->L != NULL);
 	script->ref = 1;
+	lua_atpanic(script->L, dlua_atpanic);
 	luaL_openlibs(script->L);
 	script->event = event_create(event_parent);
 	event_add_category(script->event, &event_category_lua);
@@ -353,4 +362,30 @@ void dlua_setmembers(struct dlua_script *script,
 		lua_setfield(script->L, idx-1, values->name);
 		values++;
 	}
+}
+
+void dlua_dump_stack(struct dlua_script *script)
+{
+	/* get everything in stack */
+	int top = lua_gettop(script->L);
+	for (int i = 1; i <= top; i++) T_BEGIN {  /* repeat for each level */
+		int t = lua_type(script->L, i);
+		string_t *line = t_str_new(32);
+		str_printfa(line, "#%d: ", i);
+		switch (t) {
+		case LUA_TSTRING:  /* strings */
+			str_printfa(line, "`%s'", lua_tostring(script->L, i));
+			break;
+		case LUA_TBOOLEAN:  /* booleans */
+			str_printfa(line, "`%s'", lua_toboolean(script->L, i) ? "true" : "false");
+			break;
+		case LUA_TNUMBER:  /* numbers */
+			str_printfa(line, "%g", lua_tonumber(script->L, i));
+			break;
+		default:  /* other values */
+			str_printfa(line, "%s", lua_typename(script->L, t));
+			break;
+		}
+		i_debug("%s", str_c(line));
+	} T_END;
 }

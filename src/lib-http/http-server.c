@@ -16,6 +16,10 @@
 
 #include "http-server-private.h"
 
+static struct event_category event_category_http_server = {
+	.name = "http-server"
+};
+
 /*
  * Server
  */
@@ -47,7 +51,15 @@ struct http_server *http_server_init(const struct http_server_settings *set)
 	server->set.socket_recv_buffer_size = set->socket_recv_buffer_size;
 	server->set.debug = set->debug;
 
+	server->event = event_create(set->event);
+	event_add_category(server->event, &event_category_http_server);
+	event_set_forced_debug(server->event, set->debug);
+	event_set_append_log_prefix(server->event, "http-server: ");
+
 	server->conn_list = http_server_connection_list_init();
+
+	p_array_init(&server->resources, pool, 4);
+	p_array_init(&server->locations, pool, 4);
 
 	return server;
 }
@@ -55,13 +67,19 @@ struct http_server *http_server_init(const struct http_server_settings *set)
 void http_server_deinit(struct http_server **_server)
 {
 	struct http_server *server = *_server;
+	struct http_server_resource **resp;
 
 	*_server = NULL;
 
 	connection_list_deinit(&server->conn_list);
 
+	array_foreach_modifiable(&server->resources, resp)
+		http_server_resource_free(resp);
+	i_assert(array_count(&server->locations) == 0);
+
 	if (server->ssl_ctx != NULL)
 		ssl_iostream_context_unref(&server->ssl_ctx);
+	event_unref(&server->event);
 	pool_unref(&server->pool);
 }
 

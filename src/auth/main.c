@@ -9,7 +9,6 @@
 #include "child-wait.h"
 #include "sql-api.h"
 #include "module-dir.h"
-#include "hostpid.h"
 #include "randgen.h"
 #include "process-title.h"
 #include "settings-parser.h"
@@ -20,6 +19,8 @@
 #include "password-scheme.h"
 #include "passdb-cache.h"
 #include "mech.h"
+#include "otp.h"
+#include "mech-otp-skey-common.h"
 #include "auth.h"
 #include "auth-penalty.h"
 #include "auth-token.h"
@@ -281,6 +282,7 @@ static void main_deinit(void)
 
 	auth_policy_deinit();
 	mech_register_deinit(&mech_reg);
+	mech_otp_deinit();
 	mech_deinit(global_auth_settings);
 
 	/* allow modules to unregister their dbs/drivers/etc. before freeing
@@ -374,13 +376,12 @@ int main(int argc, char *argv[])
 		MASTER_SERVICE_FLAG_NO_SSL_INIT;
 
 	master_service = master_service_init("auth", service_flags, &argc, &argv, "w");
-	master_service_init_log(master_service, "auth: ");
+	master_service_init_log(master_service);
 
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
 		case 'w':
-			master_service_init_log(master_service,
-				t_strdup_printf("auth-worker(%s): ", my_pid));
+			master_service_init_log_with_pid(master_service);
 			worker = TRUE;
 			break;
 		default:

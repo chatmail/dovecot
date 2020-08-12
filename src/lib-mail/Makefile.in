@@ -142,7 +142,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -161,10 +162,11 @@ am_libmail_la_OBJECTS = istream-attachment-connector.lo \
 	message-binary-part.lo message-date.lo message-decoder.lo \
 	message-header-decode.lo message-header-encode.lo \
 	message-header-hash.lo message-header-parser.lo message-id.lo \
-	message-parser.lo message-part.lo message-part-data.lo \
-	message-part-serialize.lo message-search.lo message-size.lo \
-	message-snippet.lo ostream-dot.lo qp-decoder.lo qp-encoder.lo \
-	quoted-printable.lo rfc2231-parser.lo rfc822-parser.lo
+	message-parser.lo message-parser-from-parts.lo message-part.lo \
+	message-part-data.lo message-part-serialize.lo \
+	message-search.lo message-size.lo message-snippet.lo \
+	ostream-dot.lo qp-decoder.lo qp-encoder.lo quoted-printable.lo \
+	rfc2231-parser.lo rfc822-parser.lo
 libmail_la_OBJECTS = $(am_libmail_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -532,6 +534,8 @@ SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VALGRIND = @VALGRIND@
 VERSION = @VERSION@
+ZSTD_CFLAGS = @ZSTD_CFLAGS@
+ZSTD_LIBS = @ZSTD_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -622,6 +626,7 @@ libmail_la_SOURCES = \
 	message-header-parser.c \
 	message-id.c \
 	message-parser.c \
+	message-parser-from-parts.c \
 	message-part.c \
 	message-part-data.c \
 	message-part-serialize.c \
@@ -636,7 +641,8 @@ libmail_la_SOURCES = \
 	rfc822-parser.c
 
 noinst_HEADERS = \
-	html-entities.h
+	html-entities.h \
+	message-parser-private.h
 
 headers = \
 	istream-attachment-connector.h \
@@ -974,6 +980,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-header-hash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-header-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-id.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-parser-from-parts.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-part-data.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message-part-serialize.Plo@am__quote@

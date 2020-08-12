@@ -100,12 +100,12 @@ static int i_stream_zlib_read_header(struct istream_private *stream)
 		return -1;
 	}
 	if ((data[3] & GZ_FLAG_FEXTRA) != 0) {
-		if (pos + 2 < size)
+		if (pos + 2 > size)
 			return 0;
 
 		fextra_size = le16_to_cpu_unaligned(&data[pos]);
 		pos += 2;
-		if (pos + fextra_size < size)
+		if (pos + fextra_size > size)
 			return 0;
 		pos += fextra_size;
 	}
@@ -122,7 +122,7 @@ static int i_stream_zlib_read_header(struct istream_private *stream)
 		} while (data[pos++] != '\0');
 	}
 	if ((data[3] & GZ_FLAG_FHCRC) != 0) {
-		if (pos + 2 < size)
+		if (pos + 2 > size)
 			return 0;
 		pos += 2;
 	}
@@ -366,7 +366,7 @@ static void i_stream_zlib_sync(struct istream_private *stream)
 	struct zlib_istream *zstream = (struct zlib_istream *) stream;
 	const struct stat *st;
 
-	if (i_stream_stat(stream->parent, FALSE, &st) < 0) {
+	if (i_stream_stat(stream->parent, FALSE, &st) == 0) {
 		if (memcmp(&zstream->last_parent_statbuf,
 			   st, sizeof(*st)) == 0) {
 			/* a compressed file doesn't change unexpectedly,

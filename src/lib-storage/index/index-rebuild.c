@@ -200,6 +200,11 @@ index_index_rebuild_init(struct mailbox *box, struct mail_index_view *view,
 	const char *index_dir, *backup_path;
 	enum mail_index_open_flags open_flags = MAIL_INDEX_OPEN_FLAG_READONLY;
 
+	/* Rebuilding really should be done locked so multiple processes won't
+	   try to rebuild concurrently. Also at the end of rebiuld cache
+	   purging requires this lock. */
+	i_assert(mail_index_is_locked(view->index));
+
 	ctx = i_new(struct index_rebuild_context, 1);
 	ctx->box = box;
 	ctx->view = view;
@@ -214,7 +219,7 @@ index_index_rebuild_init(struct mailbox *box, struct mail_index_view *view,
 	/* if backup index file exists, try to use it */
 	index_dir = mailbox_get_index_path(box);
 	backup_path = t_strconcat(box->index_prefix, ".backup", NULL);
-	ctx->backup_index = mail_index_alloc(box->storage->event,
+	ctx->backup_index = mail_index_alloc(box->event,
 					     index_dir, backup_path);
 
 #ifndef MMAP_CONFLICTS_WRITE
@@ -235,19 +240,12 @@ void index_index_rebuild_deinit(struct index_rebuild_context **_ctx,
 				index_rebuild_generate_uidvalidity_t *cb)
 {
 	struct index_rebuild_context *ctx = *_ctx;
-	struct mail_cache_compress_lock *lock = NULL;
 
 	*_ctx = NULL;
 
 	/* initialize cache file with the old field decisions */
-	(void)mail_cache_compress(ctx->box->cache, ctx->trans, &lock);
-	if (lock != NULL) {
-		/* FIXME: this is a bit too early. ideally we should return it
-		   from this function and unlock only after the transaction is
-		   committed, but it would be an API change and this rebuilding
-		   isn't happening normally anyway. */
-		mail_cache_compress_unlock(&lock);
-	}
+	(void)mail_cache_purge_with_trans(ctx->box->cache, ctx->trans,
+					  (uint32_t)-1, "rebuilding index");
 	index_rebuild_header(ctx, cb);
 	index_rebuild_box_name_header(ctx);
 	if (ctx->backup_index != NULL) {

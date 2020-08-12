@@ -69,8 +69,34 @@ struct stats_exporter_settings {
 	enum event_exporter_time_fmt parsed_time_format;
 };
 
+/* <settings checks> */
+enum stats_metric_group_by_func {
+	STATS_METRIC_GROUPBY_DISCRETE = 0,
+	STATS_METRIC_GROUPBY_QUANTIZED,
+};
+
+/*
+ * A range covering a stats bucket.  The the interval is half closed - the
+ * minimum is excluded and the maximum is included.  In other words: (min, max].
+ * Because we don't have a +Inf and -Inf, we use INTMAX_MIN and INTMAX_MAX
+ * respectively.
+ */
+struct stats_metric_settings_bucket_range {
+	intmax_t min;
+	intmax_t max;
+};
+
+struct stats_metric_settings_group_by {
+	const char *field;
+	enum stats_metric_group_by_func func;
+	unsigned int num_ranges;
+	struct stats_metric_settings_bucket_range *ranges;
+};
+/* </settings checks> */
+
 struct stats_metric_settings {
-	const char *name;
+	const char *metric_name;
+	const char *description;
 	const char *event_name;
 	const char *source_location;
 	const char *categories;
@@ -79,6 +105,7 @@ struct stats_metric_settings {
 	ARRAY(const char *) filter;
 
 	unsigned int parsed_source_linenum;
+	ARRAY(struct stats_metric_settings_group_by) parsed_group_by;
 
 	/* exporter related fields */
 	const char *exporter;
@@ -86,6 +113,8 @@ struct stats_metric_settings {
 };
 
 struct stats_settings {
+	const char *stats_http_rawlog_dir;
+
 	ARRAY(struct stats_exporter_settings *) exporters;
 	ARRAY(struct stats_metric_settings *) metrics;
 };

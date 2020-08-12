@@ -4,7 +4,6 @@
 #include "test-common.h"
 
 #include <stdio.h>
-#include <unistd.h> /* _exit() */
 #include <setjmp.h> /* for fatal tests */
 
 static bool test_deinit_lib;
@@ -52,10 +51,14 @@ void test_assert_failed_idx(const char *code, const char *file, unsigned int lin
 	test_success = FALSE;
 }
 
-void test_assert_failed_strcmp(const char *code, const char *file, unsigned int line,
-				const char * src, const char * dst)
+void test_assert_failed_strcmp_idx(const char *code, const char *file, unsigned int line,
+				   const char * src, const char * dst, long long i)
 {
-	printf("%s: Assert(#%u) failed: %s\n", file, line, code);
+	printf("%s:%u: Assert", file, line);
+	if (i == LLONG_MIN)
+		printf(" failed: %s\n", code);
+	else
+		printf("(#%lld) failed: %s\n", i, code);
 	if (src != NULL)
 		printf("        \"%s\" != ", src);
 	else
@@ -386,5 +389,5 @@ test_exit(int status)
 	i_free_and_null(test_prefix);
 	t_pop_last_unsafe(); /* as we were within a T_BEGIN { tests[i].func(); } T_END */
 	lib_deinit();
-	_exit(status);
+	exit(status);
 }
