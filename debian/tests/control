@@ -11,5 +11,4 @@ Restrictions: needs-root, breaks-testbed, allow-stderr
 
 Tests: testmails
 Restrictions: needs-root, breaks-testbed
-Features: no-build-needed
 Depends: dovecot-imapd, dovecot-pop3d, lsb-release, python3
