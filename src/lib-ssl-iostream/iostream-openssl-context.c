@@ -66,7 +66,7 @@ pem_password_callback(char *buf, int size, int rwflag ATTR_UNUSED,
 		return 0;
 	}
 
-	if (i_strocpy(buf, userdata, size) < 0) {
+	if (i_strocpy(buf, ctx->password, size) < 0) {
 		ctx->error = "SSL private key password is too long";
 		return 0;
 	}
@@ -74,6 +74,7 @@ pem_password_callback(char *buf, int size, int rwflag ATTR_UNUSED,
 }
 
 int openssl_iostream_load_key(const struct ssl_iostream_cert *set,
+			      const char *set_name,
 			      EVP_PKEY **pkey_r, const char **error_r)
 {
 	struct ssl_iostream_password_context ctx;
@@ -95,8 +96,13 @@ int openssl_iostream_load_key(const struct ssl_iostream_cert *set,
 
 	pkey = PEM_read_bio_PrivateKey(bio, NULL, pem_password_callback, &ctx);
 	if (pkey == NULL && ctx.error == NULL) {
-		ctx.error = t_strdup_printf("Couldn't parse private SSL key: %s",
-					    openssl_iostream_error());
+		ctx.error = t_strdup_printf(
+			"Couldn't parse private SSL key (%s setting)%s: %s",
+			set_name,
+			ctx.password != NULL ?
+				" (maybe ssl_key_password is wrong?)" :
+				"",
+			openssl_iostream_error());
 	}
 	BIO_free(bio);
 
@@ -136,19 +142,19 @@ int openssl_iostream_load_dh(const struct ssl_iostream_settings *set,
 }
 
 static int
-ssl_iostream_ctx_use_key(struct ssl_iostream_context *ctx,
+ssl_iostream_ctx_use_key(struct ssl_iostream_context *ctx, const char *set_name,
 			 const struct ssl_iostream_cert *set,
 			 const char **error_r)
 {
 	EVP_PKEY *pkey;
 	int ret = 0;
 
-	if (openssl_iostream_load_key(set, &pkey, error_r) < 0)
+	if (openssl_iostream_load_key(set, set_name, &pkey, error_r) < 0)
 		return -1;
 	if (SSL_CTX_use_PrivateKey(ctx->ssl_ctx, pkey) == 0) {
 		*error_r = t_strdup_printf(
-			"Can't load SSL private key: %s",
-			openssl_iostream_key_load_error());
+			"Can't load SSL private key (%s setting): %s",
+			set_name, openssl_iostream_key_load_error());
 		ret = -1;
 	}
 	EVP_PKEY_free(pkey);
@@ -169,7 +175,7 @@ ssl_iostream_ctx_use_dh(struct ssl_iostream_context *ctx,
 		return -1;
 	if (SSL_CTX_set_tmp_dh(ctx->ssl_ctx, dh) == 0) {
 		 *error_r = t_strdup_printf(
-			"Can't load DH parameters: %s",
+			"Can't load DH parameters (ssl_dh setting): %s",
 			openssl_iostream_key_load_error());
 		ret = -1;
 	}
@@ -277,6 +283,32 @@ static int load_ca(X509_STORE *store, const char *ca,
 	return 0;
 }
 
+static int
+load_ca_locations(struct ssl_iostream_context *ctx, const char *ca_file,
+		  const char *ca_dir, const char **error_r)
+{
+	if (SSL_CTX_load_verify_locations(ctx->ssl_ctx, ca_file, ca_dir) != 0)
+		return 0;
+
+	if (ca_dir == NULL) {
+		*error_r = t_strdup_printf(
+			"Can't load CA certs from %s "
+			"(ssl_client_ca_file setting): %s",
+			ca_file, openssl_iostream_error());
+	} else if (ca_file == NULL) {
+		*error_r = t_strdup_printf(
+			"Can't load CA certs from directory %s "
+			"(ssl_client_ca_dir setting): %s",
+			ca_dir, openssl_iostream_error());
+	} else {
+		*error_r = t_strdup_printf(
+			"Can't load CA certs from file %s and directory %s "
+			"(ssl_client_ca_* settings): %s",
+			ca_file, ca_dir, openssl_iostream_error());
+	}
+	return -1;
+}
+
 static void
 ssl_iostream_ctx_verify_remote_cert(struct ssl_iostream_context *ctx,
 				    STACK_OF(X509_NAME) *ca_names)
@@ -346,12 +378,8 @@ ssl_iostream_context_load_ca(struct ssl_iostream_context *ctx,
 	ca_dir = set->ca_dir == NULL || *set->ca_dir == '\0' ?
 		NULL : set->ca_dir;
 	if (ca_file != NULL || ca_dir != NULL) {
-		if (SSL_CTX_load_verify_locations(ctx->ssl_ctx, ca_file, ca_dir) == 0) {
-			*error_r = t_strdup_printf(
-				"Can't load CA certs from directory %s: %s",
-				set->ca_dir, openssl_iostream_error());
+		if (load_ca_locations(ctx, ca_file, ca_dir, error_r) < 0)
 			return -1;
-		}
 		have_ca = TRUE;
 	}
 	if (!have_ca && ctx->client_ctx) {
@@ -376,15 +404,17 @@ ssl_iostream_context_set(struct ssl_iostream_context *ctx,
 	ssl_iostream_settings_init_from(ctx->pool, &ctx->set, set);
 	if (set->cipher_list != NULL &&
 	    SSL_CTX_set_cipher_list(ctx->ssl_ctx, set->cipher_list) == 0) {
-		*error_r = t_strdup_printf("Can't set cipher list to '%s': %s",
+		*error_r = t_strdup_printf(
+			"Can't set cipher list to '%s' (ssl_cipher_list setting): %s",
 			set->cipher_list, openssl_iostream_error());
 		return -1;
 	}
 #ifdef HAVE_SSL_CTX_SET1_CURVES_LIST
 	if (set->curve_list != NULL && strlen(set->curve_list) > 0 &&
 		SSL_CTX_set1_curves_list(ctx->ssl_ctx, set->curve_list) == 0) {
-		*error_r = t_strdup_printf("Failed to set curve list to '%s'",
-					   set->curve_list);
+		*error_r = t_strdup_printf(
+			"Can't set curve list to '%s' (ssl_curve_list setting)",
+			set->curve_list);
 		return -1;
 	}
 #endif
@@ -419,22 +449,25 @@ ssl_iostream_context_set(struct ssl_iostream_context *ctx,
 
 	if (set->cert.cert != NULL &&
 	    ssl_ctx_use_certificate_chain(ctx->ssl_ctx, set->cert.cert) == 0) {
-		*error_r = t_strdup_printf("Can't load SSL certificate: %s",
+		*error_r = t_strdup_printf(
+			"Can't load SSL certificate (ssl_cert setting): %s",
 			openssl_iostream_use_certificate_error(set->cert.cert, NULL));
 		return -1;
 	}
 	if (set->cert.key != NULL) {
-		if (ssl_iostream_ctx_use_key(ctx, &set->cert, error_r) < 0)
+		if (ssl_iostream_ctx_use_key(ctx, "ssl_key", &set->cert, error_r) < 0)
 			return -1;
 	}
 	if (set->alt_cert.cert != NULL &&
 	    ssl_ctx_use_certificate_chain(ctx->ssl_ctx, set->alt_cert.cert) == 0) {
-		*error_r = t_strdup_printf("Can't load alternative SSL certificate: %s",
+		*error_r = t_strdup_printf(
+			"Can't load alternative SSL certificate "
+			"(ssl_alt_cert setting): %s",
 			openssl_iostream_use_certificate_error(set->alt_cert.cert, NULL));
 		return -1;
 	}
 	if (set->alt_cert.key != NULL) {
-		if (ssl_iostream_ctx_use_key(ctx, &set->alt_cert, error_r) < 0)
+		if (ssl_iostream_ctx_use_key(ctx, "ssl_alt_key", &set->alt_cert, error_r) < 0)
 			return -1;
 	}
 
@@ -481,7 +514,7 @@ ssl_proxy_ctx_get_pkey_ec_curve_name(const struct ssl_iostream_settings *set,
 	const EC_GROUP *ecgrp;
 
 	if (set->cert.key != NULL) {
-		if (openssl_iostream_load_key(&set->cert, &pkey, error_r) < 0)
+		if (openssl_iostream_load_key(&set->cert, "ssl_key", &pkey, error_r) < 0)
 			return -1;
 
 		if ((eckey = EVP_PKEY_get1_EC_KEY(pkey)) != NULL &&
@@ -494,7 +527,7 @@ ssl_proxy_ctx_get_pkey_ec_curve_name(const struct ssl_iostream_settings *set,
 		EVP_PKEY_free(pkey);
 	}
 	if (nid == 0 && set->alt_cert.key != NULL) {
-		if (openssl_iostream_load_key(&set->alt_cert, &pkey, error_r) < 0)
+		if (openssl_iostream_load_key(&set->alt_cert, "ssl_alt_key", &pkey, error_r) < 0)
 			return -1;
 
 		if ((eckey = EVP_PKEY_get1_EC_KEY(pkey)) != NULL &&

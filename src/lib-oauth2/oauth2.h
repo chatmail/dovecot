@@ -4,7 +4,9 @@
 
 #include "net.h"
 
+struct dict;
 struct oauth2_request;
+struct oauth2_validation_key_cache;
 
 struct oauth2_field {
 	const char *name;
@@ -30,10 +32,18 @@ struct oauth2_settings {
 	const char *client_secret;
 	/* access request scope for oauth2 server (optional) */
 	const char *scope;
+	/* key dict for looking up validation keys */
+	struct dict *key_dict;
+	/* cache for validation keys */
+	struct oauth2_validation_key_cache *key_cache;
+	/* valid issuer names */
+	const char *const *issuers;
+
 	enum {
 		INTROSPECTION_MODE_GET_AUTH,
 		INTROSPECTION_MODE_GET,
-		INTROSPECTION_MODE_POST
+		INTROSPECTION_MODE_POST,
+		INTROSPECTION_MODE_LOCAL,
 	} introspection_mode;
 	unsigned int timeout_msecs;
 	/* Should X-Dovecot-Auth-* headers be sent */
@@ -113,5 +123,19 @@ oauth2_refresh_start(const struct oauth2_settings *set,
 
 /* abort without calling callback, use this to cancel the request */
 void oauth2_request_abort(struct oauth2_request **);
+
+int oauth2_try_parse_jwt(const struct oauth2_settings *set,
+			 const char *token, ARRAY_TYPE(oauth2_field) *fields,
+			 bool *is_jwt_r, const char **error_r);
+
+/* Initialize validation key cache */
+struct oauth2_validation_key_cache *oauth2_validation_key_cache_init(void);
+
+/* Evict given key ID from cache, returns 0 on successful eviction */
+int oauth2_validation_key_cache_evict(struct oauth2_validation_key_cache *cache,
+				      const char *key_id);
+
+/* Deinitialize validation key cache */
+void oauth2_validation_key_cache_deinit(struct oauth2_validation_key_cache **_cache);
 
 #endif

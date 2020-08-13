@@ -18,8 +18,11 @@
 #include "pop3-proxy.h"
 #include "pop3-login-settings.h"
 
+#include <ctype.h>
+
 /* Disconnect client when it sends too many bad commands */
 #define CLIENT_MAX_BAD_COMMANDS 3
+#define CLIENT_MAX_CMD_LEN 8
 
 static bool cmd_stls(struct pop3_client *client)
 {
@@ -88,15 +91,12 @@ static bool cmd_xclient(struct pop3_client *client, const char *args)
 static bool client_command_execute(struct pop3_client *client, const char *cmd,
 				   const char *args)
 {
-	cmd = t_str_ucase(cmd);
 	if (strcmp(cmd, "CAPA") == 0)
 		return cmd_capa(client, args);
 	if (strcmp(cmd, "USER") == 0)
 		return cmd_user(client, args);
 	if (strcmp(cmd, "PASS") == 0)
 		return cmd_pass(client, args);
-	if (strcmp(cmd, "AUTH") == 0)
-		return cmd_auth(client, args);
 	if (strcmp(cmd, "APOP") == 0)
 		return cmd_apop(client, args);
 	if (strcmp(cmd, "STLS") == 0)
@@ -140,20 +140,55 @@ static void pop3_client_input(struct client *client)
 	client_unref(&client);
 }
 
+static bool client_read_cmd_name(struct client *client, const char **cmd_r)
+{
+	const unsigned char *data;
+	size_t size, i;
+	string_t *cmd = t_str_new(CLIENT_MAX_CMD_LEN);
+	if (i_stream_read_more(client->input, &data, &size) <= 0)
+		return FALSE;
+	for(i = 0; i < size; i++) {
+		if (data[i] == '\r') continue;
+		if (data[i] == ' ' ||
+		    data[i] == '\n' ||
+		    data[i] == '\0' ||
+		    i >= CLIENT_MAX_CMD_LEN) {
+			*cmd_r = str_c(cmd);
+			/* only skip ws */
+			i_stream_skip(client->input, i + (data[i] == ' ' ? 1 : 0));
+			return TRUE;
+		}
+		str_append_c(cmd, i_toupper(data[i]));
+	}
+	return FALSE;
+}
+
 static bool pop3_client_input_next_cmd(struct client *client)
 {
 	struct pop3_client *pop3_client = (struct pop3_client *)client;
-	char *line, *args;
+	const char *cmd, *args;
 
-	if ((line = i_stream_next_line(client->input)) == NULL)
+	if (pop3_client->current_cmd == NULL) {
+		if (!client_read_cmd_name(client, &cmd))
+			return FALSE;
+		pop3_client->current_cmd = i_strdup(cmd);
+	}
+
+	if (strcmp(pop3_client->current_cmd, "AUTH") == 0) {
+		if (cmd_auth(pop3_client) <= 0) {
+			/* Need more input / destroyed. We also get here when
+			   SASL authentication is actually started. */
+			return FALSE;
+		}
+		/* AUTH command finished already (SASL probe or ERR reply) */
+		i_free(pop3_client->current_cmd);
+		return TRUE;
+	}
+
+	if ((args = i_stream_next_line(client->input)) == NULL)
 		return FALSE;
 
-	args = strchr(line, ' ');
-	if (args != NULL)
-		*args++ = '\0';
-
-	if (client_command_execute(pop3_client, line,
-				   args != NULL ? args : ""))
+	if (client_command_execute(pop3_client, pop3_client->current_cmd, args))
 		client->bad_counter = 0;
 	else if (++client->bad_counter >= CLIENT_MAX_BAD_COMMANDS) {
 		client_send_reply(client, POP3_CMD_REPLY_ERROR,
@@ -162,6 +197,7 @@ static bool pop3_client_input_next_cmd(struct client *client)
 			       "Disconnected: Too many bad commands");
 		return FALSE;
 	}
+	i_free(pop3_client->current_cmd);
 	return TRUE;
 }
 
@@ -182,6 +218,7 @@ static void pop3_client_destroy(struct client *client)
 {
 	struct pop3_client *pop3_client = (struct pop3_client *)client;
 
+	i_free_and_null(pop3_client->current_cmd);
 	i_free_and_null(pop3_client->last_user);
 	i_free_and_null(pop3_client->apop_challenge);
 }
@@ -333,11 +370,15 @@ static struct client_vfuncs pop3_client_vfuncs = {
 	.free = client_common_default_free,
 };
 
-static const struct login_binary pop3_login_binary = {
+static struct login_binary pop3_login_binary = {
 	.protocol = "pop3",
 	.process_name = "pop3-login",
 	.default_port = 110,
 	.default_ssl_port = 995,
+
+	.event_category = {
+		.name = "pop3",
+	},
 
 	.client_vfuncs = &pop3_client_vfuncs,
 	.preinit = pop3_login_preinit,

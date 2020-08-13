@@ -142,7 +142,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -411,6 +412,8 @@ SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VALGRIND = @VALGRIND@
 VERSION = @VERSION@
+ZSTD_CFLAGS = @ZSTD_CFLAGS@
+ZSTD_LIBS = @ZSTD_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@

@@ -116,7 +116,8 @@ imap_hibernate_process_send_cmd(int fd_socket, const char *path,
 		i_error("fd_send(%s) failed: %m", path);
 		return -1;
 	}
-	if ((ret = write_full(fd_socket, str_data(cmd)+1, str_len(cmd)-1)) < 0) {
+	i_assert(ret == 1);
+	if (write_full(fd_socket, str_data(cmd)+1, str_len(cmd)-1) < 0) {
 		i_error("write(%s) failed: %m", path);
 		return -1;
 	}

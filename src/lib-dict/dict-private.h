@@ -4,6 +4,8 @@
 #include <time.h>
 #include "dict.h"
 
+struct ioloop;
+
 struct dict_vfuncs {
 	int (*init)(struct dict *dict_driver, const char *uri,
 		    const struct dict_settings *set,
@@ -52,10 +54,14 @@ struct dict {
 	unsigned int iter_count;
 	unsigned int transaction_count;
 	struct dict_transaction_context *transactions;
+	int refcount;
+	struct event *event;
+	struct ioloop *ioloop, *prev_ioloop;
 };
 
 struct dict_iterate_context {
 	struct dict *dict;
+	struct event *event;
 
 	dict_iterate_callback_t *async_callback;
 	void *async_context;
@@ -69,6 +75,7 @@ struct dict_transaction_context {
 	struct dict *dict;
 	struct dict_transaction_context *prev, *next;
 
+	struct event *event;
 	struct timespec timestamp;
 
 	bool changed:1;
@@ -89,5 +96,8 @@ extern struct dict dict_driver_fail;
 
 extern struct dict_iterate_context dict_iter_unsupported;
 extern struct dict_transaction_context dict_transaction_unsupported;
+
+void dict_pre_api_callback(struct dict *dict);
+void dict_post_api_callback(struct dict *dict);
 
 #endif

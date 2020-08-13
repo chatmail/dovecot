@@ -319,7 +319,7 @@ fts_expunge_log_write(struct fts_expunge_log_append_ctx *ctx)
 	/* the file was opened with O_APPEND, so this write() should be
 	   appended atomically without any need for locking. */
 	for (;;) {
-		if ((ret = write_full(log->fd, buf->data, buf->used)) < 0) {
+		if (write_full(log->fd, buf->data, buf->used) < 0) {
 			i_error("write(%s) failed: %m", log->path);
 			if (ftruncate(log->fd, log->st.st_size) < 0)
 				i_error("ftruncate(%s) failed: %m", log->path);
@@ -429,7 +429,7 @@ fts_expunge_log_read_failure(struct fts_expunge_log_read_ctx *ctx,
 		size = i_stream_get_data_size(ctx->input);
 		ctx->corrupted = TRUE;
 		i_error("Corrupted fts expunge log %s: "
-			"Unexpected EOF (read %"PRIuSIZE_T" / %u bytes)",
+			"Unexpected EOF (read %zu / %u bytes)",
 			ctx->log->path, size, wanted_size);
 	}
 }

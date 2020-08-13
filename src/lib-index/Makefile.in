@@ -142,7 +142,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -153,13 +154,12 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libindex_la_LIBADD =
-am_libindex_la_OBJECTS = mail-cache.lo mail-cache-compress.lo \
-	mail-cache-decisions.lo mail-cache-fields.lo \
-	mail-cache-lookup.lo mail-cache-transaction.lo \
-	mail-cache-sync-update.lo mail-index.lo \
-	mail-index-alloc-cache.lo mail-index-dummy-view.lo \
-	mail-index-fsck.lo mail-index-lock.lo mail-index-map.lo \
-	mail-index-map-hdr.lo mail-index-map-read.lo \
+am_libindex_la_OBJECTS = mail-cache.lo mail-cache-decisions.lo \
+	mail-cache-fields.lo mail-cache-lookup.lo mail-cache-purge.lo \
+	mail-cache-transaction.lo mail-cache-sync-update.lo \
+	mail-index.lo mail-index-alloc-cache.lo \
+	mail-index-dummy-view.lo mail-index-fsck.lo mail-index-lock.lo \
+	mail-index-map.lo mail-index-map-hdr.lo mail-index-map-read.lo \
 	mail-index-modseq.lo mail-index-transaction.lo \
 	mail-index-transaction-export.lo \
 	mail-index-transaction-finish.lo \
@@ -177,7 +177,8 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__EXEEXT_1 = test-mail-index$(EXEEXT) test-mail-index-map$(EXEEXT) \
+am__EXEEXT_1 = test-mail-cache$(EXEEXT) test-mail-cache-purge$(EXEEXT) \
+	test-mail-index$(EXEEXT) test-mail-index-map$(EXEEXT) \
 	test-mail-index-modseq$(EXEEXT) \
 	test-mail-index-sync-ext$(EXEEXT) \
 	test-mail-index-transaction-finish$(EXEEXT) \
@@ -186,6 +187,12 @@ am__EXEEXT_1 = test-mail-index$(EXEEXT) test-mail-index-map$(EXEEXT) \
 	test-mail-transaction-log-file$(EXEEXT) \
 	test-mail-transaction-log-view$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
+am_test_mail_cache_OBJECTS = test-mail-cache-common.$(OBJEXT) \
+	test-mail-cache.$(OBJEXT)
+test_mail_cache_OBJECTS = $(am_test_mail_cache_OBJECTS)
+am_test_mail_cache_purge_OBJECTS = test-mail-cache-common.$(OBJEXT) \
+	test-mail-cache-purge.$(OBJEXT)
+test_mail_cache_purge_OBJECTS = $(am_test_mail_cache_purge_OBJECTS)
 am_test_mail_index_OBJECTS = test-mail-index.$(OBJEXT)
 test_mail_index_OBJECTS = $(am_test_mail_index_OBJECTS)
 am_test_mail_index_map_OBJECTS = test-mail-index-map.$(OBJEXT)
@@ -250,7 +257,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libindex_la_SOURCES) $(test_mail_index_SOURCES) \
+SOURCES = $(libindex_la_SOURCES) $(test_mail_cache_SOURCES) \
+	$(test_mail_cache_purge_SOURCES) $(test_mail_index_SOURCES) \
 	$(test_mail_index_map_SOURCES) \
 	$(test_mail_index_modseq_SOURCES) \
 	$(test_mail_index_sync_ext_SOURCES) \
@@ -259,7 +267,8 @@ SOURCES = $(libindex_la_SOURCES) $(test_mail_index_SOURCES) \
 	$(test_mail_transaction_log_append_SOURCES) \
 	$(test_mail_transaction_log_file_SOURCES) \
 	$(test_mail_transaction_log_view_SOURCES)
-DIST_SOURCES = $(libindex_la_SOURCES) $(test_mail_index_SOURCES) \
+DIST_SOURCES = $(libindex_la_SOURCES) $(test_mail_cache_SOURCES) \
+	$(test_mail_cache_purge_SOURCES) $(test_mail_index_SOURCES) \
 	$(test_mail_index_map_SOURCES) \
 	$(test_mail_index_modseq_SOURCES) \
 	$(test_mail_index_sync_ext_SOURCES) \
@@ -469,6 +478,8 @@ SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VALGRIND = @VALGRIND@
 VERSION = @VERSION@
+ZSTD_CFLAGS = @ZSTD_CFLAGS@
+ZSTD_LIBS = @ZSTD_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -538,10 +549,10 @@ AM_CPPFLAGS = \
 
 libindex_la_SOURCES = \
 	mail-cache.c \
-	mail-cache-compress.c \
 	mail-cache-decisions.c \
 	mail-cache-fields.c \
 	mail-cache-lookup.c \
+	mail-cache-purge.c \
 	mail-cache-transaction.c \
 	mail-cache-sync-update.c \
         mail-index.c \
@@ -592,6 +603,8 @@ headers = \
         mailbox-log.h
 
 test_programs = \
+	test-mail-cache \
+	test-mail-cache-purge \
 	test-mail-index \
 	test-mail-index-map \
 	test-mail-index-modseq \
@@ -608,6 +621,12 @@ test_libs = \
 	../lib/liblib.la
 
 test_deps = $(noinst_LTLIBRARIES) $(test_libs)
+test_mail_cache_SOURCES = test-mail-cache-common.c test-mail-cache.c
+test_mail_cache_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
+test_mail_cache_DEPENDENCIES = $(test_deps)
+test_mail_cache_purge_SOURCES = test-mail-cache-common.c test-mail-cache-purge.c
+test_mail_cache_purge_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
+test_mail_cache_purge_DEPENDENCIES = $(test_deps)
 test_mail_index_SOURCES = test-mail-index.c
 test_mail_index_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
 test_mail_index_DEPENDENCIES = $(test_deps)
@@ -637,7 +656,10 @@ test_mail_transaction_log_view_LDADD = mail-transaction-log-view.lo $(test_libs)
 test_mail_transaction_log_view_DEPENDENCIES = $(test_deps)
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
-noinst_HEADERS = test-mail-index.h
+noinst_HEADERS = \
+	test-mail-cache.h \
+	test-mail-index.h
+
 all: all-am
 
 .SUFFIXES:
@@ -695,6 +717,14 @@ clean-noinstPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+test-mail-cache$(EXEEXT): $(test_mail_cache_OBJECTS) $(test_mail_cache_DEPENDENCIES) $(EXTRA_test_mail_cache_DEPENDENCIES) 
+	@rm -f test-mail-cache$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_mail_cache_OBJECTS) $(test_mail_cache_LDADD) $(LIBS)
+
+test-mail-cache-purge$(EXEEXT): $(test_mail_cache_purge_OBJECTS) $(test_mail_cache_purge_DEPENDENCIES) $(EXTRA_test_mail_cache_purge_DEPENDENCIES) 
+	@rm -f test-mail-cache-purge$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_mail_cache_purge_OBJECTS) $(test_mail_cache_purge_LDADD) $(LIBS)
+
 test-mail-index$(EXEEXT): $(test_mail_index_OBJECTS) $(test_mail_index_DEPENDENCIES) $(EXTRA_test_mail_index_DEPENDENCIES) 
 	@rm -f test-mail-index$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_mail_index_OBJECTS) $(test_mail_index_LDADD) $(LIBS)
@@ -737,10 +767,10 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-compress.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-decisions.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-fields.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-lookup.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-purge.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-sync-update.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache-transaction.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-cache.Plo@am__quote@
@@ -773,6 +803,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-view.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-log.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-cache-common.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-cache-purge.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-map.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-modseq.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-sync-ext.Po@am__quote@

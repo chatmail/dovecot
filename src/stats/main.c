@@ -1,16 +1,22 @@
 /* Copyright (c) 2017-2018 Dovecot authors, see the included COPYING file */
 
-#include "lib.h"
+#include "stats-common.h"
 #include "restrict-access.h"
+#include "ioloop.h"
 #include "master-service.h"
 #include "master-service-settings.h"
 #include "stats-settings.h"
 #include "stats-event-category.h"
 #include "stats-metrics.h"
+#include "stats-service.h"
 #include "client-writer.h"
 #include "client-reader.h"
+#include "client-http.h"
 
-static struct stats_metrics *metrics;
+struct stats_metrics *stats_metrics;
+time_t stats_startup_time;
+
+static const struct stats_settings *stats_settings;
 
 static bool client_is_writer(const char *path)
 {
@@ -33,10 +39,12 @@ static bool client_is_writer(const char *path)
 
 static void client_connected(struct master_service_connection *conn)
 {
-	if (client_is_writer(conn->name))
-		client_writer_create(conn->fd, metrics);
+	if (strcmp(conn->name, "http") == 0)
+		client_http_create(conn);
+	else if (client_is_writer(conn->name))
+		client_writer_create(conn->fd);
 	else
-		client_reader_create(conn->fd, metrics);
+		client_reader_create(conn->fd);
 	master_service_client_connection_accept(conn);
 }
 
@@ -54,20 +62,25 @@ static void main_preinit(void)
 static void main_init(void)
 {
 	void **sets = master_service_settings_get_others(master_service);
-	const struct stats_settings *set = sets[0];
+	stats_settings = sets[0];
 
-	metrics = stats_metrics_init(set);
+	stats_startup_time = ioloop_time;
+	stats_metrics = stats_metrics_init(stats_settings);
 	stats_event_categories_init();
 	client_readers_init();
 	client_writers_init();
+	client_http_init(stats_settings);
+	stats_services_init();
 }
 
 static void main_deinit(void)
 {
+	stats_services_deinit();
 	client_readers_deinit();
 	client_writers_deinit();
+	client_http_deinit();
 	stats_event_categories_deinit();
-	stats_metrics_deinit(&metrics);
+	stats_metrics_deinit(&stats_metrics);
 }
 
 int main(int argc, char *argv[])
@@ -91,7 +104,7 @@ int main(int argc, char *argv[])
 	if (master_service_settings_read_simple(master_service, set_roots,
 						&error) < 0)
 		i_fatal("Error reading configuration: %s", error);
-	master_service_init_log(master_service, "stats: ");
+	master_service_init_log(master_service);
 	master_service_set_die_callback(master_service, stats_die);
 
 	main_preinit();

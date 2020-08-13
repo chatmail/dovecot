@@ -274,17 +274,19 @@ struct mail_index_cache_optimization_settings {
 	/* If cache record becomes larger than this, don't add it. */
 	unsigned int record_max_size;
 
-	/* Never compress the file if it's smaller than this */
-	uoff_t compress_min_size;
-	/* Compress the file when n% of records are deleted */
-	unsigned int compress_delete_percentage;
-	/* Compress the file when n% of rows contain continued rows.
+	/* Maximum size for the cache file. Internally the limit is 1 GB. */
+	uoff_t max_size;
+	/* Never purge the file if it's smaller than this */
+	uoff_t purge_min_size;
+	/* Purge the file when n% of records are deleted */
+	unsigned int purge_delete_percentage;
+	/* Purge the file when n% of rows contain continued rows.
 	   For example 200% means that the record has 2 continued rows, i.e.
 	   it exists in 3 separate segments in the cache file. */
-	unsigned int compress_continued_percentage;
-	/* Compress the file when we need to follow more than n next_offsets to
+	unsigned int purge_continued_percentage;
+	/* Purge the file when we need to follow more than n next_offsets to
 	   find the latest cache header. */
-	unsigned int compress_header_continue_count;
+	unsigned int purge_header_continue_count;
 };
 
 struct mail_index_optimization_settings {
@@ -487,6 +489,18 @@ int mail_index_sync_commit(struct mail_index_sync_ctx **ctx);
 /* Rollback synchronization - none of the changes listed by sync_next() are
    actually written to index file. */
 void mail_index_sync_rollback(struct mail_index_sync_ctx **ctx);
+
+/* Lock the index exclusively. This is the same locking as what happens when
+   syncing the index. It's not necessary to normally call this function, unless
+   doing something special such as rebuilding the index outside syncing.
+   Returns 0 on success, -1 if locking failed for any reason. */
+int mail_index_lock_sync(struct mail_index *index, const char *lock_reason);
+/* Unlock the locked index. The index must have been locked previously with
+   mail_index_lock_sync(). If the lock had been kept for excessively long,
+   a warning is logged with the long_lock_reason. */
+void mail_index_unlock(struct mail_index *index, const char *long_lock_reason);
+/* Returns TRUE if index is currently exclusively locked. */
+bool mail_index_is_locked(struct mail_index *index);
 
 /* Mark index file corrupted. Invalidates all views. */
 void mail_index_mark_corrupted(struct mail_index *index);

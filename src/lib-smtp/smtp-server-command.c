@@ -131,9 +131,14 @@ smtp_server_command_update_event(struct smtp_server_command *cmd)
 {
 	struct event *event = cmd->context.event;
 	const char *label = (cmd->context.name == NULL ?
-			    "[INVALID]" : cmd->context.name);
+			     "[unknown]" :
+			     t_str_ucase(cmd->context.name));
 
-	event_add_str(event, "cmd_name", cmd->context.name);
+	if (cmd->reg != NULL)
+		event_add_str(event, "cmd_name", cmd->reg->name);
+	else
+		event_add_str(event, "cmd_name", "unknown");
+	event_add_str(event, "cmd_input_name", cmd->context.name);
 	event_set_append_log_prefix(event,
 				    t_strdup_printf("command %s: ", label));
 }

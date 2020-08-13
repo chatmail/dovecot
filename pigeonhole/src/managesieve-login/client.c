@@ -522,10 +522,14 @@ static struct client_vfuncs managesieve_client_vfuncs = {
 	.free = client_common_default_free,
 };
 
-static const struct login_binary managesieve_login_binary = {
+static struct login_binary managesieve_login_binary = {
 	.protocol = "sieve",
 	.process_name = "managesieve-login",
 	.default_port = 4190,
+
+	.event_category = {
+		.name = "managesieve",
+	},
 
 	.client_vfuncs = &managesieve_client_vfuncs,
 	.preinit = managesieve_login_preinit,

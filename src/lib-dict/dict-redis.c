@@ -50,7 +50,6 @@ struct redis_dict {
 	char *username, *password, *key_prefix, *expire_value;
 	unsigned int timeout_msecs, db_id;
 
-	struct ioloop *ioloop, *prev_ioloop;
 	struct redis_connection conn;
 
 	ARRAY(enum redis_input_state) input_states;
@@ -80,23 +79,6 @@ static void redis_input_state_remove(struct redis_dict *dict)
 	array_pop_front(&dict->input_states);
 }
 
-static void redis_callback(struct redis_dict *dict,
-			   const struct redis_dict_reply *reply,
-			   const struct dict_commit_result *result)
-{
-	if (reply->callback != NULL) {
-		if (dict->prev_ioloop != NULL) {
-			/* Don't let callback see that we've created our
-			   internal ioloop in case it wants to add some ios
-			   or timeouts. */
-			current_ioloop = dict->prev_ioloop;
-		}
-		reply->callback(result, reply->context);
-		if (dict->prev_ioloop != NULL)
-			current_ioloop = dict->ioloop;
-	}
-}
-
 static void
 redis_disconnected(struct redis_connection *conn, const char *reason)
 {
@@ -110,12 +92,12 @@ redis_disconnected(struct redis_connection *conn, const char *reason)
 	connection_disconnect(&conn->conn);
 
 	array_foreach(&conn->dict->replies, reply)
-		redis_callback(conn->dict, reply, &result);
+		reply->callback(&result, reply->context);
 	array_clear(&conn->dict->replies);
 	array_clear(&conn->dict->input_states);
 
-	if (conn->dict->ioloop != NULL)
-		io_loop_stop(conn->dict->ioloop);
+	if (conn->dict->dict.ioloop != NULL)
+		io_loop_stop(conn->dict->dict.ioloop);
 }
 
 static void redis_conn_destroy(struct connection *_conn)
@@ -137,23 +119,23 @@ static void redis_wait(struct redis_dict *dict)
 {
 	struct timeout *to;
 
-	i_assert(dict->ioloop == NULL);
+	i_assert(dict->dict.ioloop == NULL);
 
-	dict->prev_ioloop = current_ioloop;
-	dict->ioloop = io_loop_create();
+	dict->dict.prev_ioloop = current_ioloop;
+	dict->dict.ioloop = io_loop_create();
 	to = timeout_add(dict->timeout_msecs, redis_dict_wait_timeout, dict);
 	connection_switch_ioloop(&dict->conn.conn);
 
 	do {
-		io_loop_run(dict->ioloop);
+		io_loop_run(dict->dict.ioloop);
 	} while (array_count(&dict->input_states) > 0);
 
 	timeout_remove(&to);
-	io_loop_set_current(dict->prev_ioloop);
+	io_loop_set_current(dict->dict.prev_ioloop);
 	connection_switch_ioloop(&dict->conn.conn);
-	io_loop_set_current(dict->ioloop);
-	io_loop_destroy(&dict->ioloop);
-	dict->prev_ioloop = NULL;
+	io_loop_set_current(dict->dict.ioloop);
+	io_loop_destroy(&dict->dict.ioloop);
+	dict->dict.prev_ioloop = NULL;
 }
 
 static int redis_input_get(struct redis_connection *conn, const char **error_r)
@@ -170,8 +152,8 @@ static int redis_input_get(struct redis_connection *conn, const char **error_r)
 		if (strcmp(line, "$-1") == 0) {
 			conn->value_received = TRUE;
 			conn->value_not_found = TRUE;
-			if (conn->dict->ioloop != NULL)
-				io_loop_stop(conn->dict->ioloop);
+			if (conn->dict->dict.ioloop != NULL)
+				io_loop_stop(conn->dict->dict.ioloop);
 			redis_input_state_remove(conn->dict);
 			return 1;
 		}
@@ -198,8 +180,8 @@ static int redis_input_get(struct redis_connection *conn, const char **error_r)
 	conn->value_received = TRUE;
 	str_truncate(conn->last_reply, str_len(conn->last_reply)-2);
 
-	if (conn->dict->ioloop != NULL)
-		io_loop_stop(conn->dict->ioloop);
+	if (conn->dict->dict.ioloop != NULL)
+		io_loop_stop(conn->dict->dict.ioloop);
 	redis_input_state_remove(conn->dict);
 	return 1;
 }
@@ -265,13 +247,13 @@ redis_conn_input_more(struct redis_connection *conn, const char **error_r)
 			const struct dict_commit_result result = {
 				DICT_COMMIT_RET_OK, NULL
 			};
-			redis_callback(dict, reply, &result);
+			reply->callback(&result, reply->context);
 			array_pop_front(&dict->replies);
 			/* if we're running in a dict-ioloop, we're handling a
 			   synchronous commit and need to stop now */
 			if (array_count(&dict->replies) == 0 &&
-			    conn->dict->ioloop != NULL)
-				io_loop_stop(conn->dict->ioloop);
+			    conn->dict->dict.ioloop != NULL)
+				io_loop_stop(conn->dict->dict.ioloop);
 		}
 		return 1;
 	}
@@ -309,12 +291,12 @@ static void redis_conn_connected(struct connection *_conn, bool success)
 	struct redis_connection *conn = (struct redis_connection *)_conn;
 
 	if (!success) {
-		i_error("redis: connect(%s) failed: %m", _conn->name);
+		e_error(conn->conn.event, "connect() failed: %m");
 	} else {
 		conn->dict->connected = TRUE;
 	}
-	if (conn->dict->ioloop != NULL)
-		io_loop_stop(conn->dict->ioloop);
+	if (conn->dict->dict.ioloop != NULL)
+		io_loop_stop(conn->dict->dict.ioloop);
 }
 
 static const struct connection_settings redis_conn_set = {
@@ -430,6 +412,9 @@ redis_dict_init(struct dict *driver, const char *uri,
 		i_free(dict);
 		return -1;
 	}
+
+	dict->conn.conn.event_parent = set->event_parent;
+
 	if (unix_path != NULL) {
 		connection_init_client_unix(redis_connections, &dict->conn.conn,
 					    unix_path);
@@ -437,6 +422,7 @@ redis_dict_init(struct dict *driver, const char *uri,
 		connection_init_client_ip(redis_connections, &dict->conn.conn,
 					  NULL, &ip, port);
 	}
+	event_set_append_log_prefix(dict->conn.conn.event, "redis: ");
 	dict->dict = *driver;
 	dict->conn.last_reply = str_new(default_pool, 256);
 	dict->conn.dict = dict;
@@ -552,21 +538,21 @@ static int redis_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
 	dict->conn.value_received = FALSE;
 	dict->conn.value_not_found = FALSE;
 
-	i_assert(dict->ioloop == NULL);
+	i_assert(dict->dict.ioloop == NULL);
 
-	dict->prev_ioloop = current_ioloop;
-	dict->ioloop = io_loop_create();
+	dict->dict.prev_ioloop = current_ioloop;
+	dict->dict.ioloop = io_loop_create();
 	connection_switch_ioloop(&dict->conn.conn);
 
 	if (dict->conn.conn.fd_in == -1 &&
 	    connection_client_connect(&dict->conn.conn) < 0) {
-		i_error("redis: Couldn't connect to %s", dict->conn.conn.name);
+		e_error(dict->conn.conn.event, "Couldn't connect");
 	} else {
 		to = timeout_add(dict->timeout_msecs,
 				 redis_dict_lookup_timeout, dict);
 		if (!dict->connected) {
 			/* wait for connection */
-			io_loop_run(dict->ioloop);
+			io_loop_run(dict->dict.ioloop);
 			if (dict->connected)
 				redis_dict_auth(dict);
 		}
@@ -580,17 +566,17 @@ static int redis_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
 			str_truncate(dict->conn.last_reply, 0);
 			redis_input_state_add(dict, REDIS_INPUT_STATE_GET);
 			do {
-				io_loop_run(dict->ioloop);
+				io_loop_run(dict->dict.ioloop);
 			} while (array_count(&dict->input_states) > 0);
 		}
 		timeout_remove(&to);
 	}
 
-	io_loop_set_current(dict->prev_ioloop);
+	io_loop_set_current(dict->dict.prev_ioloop);
 	connection_switch_ioloop(&dict->conn.conn);
-	io_loop_set_current(dict->ioloop);
-	io_loop_destroy(&dict->ioloop);
-	dict->prev_ioloop = NULL;
+	io_loop_set_current(dict->dict.ioloop);
+	io_loop_destroy(&dict->dict.ioloop);
+	dict->dict.prev_ioloop = NULL;
 
 	if (!dict->conn.value_received) {
 		/* we failed in some way. make sure we disconnect since the
@@ -621,8 +607,7 @@ redis_transaction_init(struct dict *_dict)
 
 	if (dict->conn.conn.fd_in == -1 &&
 	    connection_client_connect(&dict->conn.conn) < 0) {
-		i_error("redis: Couldn't connect to %s",
-			dict->conn.conn.name);
+		e_error(dict->conn.conn.event, "Couldn't connect");
 	} else if (!dict->connected) {
 		/* wait for connection */
 		redis_wait(dict);

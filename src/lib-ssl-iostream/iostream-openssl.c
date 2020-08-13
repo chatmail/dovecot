@@ -91,18 +91,19 @@ openssl_iostream_use_certificate(struct ssl_iostream *ssl_io, const char *cert,
 }
 
 static int
-openssl_iostream_use_key(struct ssl_iostream *ssl_io,
+openssl_iostream_use_key(struct ssl_iostream *ssl_io, const char *set_name,
 			 const struct ssl_iostream_cert *set,
 			 const char **error_r)
 {
 	EVP_PKEY *pkey;
 	int ret = 0;
 
-	if (openssl_iostream_load_key(set, &pkey, error_r) < 0)
+	if (openssl_iostream_load_key(set, set_name, &pkey, error_r) < 0)
 		return -1;
 	if (SSL_use_PrivateKey(ssl_io->ssl, pkey) != 1) {
-		*error_r = t_strdup_printf("Can't load SSL private key: %s",
-					   openssl_iostream_key_load_error());
+		*error_r = t_strdup_printf(
+			"Can't load SSL private key (%s setting): %s",
+			set_name, openssl_iostream_key_load_error());
 		ret = -1;
 	}
 	EVP_PKEY_free(pkey);
@@ -219,7 +220,7 @@ openssl_iostream_set(struct ssl_iostream *ssl_io,
 			return -1;
 	}
 	if (set->cert.key != NULL && strcmp(ctx_set->cert.key, set->cert.key) != 0) {
-		if (openssl_iostream_use_key(ssl_io, &set->cert, error_r) < 0)
+		if (openssl_iostream_use_key(ssl_io, "ssl_key", &set->cert, error_r) < 0)
 			return -1;
 	}
 	if (set->alt_cert.cert != NULL && strcmp(ctx_set->alt_cert.cert, set->alt_cert.cert) != 0) {
@@ -227,7 +228,7 @@ openssl_iostream_set(struct ssl_iostream *ssl_io,
 			return -1;
 	}
 	if (set->alt_cert.key != NULL && strcmp(ctx_set->alt_cert.key, set->alt_cert.key) != 0) {
-		if (openssl_iostream_use_key(ssl_io, &set->alt_cert, error_r) < 0)
+		if (openssl_iostream_use_key(ssl_io, "ssl_alt_key", &set->alt_cert, error_r) < 0)
 			return -1;
 	}
 	if (set->verify_remote_cert) {
@@ -595,14 +596,16 @@ int openssl_iostream_handle_error(struct ssl_iostream *ssl_io, int ret,
 		if (ERR_peek_error() != 0) {
 			errstr = openssl_iostream_error();
 			errno = EINVAL;
-		} else if (ret != 0) {
-			i_assert(errno != 0);
-			errstr = strerror(errno);
-		} else {
+		} else if (ret == 0) {
 			/* EOF. */
 			errno = EPIPE;
 			errstr = "Disconnected";
 			break;
+		} else if (errno != 0) {
+			errstr = strerror(errno);
+		} else {
+			/* Seen this at least with v1.1.0l SSL_accept() */
+			errstr = "OpenSSL BUG: errno=0";
 		}
 		errstr = t_strdup_printf("%s syscall failed: %s",
 					 func_name, errstr);

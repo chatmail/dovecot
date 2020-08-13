@@ -16,7 +16,6 @@
 #include <sys/stat.h>
 
 #define MAIL_CACHE_INIT_WRITE_BUFFER (1024*16)
-#define MAIL_CACHE_MAX_WRITE_BUFFER (1024*256)
 
 #define CACHE_TRANS_CONTEXT(obj) \
 	MODULE_CONTEXT(obj, cache_mail_index_transaction_module)
@@ -40,6 +39,7 @@ struct mail_cache_transaction_ctx {
 	uint32_t first_new_seq;
 
 	buffer_t *cache_data;
+	ARRAY(uint8_t) cache_field_idx_used;
 	ARRAY(struct mail_cache_transaction_rec) cache_data_seq;
 	ARRAY_TYPE(seq_range) cache_data_wanted_seqs;
 	uint32_t prev_seq, min_seq;
@@ -47,7 +47,9 @@ struct mail_cache_transaction_ctx {
 
 	unsigned int records_written;
 
-	bool tried_compression:1;
+	bool tried_purging:1;
+	bool decisions_refreshed:1;
+	bool have_noncommited_mails:1;
 	bool changes:1;
 };
 
@@ -55,7 +57,10 @@ static MODULE_CONTEXT_DEFINE_INIT(cache_mail_index_transaction_module,
 				  &mail_index_module_register);
 
 static int mail_cache_transaction_lock(struct mail_cache_transaction_ctx *ctx);
-static size_t mail_cache_transaction_update_last_rec_size(struct mail_cache_transaction_ctx *ctx);
+static bool
+mail_cache_transaction_update_last_rec_size(struct mail_cache_transaction_ctx *ctx,
+					    size_t *size_r);
+static int mail_cache_header_rewrite_fields(struct mail_cache *cache);
 
 static void mail_index_transaction_cache_reset(struct mail_index_transaction *t)
 {
@@ -119,13 +124,29 @@ mail_cache_get_transaction(struct mail_cache_view *view,
 	return ctx;
 }
 
-void mail_cache_transaction_reset(struct mail_cache_transaction_ctx *ctx)
+static void
+mail_cache_transaction_forget_flushed(struct mail_cache_transaction_ctx *ctx,
+				      bool reset_id_changed)
 {
-	ctx->cache_file_seq = MAIL_CACHE_IS_UNUSABLE(ctx->cache) ? 0 :
+	uint32_t new_cache_file_seq = MAIL_CACHE_IS_UNUSABLE(ctx->cache) ? 0 :
 		ctx->cache->hdr->file_seq;
+	if (reset_id_changed && ctx->records_written > 0) {
+		e_warning(ctx->cache->event,
+			  "Purging lost %u written cache records "
+			  "(reset_id changed %u -> %u)", ctx->records_written,
+			  ctx->cache_file_seq, new_cache_file_seq);
+		/* don't increase deleted_record_count in the new file */
+		ctx->records_written = 0;
+	}
+	ctx->cache_file_seq = new_cache_file_seq;
+	/* forget all cache extension updates even if reset_id doesn't change */
 	mail_index_ext_set_reset_id(ctx->trans, ctx->cache->ext_id,
 				    ctx->cache_file_seq);
+}
 
+void mail_cache_transaction_reset(struct mail_cache_transaction_ctx *ctx)
+{
+	mail_cache_transaction_forget_flushed(ctx, FALSE);
 	if (ctx->cache_data != NULL)
 		buffer_set_used_size(ctx->cache_data, 0);
 	if (array_is_created(&ctx->cache_data_seq))
@@ -148,7 +169,8 @@ void mail_cache_transaction_rollback(struct mail_cache_transaction_ctx **_ctx)
 		if (mail_cache_transaction_lock(ctx) > 0) {
 			ctx->cache->hdr_copy.deleted_record_count +=
 				ctx->records_written;
-			(void)mail_cache_unlock(ctx->cache);
+			ctx->cache->hdr_modified = TRUE;
+			(void)mail_cache_flush_and_unlock(ctx->cache);
 		}
 	}
 
@@ -163,107 +185,53 @@ void mail_cache_transaction_rollback(struct mail_cache_transaction_ctx **_ctx)
 		array_free(&ctx->cache_data_seq);
 	if (array_is_created(&ctx->cache_data_wanted_seqs))
 		array_free(&ctx->cache_data_wanted_seqs);
+	array_free(&ctx->cache_field_idx_used);
 	i_free(ctx);
 }
 
-static int
-mail_cache_transaction_compress(struct mail_cache_transaction_ctx *ctx)
+bool mail_cache_transactions_have_changes(struct mail_cache *cache)
 {
-	struct mail_cache *cache = ctx->cache;
-	struct mail_index_view *view;
-	struct mail_index_transaction *trans;
-	struct mail_cache_compress_lock *lock;
-	int ret;
+	struct mail_cache_view *view;
 
-	ctx->tried_compression = TRUE;
-
-	cache->need_compress_file_seq =
-		MAIL_CACHE_IS_UNUSABLE(cache) ? 0 : cache->hdr->file_seq;
-
-	view = mail_index_view_open(cache->index);
-	trans = mail_index_transaction_begin(view,
-					MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
-	if (mail_cache_compress(cache, trans, &lock) < 0) {
-		mail_index_transaction_rollback(&trans);
-		ret = -1;
-	} else {
-		ret = mail_index_transaction_commit(&trans);
-		if (lock != NULL)
-			mail_cache_compress_unlock(&lock);
+	for (view = cache->views; view != NULL; view = view->next) {
+		if (view->transaction != NULL &&
+		    view->transaction->changes)
+			return TRUE;
 	}
-	mail_index_view_close(&view);
-	mail_cache_transaction_reset(ctx);
-	return ret;
+	return FALSE;
 }
 
-static void
-mail_cache_transaction_open_if_needed(struct mail_cache_transaction_ctx *ctx)
+static int
+mail_cache_transaction_purge(struct mail_cache_transaction_ctx *ctx,
+			     const char *reason)
 {
 	struct mail_cache *cache = ctx->cache;
-	const struct mail_index_ext *ext;
-	uint32_t idx;
-	int i;
 
-	if (!cache->opened) {
-		(void)mail_cache_open_and_verify(cache);
-		return;
-	}
+	ctx->tried_purging = TRUE;
 
-	/* see if we should try to reopen the cache file */
-	for (i = 0;; i++) {
-		if (MAIL_CACHE_IS_UNUSABLE(cache))
-			return;
+	uint32_t purge_file_seq =
+		MAIL_CACHE_IS_UNUSABLE(cache) ? 0 : cache->hdr->file_seq;
 
-		if (!mail_index_map_get_ext_idx(cache->index->map,
-						cache->ext_id, &idx)) {
-			/* index doesn't have a cache extension, but the cache
-			   file exists (corrupted indexes fixed?). fix it. */
-			if (i == 2)
-				break;
-		} else {
-			ext = array_idx(&cache->index->map->extensions, idx);
-			if (ext->reset_id == cache->hdr->file_seq || i == 2)
-				break;
-
-			/* index offsets don't match the cache file */
-			if (ext->reset_id > cache->hdr->file_seq) {
-				/* the cache file appears to be too old.
-				   reopening should help. */
-				if (mail_cache_reopen(cache) != 0)
-					break;
-			}
-		}
-
-		/* cache file sequence might be broken. it's also possible
-		   that it was just compressed and we just haven't yet seen
-		   the changes in index. try if refreshing index helps.
-		   if not, compress the cache file. */
-		if (i == 0) {
-			if (ctx->tried_compression)
-				break;
-			/* get the latest reset ID */
-			if (mail_index_refresh(ctx->cache->index) < 0)
-				return;
-		} else {
-			i_assert(i == 1);
-			(void)mail_cache_transaction_compress(ctx);
-		}
-	}
+	int ret = mail_cache_purge(cache, purge_file_seq, reason);
+	/* already written cache records must be forgotten, but records in
+	   memory can still be written to the new cache file */
+	mail_cache_transaction_forget_flushed(ctx, TRUE);
+	return ret;
 }
 
 static int mail_cache_transaction_lock(struct mail_cache_transaction_ctx *ctx)
 {
 	struct mail_cache *cache = ctx->cache;
+	const uoff_t cache_max_size =
+		cache->index->optimization_set.cache.max_size;
 	int ret;
-
-	mail_cache_transaction_open_if_needed(ctx);
 
 	if ((ret = mail_cache_lock(cache)) <= 0) {
 		if (ret < 0)
 			return -1;
 
-		if (!ctx->tried_compression && MAIL_CACHE_IS_UNUSABLE(cache)) {
-			if (mail_cache_transaction_compress(ctx) < 0)
+		if (!ctx->tried_purging) {
+			if (mail_cache_transaction_purge(ctx, "creating cache") < 0)
 				return -1;
 			return mail_cache_transaction_lock(ctx);
 		} else {
@@ -272,15 +240,25 @@ static int mail_cache_transaction_lock(struct mail_cache_transaction_ctx *ctx)
 	}
 	i_assert(!MAIL_CACHE_IS_UNUSABLE(cache));
 
-	if (ctx->cache_file_seq == 0) {
-		i_assert(ctx->cache_data == NULL ||
-			 ctx->cache_data->used == 0);
+	if (!ctx->tried_purging && ctx->cache_data != NULL &&
+	    cache->last_stat_size + ctx->cache_data->used > cache_max_size) {
+		/* Looks like cache file is becoming too large. Try to purge
+		   it to free up some space. */
+		if (cache->hdr->continued_record_count > 0 ||
+		    cache->hdr->deleted_record_count > 0) {
+			mail_cache_unlock(cache);
+			(void)mail_cache_transaction_purge(ctx, "cache is too large");
+			return mail_cache_transaction_lock(ctx);
+		}
+	}
+
+	if (ctx->cache_file_seq == 0)
 		ctx->cache_file_seq = cache->hdr->file_seq;
-	} else if (ctx->cache_file_seq != cache->hdr->file_seq) {
-		if (mail_cache_unlock(cache) < 0)
-			return -1;
-		mail_cache_transaction_reset(ctx);
-		return 0;
+	else if (ctx->cache_file_seq != cache->hdr->file_seq) {
+		/* already written cache records must be forgotten, but records
+		   in memory can still be written to the new cache file */
+		mail_cache_transaction_forget_flushed(ctx, TRUE);
+		i_assert(ctx->cache_file_seq == cache->hdr->file_seq);
 	}
 	return 1;
 }
@@ -292,15 +270,6 @@ mail_cache_transaction_lookup_rec(struct mail_cache_transaction_ctx *ctx,
 {
 	const struct mail_cache_transaction_rec *recs;
 	unsigned int i, count;
-
-	if (!MAIL_INDEX_IS_IN_MEMORY(ctx->cache->index) &&
-	    (MAIL_CACHE_IS_UNUSABLE(ctx->cache) ||
-	     ctx->cache_file_seq != ctx->cache->hdr->file_seq)) {
-		/* Cache was compressed during this transaction. We can't
-		   safely use the data anymore, since its fields won't match
-		   cache->file_fields_map. */
-		return NULL;
-	}
 
 	recs = array_get(&ctx->cache_data_seq, &count);
 	for (i = *trans_next_idx; i < count; i++) {
@@ -314,23 +283,42 @@ mail_cache_transaction_lookup_rec(struct mail_cache_transaction_ctx *ctx,
 	if (seq == ctx->prev_seq && i == count) {
 		/* update the unfinished record's (temporary) size and
 		   return it */
-		mail_cache_transaction_update_last_rec_size(ctx);
+		size_t size;
+		if (!mail_cache_transaction_update_last_rec_size(ctx, &size))
+			return NULL;
 		return CONST_PTR_OFFSET(ctx->cache_data->data,
 					ctx->last_rec_pos);
 	}
 	return NULL;
 }
 
-static int
+static void
 mail_cache_transaction_update_index(struct mail_cache_transaction_ctx *ctx,
-				    uint32_t write_offset)
+				    uint32_t write_offset, bool committing)
 {
 	struct mail_cache *cache = ctx->cache;
+	struct mail_index_transaction *trans;
 	const struct mail_cache_record *rec = ctx->cache_data->data;
 	const struct mail_cache_transaction_rec *recs;
 	uint32_t i, seq_count;
 
-	mail_index_ext_using_reset_id(ctx->trans, ctx->cache->ext_id,
+	if (committing) {
+		/* The transaction is being committed now. Use it. */
+		trans = ctx->trans;
+	} else if (ctx->have_noncommited_mails) {
+		/* Some of the mails haven't been committed yet. We must use
+		   the provided transaction to update the cache records. */
+		trans = ctx->trans;
+	} else {
+		/* We can commit these changes immediately. This way even if
+		   the provided transaction runs for a very long time, we
+		   still once in a while commit the cache changes so they
+		   become visible to other processes as well. */
+		trans = mail_index_transaction_begin(ctx->view->trans_view,
+			MAIL_INDEX_TRANSACTION_FLAG_EXTERNAL);
+	}
+
+	mail_index_ext_using_reset_id(trans, ctx->cache->ext_id,
 				      ctx->cache_file_seq);
 
 	/* write the cache_offsets to index file. records' prev_offset
@@ -338,13 +326,20 @@ mail_cache_transaction_update_index(struct mail_cache_transaction_ctx *ctx,
 	   synced. */
 	recs = array_get(&ctx->cache_data_seq, &seq_count);
 	for (i = 0; i < seq_count; i++) {
-		mail_index_update_ext(ctx->trans, recs[i].seq, cache->ext_id,
+		mail_index_update_ext(trans, recs[i].seq, cache->ext_id,
 				      &write_offset, NULL);
 
 		write_offset += rec->size;
 		rec = CONST_PTR_OFFSET(rec, rec->size);
+		ctx->records_written++;
 	}
-	return 0;
+	if (trans != ctx->trans) {
+		if (mail_index_transaction_commit(&trans) < 0) {
+			/* failed, but can't really do anything */
+		} else {
+			ctx->records_written = 0;
+		}
+	}
 }
 
 static int
@@ -409,8 +404,103 @@ mail_cache_link_records(struct mail_cache_transaction_ctx *ctx,
 	return 0;
 }
 
+static bool
+mail_cache_transaction_set_used(struct mail_cache_transaction_ctx *ctx)
+{
+	const uint8_t *cache_fields_used;
+	unsigned int field_idx, count;
+	bool missing_file_fields = FALSE;
+
+	cache_fields_used = array_get(&ctx->cache_field_idx_used, &count);
+	i_assert(count <= ctx->cache->fields_count);
+	for (field_idx = 0; field_idx < count; field_idx++) {
+		if (cache_fields_used[field_idx] != 0) {
+			ctx->cache->fields[field_idx].used = TRUE;
+			if (ctx->cache->field_file_map[field_idx] == (uint32_t)-1)
+				missing_file_fields = TRUE;
+		}
+	}
+	return missing_file_fields;
+}
+
 static int
-mail_cache_transaction_flush(struct mail_cache_transaction_ctx *ctx)
+mail_cache_transaction_update_fields(struct mail_cache_transaction_ctx *ctx)
+{
+	unsigned char *p;
+	const unsigned char *end, *rec_end;
+	uint32_t field_idx, data_size;
+
+	if (mail_cache_transaction_set_used(ctx)) {
+		/* add missing fields to cache */
+		if (mail_cache_header_rewrite_fields(ctx->cache) < 0)
+			return -1;
+		/* make sure they were actually added */
+		if (mail_cache_transaction_set_used(ctx)) {
+			mail_index_set_error(ctx->cache->index,
+				"Cache file %s: Unexpectedly lost newly added field",
+				ctx->cache->filepath);
+			return -1;
+		}
+	}
+
+	/* Go through all the added cache records and replace the in-memory
+	   field_idx with the cache file-specific field index. Update only
+	   up to last_rec_pos, because that's how far flushing is done. The
+	   fields after that keep the in-memory field_idx until the next
+	   flush. */
+	p = buffer_get_modifiable_data(ctx->cache_data, NULL);
+	end = CONST_PTR_OFFSET(ctx->cache_data->data, ctx->last_rec_pos);
+	rec_end = p;
+	while (p < end) {
+		if (p >= rec_end) {
+			/* next cache record */
+			i_assert(p == rec_end);
+			const struct mail_cache_record *rec =
+				(const struct mail_cache_record *)p;
+			/* note that the last rec->size==0 */
+			rec_end = CONST_PTR_OFFSET(p, rec->size);
+			p += sizeof(*rec);
+		}
+		/* replace field_idx */
+		uint32_t *file_fieldp = (uint32_t *)p;
+		field_idx = *file_fieldp;
+		*file_fieldp = ctx->cache->field_file_map[field_idx];
+		i_assert(*file_fieldp != (uint32_t)-1);
+		p += sizeof(field_idx);
+
+		/* Skip to next cache field. Next is <data size> if the field
+		   is not fixed size. */
+		data_size = ctx->cache->fields[field_idx].field.field_size;
+		if (data_size == UINT_MAX) {
+			memcpy(&data_size, p, sizeof(data_size));
+			p += sizeof(data_size);
+		}
+		/* data & 32bit padding */
+		p += data_size;
+		if ((data_size & 3) != 0)
+			p += 4 - (data_size & 3);
+	}
+	i_assert(p == end);
+	return 0;
+}
+
+static void
+mail_cache_transaction_drop_last_flush(struct mail_cache_transaction_ctx *ctx)
+{
+	buffer_copy(ctx->cache_data, 0,
+		    ctx->cache_data, ctx->last_rec_pos, (size_t)-1);
+	buffer_set_used_size(ctx->cache_data,
+			     ctx->cache_data->used - ctx->last_rec_pos);
+	ctx->last_rec_pos = 0;
+	ctx->min_seq = 0;
+
+	array_clear(&ctx->cache_data_seq);
+	array_clear(&ctx->cache_data_wanted_seqs);
+}
+
+static int
+mail_cache_transaction_flush(struct mail_cache_transaction_ctx *ctx,
+			     bool committing)
 {
 	struct stat st;
 	uint32_t write_offset = 0;
@@ -431,12 +521,17 @@ mail_cache_transaction_flush(struct mail_cache_transaction_ctx *ctx)
 	i_assert(ctx->cache_data != NULL);
 	i_assert(ctx->last_rec_pos <= ctx->cache_data->used);
 
+	if (mail_cache_transaction_update_fields(ctx) < 0) {
+		mail_cache_unlock(ctx->cache);
+		return -1;
+	}
+
 	/* we need to get the final write offset for linking records */
 	if (fstat(ctx->cache->fd, &st) < 0) {
 		if (!ESTALE_FSTAT(errno))
 			mail_cache_set_syscall_error(ctx->cache, "fstat()");
 		ret = -1;
-	} else if ((uint32_t)-1 < st.st_size + ctx->last_rec_pos) {
+	} else if ((uoff_t)st.st_size + ctx->last_rec_pos > ctx->cache->index->optimization_set.cache.max_size) {
 		mail_cache_set_corrupted(ctx->cache, "Cache file too large");
 		ret = -1;
 	} else {
@@ -452,22 +547,11 @@ mail_cache_transaction_flush(struct mail_cache_transaction_ctx *ctx)
 		ret = -1;
 	else {
 		/* update records' cache offsets to index */
-		ctx->records_written++;
-		ret = mail_cache_transaction_update_index(ctx, write_offset);
+		mail_cache_transaction_update_index(ctx, write_offset,
+						    committing);
 	}
-	if (mail_cache_unlock(ctx->cache) < 0)
+	if (mail_cache_flush_and_unlock(ctx->cache) < 0)
 		ret = -1;
-
-	/* drop the written data from buffer */
-	buffer_copy(ctx->cache_data, 0,
-		    ctx->cache_data, ctx->last_rec_pos, (size_t)-1);
-	buffer_set_used_size(ctx->cache_data,
-			     ctx->cache_data->used - ctx->last_rec_pos);
-	ctx->last_rec_pos = 0;
-	ctx->min_seq = 0;
-
-	array_clear(&ctx->cache_data_seq);
-	array_clear(&ctx->cache_data_wanted_seqs);
 	return ret;
 }
 
@@ -501,8 +585,9 @@ mail_cache_transaction_drop_unwanted(struct mail_cache_transaction_ctx *ctx,
 	buffer_delete(ctx->cache_data, 0, deleted_space);
 }
 
-static size_t
-mail_cache_transaction_update_last_rec_size(struct mail_cache_transaction_ctx *ctx)
+static bool
+mail_cache_transaction_update_last_rec_size(struct mail_cache_transaction_ctx *ctx,
+					    size_t *size_r)
 {
 	struct mail_cache_record *rec;
 	void *data;
@@ -511,8 +596,11 @@ mail_cache_transaction_update_last_rec_size(struct mail_cache_transaction_ctx *c
 	data = buffer_get_modifiable_data(ctx->cache_data, &size);
 	rec = PTR_OFFSET(data, ctx->last_rec_pos);
 	rec->size = size - ctx->last_rec_pos;
+	if (rec->size == sizeof(*rec))
+		return FALSE;
 	i_assert(rec->size > sizeof(*rec));
-	return rec->size;
+	*size_r = rec->size;
+	return TRUE;
 }
 
 static void
@@ -521,8 +609,8 @@ mail_cache_transaction_update_last_rec(struct mail_cache_transaction_ctx *ctx)
 	struct mail_cache_transaction_rec *trans_rec;
 	size_t size;
 
-	size = mail_cache_transaction_update_last_rec_size(ctx);
-	if (size > ctx->cache->index->optimization_set.cache.record_max_size) {
+	if (!mail_cache_transaction_update_last_rec_size(ctx, &size) ||
+	    size > ctx->cache->index->optimization_set.cache.record_max_size) {
 		buffer_set_used_size(ctx->cache_data, ctx->last_rec_pos);
 		return;
 	}
@@ -549,6 +637,7 @@ mail_cache_transaction_switch_seq(struct mail_cache_transaction_ctx *ctx)
 					      MAIL_CACHE_INIT_WRITE_BUFFER);
 		i_array_init(&ctx->cache_data_seq, 64);
 		i_array_init(&ctx->cache_data_wanted_seqs, 32);
+		i_array_init(&ctx->cache_field_idx_used, 64);
 	}
 
 	i_zero(&new_rec);
@@ -566,7 +655,7 @@ int mail_cache_transaction_commit(struct mail_cache_transaction_ctx **_ctx)
 	if (ctx->changes) {
 		if (ctx->prev_seq != 0)
 			mail_cache_transaction_update_last_rec(ctx);
-		if (mail_cache_transaction_flush(ctx) < 0)
+		if (mail_cache_transaction_flush(ctx, TRUE) < 0)
 			ret = -1;
 		else {
 			/* successfully wrote everything */
@@ -583,10 +672,8 @@ int mail_cache_transaction_commit(struct mail_cache_transaction_ctx **_ctx)
 }
 
 static int
-mail_cache_header_fields_write(struct mail_cache_transaction_ctx *ctx,
-			       const buffer_t *buffer)
+mail_cache_header_fields_write(struct mail_cache *cache, const buffer_t *buffer)
 {
-	struct mail_cache *cache = ctx->cache;
 	uint32_t offset, hdr_offset;
 
 	i_assert(cache->locked);
@@ -620,74 +707,20 @@ mail_cache_header_fields_write(struct mail_cache_transaction_ctx *ctx,
 	return 0;
 }
 
-static void mail_cache_mark_adding(struct mail_cache *cache, bool set)
+static int mail_cache_header_rewrite_fields(struct mail_cache *cache)
 {
-	unsigned int i;
-
-	/* we want to avoid adding all the fields one by one to the cache file,
-	   so just add all of them at once in here. the unused ones get dropped
-	   later when compressing. */
-	for (i = 0; i < cache->fields_count; i++) {
-		if (set)
-			cache->fields[i].used = TRUE;
-		cache->fields[i].adding = set;
-	}
-}
-
-static int mail_cache_header_add_field(struct mail_cache_transaction_ctx *ctx,
-				       unsigned int field_idx)
-{
-	struct mail_cache *cache = ctx->cache;
 	int ret;
 
-	if (MAIL_INDEX_IS_IN_MEMORY(cache->index)) {
-		if (cache->file_fields_count <= field_idx) {
-			cache->file_field_map =
-				i_realloc_type(cache->file_field_map,
-					       unsigned int,
-					       cache->file_fields_count,
-					       field_idx+1);
-			cache->file_fields_count = field_idx+1;
-		}
-		cache->file_field_map[field_idx] = field_idx;
-		cache->field_file_map[field_idx] = field_idx;
-		return 0;
-	}
-
-	if (mail_cache_transaction_lock(ctx) <= 0) {
-		if (MAIL_CACHE_IS_UNUSABLE(cache))
-			return -1;
-
-		/* if we compressed the cache, the field should be there now.
-		   it's however possible that someone else just compressed it
-		   and we only reopened the cache file. */
-		if (cache->field_file_map[field_idx] != (uint32_t)-1)
-			return 0;
-
-		/* need to add it */
-		if (mail_cache_transaction_lock(ctx) <= 0)
-			return -1;
-	}
-
 	/* re-read header to make sure we don't lose any fields. */
-	if (mail_cache_header_fields_read(cache) < 0) {
-		(void)mail_cache_unlock(cache);
+	if (mail_cache_header_fields_read(cache) < 0)
 		return -1;
-	}
-
-	if (cache->field_file_map[field_idx] != (uint32_t)-1) {
-		/* it was already added */
-		if (mail_cache_unlock(cache) < 0)
-			return -1;
-		return 0;
-	}
 
 	T_BEGIN {
 		buffer_t *buffer;
 
 		buffer = t_buffer_create(256);
 		mail_cache_header_fields_get(cache, buffer);
-		ret = mail_cache_header_fields_write(ctx, buffer);
+		ret = mail_cache_header_fields_write(cache, buffer);
 	} T_END;
 
 	if (ret == 0) {
@@ -695,25 +728,30 @@ static int mail_cache_header_add_field(struct mail_cache_transaction_ctx *ctx,
 		cache->field_header_write_pending = FALSE;
 		ret = mail_cache_header_fields_read(cache);
 	}
-	if (ret == 0 && cache->field_file_map[field_idx] == (uint32_t)-1) {
-		mail_index_set_error(cache->index,
-				     "Cache file %s: Newly added field got "
-				     "lost unexpectedly", cache->filepath);
-		ret = -1;
-	}
-
-	if (mail_cache_unlock(cache) < 0)
-		ret = -1;
 	return ret;
+}
+
+static void
+mail_cache_transaction_refresh_decisions(struct mail_cache_transaction_ctx *ctx)
+{
+	if (ctx->decisions_refreshed)
+		return;
+
+	/* Read latest caching decisions from the cache file's header once
+	   per transaction. */
+	if (!ctx->cache->opened)
+		(void)mail_cache_open_and_verify(ctx->cache);
+	else
+		(void)mail_cache_header_fields_read(ctx->cache);
+	ctx->decisions_refreshed = TRUE;
 }
 
 void mail_cache_add(struct mail_cache_transaction_ctx *ctx, uint32_t seq,
 		    unsigned int field_idx, const void *data, size_t data_size)
 {
-	uint32_t file_field, data_size32;
+	uint32_t data_size32;
 	unsigned int fixed_size;
-	size_t full_size;
-	int ret;
+	size_t full_size, record_size;
 
 	i_assert(field_idx < ctx->cache->fields_count);
 	i_assert(data_size < (uint32_t)-1);
@@ -722,36 +760,12 @@ void mail_cache_add(struct mail_cache_transaction_ctx *ctx, uint32_t seq,
 	    (MAIL_CACHE_DECISION_NO | MAIL_CACHE_DECISION_FORCED))
 		return;
 
-	if (ctx->cache_file_seq == 0) {
-		mail_cache_transaction_open_if_needed(ctx);
-		if (!MAIL_CACHE_IS_UNUSABLE(ctx->cache))
-			ctx->cache_file_seq = ctx->cache->hdr->file_seq;
-	} else if (!MAIL_CACHE_IS_UNUSABLE(ctx->cache) &&
-		   ctx->cache_file_seq != ctx->cache->hdr->file_seq) {
-		/* cache was compressed within this transaction */
-		mail_cache_transaction_reset(ctx);
-	}
+	if (seq >= ctx->trans->first_new_seq)
+		ctx->have_noncommited_mails = TRUE;
 
-	file_field = ctx->cache->field_file_map[field_idx];
-	if (MAIL_CACHE_IS_UNUSABLE(ctx->cache) || file_field == (uint32_t)-1) {
-		/* we'll have to add this field to headers */
-		mail_cache_mark_adding(ctx->cache, TRUE);
-		ret = mail_cache_header_add_field(ctx, field_idx);
-		mail_cache_mark_adding(ctx->cache, FALSE);
-		if (ret < 0)
-			return;
-
-		if (ctx->cache_file_seq == 0) {
-			if (MAIL_INDEX_IS_IN_MEMORY(ctx->cache->index))
-				ctx->cache_file_seq = 1;
-			else
-				ctx->cache_file_seq = ctx->cache->hdr->file_seq;
-		}
-
-		file_field = ctx->cache->field_file_map[field_idx];
-		i_assert(file_field != (uint32_t)-1);
-	}
-	i_assert(ctx->cache_file_seq != 0);
+	/* If the cache file exists, make sure the caching decisions have been
+	   read. */
+	mail_cache_transaction_refresh_decisions(ctx);
 
 	mail_cache_decision_add(ctx->view, seq, field_idx);
 
@@ -759,6 +773,9 @@ void mail_cache_add(struct mail_cache_transaction_ctx *ctx, uint32_t seq,
 	i_assert(fixed_size == UINT_MAX || fixed_size == data_size);
 
 	data_size32 = (uint32_t)data_size;
+	full_size = sizeof(field_idx) + ((data_size + 3) & ~3);
+	if (fixed_size == UINT_MAX)
+		full_size += sizeof(data_size32);
 
 	if (ctx->prev_seq != seq) {
 		mail_cache_transaction_switch_seq(ctx);
@@ -773,35 +790,55 @@ void mail_cache_add(struct mail_cache_transaction_ctx *ctx, uint32_t seq,
 			ctx->view->trans_seq2 = seq;
 	}
 
-	/* remember that this value exists, in case we try to look it up */
+	if (mail_cache_transaction_update_last_rec_size(ctx, &record_size) &&
+	    record_size + full_size >
+	    ctx->cache->index->optimization_set.cache.record_max_size) {
+		/* Adding this field would exceed the cache record's maximum
+		   size. If we don't add this, it's possible that other fields
+		   could still be added. */
+		return;
+	}
+
+	/* Remember that this field has been used within the transaction. Later
+	   on we fill mail_cache_field_private.used with it. We can't rely on
+	   setting it here, because cache purging may run and clear it. */
+	uint8_t field_idx_set = 1;
+	array_idx_set(&ctx->cache_field_idx_used, field_idx, &field_idx_set);
+
+	/* Remember that this value exists for the mail, in case we try to look
+	   it up. Note that this gets forgotten whenever changing the mail. */
 	buffer_write(ctx->view->cached_exists_buf, field_idx,
 		     &ctx->view->cached_exists_value, 1);
 
-	full_size = (data_size + 3) & ~3;
-	if (fixed_size == UINT_MAX)
-		full_size += sizeof(data_size32);
-
 	if (ctx->cache_data->used + full_size > MAIL_CACHE_MAX_WRITE_BUFFER &&
 	    ctx->last_rec_pos > 0) {
-		/* time to flush our buffer. if flushing fails because the
-		   cache file had been compressed and was reopened, return
-		   without adding the cached data since cache_data buffer
-		   doesn't contain the cache_rec anymore. */
+		/* time to flush our buffer. */
 		if (MAIL_INDEX_IS_IN_MEMORY(ctx->cache->index)) {
 			/* just drop the old data to free up memory */
 			size_t space_needed = ctx->cache_data->used +
 				full_size - MAIL_CACHE_MAX_WRITE_BUFFER;
 			mail_cache_transaction_drop_unwanted(ctx, space_needed);
-		} else if (mail_cache_transaction_flush(ctx) < 0) {
-			/* make sure the transaction is reset, so we don't
-			   constantly try to flush for each call to this
-			   function */
-			mail_cache_transaction_reset(ctx);
-			return;
+		} else {
+			if (mail_cache_transaction_flush(ctx, FALSE) < 0) {
+				/* If this is a syscall failure, the already
+				   flushed changes could still be finished by
+				   writing the offsets to .log file. If this is
+				   a corruption/lost cache, the offsets will
+				   point to a nonexistent file or be ignored.
+				   Either way, we don't really need to handle
+				   this failure in any special way. */
+			}
+			/* Regardless of whether the flush succeeded, drop all
+			   data that it would have written. This way the flush
+			   is attempted only once, but it could still be
+			   possible to write new data later. Also don't reset
+			   the transaction entirely so that the last partially
+			   cached mail can still be accessed from memory. */
+			mail_cache_transaction_drop_last_flush(ctx);
 		}
 	}
 
-	buffer_append(ctx->cache_data, &file_field, sizeof(file_field));
+	buffer_append(ctx->cache_data, &field_idx, sizeof(field_idx));
 	if (fixed_size == UINT_MAX) {
 		buffer_append(ctx->cache_data, &data_size32,
 			      sizeof(data_size32));
@@ -817,7 +854,7 @@ bool mail_cache_field_want_add(struct mail_cache_transaction_ctx *ctx,
 {
 	enum mail_cache_decision_type decision;
 
-	mail_cache_transaction_open_if_needed(ctx);
+	mail_cache_transaction_refresh_decisions(ctx);
 
 	decision = mail_cache_field_get_decision(ctx->view->cache, field_idx);
 	decision &= ~MAIL_CACHE_DECISION_FORCED;
@@ -826,7 +863,7 @@ bool mail_cache_field_want_add(struct mail_cache_transaction_ctx *ctx,
 		return FALSE;
 	case MAIL_CACHE_DECISION_TEMP:
 		/* add it only if it's newer than what we would drop when
-		   compressing */
+		   purging */
 		if (ctx->first_new_seq == 0) {
 			ctx->first_new_seq =
 				mail_cache_get_first_new_seq(ctx->view->view);
@@ -846,7 +883,7 @@ bool mail_cache_field_can_add(struct mail_cache_transaction_ctx *ctx,
 {
 	enum mail_cache_decision_type decision;
 
-	mail_cache_transaction_open_if_needed(ctx);
+	mail_cache_transaction_refresh_decisions(ctx);
 
 	decision = mail_cache_field_get_decision(ctx->view->cache, field_idx);
 	if (decision == (MAIL_CACHE_DECISION_FORCED | MAIL_CACHE_DECISION_NO))

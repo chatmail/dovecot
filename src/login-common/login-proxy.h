@@ -38,7 +38,7 @@ typedef void proxy_callback_t(struct client *client);
 
 /* Create a proxy to given host. Returns NULL if failed. Given callback is
    called when new input is available from proxy. */
-int login_proxy_new(struct client *client,
+int login_proxy_new(struct client *client, struct event *event,
 		    const struct login_proxy_settings *set,
 		    proxy_callback_t *callback);
 /* Free the proxy. This should be called if authentication fails. */
@@ -59,6 +59,7 @@ int login_proxy_starttls(struct login_proxy *proxy);
 struct istream *login_proxy_get_istream(struct login_proxy *proxy);
 struct ostream *login_proxy_get_ostream(struct login_proxy *proxy);
 
+struct event *login_proxy_get_event(struct login_proxy *proxy);
 const char *login_proxy_get_host(const struct login_proxy *proxy) ATTR_PURE;
 in_port_t login_proxy_get_port(const struct login_proxy *proxy) ATTR_PURE;
 enum login_proxy_ssl_flags

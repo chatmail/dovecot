@@ -187,18 +187,27 @@ static int cmd_noop(struct client *client, const char *args ATTR_UNUSED)
 }
 
 static struct mail_search_args *
-pop3_search_build(struct client *client, uint32_t seq)
+pop3_search_build_seqset(ARRAY_TYPE(seq_range) *seqset)
 {
 	struct mail_search_args *search_args;
 	struct mail_search_arg *sarg;
 
 	search_args = mail_search_build_init();
-	if (seq == 0) {
-		sarg = mail_search_build_add(search_args, SEARCH_SEQSET);
-		sarg->value.seqset = client->all_seqs;
-	} else {
-		mail_search_build_add_seqset(search_args, seq, seq);
-	}
+	sarg = mail_search_build_add(search_args, SEARCH_SEQSET);
+	sarg->value.seqset = *seqset;
+	return search_args;
+}
+
+static struct mail_search_args *
+pop3_search_build(struct client *client, uint32_t seq)
+{
+	struct mail_search_args *search_args;
+
+	if (seq == 0)
+		return pop3_search_build_seqset(&client->all_seqs);
+
+	search_args = mail_search_build_init();
+	mail_search_build_add_seqset(search_args, seq, seq);
 	return search_args;
 }
 
@@ -247,7 +256,7 @@ bool client_update_mails(struct client *client)
 	/* translate msgnums to sequences (in case POP3 ordering is
 	   different) */
 	t_array_init(&deleted_msgs, 8);
-	if (client->deleted_bitmask != NULL) {
+	if (client->deleted_bitmask != NULL && client->quit_seen) {
 		for (msgnum = 0; msgnum < client->messages_count; msgnum++) {
 			bit = 1 << (msgnum % CHAR_BIT);
 			if ((client->deleted_bitmask[msgnum / CHAR_BIT] & bit) != 0)
@@ -263,20 +272,34 @@ bool client_update_mails(struct client *client)
 		}
 	}
 
-	search_args = pop3_search_build(client, 0);
-	ctx = mailbox_search_init(client->trans, search_args, NULL, 0, NULL);
-	mail_search_args_unref(&search_args);
+	if (array_count(&deleted_msgs) > 0) {
+		/* expunge DELEted mails */
+		search_args = pop3_search_build_seqset(&deleted_msgs);
+		ctx = mailbox_search_init(client->trans, search_args, NULL, 0, NULL);
+		mail_search_args_unref(&search_args);
 
-	while (mailbox_search_next(ctx, &mail)) {
-		if (client->quit_seen && seq_range_exists(&deleted_msgs, mail->seq))
+		while (mailbox_search_next(ctx, &mail))
 			client_expunge(client, mail);
-		else if (seq_range_exists(&seen_msgs, mail->seq))
+		if (mailbox_search_deinit(&ctx) < 0)
+			ret = FALSE;
+		/* don't bother setting \Seen flags for deleted messages */
+		seq_range_array_invert(&deleted_msgs, 1, client->highest_seq);
+		seq_range_array_intersect(&seen_msgs, &deleted_msgs);
+	}
+
+	if (array_count(&seen_msgs) > 0) {
+		/* add \Seen flags for RETRed mails */
+		search_args = pop3_search_build_seqset(&seen_msgs);
+		ctx = mailbox_search_init(client->trans, search_args, NULL, 0, NULL);
+		mail_search_args_unref(&search_args);
+
+		while (mailbox_search_next(ctx, &mail))
 			mail_update_flags(mail, MODIFY_ADD, MAIL_SEEN);
+		if (mailbox_search_deinit(&ctx) < 0)
+			ret = FALSE;
 	}
 
 	client->seen_change_count = 0;
-	if (mailbox_search_deinit(&ctx) < 0)
-		ret = FALSE;
 	return ret;
 }
 

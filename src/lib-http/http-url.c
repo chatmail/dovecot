@@ -33,13 +33,12 @@ static bool
 http_url_parse_scheme(struct http_url_parser *url_parser, const char **scheme_r)
 {
 	struct uri_parser *parser = &url_parser->parser;
-	int ret;
 
 	*scheme_r = NULL;
 	if ((url_parser->flags & HTTP_URL_PARSE_SCHEME_EXTERNAL) != 0)
 		return TRUE;
 
-	if ((ret = uri_parse_scheme(parser, scheme_r)) <= 0) {
+	if (uri_parse_scheme(parser, scheme_r) <= 0) {
 		parser->cur = parser->begin;
 		return FALSE;
 	}
@@ -513,6 +512,15 @@ int http_url_request_target_parse(const char *request_target,
 /*
  * HTTP URL manipulation
  */
+
+void http_url_init_authority_from(struct http_url *dest,
+				  const struct http_url *src)
+{
+	i_zero(dest);
+	dest->host = src->host;
+	dest->port = src->port;
+	dest->have_ssl = src->have_ssl;
+}
 
 void http_url_copy_authority(pool_t pool, struct http_url *dest,
 			     const struct http_url *src)

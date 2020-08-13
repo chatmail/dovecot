@@ -90,7 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-noinst_PROGRAMS = $(am__EXEEXT_1)
+noinst_PROGRAMS = $(am__EXEEXT_1) bench-compression$(EXEEXT)
 subdir = src/lib-compression
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -142,7 +142,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
 	$(top_srcdir)/m4/want_unwind.m4 \
 	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
@@ -185,8 +186,8 @@ am__DEPENDENCIES_1 =
 libcompression_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am_libcompression_la_OBJECTS = compression.lo istream-lzma.lo \
 	istream-lz4.lo istream-zlib.lo istream-bzlib.lo \
-	ostream-lzma.lo ostream-lz4.lo ostream-zlib.lo \
-	ostream-bzlib.lo
+	istream-zstd.lo ostream-lzma.lo ostream-lz4.lo ostream-zlib.lo \
+	ostream-bzlib.lo ostream-zstd.lo
 libcompression_la_OBJECTS = $(am_libcompression_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -201,6 +202,8 @@ libdovecot_compression_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(LDFLAGS) -o $@
 am__EXEEXT_1 = test-compression$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
+am_bench_compression_OBJECTS = bench-compression.$(OBJEXT)
+bench_compression_OBJECTS = $(am_bench_compression_OBJECTS)
 am_test_compression_OBJECTS = test-compression.$(OBJEXT)
 test_compression_OBJECTS = $(am_test_compression_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -239,10 +242,10 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libcompression_la_SOURCES) \
 	$(libdovecot_compression_la_SOURCES) \
-	$(test_compression_SOURCES)
+	$(bench_compression_SOURCES) $(test_compression_SOURCES)
 DIST_SOURCES = $(libcompression_la_SOURCES) \
 	$(libdovecot_compression_la_SOURCES) \
-	$(test_compression_SOURCES)
+	$(bench_compression_SOURCES) $(test_compression_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -416,6 +419,8 @@ SSL_LIBS = @SSL_LIBS@
 STRIP = @STRIP@
 VALGRIND = @VALGRIND@
 VERSION = @VERSION@
+ZSTD_CFLAGS = @ZSTD_CFLAGS@
+ZSTD_LIBS = @ZSTD_LIBS@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
@@ -480,7 +485,8 @@ top_srcdir = @top_srcdir@
 noinst_LTLIBRARIES = libcompression.la
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
-	-I$(top_srcdir)/src/lib-test
+	-I$(top_srcdir)/src/lib-test \
+	$(ZSTD_CFLAGS)
 
 libcompression_la_SOURCES = \
 	compression.c \
@@ -488,10 +494,12 @@ libcompression_la_SOURCES = \
 	istream-lz4.c \
 	istream-zlib.c \
 	istream-bzlib.c \
+	istream-zstd.c \
 	ostream-lzma.c \
 	ostream-lz4.c \
 	ostream-zlib.c \
-	ostream-bzlib.c
+	ostream-bzlib.c \
+	ostream-zstd.c
 
 libcompression_la_LIBADD = \
 	$(COMPRESS_LIBS)
@@ -520,6 +528,9 @@ test_deps = $(test_libs)
 test_compression_SOURCES = test-compression.c
 test_compression_LDADD = $(test_libs)
 test_compression_DEPENDENCIES = $(test_deps)
+bench_compression_SOURCES = bench-compression.c
+bench_compression_LDADD = $(test_libs)
+bench_compression_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -615,6 +626,10 @@ clean-noinstPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+bench-compression$(EXEEXT): $(bench_compression_OBJECTS) $(bench_compression_DEPENDENCIES) $(EXTRA_bench_compression_DEPENDENCIES) 
+	@rm -f bench-compression$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(bench_compression_OBJECTS) $(bench_compression_LDADD) $(LIBS)
+
 test-compression$(EXEEXT): $(test_compression_OBJECTS) $(test_compression_DEPENDENCIES) $(EXTRA_test_compression_DEPENDENCIES) 
 	@rm -f test-compression$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_compression_OBJECTS) $(test_compression_LDADD) $(LIBS)
@@ -625,15 +640,18 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bench-compression.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/compression.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-bzlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-lz4.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-lzma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-zlib.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-zstd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-bzlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-lz4.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-lzma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-zlib.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-zstd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-compression.Po@am__quote@
 
 .c.o:

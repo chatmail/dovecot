@@ -224,7 +224,7 @@ rpa_read_buffer(pool_t pool, const unsigned char **data,
 		return 0;
 
 	len = *p++;
-	if (p + len > end)
+	if (p + len > end || len == 0)
 		return 0;
 
 	*buffer = p_malloc(pool, len);
@@ -580,7 +580,7 @@ const struct mech_module mech_rpa = {
 	"RPA",
 
 	.flags = MECH_SEC_DICTIONARY | MECH_SEC_ACTIVE |
-		MECH_SEC_MUTUAL_AUTH,
+		MECH_SEC_MUTUAL_AUTH | MECH_SEC_ALLOW_NULS,
 	.passdb_need = MECH_PASSDB_NEED_LOOKUP_CREDENTIALS,
 
 	mech_rpa_auth_new,

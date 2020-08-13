@@ -26,7 +26,7 @@
 
    So, group 1. and 2. could be optimally implemented by keeping things
    cached only for a while. I thought a week would be good. When cache file
-   is compressed, everything older than week will be dropped.
+   is purged, everything older than week will be dropped.
 
    But how to figure out if user is in group 3? One quite easy rule would
    be to see if client is accessing messages older than a week. But with
@@ -70,6 +70,37 @@
 #include "ioloop.h"
 #include "mail-cache-private.h"
 
+const char *mail_cache_decision_to_string(enum mail_cache_decision_type dec)
+{
+	switch (dec & ~MAIL_CACHE_DECISION_FORCED) {
+	case MAIL_CACHE_DECISION_NO:
+		return "no";
+	case MAIL_CACHE_DECISION_TEMP:
+		return "temp";
+	case MAIL_CACHE_DECISION_YES:
+		return "yes";
+	}
+	i_unreached();
+}
+
+struct event_passthrough *
+mail_cache_decision_changed_event(struct mail_cache *cache, struct event *event,
+				  unsigned int field)
+{
+	return event_create_passthrough(event)->
+		set_name("mail_cache_decision_changed")->
+		add_str("field", cache->fields[field].field.name)->
+		add_int("last_used", cache->fields[field].field.last_used);
+}
+
+static void
+mail_cache_update_last_used(struct mail_cache *cache, unsigned int field)
+{
+	cache->fields[field].field.last_used = (uint32_t)ioloop_time;
+	if (cache->field_file_map[field] != (uint32_t)-1)
+		cache->field_header_write_pending = TRUE;
+}
+
 void mail_cache_decision_state_update(struct mail_cache_view *view,
 				      uint32_t seq, unsigned int field)
 {
@@ -89,26 +120,42 @@ void mail_cache_decision_state_update(struct mail_cache_view *view,
 		return;
 	}
 
-	if (ioloop_time - cache->fields[field].field.last_used > 3600*24) {
-		/* update last_used about once a day */
-		cache->fields[field].field.last_used = (uint32_t)ioloop_time;
-		if (cache->field_file_map[field] != (uint32_t)-1)
-			cache->field_header_write_pending = TRUE;
-	}
+	/* update last_used about once a day */
+	bool last_used_need_update =
+		ioloop_time - cache->fields[field].field.last_used > 3600*24;
 
-	if (dec != MAIL_CACHE_DECISION_TEMP) {
+	if (dec == MAIL_CACHE_DECISION_NO ||
+	    (dec & MAIL_CACHE_DECISION_FORCED) != 0) {
 		/* a) forced decision
-		   b) not cached, mail_cache_decision_add() will handle this
-		   c) permanently cached already, okay. */
+		   b) not cached, mail_cache_decision_add() will handle this */
+		if (last_used_need_update)
+			mail_cache_update_last_used(cache, field);
 		return;
+	}
+	if (dec == MAIL_CACHE_DECISION_YES) {
+		if (!last_used_need_update)
+			return;
+		/* update last_used only when we can confirm that the YES
+		   decision is still correct. */
+	} else {
+		/* see if we want to change decision from TEMP to YES */
+		i_assert(dec == MAIL_CACHE_DECISION_TEMP);
+		if (last_used_need_update)
+			mail_cache_update_last_used(cache, field);
 	}
 
 	mail_index_lookup_uid(view->view, seq, &uid);
 	hdr = mail_index_get_header(view->view);
 
-	/* see if we want to change decision from TEMP to YES */
-	if (uid < cache->fields[field].uid_highwater ||
-	    uid < hdr->day_first_uid[7]) {
+	if (uid >= cache->fields[field].uid_highwater &&
+	    uid >= hdr->day_first_uid[7]) {
+		cache->fields[field].uid_highwater = uid;
+	} else if (dec == MAIL_CACHE_DECISION_YES) {
+		/* Confirmed that we still want to preserve YES as cache
+		   decision. We can update last_used now. */
+		i_assert(last_used_need_update);
+		mail_cache_update_last_used(cache, field);
+	} else {
 		/* a) nonordered access within this session. if client doesn't
 		      request messages in growing order, we assume it doesn't
 		      have a permanent local cache.
@@ -116,13 +163,22 @@ void mail_cache_decision_state_update(struct mail_cache_view *view,
 		      client with no local cache. if it was just a new client
 		      generating the local cache for the first time, we'll
 		      drop back to TEMP within few months. */
+		i_assert(dec == MAIL_CACHE_DECISION_TEMP);
 		cache->fields[field].field.decision = MAIL_CACHE_DECISION_YES;
 		cache->fields[field].decision_dirty = TRUE;
+		cache->field_header_write_pending = TRUE;
 
-		if (cache->field_file_map[field] != (uint32_t)-1)
-			cache->field_header_write_pending = TRUE;
-	} else {
-		cache->fields[field].uid_highwater = uid;
+		const char *reason = uid < hdr->day_first_uid[7] ?
+			"old_mail" : "unordered_access";
+		struct event_passthrough *e =
+			mail_cache_decision_changed_event(
+				view->cache, view->cache->event, field)->
+			add_str("reason", reason)->
+			add_int("uid", uid)->
+			add_str("old_decision", "temp")->
+			add_str("new_decision", "yes");
+		e_debug(e->event(), "Changing field %s decision temp -> yes (uid=%u)",
+			cache->fields[field].field.name, uid);
 	}
 }
 
@@ -130,37 +186,50 @@ void mail_cache_decision_add(struct mail_cache_view *view, uint32_t seq,
 			     unsigned int field)
 {
 	struct mail_cache *cache = view->cache;
+	struct mail_cache_field_private *priv;
 	uint32_t uid;
 
 	i_assert(field < cache->fields_count);
 
-	if (MAIL_CACHE_IS_UNUSABLE(cache) || view->no_decision_updates)
+	if (view->no_decision_updates)
 		return;
 
-	if (cache->fields[field].field.decision != MAIL_CACHE_DECISION_NO) {
+	priv = &cache->fields[field];
+	if (priv->field.decision != MAIL_CACHE_DECISION_NO &&
+	    priv->field.last_used != 0) {
 		/* a) forced decision
 		   b) we're already caching it, so it just wasn't in cache */
 		return;
 	}
 
 	/* field used the first time */
-	cache->fields[field].field.decision = MAIL_CACHE_DECISION_TEMP;
-	cache->fields[field].decision_dirty = TRUE;
+	if (priv->field.decision == MAIL_CACHE_DECISION_NO)
+		priv->field.decision = MAIL_CACHE_DECISION_TEMP;
+	priv->field.last_used = ioloop_time;
+	priv->decision_dirty = TRUE;
 	cache->field_header_write_pending = TRUE;
 
 	mail_index_lookup_uid(view->view, seq, &uid);
-	cache->fields[field].uid_highwater = uid;
+	priv->uid_highwater = uid;
+
+	const char *new_decision =
+		mail_cache_decision_to_string(priv->field.decision);
+	struct event_passthrough *e =
+		mail_cache_decision_changed_event(cache, cache->event, field)->
+		add_str("reason", "add")->
+		add_int("uid", uid)->
+		add_str("old_decision", "no")->
+		add_str("new_decision", new_decision);
+	e_debug(e->event(), "Adding field %s to cache for the first time (uid=%u)",
+		priv->field.name, uid);
 }
 
-void mail_cache_decisions_copy(struct mail_index_transaction *itrans,
-			       struct mail_cache *src,
-			       struct mail_cache *dst)
+int mail_cache_decisions_copy(struct mail_cache *src, struct mail_cache *dst)
 {
-	struct mail_cache_compress_lock *lock = NULL;
-
-	if (mail_cache_open_and_verify(src) < 0 ||
-	    MAIL_CACHE_IS_UNUSABLE(src))
-		return;
+	if (mail_cache_open_and_verify(src) < 0)
+		return -1;
+	if (MAIL_CACHE_IS_UNUSABLE(src))
+		return 0; /* no caching decisions */
 
 	unsigned int count = 0;
 	struct mail_cache_field *fields =
@@ -169,8 +238,10 @@ void mail_cache_decisions_copy(struct mail_index_transaction *itrans,
 	if (count > 0)
 		mail_cache_register_fields(dst, fields, count);
 
+	/* Destination cache isn't expected to exist yet, so use purging
+	   to create it. Setting field_header_write_pending also guarantees
+	   that the fields are updated even if the cache was already created
+	   and no purging was done. */
 	dst->field_header_write_pending = TRUE;
-	(void)mail_cache_compress(dst, itrans, &lock);
-	if (lock != NULL)
-		mail_cache_compress_unlock(&lock);
+	return mail_cache_purge(dst, 0, "copy cache decisions");
 }

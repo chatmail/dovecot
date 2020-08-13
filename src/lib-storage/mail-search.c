@@ -53,27 +53,76 @@ mailbox_uidset_change(struct mail_search_arg *arg, struct mailbox *box,
 			/* make sure the last message is in the range */
 			mailbox_get_seq_range(box, 1, (uint32_t)-1,
 					      &seq1, &seq2);
+			if (seq2 != 0)
+				seq_range_array_add(&arg->value.seqset, seq2);
+		}
+	}
+}
+
+static void
+mailbox_seqset_change(struct mail_search_arg *arg, struct mailbox *box)
+{
+	const struct seq_range *seqset;
+	unsigned int count;
+	uint32_t seq1, seq2;
+
+	seqset = array_get(&arg->value.seqset, &count);
+	if (count > 0 && seqset[count-1].seq2 == (uint32_t)-1) {
+		/* n:* -> n:maxseq. */
+		mailbox_get_seq_range(box, 1, (uint32_t)-1,
+				      &seq1, &seq2);
+		if (seq2 == 0) {
+			/* no mails in mailbox - nothing can match */
+			array_clear(&arg->value.seqset);
+		} else if (seqset[count-1].seq1 == (uint32_t)-1) {
+			/* "*" alone needs a bit special handling
+			   NOTE: This could be e.g. 5,* so use
+			   seqset[last] */
+			seq_range_array_remove(&arg->value.seqset, (uint32_t)-1);
 			seq_range_array_add(&arg->value.seqset, seq2);
+		} else {
+			seq_range_array_remove_range(&arg->value.seqset,
+						     seq2+1, (uint32_t)-1);
+		}
+	}
+}
+
+static void
+mail_search_arg_change_sets(struct mail_search_args *args,
+			    struct mail_search_arg *arg,
+			    const ARRAY_TYPE(seq_range) *search_saved_uidset)
+{
+	for (; arg != NULL; arg = arg->next) {
+		switch (arg->type) {
+		case SEARCH_SEQSET:
+			mailbox_seqset_change(arg, args->box);
+			break;
+		case SEARCH_UIDSET:
+			T_BEGIN {
+				mailbox_uidset_change(arg, args->box,
+						      search_saved_uidset);
+			} T_END;
+			break;
+		case SEARCH_INTHREAD:
+		case SEARCH_SUB:
+		case SEARCH_OR:
+			mail_search_arg_change_sets(args, arg->value.subargs,
+						    search_saved_uidset);
+			break;
+		default:
+			break;
 		}
 	}
 }
 
 void mail_search_arg_init(struct mail_search_args *args,
-			  struct mail_search_arg *arg,
-			  bool change_uidsets,
-			  const ARRAY_TYPE(seq_range) *search_saved_uidset)
+			  struct mail_search_arg *arg)
 {
 	struct mail_search_args *thread_args;
 	const char *keywords[2];
 
 	for (; arg != NULL; arg = arg->next) {
 		switch (arg->type) {
-		case SEARCH_UIDSET:
-			if (change_uidsets) T_BEGIN {
-				mailbox_uidset_change(arg, args->box,
-						      search_saved_uidset);
-			} T_END;
-			break;
 		case SEARCH_MODSEQ:
 			if (arg->value.str == NULL)
 				break;
@@ -116,9 +165,7 @@ void mail_search_arg_init(struct mail_search_args *args,
 			/* fall through */
 		case SEARCH_SUB:
 		case SEARCH_OR:
-			mail_search_arg_init(args, arg->value.subargs,
-					     change_uidsets,
-					     search_saved_uidset);
+			mail_search_arg_init(args, arg->value.subargs);
 			break;
 		default:
 			break;
@@ -127,7 +174,7 @@ void mail_search_arg_init(struct mail_search_args *args,
 }
 
 void mail_search_args_init(struct mail_search_args *args,
-			   struct mailbox *box, bool change_uidsets,
+			   struct mailbox *box, bool change_sets,
 			   const ARRAY_TYPE(seq_range) *search_saved_uidset)
 {
 	i_assert(args->init_refcount <= args->refcount);
@@ -138,10 +185,15 @@ void mail_search_args_init(struct mail_search_args *args,
 	}
 
 	args->box = box;
+	if (change_sets) {
+		/* Change seqsets/uidsets before simplifying the args, since it
+		   can't handle search_saved_uidset. */
+		mail_search_arg_change_sets(args, args->args,
+					    search_saved_uidset);
+	}
 	if (!args->simplified)
 		mail_search_args_simplify(args);
-	mail_search_arg_init(args, args->args, change_uidsets,
-			     search_saved_uidset);
+	mail_search_arg_init(args, args->args);
 }
 
 void mail_search_arg_deinit(struct mail_search_arg *arg)
@@ -277,6 +329,7 @@ mail_search_arg_dup_one(pool_t pool, const struct mail_search_arg *arg)
 			mail_search_arg_dup(pool, arg->value.subargs);
 		break;
 	case SEARCH_ALL:
+	case SEARCH_SAVEDATESUPPORTED:
 		break;
 	case SEARCH_SEQSET:
 	case SEARCH_UIDSET:
@@ -604,6 +657,7 @@ bool mail_search_arg_one_equals(const struct mail_search_arg *arg1,
 					      arg2->value.subargs);
 
 	case SEARCH_ALL:
+	case SEARCH_SAVEDATESUPPORTED:
 		return TRUE;
 	case SEARCH_SEQSET:
 		/* sequences may point to different messages at different times,

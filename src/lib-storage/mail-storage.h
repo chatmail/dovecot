@@ -60,11 +60,6 @@ enum mailbox_flags {
 	   quota updates (possibly resulting in broken quota). and This is
 	   useful for example when deleting entire user accounts. */
 	MAILBOX_FLAG_DELETE_UNSAFE	= 0x400,
-	/* Mailbox is used for caching purposes. Some of the mails may be
-	   stubs, which exist in the index but that don't have a mail body.
-	   The backend shouldn't treat it as corruption if a mail body isn't
-	   found. */
-	MAILBOX_FLAG_USE_STUBS		= 0x800,
 	/* Mailbox is created implicitly if it does not exist. */
 	MAILBOX_FLAG_AUTO_CREATE	= 0x1000,
 	/* Mailbox is subscribed to implicitly when it is created automatically */
@@ -212,10 +207,6 @@ enum mailbox_transaction_flags {
 	   especially means the notify plugin. This would normally be used only
 	   with _FLAG_SYNC. */
 	MAILBOX_TRANSACTION_FLAG_NO_NOTIFY	= 0x40,
-	/* Append fills in an existing stub mail for the specified UID,
-	   instead of saving a new mail. This requires mailbox to be opened
-	   with MAILBOX_FLAG_USE_STUBS. */
-	MAILBOX_TRANSACTION_FLAG_FILL_IN_STUB	= 0x80,
 };
 
 enum mailbox_sync_flags {
@@ -904,8 +895,9 @@ int mail_get_parts(struct mail *mail, struct message_part **parts_r);
 int mail_get_date(struct mail *mail, time_t *date_r, int *timezone_r);
 /* Get the time when the mail was received (IMAP INTERNALDATE). */
 int mail_get_received_date(struct mail *mail, time_t *date_r);
-/* Get the time when the mail was saved into this mailbox. This time may not
-   always be entirely reliable. */
+/* Get the time when the mail was saved into this mailbox. This returns -1 on
+   error, 0 if a real save date is not supported and a fall-back date is used,
+   and 1 when a save date was successfully retrieved. */
 int mail_get_save_date(struct mail *mail, time_t *date_r);
 
 /* Get the space used by the mail as seen by the reader. Linefeeds are always
@@ -982,6 +974,14 @@ int mail_get_special(struct mail *mail, enum mail_fetch_field field,
 /* Returns the mail for the physical message. Normally this is the mail itself,
    but in virtual mailboxes it points to the backend mailbox. */
 int mail_get_backend_mail(struct mail *mail, struct mail **real_mail_r);
+
+/* Retrieve and parse the value of the Message-ID header field. Returns 1 if the
+   header was found and it contains a valid message ID, 0 if the header was not
+   found or no valid message ID was contained in it, and -1 if an error occurred
+   while retrieving the header. Returns the message ID value including '<' and
+   '>' in the *value_r return parameter or NULL if the header wasn't found or
+   its value was invalid. */
+int mail_get_message_id(struct mail *mail, const char **value_r);
 
 /* Update message flags. */
 void mail_update_flags(struct mail *mail, enum modify_type modify_type,

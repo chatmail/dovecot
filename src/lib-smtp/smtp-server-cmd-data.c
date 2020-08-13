@@ -352,7 +352,6 @@ cmd_data_next(struct smtp_server_cmd_ctx *cmd,
 	struct smtp_server_transaction *trans = conn->state.trans;
 	const struct smtp_server_callbacks *callbacks = conn->callbacks;
 	struct smtp_server_command *command = cmd->cmd;
-	int ret;
 
 	/* this command is next to send a reply */
 
@@ -381,7 +380,7 @@ cmd_data_next(struct smtp_server_cmd_ctx *cmd,
 		}
 	}
 
-	smtp_server_connection_set_state(conn, SMTP_SERVER_STATE_DATA);
+	smtp_server_connection_set_state(conn, SMTP_SERVER_STATE_DATA, NULL);
 
 	/* chain data streams in the correct order */
 	if (conn->state.data_chain != NULL) {
@@ -402,8 +401,8 @@ cmd_data_next(struct smtp_server_cmd_ctx *cmd,
 		smtp_server_command_ref(cmd_temp);
 		i_assert(callbacks != NULL &&
 			 callbacks->conn_cmd_data_begin != NULL);
-		if ((ret=callbacks->conn_cmd_data_begin(conn->context,
-			cmd, conn->state.trans, conn->state.data_input)) < 0) {
+		if (callbacks->conn_cmd_data_begin(conn->context,
+			cmd, conn->state.trans, conn->state.data_input) < 0) {
 			i_assert(smtp_server_command_is_replied(cmd_temp));
 			/* command failed */
 			smtp_server_command_unref(&cmd_temp);
@@ -493,7 +492,7 @@ cmd_data_start(struct smtp_server_cmd_ctx *cmd,
 		return;
 	}
 
-	smtp_server_connection_set_state(conn, SMTP_SERVER_STATE_DATA);
+	smtp_server_connection_set_state(conn, SMTP_SERVER_STATE_DATA, NULL);
 
 	/* confirm initial success to client */
 	smtp_server_connection_reply_immediate(conn, 354, "OK");

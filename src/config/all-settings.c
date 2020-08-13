@@ -45,10 +45,11 @@ struct mail_storage_settings {
 	unsigned int mail_cache_min_mail_count;
 	unsigned int mail_cache_unaccessed_field_drop;
 	uoff_t mail_cache_record_max_size;
-	uoff_t mail_cache_compress_min_size;
-	unsigned int mail_cache_compress_delete_percentage;
-	unsigned int mail_cache_compress_continued_percentage;
-	unsigned int mail_cache_compress_header_continue_count;
+	uoff_t mail_cache_max_size;
+	uoff_t mail_cache_purge_min_size;
+	unsigned int mail_cache_purge_delete_percentage;
+	unsigned int mail_cache_purge_continued_percentage;
+	unsigned int mail_cache_purge_header_continue_count;
 	uoff_t mail_index_rewrite_min_log_bytes;
 	uoff_t mail_index_rewrite_max_log_bytes;
 	uoff_t mail_index_log_rotate_min_size;
@@ -488,8 +489,12 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 		return FALSE;
 	}
 
-	if (set->mail_cache_compress_delete_percentage > 100) {
-		*error_r = "mail_cache_compress_delete_percentage can't be over 100";
+	if (set->mail_cache_max_size > 1024 * 1024 * 1024) {
+		*error_r = "mail_cache_max_size can't be over 1 GB";
+		return FALSE;
+	}
+	if (set->mail_cache_purge_delete_percentage > 100) {
+		*error_r = "mail_cache_purge_delete_percentage can't be over 100";
 		return FALSE;
 	}
 
@@ -804,10 +809,11 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(SET_UINT, mail_cache_min_mail_count),
 	DEF(SET_TIME, mail_cache_unaccessed_field_drop),
 	DEF(SET_SIZE, mail_cache_record_max_size),
-	DEF(SET_SIZE, mail_cache_compress_min_size),
-	DEF(SET_UINT, mail_cache_compress_delete_percentage),
-	DEF(SET_UINT, mail_cache_compress_continued_percentage),
-	DEF(SET_UINT, mail_cache_compress_header_continue_count),
+	DEF(SET_SIZE, mail_cache_max_size),
+	DEF(SET_SIZE, mail_cache_purge_min_size),
+	DEF(SET_UINT, mail_cache_purge_delete_percentage),
+	DEF(SET_UINT, mail_cache_purge_continued_percentage),
+	DEF(SET_UINT, mail_cache_purge_header_continue_count),
 	DEF(SET_SIZE, mail_index_rewrite_min_log_bytes),
 	DEF(SET_SIZE, mail_index_rewrite_max_log_bytes),
 	DEF(SET_SIZE, mail_index_log_rotate_min_size),
@@ -869,10 +875,11 @@ const struct mail_storage_settings mail_storage_default_settings = {
 	.mail_cache_min_mail_count = 0,
 	.mail_cache_unaccessed_field_drop = 60*60*24*30,
 	.mail_cache_record_max_size = 64 * 1024,
-	.mail_cache_compress_min_size = 32 * 1024,
-	.mail_cache_compress_delete_percentage = 20,
-	.mail_cache_compress_continued_percentage = 200,
-	.mail_cache_compress_header_continue_count = 4,
+	.mail_cache_max_size = 1024 * 1024 * 1024,
+	.mail_cache_purge_min_size = 32 * 1024,
+	.mail_cache_purge_delete_percentage = 20,
+	.mail_cache_purge_continued_percentage = 200,
+	.mail_cache_purge_header_continue_count = 4,
 	.mail_index_rewrite_min_log_bytes = 8 * 1024,
 	.mail_index_rewrite_max_log_bytes = 128 * 1024,
 	.mail_index_log_rotate_min_size = 32 * 1024,
@@ -1635,6 +1642,30 @@ enum event_exporter_time_fmt {
 	EVENT_EXPORTER_TIME_FMT_RFC3339,
 };
 /* </settings checks> */
+/* <settings checks> */
+enum stats_metric_group_by_func {
+	STATS_METRIC_GROUPBY_DISCRETE = 0,
+	STATS_METRIC_GROUPBY_QUANTIZED,
+};
+
+/*
+ * A range covering a stats bucket.  The the interval is half closed - the
+ * minimum is excluded and the maximum is included.  In other words: (min, max].
+ * Because we don't have a +Inf and -Inf, we use INTMAX_MIN and INTMAX_MAX
+ * respectively.
+ */
+struct stats_metric_settings_bucket_range {
+	intmax_t min;
+	intmax_t max;
+};
+
+struct stats_metric_settings_group_by {
+	const char *field;
+	enum stats_metric_group_by_func func;
+	unsigned int num_ranges;
+	struct stats_metric_settings_bucket_range *ranges;
+};
+/* </settings checks> */
 struct stats_exporter_settings {
 	const char *name;
 	const char *transport;
@@ -1647,7 +1678,8 @@ struct stats_exporter_settings {
 	enum event_exporter_time_fmt parsed_time_format;
 };
 struct stats_metric_settings {
-	const char *name;
+	const char *metric_name;
+	const char *description;
 	const char *event_name;
 	const char *source_location;
 	const char *categories;
@@ -1656,12 +1688,15 @@ struct stats_metric_settings {
 	ARRAY(const char *) filter;
 
 	unsigned int parsed_source_linenum;
+	ARRAY(struct stats_metric_settings_group_by) parsed_group_by;
 
 	/* exporter related fields */
 	const char *exporter;
 	const char *exporter_include;
 };
 struct stats_settings {
+	const char *stats_http_rawlog_dir;
+
 	ARRAY(struct stats_exporter_settings *) exporters;
 	ARRAY(struct stats_metric_settings *) metrics;
 };
@@ -2391,6 +2426,9 @@ const struct setting_parser_info *submission_login_setting_roots[] = {
 extern const struct setting_parser_info stats_metric_setting_parser_info;
 extern const struct setting_parser_info stats_exporter_setting_parser_info;
 /* <settings checks> */
+#include <math.h>
+/* </settings checks> */
+/* <settings checks> */
 static struct file_listener_settings stats_unix_listeners_array[] = {
 	{ "stats-reader", 0600, "", "" },
 	{ "stats-writer", 0660, "", "$default_internal_group" },
@@ -2520,13 +2558,195 @@ static bool stats_exporter_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 	return TRUE;
 }
 
-static bool stats_metric_settings_check(void *_set, pool_t pool ATTR_UNUSED,
-					const char **error_r)
+static bool parse_metric_group_by_common(const char *func,
+					 const char *const *params,
+					 intmax_t *min_r,
+					 intmax_t *max_r,
+					 intmax_t *other_r,
+					 const char **error_r)
+{
+	intmax_t min, max, other;
+
+	if ((str_array_length(params) != 3) ||
+	    (str_to_intmax(params[0], &min) < 0) ||
+	    (str_to_intmax(params[1], &max) < 0) ||
+	    (str_to_intmax(params[2], &other) < 0)) {
+		*error_r = t_strdup_printf("group_by '%s' aggregate function takes "
+					   "3 int args", func);
+		return FALSE;
+	}
+
+	if ((min < 0) || (max < 0) || (other < 0)) {
+		*error_r = t_strdup_printf("group_by '%s' aggregate function "
+					   "arguments must be >= 0", func);
+		return FALSE;
+	}
+
+	if (min >= max) {
+		*error_r = t_strdup_printf("group_by '%s' aggregate function "
+					   "min must be < max (%ju must be < %ju)",
+					   func, min, max);
+		return FALSE;
+	}
+
+	*min_r = min;
+	*max_r = max;
+	*other_r = other;
+
+	return TRUE;
+}
+
+static bool parse_metric_group_by_exp(pool_t pool, struct stats_metric_settings_group_by *group_by,
+				      const char *const *params, const char **error_r)
+{
+	intmax_t min, max, base;
+
+	if (!parse_metric_group_by_common("exponential", params, &min, &max, &base, error_r))
+		return FALSE;
+
+	if ((base != 2) && (base != 10)) {
+		*error_r = t_strdup_printf("group_by 'exponential' aggregate function "
+					   "base must be one of: 2, 10 (base=%ju)",
+					   base);
+		return FALSE;
+	}
+
+	group_by->func = STATS_METRIC_GROUPBY_QUANTIZED;
+
+	/*
+	 * Allocate the bucket range array and fill it in
+	 *
+	 * The first bucket is special - it contains everything less than or
+	 * equal to 'base^min'.  The last bucket is also special - it
+	 * contains everything greater than 'base^max'.
+	 *
+	 * The second bucket begins at 'base^min + 1', the third bucket
+	 * begins at 'base^(min + 1) + 1', and so on.
+	 */
+	group_by->num_ranges = max - min + 2;
+	group_by->ranges = p_new(pool, struct stats_metric_settings_bucket_range,
+				 group_by->num_ranges);
+
+	/* set up min & max buckets */
+	group_by->ranges[0].min = INTMAX_MIN;
+	group_by->ranges[0].max = pow(base, min);
+	group_by->ranges[group_by->num_ranges - 1].min = pow(base, max);
+	group_by->ranges[group_by->num_ranges - 1].max = INTMAX_MAX;
+
+	/* remaining buckets */
+	for (unsigned int i = 1; i < group_by->num_ranges - 1; i++) {
+		group_by->ranges[i].min = pow(base, min + (i - 1));
+		group_by->ranges[i].max = pow(base, min + i);
+	}
+
+	return TRUE;
+}
+
+static bool parse_metric_group_by_lin(pool_t pool, struct stats_metric_settings_group_by *group_by,
+				      const char *const *params, const char **error_r)
+{
+	intmax_t min, max, step;
+
+	if (!parse_metric_group_by_common("linear", params, &min, &max, &step, error_r))
+		return FALSE;
+
+	if ((min + step) > max) {
+		*error_r = t_strdup_printf("group_by 'linear' aggregate function "
+					   "min+step must be <= max (%ju must be <= %ju)",
+					   min + step, max);
+		return FALSE;
+	}
+
+	group_by->func = STATS_METRIC_GROUPBY_QUANTIZED;
+
+	/*
+	 * Allocate the bucket range array and fill it in
+	 *
+	 * The first bucket is special - it contains everything less than or
+	 * equal to 'min'.  The last bucket is also special - it contains
+	 * everything greater than 'max'.
+	 *
+	 * The second bucket begins at 'min + 1', the third bucket begins at
+	 * 'min + 1 * step + 1', the fourth at 'min + 2 * step + 1', and so on.
+	 */
+	group_by->num_ranges = (max - min) / step + 2;
+	group_by->ranges = p_new(pool, struct stats_metric_settings_bucket_range,
+				 group_by->num_ranges);
+
+	/* set up min & max buckets */
+	group_by->ranges[0].min = INTMAX_MIN;
+	group_by->ranges[0].max = min;
+	group_by->ranges[group_by->num_ranges - 1].min = max;
+	group_by->ranges[group_by->num_ranges - 1].max = INTMAX_MAX;
+
+	/* remaining buckets */
+	for (unsigned int i = 1; i < group_by->num_ranges - 1; i++) {
+		group_by->ranges[i].min = min + (i - 1) * step;
+		group_by->ranges[i].max = min + i * step;
+	}
+
+	return TRUE;
+}
+
+static bool parse_metric_group_by(struct stats_metric_settings *set,
+				  pool_t pool, const char **error_r)
+{
+	const char *const *tmp = t_strsplit_spaces(set->group_by, " ");
+
+	if (tmp[0] == NULL)
+		return TRUE;
+
+	p_array_init(&set->parsed_group_by, pool, str_array_length(tmp));
+
+	/* For each group_by field */
+	for (; *tmp != NULL; tmp++) {
+		struct stats_metric_settings_group_by group_by;
+		const char *const *params;
+
+		i_zero(&group_by);
+
+		/* <field name>:<aggregation func>... */
+		params = t_strsplit(*tmp, ":");
+
+		if (params[1] == NULL) {
+			/* <field name> - alias for <field>:discrete */
+			group_by.func = STATS_METRIC_GROUPBY_DISCRETE;
+		} else if (strcmp(params[1], "discrete") == 0) {
+			/* <field>:discrete */
+			group_by.func = STATS_METRIC_GROUPBY_DISCRETE;
+			if (params[2] != NULL) {
+				*error_r = "group_by 'discrete' aggregate function "
+					   "does not take any args";
+				return FALSE;
+			}
+		} else if (strcmp(params[1], "exponential") == 0) {
+			/* <field>:exponential:<min mag>:<max mag>:<base> */
+			if (!parse_metric_group_by_exp(pool, &group_by, &params[2], error_r))
+				return FALSE;
+		} else if (strcmp(params[1], "linear") == 0) {
+			/* <field>:linear:<min val>:<max val>:<step> */
+			if (!parse_metric_group_by_lin(pool, &group_by, &params[2], error_r))
+				return FALSE;
+		} else {
+			*error_r = t_strdup_printf("unknown aggregation function "
+						   "'%s' on field '%s'", params[1], params[0]);
+			return FALSE;
+		}
+
+		group_by.field = p_strdup(pool, params[0]);
+
+		array_push_back(&set->parsed_group_by, &group_by);
+	}
+
+	return TRUE;
+}
+
+static bool stats_metric_settings_check(void *_set, pool_t pool, const char **error_r)
 {
 	struct stats_metric_settings *set = _set;
 	const char *p;
 
-	if (set->name[0] == '\0') {
+	if (set->metric_name[0] == '\0') {
 		*error_r = "Metric name can't be empty";
 		return FALSE;
 	}
@@ -2541,6 +2761,9 @@ static bool stats_metric_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 			return FALSE;
 		}
 	}
+
+	if (!parse_metric_group_by(set, pool, error_r))
+		return FALSE;
 
 	return TRUE;
 }
@@ -2572,7 +2795,7 @@ static bool stats_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 		if (!found) {
 			*error_r = t_strdup_printf("metric %s refers to "
 						   "non-existent exporter '%s'",
-						   (*metric)->name,
+						   (*metric)->metric_name,
 						   (*metric)->exporter);
 			return FALSE;
 		}
@@ -2639,7 +2862,7 @@ const struct setting_parser_info stats_exporter_setting_parser_info = {
 #define DEF(type, name) \
 	{ type, #name, offsetof(struct stats_metric_settings, name), NULL }
 static const struct setting_define stats_metric_setting_defines[] = {
-	DEF(SET_STR, name),
+	DEF(SET_STR, metric_name),
 	DEF(SET_STR, event_name),
 	DEF(SET_STR, source_location),
 	DEF(SET_STR, categories),
@@ -2648,10 +2871,11 @@ static const struct setting_define stats_metric_setting_defines[] = {
 	{ SET_STRLIST, "filter", offsetof(struct stats_metric_settings, filter), NULL },
 	DEF(SET_STR, exporter),
 	DEF(SET_STR, exporter_include),
+	DEF(SET_STR, description),
 	SETTING_DEFINE_LIST_END
 };
 static const struct stats_metric_settings stats_metric_default_settings = {
-	.name = "",
+	.metric_name = "",
 	.event_name = "",
 	.source_location = "",
 	.categories = "",
@@ -2659,27 +2883,35 @@ static const struct stats_metric_settings stats_metric_default_settings = {
 	.exporter = "",
 	.group_by = "",
 	.exporter_include = "name hostname timestamps categories fields",
+	.description = "",
 };
 const struct setting_parser_info stats_metric_setting_parser_info = {
 	.defines = stats_metric_setting_defines,
 	.defaults = &stats_metric_default_settings,
 
-	.type_offset = offsetof(struct stats_metric_settings, name),
+	.type_offset = offsetof(struct stats_metric_settings, metric_name),
 	.struct_size = sizeof(struct stats_metric_settings),
 
 	.parent_offset = (size_t)-1,
 	.check_func = stats_metric_settings_check,
 };
+#undef DEF
+#define DEF(type, name) \
+	{ type, #name, offsetof(struct stats_settings, name), NULL }
 #undef DEFLIST_UNIQUE
 #define DEFLIST_UNIQUE(field, name, defines) \
 	{ SET_DEFLIST_UNIQUE, name, \
 	  offsetof(struct stats_settings, field), defines }
 static const struct setting_define stats_setting_defines[] = {
+	DEF(SET_STR, stats_http_rawlog_dir),
+
 	DEFLIST_UNIQUE(metrics, "metric", &stats_metric_setting_parser_info),
 	DEFLIST_UNIQUE(exporters, "event_exporter", &stats_exporter_setting_parser_info),
 	SETTING_DEFINE_LIST_END
 };
 const struct stats_settings stats_default_settings = {
+	.stats_http_rawlog_dir = "",
+
 	.metrics = ARRAY_INIT,
 	.exporters = ARRAY_INIT,
 };
@@ -4881,7 +5113,7 @@ static buffer_t dns_client_unix_listeners_buf = {
 };
 /* </settings checks> */
 struct service_settings dns_client_service_settings = {
-	.name = "dns_client",
+	.name = "dns-client",
 	.protocol = "",
 	.type = "",
 	.executable = "dns-client",
@@ -5600,7 +5832,7 @@ static const struct auth_settings auth_default_settings = {
 	.policy_server_timeout_msecs = 2000,
 	.policy_hash_mech = "sha256",
 	.policy_hash_nonce = "",
-	.policy_request_attributes = "login=%{requested_username} pwhash=%{hashed_password} remote=%{rip} device_id=%{client_id} protocol=%s",
+	.policy_request_attributes = "login=%{requested_username} pwhash=%{hashed_password} remote=%{rip} device_id=%{client_id} protocol=%s session_id=%{session}",
 	.policy_reject_on_fail = FALSE,
 	.policy_check_before_auth = TRUE,
 	.policy_check_after_auth = TRUE,
