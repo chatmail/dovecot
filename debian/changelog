@@ -773,7 +773,7 @@ dovecot (1:2.1.7-6) unstable; urgency=high
   * WARNING: in order to get this package into wheezy some functionality
     from the previous release had to be removed.  Namely:
     - TCP Wrappers support
-    - Hurd compatability support
+    - Hurd compatibility support
     - Triggers
     All this will be coming back in the next version but for now, if you need
     any of it, stick with -5.
@@ -1257,7 +1257,7 @@ dovecot (1:1.2.7-1) unstable; urgency=low
 
 dovecot (1:1.2.6-1) unstable; urgency=low
 
-  * New upstream relese.
+  * New upstream release.
   * debian/patches/v1.2.5-exec-mail_fix.dpatch: removed, merged upstream.
 
  -- Fabio Tranchitella <kobold@debian.org>  Mon, 12 Oct 2009 06:56:55 +0000
@@ -2275,7 +2275,7 @@ dovecot (0.99.13-1) unstable; urgency=high
 dovecot (0.99.12-1) unstable; urgency=low
 
   * New upstream version.  (Yes I know 0.99.13 is just around the corner.)
-  * SASL is reenabled so this bug ("Dovecot seems not to require SASL")
+  * SASL is re-enabled so this bug ("Dovecot seems not to require SASL")
     is no longer valid (Closes: #272093)
   * Configuration files moved to /etc/dovecot (Closes: #276183)
   * Permissions on /var/run/dovecot and /var/run/dovecot/login no longer
@@ -2429,10 +2429,10 @@ dovecot (0.99.10.4-2) unstable; urgency=low
 dovecot (0.99.10.4-1) unstable; urgency=low
 
   * New upstream version
-    + This fixes the curruption of .subscriptions files wth folders in
+    + This fixes the corruption of .subscriptions files with folders in
       maildir format. (Closes: #222272)
   * Some extra information included in dovecot-common.README.Debian.
-    (Closes: #221106)  There should probaly be more so if you have ideas
+    (Closes: #221106)  There should probably be more so if you have ideas
     let me know.
 
  -- Jaldhar H. Vyas <jaldhar@debian.org>  Mon,  1 Dec 2003 23:41:00 -0500
@@ -2551,7 +2551,7 @@ dovecot (0.99.9.1-1) unstable; urgency=low
 dovecot (0.99.9-1) unstable; urgency=low
 
   * New upstream release.
-  * The IMAP and POP3 servers have been split into seperate package so you
+  * The IMAP and POP3 servers have been split into separate package so you
     don't have to install both.  There is also a dovecot-common package
     for the parts they share.  The dovecot package is now a dummy just for
     transitioning to this new scheme.  (Closes: #187826)
@@ -2587,7 +2587,7 @@ dovecot (0.99.8.1-3) unstable; urgency=low
 
 dovecot (0.99.8.1-2) unstable; urgency=low
 
-  * Make a seperate check for /etc/ssl/private/imapd.pem in case we don't
+  * Make a separate check for /etc/ssl/private/imapd.pem in case we don't
     have it. (Closes: #185334)
   * Move check for dovecot user and creation code to postinsts' configure
     phase. (Closes: #185333)

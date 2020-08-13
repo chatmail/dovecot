@@ -1,0 +1,3 @@
+# ignore deprecated and nowadays default feature
+# patch originated from Ubuntu so leave it for now
+dovecot source: unknown-runtime-tests-feature no-build-needed paragraph starting at line 12
