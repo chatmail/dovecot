@@ -1,0 +1,2 @@
+# The corresponding binary is Debian only
+dovecot source: maintainer-manual-page debian/maildirmake.dovecot.1
