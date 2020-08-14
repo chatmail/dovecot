@@ -1,3 +1,16 @@
+dovecot (1:2.2.27-3+deb9u6) stretch-security; urgency=high
+
+  * Non-maintainer upload by the LTS Team.
+  * Fix CVE-2020-12100 - Receiving mail with deeply nested MIME parts leads to
+    resource exhaustion as Dovecot attempts to parse it. (Closes: #968302)
+  * CVE-2020-12673 - Dovecot's NTLM implementation does not correctly check
+    message buffer size, which leads to reading past allocation which can lead
+    to crash.
+  * CVE-2020-12674 - Dovecot's RPA mechanism implementation accepts zero-length
+    message, which leads to assert-crash later on.
+
+ -- Roberto C. Sanchez <roberto@debian.org>  Fri, 14 Aug 2020 12:28:38 -0400
+
 dovecot (1:2.2.27-3+deb9u5) stretch-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
