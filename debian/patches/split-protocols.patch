@@ -4,6 +4,7 @@ Updated: Mon, 25 Nov 2013 20:11:59 -0500
 Subject: split-protocols
 Description: Set default protocols value as empty and enable each
  protocol in its own configuration file
+Forwarded: no (Debian-specific)
 ---
  doc/example-config/dovecot.conf |    4 ++--
  src/config/all-settings.c       |    2 +-
