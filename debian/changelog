@@ -1,5 +1,6 @@
 dovecot (1:2.3.4.1-5+deb10u3) buster-security; urgency=high
 
+  * Stable security update (Closes: #968302)
   * Fix CVE-2020-12100 - Receiving mail with deeply nested MIME parts leads to
     resource exhaustion as Dovecot attempts to parse it.
   * CVE-2020-12673 - Dovecot's NTLM implementation does not correctly check
