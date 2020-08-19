@@ -12,3 +12,5 @@ Correct-misspellings.patch
 fix-compiler-warnings.patch
 systemd-sd-notify-support.patch
 test-backtrace.patch
+test-mech.c-fix-32-bit-issues.patch
+doveadm-director.1-drop-acute-accent.patch
