@@ -1,4 +1,4 @@
-dovecot (1:2.3.11.3+dfsg1-2) UNRELEASED; urgency=medium
+dovecot (1:2.3.11.3+dfsg1-2) unstable; urgency=medium
 
   [ Christian Göttsche ]
   * [44770f6] Add patch for 32bit compiler warnings
@@ -11,7 +11,7 @@ dovecot (1:2.3.11.3+dfsg1-2) UNRELEASED; urgency=medium
   * [28f6425] Drop acute accent in man page
   * [8c15850] Add patch allowing GSSAPI containing NULL
 
- -- Noah Meyerhans <noahm@debian.org>  Wed, 19 Aug 2020 09:43:45 -0700
+ -- Noah Meyerhans <noahm@debian.org>  Wed, 19 Aug 2020 12:06:07 -0700
 
 dovecot (1:2.3.11.3+dfsg1-1) unstable; urgency=high
 
