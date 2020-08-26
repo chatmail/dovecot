@@ -1,3 +1,10 @@
+dovecot (1:2.3.4.1-5+deb10u4) buster; urgency=medium
+
+  * Import upstream fix for dsync sieve filter sync regression
+    (Closes: #930919)
+
+ -- Noah Meyerhans <noahm@debian.org>  Wed, 26 Aug 2020 13:54:40 -0700
+
 dovecot (1:2.3.4.1-5+deb10u3) buster-security; urgency=high
 
   * Stable security update (Closes: #968302)
