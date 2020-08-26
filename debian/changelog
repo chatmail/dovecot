@@ -2,6 +2,7 @@ dovecot (1:2.3.4.1-5+deb10u4) buster; urgency=medium
 
   * Import upstream fix for dsync sieve filter sync regression
     (Closes: #930919)
+  * userdb-passwd: Fix getpwent errno handling (Closes: #928492)
 
  -- Noah Meyerhans <noahm@debian.org>  Wed, 26 Aug 2020 13:54:40 -0700
 

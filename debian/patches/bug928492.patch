@@ -1,0 +1,46 @@
+From 414a7db1d15e57433dfc222bd6bf253c83166408 Mon Sep 17 00:00:00 2001
+From: Aki Tuomi <aki.tuomi@dovecot.fi>
+Date: Fri, 5 Oct 2018 10:18:35 +0300
+Subject: [PATCH] userdb-passwd: Fix getpwent errno handling
+
+In https://bugs.gentoo.org/667118 Reuben Farrelly
+noticed that running
+    # doveadm user '*'
+causes auth daemon to generate errors like:
+    auth-worker(3585): Error: getpwent() failed: Invalid argument
+
+This happens because on successful call getpwent()
+now sets errno=EINVAL starting from glibc-2.28.
+See https://sourceware.org/PR16004 for details.
+
+The fix is to reset 'errno' before 'getpwent()' is called.
+
+Reported-by: Reuben Farrelly
+Bug: https://bugs.gentoo.org/667118
+Bug: https://sourceware.org/PR16004
+Original-Author: Sergei Trofimovich <slyfox@gentoo.org>
+---
+ src/auth/userdb-passwd.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/auth/userdb-passwd.c b/src/auth/userdb-passwd.c
+index ee8edf04ee..708762b84a 100644
+--- a/src/auth/userdb-passwd.c
++++ b/src/auth/userdb-passwd.c
+@@ -172,12 +172,16 @@ static void passwd_iterate_next(struct userdb_iterate_context *_ctx)
+ 		return;
+ 	}
+ 
++	/* reset errno since it might have been set when we got here */
+ 	errno = 0;
+ 	while ((pw = getpwent()) != NULL) {
+ 		if (passwd_iterate_want_pw(pw, set)) {
+ 			_ctx->callback(pw->pw_name, _ctx->context);
+ 			return;
+ 		}
++		/* getpwent might set errno to something even if it
++		   returns non-NULL. */
++		errno = 0;
+ 	}
+ 	if (errno != 0) {
+ 		i_error("getpwent() failed: %m");
