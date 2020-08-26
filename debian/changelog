@@ -239,7 +239,7 @@ dovecot (1:2.2.34-2) unstable; urgency=high
 
 dovecot (1:2.2.34-1) unstable; urgency=medium
 
-  * [f53dc9a] New upstream version 2.2.34
+  * [f53dc9a] New upstream version 2.2.34 (Closes: #921529)
     Fixes the following security issues:
      + CVE-2017-15130: TLS SNI config lookups may lead to excessive memory
        usage (Closes: #891820)
