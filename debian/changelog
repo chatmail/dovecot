@@ -52,7 +52,7 @@ dovecot (1:2.3.10.1+dfsg1-1) unstable; urgency=medium
     - CVE-2020-10957
     - CVE-2020-10958
     - CVE-2020-10967
-    (Closes: #960963)
+    (Closes: #960963, #930919)
   * Refresh patches
   * Strip non-DFSG-compliant docs from .orig archives
   * Incorporate a number of improvements to debian/ metadata contributed by
