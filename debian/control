@@ -29,6 +29,7 @@ Build-Depends: debhelper-compat (= 13),
                libssl-dev,
                libstemmer-dev,
                libwrap0-dev,
+               libzstd-dev,
                lsb-release,
                pkg-config,
                zlib1g-dev
