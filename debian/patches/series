@@ -52,3 +52,7 @@ CVE-2020-12100/0016-lib-mail-Fix-handling-trailing-in-MIME-boundaries.patch
 CVE-2020-12673.patch
 CVE-2020-12674/0001-auth-mech-rpa-Fail-on-zero-len-buffer.patch
 bug928492.patch
+CVE-2020-24386/0001-imap-Escape-tag-when-sending-it-to-imap-hibernate-pr.patch
+CVE-2020-24386/0002-imap-Add-unit-test-for-imap-client-hibernate.patch
+CVE-2020-25275/0001-lib-mail-message-parser-Fix-assert-crash-when-enforc.patch
+CVE-2020-25275/0002-lib-imap-Don-t-generate-invalid-BODYSTRUCTURE-when-r.patch

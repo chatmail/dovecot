@@ -1,3 +1,15 @@
+dovecot (1:2.3.4.1-5+deb10u5) buster-security; urgency=high
+
+  * Import upstream fix for security issues:
+    - CVE-2020-24386 - When imap hibernation is active, an attacker can cause
+      Dovecot to discover file system directory structure and access other
+      users' emails using specially crafted command. The attacker must have
+      valid credentials to access the mail server.
+    - CVE-2020-25275 -  Mail delivery / parsing crashed when the 10 000th MIME
+      part was message/rfc822 (or if parent was multipart/digest).
+
+ -- Noah Meyerhans <noahm@debian.org>  Mon, 28 Dec 2020 15:18:55 -0800
+
 dovecot (1:2.3.4.1-5+deb10u4) buster; urgency=medium
 
   * Import upstream fix for dsync sieve filter sync regression
