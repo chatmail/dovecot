@@ -36,7 +36,6 @@ License: Beerware
  this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
 
 Files: src/lib-otp/*
-       src/lib-ntlm/*
 Copyright: (c) 2004-2006 Andrey Panin <pazke@donpac.ru>
            (c) Copyright 1997-2005 Simon Tatham
 License: MIT
