@@ -1065,7 +1065,7 @@ _sieve_result_implicit_keep(struct sieve_result *result, bool rollback)
 	/* Finish keep action */
 	if (act_keep.def->finish != NULL) {
 		sieve_result_prepare_action_env(result, &act_keep);
-		act_keep.def->finish(aenv, tr_context, status);
+		act_keep.def->finish(aenv, TRUE, tr_context, status);
 	}
 
 	sieve_result_finish_action_env(result);
@@ -1409,10 +1409,10 @@ sieve_result_transaction_commit_or_rollback(struct sieve_result *result,
 }
 
 static void
-sieve_result_transaction_finish(struct sieve_result *result,
-				struct sieve_result_action *first, int status)
+sieve_result_transaction_finish(struct sieve_result *result, bool last,
+				int status)
 {
-	struct sieve_result_action *rac = first;
+	struct sieve_result_action *rac = result->first_action;
 
 	while (rac != NULL) {
 		struct sieve_action *act = &rac->action;
@@ -1425,7 +1425,7 @@ sieve_result_transaction_finish(struct sieve_result *result,
 
 		if (act->def->finish != NULL) {
 			sieve_result_prepare_action_env(result, act);
-			act->def->finish(&result->action_env,
+			act->def->finish(&result->action_env, last,
 					 rac->tr_context, status);
 		}
 
@@ -1434,7 +1434,7 @@ sieve_result_transaction_finish(struct sieve_result *result,
 	sieve_result_finish_action_env(result);
 }
 
-int sieve_result_execute(struct sieve_result *result, bool *keep,
+int sieve_result_execute(struct sieve_result *result, bool last, bool *keep,
 			 struct sieve_error_handler *ehandler)
 {
 	int status = SIEVE_EXEC_OK, result_status;
@@ -1503,10 +1503,26 @@ int sieve_result_execute(struct sieve_result *result, bool *keep,
 
 	/* Finish execution */
 
-	sieve_result_transaction_finish(result, first_action, status);
+	sieve_result_transaction_finish(result, last, status);
 
 	result->action_env.ehandler = NULL;
 	return result_status;
+}
+
+void sieve_result_finish(struct sieve_result *result,
+			 struct sieve_error_handler *ehandler, bool success)
+{
+	int status = (success ? SIEVE_EXEC_OK : SIEVE_EXEC_FAILURE);
+
+	/* Prepare environment */
+
+	_sieve_result_prepare_execution(result, ehandler);
+
+	/* Finish execution */
+
+	sieve_result_transaction_finish(result, TRUE, status);
+
+	result->action_env.ehandler = NULL;
 }
 
 /*

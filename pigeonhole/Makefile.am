@@ -138,6 +138,7 @@ test_cases = \
 	tests/extensions/enotify/mailto.svtest \
 	tests/extensions/environment/basic.svtest \
 	tests/extensions/environment/rfc.svtest \
+	tests/extensions/mailbox/errors.svtest \
 	tests/extensions/mailbox/execute.svtest \
 	tests/extensions/date/basic.svtest \
 	tests/extensions/date/date-parts.svtest \
@@ -191,6 +192,13 @@ test_cases = \
 $(test_cases):
 	@$(TEST_BIN) $(top_srcdir)/$@
 
+failure_test_cases = \
+	tests/failures/fuzz1.svtest \
+	tests/failures/fuzz2.svtest
+
+$(failure_test_cases):
+	@$(TEST_BIN) -F $(top_srcdir)/$@
+
 TEST_EXTPROGRAMS_BIN = $(TEST_BIN) \
 	-P src/plugins/sieve-extprograms/.libs/sieve_extprograms
 
@@ -209,8 +217,8 @@ extprograms_test_cases = \
 $(extprograms_test_cases):
 	@$(TEST_EXTPROGRAMS_BIN) 	$(top_srcdir)/$@
 
-.PHONY: test test-plugins $(test_cases) $(extprograms_test_cases)
-test: all-am $(test_cases)
+.PHONY: test test-plugins $(test_cases) $(failure_test_cases) $(extprograms_test_cases)
+test: all-am $(test_cases) $(failure_test_cases)
 test-plugins: all-am $(extprograms_test_cases)
 
 check: check-am test

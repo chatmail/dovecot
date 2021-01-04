@@ -73,11 +73,11 @@ void buffer_insert_zero(buffer_t *buf, size_t pos, size_t data_size);
 
 /* Copy data from buffer to another. The buffers may be same in which case
    it's internal copying, possibly with overlapping positions (ie. memmove()
-   like functionality). copy_size may be set to (size_t)-1 to copy the rest of
+   like functionality). copy_size may be set to SIZE_MAX to copy the rest of
    the used data in buffer. */
 void buffer_copy(buffer_t *dest, size_t dest_pos,
 		 const buffer_t *src, size_t src_pos, size_t copy_size);
-/* Append data to buffer from another. copy_size may be set to (size_t)-1 to
+/* Append data to buffer from another. copy_size may be set to SIZE_MAX to
    copy the rest of the used data in buffer. */
 void buffer_append_buf(buffer_t *dest, const buffer_t *src,
 		       size_t src_pos, size_t copy_size);
@@ -161,5 +161,29 @@ void buffer_verify_pool(buffer_t *buf);
 
 */
 void buffer_truncate_rshift_bits(buffer_t *buf, size_t bits);
+
+enum buffer_append_result {
+	/* Stream reached EOF successfully */
+	BUFFER_APPEND_OK = 0,
+	/* Error was encountered */
+	BUFFER_APPEND_READ_ERROR = -1,
+	/* Stream is non-blocking, call again later */
+	BUFFER_APPEND_READ_MORE = -2,
+	/* Stream was consumed up to max_read_size */
+	BUFFER_APPEND_READ_MAX_SIZE = -3,
+};
+
+/* Attempt to fully read a stream. Since this can be a network stream, it
+   can return BUFFER_APPEND_READ_MORE, which means you need to call this
+   function again. It is caller's responsibility to keep track of
+   max_read_size in case more reading is needed. */
+enum buffer_append_result
+buffer_append_full_istream(buffer_t *buf, struct istream *is, size_t max_read_size,
+			   const char **error_r);
+
+/* Attempt to fully read a file. BUFFER_APPEND_READ_MORE is never returned. */
+enum buffer_append_result
+buffer_append_full_file(buffer_t *buf, const char *file, size_t max_read_size,
+			const char **error_r);
 
 #endif

@@ -63,14 +63,14 @@ struct client_dict_cmd {
 	} api_callback;
 };
 
-struct dict_connection {
+struct dict_client_connection {
 	struct connection conn;
 	struct client_dict *dict;
 };
 
 struct client_dict {
 	struct dict dict;
-	struct dict_connection conn;
+	struct dict_client_connection conn;
 
 	char *uri, *username;
 	enum dict_data_type value_type;
@@ -100,6 +100,7 @@ struct client_dict_iterate_context {
 	char *error;
 	const char **paths;
 	enum dict_iterate_flags flags;
+	int refcount;
 
 	pool_t results_pool;
 	ARRAY(struct client_dict_iter_result) results;
@@ -444,7 +445,8 @@ static void client_dict_cmd_backgrounded(struct client_dict *dict)
 }
 
 static int
-dict_conn_assign_next_async_id(struct dict_connection *conn, const char *line)
+dict_conn_assign_next_async_id(struct dict_client_connection *conn,
+			       const char *line)
 {
 	struct client_dict_cmd *const *cmds;
 	unsigned int i, count, async_id;
@@ -470,7 +472,7 @@ dict_conn_assign_next_async_id(struct dict_connection *conn, const char *line)
 	return -1;
 }
 
-static int dict_conn_find_async_id(struct dict_connection *conn,
+static int dict_conn_find_async_id(struct dict_client_connection *conn,
 				   const char *async_arg,
 				   const char *line, unsigned int *idx_r)
 {
@@ -499,7 +501,8 @@ static int dict_conn_find_async_id(struct dict_connection *conn,
 
 static int dict_conn_input_line(struct connection *_conn, const char *line)
 {
-	struct dict_connection *conn = (struct dict_connection *)_conn;
+	struct dict_client_connection *conn =
+		(struct dict_client_connection *)_conn;
 	struct client_dict *dict = conn->dict;
 	struct client_dict_cmd *const *cmds;
 	const char *const *args;
@@ -674,14 +677,15 @@ static int client_dict_reconnect(struct client_dict *dict, const char *reason,
 
 static void dict_conn_destroy(struct connection *_conn)
 {
-	struct dict_connection *conn = (struct dict_connection *)_conn;
+	struct dict_client_connection *conn =
+		(struct dict_client_connection *)_conn;
 
 	client_dict_disconnect(conn->dict, connection_disconnect_reason(_conn));
 }
 
 static const struct connection_settings dict_conn_set = {
-	.input_max_size = (size_t)-1,
-	.output_max_size = (size_t)-1,
+	.input_max_size = SIZE_MAX,
+	.output_max_size = SIZE_MAX,
 	.unix_client_connect_msecs = 1000,
 	.client = TRUE
 };
@@ -1020,9 +1024,10 @@ static int client_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
 	i_unreached();
 }
 
-static void client_dict_iterate_free(struct client_dict_iterate_context *ctx)
+static void client_dict_iterate_unref(struct client_dict_iterate_context *ctx)
 {
-	if (!ctx->deinit || !ctx->finished)
+	i_assert(ctx->refcount > 0);
+	if (--ctx->refcount > 0)
 		return;
 	i_free(ctx->error);
 	i_free(ctx);
@@ -1089,9 +1094,10 @@ client_dict_iter_async_callback(struct client_dict_cmd *cmd,
 	} else switch (reply) {
 	case DICT_PROTOCOL_REPLY_ITER_FINISHED:
 		/* end of iteration */
+		i_assert(!ctx->finished);
 		ctx->finished = TRUE;
 		client_dict_iter_api_callback(ctx, cmd, extra_args);
-		client_dict_iterate_free(ctx);
+		client_dict_iterate_unref(ctx);
 		return;
 	case DICT_PROTOCOL_REPLY_OK:
 		/* key \t value */
@@ -1115,9 +1121,10 @@ client_dict_iter_async_callback(struct client_dict_cmd *cmd,
 	if (error != NULL) {
 		if (ctx->error == NULL)
 			ctx->error = i_strdup(error);
+		i_assert(!ctx->finished);
 		ctx->finished = TRUE;
 		client_dict_iter_api_callback(ctx, cmd, extra_args);
-		client_dict_iterate_free(ctx);
+		client_dict_iterate_unref(ctx);
 		return;
 	}
 	cmd->unfinished = TRUE;
@@ -1145,6 +1152,7 @@ client_dict_iterate_init(struct dict *_dict, const char *const *paths,
 	ctx->results_pool = pool_alloconly_create("client dict iteration", 512);
 	ctx->flags = flags;
 	ctx->paths = p_strarray_dup(system_pool, paths);
+	ctx->refcount = 1;
 	i_array_init(&ctx->results, 64);
 	return &ctx->ctx;
 }
@@ -1171,6 +1179,7 @@ client_dict_iterate_cmd_send(struct client_dict_iterate_context *ctx)
 	cmd->callback = client_dict_iter_async_callback;
 	cmd->retry_errors = TRUE;
 
+	ctx->refcount++;
 	client_dict_cmd_send(dict, &cmd, NULL);
 }
 
@@ -1221,13 +1230,14 @@ static int client_dict_iterate_deinit(struct dict_iterate_context *_ctx,
 		(struct client_dict_iterate_context *)_ctx;
 	int ret = ctx->error != NULL ? -1 : 0;
 
+	i_assert(!ctx->deinit);
 	ctx->deinit = TRUE;
 
 	*error_r = t_strdup(ctx->error);
 	array_free(&ctx->results);
 	pool_unref(&ctx->results_pool);
 	i_free(ctx->paths);
-	client_dict_iterate_free(ctx);
+	client_dict_iterate_unref(ctx);
 
 	client_dict_add_timeout(dict);
 	return ret;

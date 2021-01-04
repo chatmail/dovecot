@@ -40,7 +40,7 @@ client_handshake_filter(const char *const *args, struct event_filter **filter_r,
 	}
 
 	*filter_r = event_filter_create();
-	if (!event_filter_import_unescaped(*filter_r, args+1, error_r)) {
+	if (!event_filter_import(*filter_r, t_str_tabunescape(args[1]), error_r)) {
 		event_filter_unref(filter_r);
 		return -1;
 	}
@@ -114,7 +114,7 @@ static void stats_client_destroy(struct connection *conn)
 
 	/* after reconnection the IDs need to be re-sent */
 	for (event = events_get_head(); event != NULL; event = event->next)
-		event->id_sent_to_stats = FALSE;
+		event->sent_to_stats_id = 0;
 
 	client->handshaked = FALSE;
 	connection_disconnect(conn);
@@ -148,8 +148,8 @@ static const struct connection_settings stats_client_set = {
 	.major_version = 3,
 	.minor_version = 0,
 
-	.input_max_size = (size_t)-1,
-	.output_max_size = (size_t)-1,
+	.input_max_size = SIZE_MAX,
+	.output_max_size = SIZE_MAX,
 	.client = TRUE
 };
 
@@ -164,23 +164,30 @@ stats_event_write(struct event *event, const struct failure_context *ctx,
 {
 	struct event *merged_event;
 	struct event *parent_event;
+	bool update = FALSE;
 
 	merged_event = begin ? event_ref(event) : event_minimize(event);
 	parent_event = merged_event->parent;
 
 	if (parent_event != NULL) {
-		if (!parent_event->id_sent_to_stats)
+		if (parent_event->sent_to_stats_id !=
+		    parent_event->change_id)
 			stats_event_write(parent_event, ctx, str, TRUE);
+		i_assert(parent_event->sent_to_stats_id != 0);
 	}
 	if (begin) {
-		str_printfa(str, "BEGIN\t%"PRIu64"\t", event->id);
-		event->id_sent_to_stats = TRUE;
+		i_assert(event == merged_event);
+		update = (event->sent_to_stats_id != 0);
+		const char *cmd = !update ? "BEGIN" : "UPDATE";
+		str_printfa(str, "%s\t%"PRIu64"\t", cmd, event->id);
+		event->sent_to_stats_id = event->change_id;
 	} else {
 		str_append(str, "EVENT\t");
 	}
-	str_printfa(str, "%"PRIu64"\t%u\t",
-		    parent_event == NULL ? 0 : parent_event->id,
-		    ctx->type);
+	str_printfa(str, "%"PRIu64"\t",
+		    parent_event == NULL ? 0 : parent_event->id);
+	if (!update)
+		str_printfa(str, "%u\t", ctx->type);
 	event_export(merged_event, str);
 	str_append_c(str, '\n');
 	event_unref(&merged_event);
@@ -207,7 +214,7 @@ stats_client_send_event(struct stats_client *client, struct event *event,
 static void
 stats_client_free_event(struct stats_client *client, struct event *event)
 {
-	if (!event->id_sent_to_stats)
+	if (event->sent_to_stats_id == 0)
 		return;
 	o_stream_nsend_str(client->conn.output,
 			   t_strdup_printf("END\t%"PRIu64"\n", event->id));

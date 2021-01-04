@@ -19,6 +19,7 @@
 #endif
 #include "connection.h"
 #include "test-common.h"
+#include "test-subprocess.h"
 #include "smtp-server.h"
 #include "smtp-client.h"
 #include "smtp-client-connection.h"
@@ -26,13 +27,12 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
-#include <signal.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
 
 #define CLIENT_PROGRESS_TIMEOUT     30
+#define SERVER_KILL_TIMEOUT_SECS    20
 #define MAX_PARALLEL_PENDING        200
 
 static bool debug = FALSE;
@@ -52,7 +52,8 @@ static enum test_ssl_mode test_ssl_mode = TEST_SSL_MODE_NONE;
 static struct ip_addr bind_ip;
 static in_port_t bind_port = 0;
 static int fd_listen = -1;
-static pid_t server_pid = (pid_t)-1;
+
+static void main_deinit(void);
 
 /*
  * Test files
@@ -83,7 +84,7 @@ static void test_files_read_dir(const char *path)
 			break;
 #endif
 		errno = 0;
-		if ((dp=readdir(dirp)) == NULL)
+		if ((dp = readdir(dirp)) == NULL)
 			break;
 		if (*dp->d_name == '.')
 			continue;
@@ -113,8 +114,8 @@ static void test_files_read_dir(const char *path)
 static void test_files_init(void)
 {
 	/* initialize file array */
-	files_pool = pool_alloconly_create
-		(MEMPOOL_GROWING"smtp_server_request", 4096);
+	files_pool = pool_alloconly_create(
+		MEMPOOL_GROWING"smtp_server_request", 4096);
 	p_array_init(&files, files_pool, 512);
 
 	/* obtain all filenames */
@@ -126,8 +127,7 @@ static void test_files_deinit(void)
 	pool_unref(&files_pool);
 }
 
-static struct istream *
-test_file_open(const char *path)
+static struct istream *test_file_open(const char *path)
 {
 	struct istream *file;
 	int fd;
@@ -190,7 +190,7 @@ client_transaction_read_more(struct client_transaction *ctrans)
 	}
 
 	/* read payload */
-	while ((ret=i_stream_read_more(payload, &pdata, &psize)) > 0) {
+	while ((ret = i_stream_read_more(payload, &pdata, &psize)) > 0) {
 		if (debug) {
 			i_debug("test server: "
 				"got data for [%s] (size=%d)",
@@ -198,8 +198,9 @@ client_transaction_read_more(struct client_transaction *ctrans)
 		}
 		/* compare with file on disk */
 		pleft = psize;
-		while ((ret=i_stream_read_more
-			(ctrans->file, &fdata, &fsize)) > 0 && pleft > 0) {
+		while ((ret = i_stream_read_more(ctrans->file,
+						 &fdata, &fsize)) > 0 &&
+		       pleft > 0) {
 			fsize = (fsize > pleft ? pleft : fsize);
 			if (memcmp(pdata, fdata, fsize) != 0) {
 				i_fatal("test server: "
@@ -235,7 +236,8 @@ client_transaction_read_more(struct client_transaction *ctrans)
 		i_fatal("test server: "
 			"failed to read transaction payload: %s",
 			i_stream_get_error(payload));
-	} if (i_stream_have_bytes_left(ctrans->file)) {
+	}
+	if (i_stream_have_bytes_left(ctrans->file)) {
 		if (i_stream_read_more(ctrans->file, &fdata, &fsize) <= 0)
 			fsize = 0;
 		i_fatal("test server: "
@@ -261,7 +263,7 @@ client_transaction_read_more(struct client_transaction *ctrans)
 
 static void
 client_transaction_handle_payload(struct client_transaction *ctrans,
-	const char *path, struct istream *data_input)
+				  const char *path, struct istream *data_input)
 {
 	struct smtp_server_transaction *trans = ctrans->trans;
 	struct istream *fstream;
@@ -291,8 +293,8 @@ client_transaction_handle_payload(struct client_transaction *ctrans,
 
 static struct client_transaction *
 client_transaction_init(struct client *client,
-	struct smtp_server_cmd_ctx *data_cmd,
-	struct smtp_server_transaction *trans)
+			struct smtp_server_cmd_ctx *data_cmd,
+			struct smtp_server_transaction *trans)
 {
 	struct client_transaction *ctrans;
 	pool_t pool = trans->pool;
@@ -305,8 +307,7 @@ client_transaction_init(struct client *client,
 	return ctrans;
 }
 
-static void
-client_transaction_deinit(struct client_transaction **_ctrans)
+static void client_transaction_deinit(struct client_transaction **_ctrans)
 {
 	struct client_transaction *ctrans = *_ctrans;
 
@@ -318,7 +319,7 @@ client_transaction_deinit(struct client_transaction **_ctrans)
 
 static void
 test_server_conn_trans_free(void *context ATTR_UNUSED,
-	struct smtp_server_transaction *trans)
+			    struct smtp_server_transaction *trans)
 {
 	struct client_transaction *ctrans =
 		(struct client_transaction *)trans->context;
@@ -327,8 +328,8 @@ test_server_conn_trans_free(void *context ATTR_UNUSED,
 
 static int
 test_server_conn_cmd_rcpt(void *conn_ctx ATTR_UNUSED,
-	struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
-	struct smtp_server_recipient *rcpt)
+			  struct smtp_server_cmd_ctx *cmd ATTR_UNUSED,
+			  struct smtp_server_recipient *rcpt)
 {
 	if (debug) {
 		i_debug("test server: RCPT TO:%s",
@@ -339,10 +340,9 @@ test_server_conn_cmd_rcpt(void *conn_ctx ATTR_UNUSED,
 }
 
 static int
-test_server_conn_cmd_data_begin(void *conn_ctx,
-	struct smtp_server_cmd_ctx *cmd,
-	struct smtp_server_transaction *trans,
-	struct istream *data_input)
+test_server_conn_cmd_data_begin(void *conn_ctx, struct smtp_server_cmd_ctx *cmd,
+				struct smtp_server_transaction *trans,
+				struct istream *data_input)
 {
 	struct client *client = (struct client *)conn_ctx;
 	const char *fpath = trans->params.envid;
@@ -350,24 +350,22 @@ test_server_conn_cmd_data_begin(void *conn_ctx,
 
 	i_assert(fpath != NULL);
 
-	if (debug) {
+	if (debug)
 		i_debug("test server: DATA (file path = %s)", fpath);
-	}
 
 	ctrans = client_transaction_init(client, cmd, trans);
-	client_transaction_handle_payload
-		(ctrans, fpath, data_input);
+	client_transaction_handle_payload(ctrans, fpath, data_input);
 	trans->context = ctrans;
 	return 0;
 }
 
 static int
 test_server_conn_cmd_data_continue(void *conn_ctx ATTR_UNUSED,
-	struct smtp_server_cmd_ctx *cmd,
-	struct smtp_server_transaction *trans)
+				   struct smtp_server_cmd_ctx *cmd,
+				   struct smtp_server_transaction *trans)
 {
 	struct client_transaction *ctrans =
-		(	struct client_transaction *)trans->context;
+		(struct client_transaction *)trans->context;
 
 	if (debug)
 		i_debug("test server: DATA continue");
@@ -379,8 +377,7 @@ test_server_conn_cmd_data_continue(void *conn_ctx ATTR_UNUSED,
 
 /* client connection */
 
-static void
-test_server_connection_destroy(void *context);
+static void test_server_connection_destroy(void *context);
 
 static const struct smtp_server_callbacks server_callbacks =
 {
@@ -390,7 +387,7 @@ static const struct smtp_server_callbacks server_callbacks =
 
 	.conn_trans_free = test_server_conn_trans_free,
 
-	.conn_destroy = test_server_connection_destroy
+	.conn_destroy = test_server_connection_destroy,
 };
 
 static void client_init(int fd)
@@ -404,8 +401,9 @@ static void client_init(int fd)
 	client = p_new(pool, struct client, 1);
 	client->pool = pool;
 
-	client->smtp_conn = smtp_server_connection_create(smtp_server,
-		fd, fd, NULL, 0, (test_ssl_mode == TEST_SSL_MODE_IMMEDIATE),
+	client->smtp_conn = smtp_server_connection_create(
+		smtp_server, fd, fd, NULL, 0,
+		(test_ssl_mode == TEST_SSL_MODE_IMMEDIATE),
 		NULL, &server_callbacks, client);
 	smtp_server_connection_start(client->smtp_conn);
 	DLLIST_PREPEND(&clients, client);
@@ -419,13 +417,14 @@ static void client_deinit(struct client **_client)
 
 	DLLIST_REMOVE(&clients, client);
 
-	if (client->smtp_conn != NULL)
-		smtp_server_connection_terminate(&client->smtp_conn, NULL, "deinit");
+	if (client->smtp_conn != NULL) {
+		smtp_server_connection_terminate(&client->smtp_conn,
+						 NULL, "deinit");
+	}
 	pool_unref(&client->pool);
 }
 
-static void
-test_server_connection_destroy(void *context)
+static void test_server_connection_destroy(void *context)
 {
 	struct client *client = context;
 
@@ -439,7 +438,7 @@ static void client_accept(void *context ATTR_UNUSED)
 
 	for (;;) {
 		/* accept new client */
-		if ((fd=net_accept(fd_listen, NULL, NULL)) < 0) {
+		if ((fd = net_accept(fd_listen, NULL, NULL)) < 0) {
 			if (errno == EAGAIN)
 				break;
 			if (errno == ECONNABORTED)
@@ -453,12 +452,10 @@ static void client_accept(void *context ATTR_UNUSED)
 
 /* */
 
-static void
-test_server_init(const struct smtp_server_settings *server_set)
+static void test_server_init(const struct smtp_server_settings *server_set)
 {
 	/* open server socket */
-	io_listen = io_add(fd_listen,
-		IO_READ, client_accept, NULL);
+	io_listen = io_add(fd_listen, IO_READ, client_accept, NULL);
 
 	smtp_server = smtp_server_init(server_set);
 }
@@ -498,8 +495,7 @@ static unsigned int client_files_first, client_files_last;
 static struct timeout *client_to = NULL;
 struct timeout *to_client_progress = NULL;
 
-static struct test_client_connection *
-test_client_connection_get(void)
+static struct test_client_connection *test_client_connection_get(void)
 {
 	unsigned int i;
 	enum smtp_client_connection_ssl_mode ssl_mode;
@@ -533,8 +529,7 @@ test_client_connection_get(void)
 	return &test_conns[i];
 }
 
-static struct test_client_transaction *
-test_client_transaction_new(void)
+static struct test_client_transaction *test_client_transaction_new(void)
 {
 	struct test_client_transaction *tctrans;
 
@@ -557,8 +552,7 @@ test_client_transaction_destroy(struct test_client_transaction *tctrans)
 
 static void test_client_continue(void *dummy);
 
-static void
-test_client_finished(unsigned int files_idx)
+static void test_client_finished(unsigned int files_idx)
 {
 	const char **paths;
 	unsigned int count;
@@ -587,7 +581,7 @@ test_client_transaction_finish(struct test_client_transaction *tctrans)
 
 static void
 test_client_transaction_rcpt(const struct smtp_reply *reply,
-				      struct test_client_transaction *tctrans)
+			     struct test_client_transaction *tctrans)
 {
 	const char **paths;
 	const char *path;
@@ -611,7 +605,7 @@ test_client_transaction_rcpt(const struct smtp_reply *reply,
 
 static void
 test_client_transaction_rcpt_data(const struct smtp_reply *reply ATTR_UNUSED,
-				      struct test_client_transaction *tctrans)
+				  struct test_client_transaction *tctrans)
 {
 	const char **paths;
 	const char *path;
@@ -635,7 +629,7 @@ test_client_transaction_rcpt_data(const struct smtp_reply *reply ATTR_UNUSED,
 
 static void
 test_client_transaction_data(const struct smtp_reply *reply,
-				      struct test_client_transaction *tctrans)
+			     struct test_client_transaction *tctrans)
 {
 	const char **paths;
 	const char *path;
@@ -691,8 +685,8 @@ static void test_client_continue(void *dummy ATTR_UNUSED)
 	i_assert(client_files_last <= count);
 
 	i_assert(client_files_first <= client_files_last);
-	for (; client_files_first < client_files_last &&
-		paths[client_files_first] == NULL; client_files_first++);
+	for (; (client_files_first < client_files_last &&
+		paths[client_files_first] == NULL); client_files_first++);
 
 	pending_count = 0;
 	for (i = client_files_first; i < client_files_last; i++) {
@@ -734,8 +728,10 @@ static void test_client_continue(void *dummy ATTR_UNUSED)
 					"skipping %s [%u]",
 					path, client_files_last);
 			}
-			if (client_to == NULL)
-				client_to = timeout_add_short(0, test_client_continue, NULL);
+			if (client_to == NULL) {
+				client_to = timeout_add_short(
+					0, test_client_continue, NULL);
+			}
 			continue;
 		}
 
@@ -764,22 +760,25 @@ static void test_client_continue(void *dummy ATTR_UNUSED)
 			smtp_client_transaction_add_rcpt(
 				tctrans->conn->trans,
 				smtp_address_create_temp(
-					t_strdup_printf("rcpt%u", r), "example.com"), NULL,
+					t_strdup_printf("rcpt%u", r),
+					"example.com"), NULL,
 				test_client_transaction_rcpt,
 				test_client_transaction_rcpt_data, tctrans);
 		}
 
-		if (!test_unknown_size)
-			payload = i_stream_create_base64_encoder(fstream, 80, TRUE);
-		else {
+		if (!test_unknown_size) {
+			payload = i_stream_create_base64_encoder(
+				fstream, 80, TRUE);
+		} else {
 			struct istream *b64_stream =
-				i_stream_create_base64_encoder(fstream, 80, FALSE);
+				i_stream_create_base64_encoder(
+					fstream, 80, FALSE);
 			payload = i_stream_create_crlf(b64_stream);
 			i_stream_unref(&b64_stream);
 		}
 
 		if (debug) {
-			uoff_t raw_size = (uoff_t)-1, b64_size = (uoff_t)-1;
+			uoff_t raw_size = UOFF_T_MAX, b64_size = UOFF_T_MAX;
 
 			(void)i_stream_get_size(fstream, TRUE, &raw_size);
 			(void)i_stream_get_size(payload, TRUE, &b64_size);
@@ -797,8 +796,7 @@ static void test_client_continue(void *dummy ATTR_UNUSED)
 	}
 }
 
-static void
-test_client_progress_timeout(void *context ATTR_UNUSED)
+static void test_client_progress_timeout(void *context ATTR_UNUSED)
 {
 	/* Terminate test due to lack of progress */
 	failure = "Test is hanging";
@@ -808,12 +806,13 @@ test_client_progress_timeout(void *context ATTR_UNUSED)
 
 static void
 test_client(enum smtp_protocol protocol,
-	const struct smtp_client_settings *client_set)
+	    const struct smtp_client_settings *client_set)
 {
 	client_protocol = protocol;
 
 	if (!small_socket_buffers) {
-		to_client_progress = timeout_add(CLIENT_PROGRESS_TIMEOUT*1000,
+		to_client_progress = timeout_add(
+			CLIENT_PROGRESS_TIMEOUT*1000,
 			test_client_progress_timeout, NULL);
 	}
 
@@ -843,6 +842,10 @@ static void test_client_deinit(void)
  * Tests
  */
 
+struct test_server_data {
+	const struct smtp_server_settings *set;
+};
+
 static void test_open_server_fd(void)
 {
 	if (fd_listen != -1)
@@ -855,66 +858,95 @@ static void test_open_server_fd(void)
 	net_set_nonblock(fd_listen, TRUE);
 }
 
-static void test_server_kill(void)
+static int test_run_server(struct test_server_data *data)
 {
-	if (server_pid != (pid_t)-1) {
-		(void)kill(server_pid, SIGKILL);
-		(void)waitpid(server_pid, NULL, 0);
-	}
-	server_pid = (pid_t)-1;
+	const struct smtp_server_settings *server_set = data->set;
+	struct ioloop *ioloop;
+
+	i_set_failure_prefix("SERVER: ");
+
+	if (debug)
+		i_debug("PID=%s", my_pid);
+
+	ioloop = io_loop_create();
+	test_server_init(server_set);
+	io_loop_run(ioloop);
+	test_server_deinit();
+	io_loop_destroy(&ioloop);
+
+	if (debug)
+		i_debug("Terminated");
+
+	i_close_fd(&fd_listen);
+	test_files_deinit();
+	main_deinit();
+	return 0;
 }
 
-static void test_run_client_server(
+static void
+test_run_client(
+	enum smtp_protocol protocol, struct smtp_client_settings *client_set,
+	void (*client_init)(enum smtp_protocol protocol,
+			    const struct smtp_client_settings *client_set))
+{
+	struct ioloop *ioloop;
+
+	i_set_failure_prefix("CLIENT: ");
+
+	if (debug)
+		i_debug("client: PID=%s", my_pid);
+
+	ioloop = io_loop_create();
+	test_client_init();
+	client_init(protocol, client_set);
+	io_loop_run(ioloop);
+	test_client_deinit();
+	io_loop_destroy(&ioloop);
+
+	if (debug)
+		i_debug("Terminated");
+}
+
+static void
+test_run_client_server(
 	enum smtp_protocol protocol,
 	struct smtp_client_settings *client_set,
 	struct smtp_server_settings *server_set,
 	void (*client_init)(enum smtp_protocol protocol,
-		const struct smtp_client_settings *client_set))
+			    const struct smtp_client_settings *client_set))
 {
-	struct ioloop *ioloop;
+	struct test_server_data data;
 
 	if (test_ssl_mode == TEST_SSL_MODE_STARTTLS)
 		server_set->capabilities |= SMTP_CAPABILITY_STARTTLS;
 
 	failure = NULL;
-	test_open_server_fd();
 
-	if ((server_pid = fork()) == (pid_t)-1)
-		i_fatal("fork() failed: %m");
-	if (server_pid == 0) {
-		server_pid = (pid_t)-1;
-		hostpid_init();
-		if (debug)
-			i_debug("server: PID=%s", my_pid);
-		i_set_failure_prefix("SERVER: ");
-		/* child: server */
-		ioloop = io_loop_create();
-		test_server_init(server_set);
-		io_loop_run(ioloop);
-		test_server_deinit();
-		io_loop_destroy(&ioloop);
-		i_close_fd(&fd_listen);
-	} else {
-		if (debug)
-			i_debug("client: PID=%s", my_pid);
-		i_set_failure_prefix("CLIENT: ");
-		i_close_fd(&fd_listen);
-		/* parent: client */
-		ioloop = io_loop_create();
-		test_client_init();
-		client_init(protocol, client_set);
-		io_loop_run(ioloop);
-		test_client_deinit();
-		io_loop_destroy(&ioloop);
-		bind_port = 0;
-		test_server_kill();
-	}
+	i_zero(&data);
+	data.set = server_set;
+
+	test_files_init();
+
+	/* Fork server */
+	test_open_server_fd();
+	test_subprocess_fork(test_run_server, &data, FALSE);
+	i_close_fd(&fd_listen);
+
+	/* Run client */
+	test_run_client(protocol, client_set, client_init);
+
+	i_unset_failure_prefix();
+	bind_port = 0;
+	test_subprocess_kill_all(SERVER_KILL_TIMEOUT_SECS);
+	test_files_deinit();
 }
 
-static void test_run_scenarios(enum smtp_protocol protocol,
+static void
+test_run_scenarios(
+	enum smtp_protocol protocol,
 	enum smtp_capability capabilities,
 	void (*client_init)(enum smtp_protocol protocol,
-		const struct smtp_client_settings *client_set))
+			    const struct smtp_client_settings *client_set))
 {
 	struct smtp_server_settings smtp_server_set;
 	struct smtp_client_settings smtp_client_set;
@@ -956,22 +988,16 @@ static void test_run_scenarios(enum smtp_protocol protocol,
 	test_max_pending = 1;
 	test_unknown_size = FALSE;
 	test_ssl_mode = TEST_SSL_MODE_NONE;
-	test_files_init();
-	test_run_client_server(protocol,
-		&smtp_client_set, &smtp_server_set,
-		client_init);
-	test_files_deinit();
+	test_run_client_server(protocol, &smtp_client_set, &smtp_server_set,
+			       client_init);
 
 	test_out_reason("sequential", (failure == NULL), failure);
 
 	test_max_pending = MAX_PARALLEL_PENDING;
 	test_unknown_size = FALSE;
 	test_ssl_mode = TEST_SSL_MODE_NONE;
-	test_files_init();
-	test_run_client_server(protocol,
-		&smtp_client_set, &smtp_server_set,
-		client_init);
-	test_files_deinit();
+	test_run_client_server(protocol, &smtp_client_set, &smtp_server_set,
+			       client_init);
 
 	test_out_reason("parallel", (failure == NULL), failure);
 
@@ -980,11 +1006,8 @@ static void test_run_scenarios(enum smtp_protocol protocol,
 	test_max_pending = MAX_PARALLEL_PENDING;
 	test_unknown_size = FALSE;
 	test_ssl_mode = TEST_SSL_MODE_NONE;
-	test_files_init();
-	test_run_client_server(protocol,
-		&smtp_client_set, &smtp_server_set,
-		client_init);
-	test_files_deinit();
+	test_run_client_server(protocol, &smtp_client_set, &smtp_server_set,
+			       client_init);
 
 	test_out_reason("parallel pipelining", (failure == NULL), failure);
 
@@ -993,11 +1016,8 @@ static void test_run_scenarios(enum smtp_protocol protocol,
 	test_max_pending = MAX_PARALLEL_PENDING;
 	test_unknown_size = TRUE;
 	test_ssl_mode = TEST_SSL_MODE_NONE;
-	test_files_init();
-	test_run_client_server(protocol,
-		&smtp_client_set, &smtp_server_set,
-		client_init);
-	test_files_deinit();
+	test_run_client_server(protocol, &smtp_client_set, &smtp_server_set,
+			       client_init);
 
 	test_out_reason("unknown payload size", (failure == NULL), failure);
 
@@ -1007,11 +1027,8 @@ static void test_run_scenarios(enum smtp_protocol protocol,
 	test_max_pending = MAX_PARALLEL_PENDING;
 	test_unknown_size = FALSE;
 	test_ssl_mode = TEST_SSL_MODE_IMMEDIATE;
-	test_files_init();
-	test_run_client_server(protocol,
-		&smtp_client_set, &smtp_server_set,
-		client_init);
-	test_files_deinit();
+	test_run_client_server(protocol, &smtp_client_set, &smtp_server_set,
+			       client_init);
 
 	test_out_reason("parallel pipelining ssl",
 			(failure == NULL), failure);
@@ -1021,11 +1038,8 @@ static void test_run_scenarios(enum smtp_protocol protocol,
 	test_max_pending = MAX_PARALLEL_PENDING;
 	test_unknown_size = FALSE;
 	test_ssl_mode = TEST_SSL_MODE_STARTTLS;
-	test_files_init();
-	test_run_client_server(protocol,
-		&smtp_client_set, &smtp_server_set,
-		client_init);
-	test_files_deinit();
+	test_run_client_server(protocol, &smtp_client_set, &smtp_server_set,
+			       client_init);
 
 	test_out_reason("parallel pipelining startls",
 			(failure == NULL), failure);
@@ -1036,7 +1050,7 @@ static void test_smtp_normal(void)
 {
 	test_begin("smtp payload - normal");
 	test_run_scenarios(SMTP_PROTOCOL_SMTP,
-		SMTP_CAPABILITY_DSN, test_client);
+			   SMTP_CAPABILITY_DSN, test_client);
 	test_end();
 }
 
@@ -1044,8 +1058,8 @@ static void test_smtp_chunking(void)
 {
 	test_begin("smtp payload - chunking");
 	test_run_scenarios(SMTP_PROTOCOL_SMTP,
-		SMTP_CAPABILITY_DSN | SMTP_CAPABILITY_CHUNKING,
-		test_client);
+			   SMTP_CAPABILITY_DSN | SMTP_CAPABILITY_CHUNKING,
+			   test_client);
 	test_end();
 }
 
@@ -1053,7 +1067,7 @@ static void test_lmtp_normal(void)
 {
 	test_begin("lmtp payload - normal");
 	test_run_scenarios(SMTP_PROTOCOL_LMTP,
-		SMTP_CAPABILITY_DSN, test_client);
+			   SMTP_CAPABILITY_DSN, test_client);
 	test_end();
 }
 
@@ -1061,8 +1075,8 @@ static void test_lmtp_chunking(void)
 {
 	test_begin("lmtp payload - chunking");
 	test_run_scenarios(SMTP_PROTOCOL_LMTP,
-		SMTP_CAPABILITY_DSN | SMTP_CAPABILITY_CHUNKING,
-		test_client);
+			   SMTP_CAPABILITY_DSN | SMTP_CAPABILITY_CHUNKING,
+			   test_client);
 	test_end();
 }
 
@@ -1078,25 +1092,19 @@ static void (*const test_functions[])(void) = {
  * Main
  */
 
-volatile sig_atomic_t terminating = 0;
-
-static void
-test_signal_handler(int signo)
+static void main_init(void)
 {
-	if (terminating != 0)
-		raise(signo);
-	terminating = 1;
-
-	/* make sure we don't leave any pesky children alive */
-	test_server_kill();
-
-	(void)signal(signo, SIG_DFL);
-	raise(signo);
+#ifdef HAVE_OPENSSL
+	ssl_iostream_openssl_init();
+#endif
 }
 
-static void test_atexit(void)
+static void main_deinit(void)
 {
-	test_server_kill();
+	ssl_iostream_context_cache_free();
+#ifdef HAVE_OPENSSL
+	ssl_iostream_openssl_deinit();
+#endif
 }
 
 int main(int argc, char *argv[])
@@ -1105,18 +1113,7 @@ int main(int argc, char *argv[])
 	int ret;
 
 	lib_init();
-#ifdef HAVE_OPENSSL
-	ssl_iostream_openssl_init();
-#endif
-
-	atexit(test_atexit);
-	(void)signal(SIGCHLD, SIG_IGN);
-	(void)signal(SIGPIPE, SIG_IGN);
-	(void)signal(SIGTERM, test_signal_handler);
-	(void)signal(SIGQUIT, test_signal_handler);
-	(void)signal(SIGINT, test_signal_handler);
-	(void)signal(SIGSEGV, test_signal_handler);
-	(void)signal(SIGABRT, test_signal_handler);
+	main_init();
 
 	while ((c = getopt(argc, argv, "DS")) > 0) {
 		switch (c) {
@@ -1131,6 +1128,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	test_subprocesses_init(debug);
+
 	/* listen on localhost */
 	i_zero(&bind_ip);
 	bind_ip.family = AF_INET;
@@ -1138,10 +1137,8 @@ int main(int argc, char *argv[])
 
 	ret = test_run(test_functions);
 
-	ssl_iostream_context_cache_free();
-#ifdef HAVE_OPENSSL
-	ssl_iostream_openssl_deinit();
-#endif
+	test_subprocesses_deinit();
+	main_deinit();
 	lib_deinit();
 
 	return ret;

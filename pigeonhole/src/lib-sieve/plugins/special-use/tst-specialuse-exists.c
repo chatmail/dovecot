@@ -42,7 +42,7 @@ const struct sieve_command_def specialuse_exists_test = {
 	.block_allowed = FALSE,
 	.block_required = FALSE,
 	.validate = tst_specialuse_exists_validate,
-	.generate = tst_specialuse_exists_generate
+	.generate = tst_specialuse_exists_generate,
 };
 
 /*
@@ -60,7 +60,7 @@ const struct sieve_operation_def specialuse_exists_operation = {
 	.mnemonic = "SPECIALUSE_EXISTS",
 	.ext_def = &special_use_extension,
 	.dump = tst_specialuse_exists_operation_dump,
-	.execute = tst_specialuse_exists_operation_execute
+	.execute = tst_specialuse_exists_operation_execute,
 };
 
 /*
@@ -130,8 +130,9 @@ tst_specialuse_exists_validate(struct sieve_validator *valdtr,
 		if (sieve_ast_argument_type(arg) != SAAT_STRING) {
 			sieve_argument_validate_error(
 				valdtr, arg,
-				"if a second argument is specified for the %s %s, the first "
-				"must be a string (mailbox), but %s was found",
+				"if a second argument is specified for the %s %s, "
+				"the first must be a string (mailbox), "
+				"but %s was found",
 				sieve_command_identifier(tst),
 				sieve_command_type_name(tst),
 				sieve_ast_argument_name(arg));
@@ -140,9 +141,22 @@ tst_specialuse_exists_validate(struct sieve_validator *valdtr,
 		if (!sieve_validator_argument_activate(valdtr, tst, arg, FALSE))
 			return FALSE;
 
+		/* Check name validity when mailbox argument is not a variable */
+		if (sieve_argument_is_string_literal(arg)) {
+			const char *mailbox = sieve_ast_argument_strc(arg);
+			const char *error;
+
+			if (!sieve_mailbox_check_name(mailbox, &error)) {
+				sieve_argument_validate_warning(
+					valdtr, arg, "%s test: "
+					"invalid mailbox name `%s' specified: %s",
+					sieve_command_identifier(tst),
+					str_sanitize(mailbox, 256), error);
+			}
+		}
+
 		if (sieve_ast_argument_type(arg2) != SAAT_STRING &&
-		    sieve_ast_argument_type(arg2) != SAAT_STRING_LIST)
-		{
+		    sieve_ast_argument_type(arg2) != SAAT_STRING_LIST) {
 			sieve_argument_validate_error(
 				valdtr, arg2,
 				"the %s %s expects a string list (special-use flags) as "
@@ -341,13 +355,55 @@ tst_specialuse_find_specialuse(const struct sieve_runtime_env *renv,
 }
 
 static int
+tst_specialuse_exists_check_flag(const struct sieve_runtime_env *renv,
+				 struct mailbox *box, const char *use_flag,
+				 bool trace, bool *all_exist_r)
+{
+	int ret;
+
+	if (!ext_special_use_flag_valid(use_flag)) {
+		sieve_runtime_error(
+			renv, NULL, "specialuse_exists test: "
+			"invalid special-use flag `%s' specified",
+			str_sanitize(use_flag, 64));
+		return SIEVE_EXEC_FAILURE;
+	}
+
+	if (box != NULL) {
+		/* Mailbox has this SPECIAL-USE flag? */
+		if (!mailbox_has_special_use(box, use_flag)) {
+			*all_exist_r = FALSE;
+			return SIEVE_EXEC_OK;
+		}
+	} else {
+		/* Is there mailbox with this SPECIAL-USE flag? */
+		ret = tst_specialuse_find_specialuse(renv, use_flag);
+		if (ret < 0)
+			return SIEVE_EXEC_TEMP_FAILURE;
+		if (ret == 0) {
+			*all_exist_r = FALSE;
+			return SIEVE_EXEC_OK;
+		}
+	}
+
+	if (trace) {
+		sieve_runtime_trace(
+			renv, 0, "special-use flag `%s' exists",
+			str_sanitize(use_flag, 80));
+	}
+
+	return SIEVE_EXEC_OK;
+}
+
+static int
 tst_specialuse_exists_operation_execute(const struct sieve_runtime_env *renv,
 					sieve_size_t *address)
 {
 	struct sieve_operand oprnd;
 	struct sieve_stringlist *special_use_flags;
-	string_t *mailbox;
+	string_t *mailbox, *special_use_flag;
 	struct mailbox *box = NULL;
+	const char *error;
 	bool trace = FALSE, all_exist = TRUE;
 	int ret;
 
@@ -356,30 +412,33 @@ tst_specialuse_exists_operation_execute(const struct sieve_runtime_env *renv,
 	 */
 
 	/* Read bare operand (two types possible) */
-	if ((ret = sieve_operand_runtime_read(renv, address,
-					      NULL, &oprnd)) <= 0)
+	ret = sieve_operand_runtime_read(renv, address, NULL, &oprnd);
+	if (ret <= 0)
 		return ret;
 
 	/* Mailbox operand (optional) */
 	mailbox = NULL;
 	if (!sieve_operand_is_omitted(&oprnd)) {
 		/* Read the mailbox operand */
-		if ((ret = sieve_opr_string_read_data(
-			renv, &oprnd, address, "mailbox", &mailbox)) <= 0)
+		ret = sieve_opr_string_read_data(renv, &oprnd, address,
+						 "mailbox", &mailbox);
+		if (ret <= 0)
 			return ret;
 
 		/* Read flag list */
-		if ((ret = sieve_opr_stringlist_read(
-			renv, address, "special-use-flags",
-			&special_use_flags)) <= 0)
+		ret = sieve_opr_stringlist_read(renv, address,
+						"special-use-flags",
+						&special_use_flags);
+		if (ret <= 0)
 			return ret;
 
 	/* Flag-list operand */
 	} else {
 		/* Read flag list */
-		if ((ret = sieve_opr_stringlist_read(
-			renv, address, "special-use-flags",
-			&special_use_flags)) <= 0)
+		ret = sieve_opr_stringlist_read(renv, address,
+						"special-use-flags",
+						&special_use_flags);
+		if (ret <= 0)
 			return ret;
 	}
 
@@ -395,64 +454,48 @@ tst_specialuse_exists_operation_execute(const struct sieve_runtime_env *renv,
 	}
 
 	if (mailbox != NULL) {
+		if (!sieve_mailbox_check_name(str_c(mailbox), &error)) {
+			sieve_runtime_warning(
+				renv, NULL, "specialuse_exists test: "
+				"invalid mailbox name `%s' specified: %s",
+				str_sanitize(str_c(mailbox), 256), error);
+			sieve_interpreter_set_test_result(renv->interp, FALSE);
+			return SIEVE_EXEC_OK;
+		}
+
 		if (tst_specialuse_find_mailbox(renv, str_c(mailbox), &box) < 0)
 			return SIEVE_EXEC_TEMP_FAILURE;
 	}
 
-	ret = 0;
 	if (box == NULL && mailbox != NULL) {
-		all_exist = FALSE;
-		sieve_runtime_trace(renv, 0,
-			"mailbox `%s' is not accessible",
+		sieve_runtime_trace(
+			renv, 0, "mailbox `%s' is not accessible",
 			str_sanitize(str_c(mailbox), 80));
-	} else {
-		string_t *special_use_flag;
+		sieve_interpreter_set_test_result(renv->interp, FALSE);
+		return SIEVE_EXEC_OK;
+	}
 
-		if (mailbox != NULL) {
-			sieve_runtime_trace(
-				renv, 0, "mailbox `%s' is accessible",
-				str_sanitize(str_c(mailbox), 80));
-		}
+	if (mailbox != NULL) {
+		sieve_runtime_trace(
+			renv, 0, "mailbox `%s' is accessible",
+			str_sanitize(str_c(mailbox), 80));
+	}
 
-		special_use_flag = NULL;
-		while ((ret = sieve_stringlist_next_item(
-			special_use_flags, &special_use_flag)) > 0) {
-			const char *use_flag = str_c(special_use_flag);
+	ret = 0;
+	special_use_flag = NULL;
+	while (all_exist &&
+	       (ret = sieve_stringlist_next_item(
+		special_use_flags, &special_use_flag)) > 0) {
+		const char *use_flag = str_c(special_use_flag);
 
-			if (!ext_special_use_flag_valid(use_flag)) {
-				sieve_runtime_error(
-					renv, NULL, "specialuse_exists test: "
-					"invalid special-use flag `%s' specified",
-					str_sanitize(use_flag, 64));
-				if (box != NULL) {
-					/* Close mailbox */
-					mailbox_free(&box);
-				}
-				return SIEVE_EXEC_FAILURE;
-			}
-
+		ret = tst_specialuse_exists_check_flag(
+			renv, box, use_flag, trace, &all_exist);
+		if (ret <= 0) {
 			if (box != NULL) {
-				/* Mailbox has this SPECIAL-USE flag? */
-				if (!mailbox_has_special_use(box, use_flag)) {
-					all_exist = FALSE;
-					break;
-				}
-			} else {
-				/* Is there mailbox with this SPECIAL-USE flag? */
-				if ((ret = tst_specialuse_find_specialuse(
-					renv, use_flag)) <= 0) {
-					if (ret < 0)
-						return SIEVE_EXEC_TEMP_FAILURE;
-					all_exist = FALSE;
-					break;
-				}
+				/* Close mailbox */
+				mailbox_free(&box);
 			}
-
-			if (trace) {
-				sieve_runtime_trace(
-					renv, 0, "special-use flag `%s' exists",
-					str_sanitize(use_flag, 80));
-			}
+			return ret;
 		}
 	}
 

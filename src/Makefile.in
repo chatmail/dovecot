@@ -131,15 +131,13 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_mysql.m4 $(top_srcdir)/m4/want_pam.m4 \
 	$(top_srcdir)/m4/want_passwd.m4 $(top_srcdir)/m4/want_pgsql.m4 \
 	$(top_srcdir)/m4/want_prefetch.m4 \
-	$(top_srcdir)/m4/want_shadow.m4 $(top_srcdir)/m4/want_sia.m4 \
+	$(top_srcdir)/m4/want_shadow.m4 \
 	$(top_srcdir)/m4/want_sodium.m4 $(top_srcdir)/m4/want_solr.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
-	$(top_srcdir)/m4/want_unwind.m4 \
-	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_unwind.m4 $(top_srcdir)/m4/want_zlib.m4 \
+	$(top_srcdir)/m4/want_zstd.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
@@ -207,8 +205,8 @@ DIST_SUBDIRS = lib-test lib lib-settings lib-auth lib-dns lib-master \
 	lib-smtp lib-imap lib-imap-storage lib-oauth2 lib-dict-extra \
 	lib-dovecot lib-ldap lib-lua lib-fts lib-imap-client \
 	lib-imap-urlauth lib-compression lib-index lib-storage lib-sql \
-	lib-ntlm lib-otp lib-lda lib-dict-backend anvil auth dict dns \
-	indexer ipc master login-common imap-hibernate imap-login imap \
+	lib-otp lib-lda lib-dict-backend anvil auth dict dns indexer \
+	ipc master login-common imap-hibernate imap-login imap \
 	imap-urlauth pop3-login pop3 submission-login submission lda \
 	lmtp log config director replication util doveadm stats \
 	old-stats plugins
@@ -253,6 +251,7 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 BINARY_CFLAGS = @BINARY_CFLAGS@
 BINARY_LDFLAGS = @BINARY_LDFLAGS@
+BISON = @BISON@
 CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
 CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
@@ -283,6 +282,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
+FLEX = @FLEX@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -485,7 +485,6 @@ SUBDIRS = \
 	lib-index \
 	lib-storage \
 	lib-sql \
-	lib-ntlm \
 	lib-otp \
 	lib-lda \
 	lib-dict-backend \

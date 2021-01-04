@@ -1,7 +1,6 @@
 /* Copyright (c) 2019 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "lib-signals.h"
 #include "str.h"
 #include "strescape.h"
 #include "llist.h"
@@ -12,24 +11,22 @@
 #include "istream-chain.h"
 #include "ostream.h"
 #include "time-util.h"
+#include "sleep.h"
 #include "unlink-directory.h"
 #include "write-full.h"
 #include "connection.h"
 #include "master-service.h"
 #include "master-interface.h"
 #include "test-common.h"
+#include "test-subprocess.h"
 
 #include "auth-client.h"
 
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
-#include <signal.h>
-#include <unistd.h>
-#include <fcntl.h>
-
 #define TEST_SOCKET "./auth-client-test"
 #define CLIENT_PROGRESS_TIMEOUT     30
+#define SERVER_KILL_TIMEOUT_SECS    20
+
+static void main_deinit(void);
 
 /*
  * Types
@@ -57,7 +54,6 @@ static bool debug = FALSE;
 /* server */
 static struct io *io_listen;
 static int fd_listen = -1;
-static pid_t server_pid;
 static struct connection_list *server_conn_list;
 static void (*test_server_input)(struct server_connection *conn);
 static void (*test_server_init)(struct server_connection *conn);
@@ -95,16 +91,15 @@ test_run_client_server(test_client_init_t *client_test,
 
 /* server */
 
-static void
-test_server_connection_refused(void)
+static void test_server_connection_refused(void)
 {
 	i_close_fd(&fd_listen);
+	i_sleep_intr_secs(500);
 }
 
 /* client */
 
-static bool
-test_client_connection_refused(void)
+static bool test_client_connection_refused(void)
 {
 	const char *error;
 	int ret;
@@ -132,10 +127,9 @@ static void test_connection_refused(void)
 
 /* server */
 
-static void
-test_connection_timed_out_input(struct server_connection *conn)
+static void test_connection_timed_out_input(struct server_connection *conn)
 {
-	sleep(5);
+	i_sleep_intr_secs(5);
 	server_connection_deinit(&conn);
 }
 
@@ -147,8 +141,7 @@ static void test_server_connection_timed_out(void)
 
 /* client */
 
-static bool
-test_client_connection_timed_out(void)
+static bool test_client_connection_timed_out(void)
 {
 	time_t time;
 	const char *error;
@@ -182,16 +175,15 @@ static void test_connection_timed_out(void)
 
 /* server */
 
-static void
-test_bad_version_input(struct server_connection *conn)
+static void test_bad_version_input(struct server_connection *conn)
 {
 	server_connection_deinit(&conn);
 }
 
-static void
-test_bad_version_init(struct server_connection *conn)
+static void test_bad_version_init(struct server_connection *conn)
 {
-	o_stream_nsend_str(conn->conn.output,
+	o_stream_nsend_str(
+		conn->conn.output,
 		"VERSION\t666\t666\n"
 		"MECH\tPLAIN\tplaintext\n"
 		"MECH\tLOGIN\tplaintext\n"
@@ -210,8 +202,7 @@ static void test_server_bad_version(void)
 
 /* client */
 
-static bool
-test_client_bad_version(void)
+static bool test_client_bad_version(void)
 {
 	const char *error;
 	int ret;
@@ -238,8 +229,7 @@ static void test_bad_version(void)
 
 /* server */
 
-static void
-test_disconnect_version_input(struct server_connection *conn)
+static void test_disconnect_version_input(struct server_connection *conn)
 {
 	const char *line;
 
@@ -252,10 +242,10 @@ test_disconnect_version_input(struct server_connection *conn)
 	server_connection_deinit(&conn);
 }
 
-static void
-test_disconnect_version_init(struct server_connection *conn)
+static void test_disconnect_version_init(struct server_connection *conn)
 {
-	o_stream_nsend_str(conn->conn.output,
+	o_stream_nsend_str(
+		conn->conn.output,
 		"VERSION\t1\t2\n"
 		"MECH\tPLAIN\tplaintext\n"
 		"MECH\tLOGIN\tplaintext\n"
@@ -274,8 +264,7 @@ static void test_server_disconnect_version(void)
 
 /* client */
 
-static bool
-test_client_disconnect_version(void)
+static bool test_client_disconnect_version(void)
 {
 	const char *error;
 	int ret;
@@ -357,13 +346,15 @@ test_auth_handshake_auth_plain(struct server_connection *conn, unsigned int id,
 	if (authenid == NULL)
 		authenid = authid;
 	if (strcmp(authenid, "harrie") == 0 && strcmp(pass, "frop") == 0) {
-		o_stream_nsend_str(conn->conn.output,
+		o_stream_nsend_str(
+			conn->conn.output,
 			t_strdup_printf("OK\t%u\tuser=harrie\n", id));
 		return TRUE;
 	}
 	if (strcmp(authenid, "hendrik") == 0)
 		return FALSE;
-	o_stream_nsend_str(conn->conn.output,
+	o_stream_nsend_str(
+		conn->conn.output,
 		t_strdup_printf("FAIL\t%u\tuser=%s\n", id, authenid));
 
 	return TRUE;
@@ -392,7 +383,8 @@ test_auth_handshake_auth_login(struct server_connection *conn, unsigned int id,
 
 	chal_b64 = t_str_new(64);
 	base64_encode(prompt1, strlen(prompt1), chal_b64);
-	o_stream_nsend_str(conn->conn.output,
+	o_stream_nsend_str(
+		conn->conn.output,
 		t_strdup_printf("CONT\t%u\t%s\n", id, str_c(chal_b64)));
 	return TRUE;
 }
@@ -411,7 +403,8 @@ test_auth_handshake_cont_login(struct server_connection *conn,
 	if (++req->login_state == 1) {
 		req->username = p_strdup(conn->pool, resp);
 		if (strcmp(resp, "harrie") != 0) {
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				t_strdup_printf("FAIL\t%u\tuser=%s\n",
 						req->id, req->username));
 			return TRUE;
@@ -420,12 +413,14 @@ test_auth_handshake_cont_login(struct server_connection *conn,
 		i_assert(req->login_state == 2);
 		DLLIST_REMOVE(&ctx->requests, req);
 		if (strcmp(resp, "frop") != 0) {
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				t_strdup_printf("FAIL\t%u\tuser=%s\n",
 						req->id, req->username));
 			return TRUE;
 		}
-		o_stream_nsend_str(conn->conn.output,
+		o_stream_nsend_str(
+			conn->conn.output,
 			t_strdup_printf("OK\t%u\tuser=harrie\n", req->id));
 		return TRUE;
 	}
@@ -433,7 +428,8 @@ test_auth_handshake_cont_login(struct server_connection *conn,
 	chal_b64 = t_str_new(64);
 	base64_encode(prompt2, strlen(prompt2), chal_b64);
 	o_stream_nsend_str(conn->conn.output,
-		t_strdup_printf("CONT\t%u\t%s\n", req->id, str_c(chal_b64)));
+			   t_strdup_printf("CONT\t%u\t%s\n",
+					   req->id, str_c(chal_b64)));
 	return TRUE;
 }
 
@@ -468,7 +464,7 @@ test_auth_handshake_auth(struct server_connection *conn, unsigned int id,
 
 	if (strcasecmp(mech, "PLAIN") == 0) {
 		return test_auth_handshake_auth_plain(conn, id,
-						     data->data, data->used);
+						      data->data, data->used);
 	} else if (strcasecmp(mech, "LOGIN") == 0) {
 		return test_auth_handshake_auth_login(conn, id,
 						      data->data, data->used);
@@ -516,8 +512,7 @@ test_auth_handshake_cont(struct server_connection *conn, unsigned int id,
 					      data->data, data->used);
 }
 
-static void
-test_auth_handshake_input(struct server_connection *conn)
+static void test_auth_handshake_input(struct server_connection *conn)
 {
 	struct _auth_handshake_server *ctx =
 		(struct _auth_handshake_server *)conn->context;
@@ -577,15 +572,15 @@ test_auth_handshake_input(struct server_connection *conn)
 	}
 }
 
-static void
-test_auth_handshake_init(struct server_connection *conn)
+static void test_auth_handshake_init(struct server_connection *conn)
 {
 	struct _auth_handshake_server *ctx;
 
 	ctx = p_new(conn->pool, struct _auth_handshake_server, 1);
 	conn->context = (void*)ctx;
 
-	o_stream_nsend_str(conn->conn.output,
+	o_stream_nsend_str(
+		conn->conn.output,
 		"VERSION\t1\t2\n"
 		"MECH\tPLAIN\tplaintext\n"
 		"MECH\tLOGIN\tplaintext\n"
@@ -604,8 +599,7 @@ static void test_server_auth_handshake(void)
 
 /* client */
 
-static bool
-test_client_auth_plain_disconnect(void)
+static bool test_client_auth_plain_disconnect(void)
 {
 	const char *error;
 	int ret;
@@ -618,8 +612,7 @@ test_client_auth_plain_disconnect(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_plain_reconnect(void)
+static bool test_client_auth_plain_reconnect(void)
 {
 	const char *error;
 	int ret;
@@ -632,8 +625,7 @@ test_client_auth_plain_reconnect(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_plain_failure(void)
+static bool test_client_auth_plain_failure(void)
 {
 	const char *error;
 	int ret;
@@ -645,8 +637,7 @@ test_client_auth_plain_failure(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_plain_success(void)
+static bool test_client_auth_plain_success(void)
 {
 	const char *error;
 	int ret;
@@ -658,8 +649,7 @@ test_client_auth_plain_success(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_login_failure1(void)
+static bool test_client_auth_login_failure1(void)
 {
 	const char *error;
 	int ret;
@@ -671,8 +661,7 @@ test_client_auth_login_failure1(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_login_failure2(void)
+static bool test_client_auth_login_failure2(void)
 {
 	const char *error;
 	int ret;
@@ -685,8 +674,7 @@ test_client_auth_login_failure2(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_login_success(void)
+static bool test_client_auth_login_success(void)
 {
 	const char *error;
 	int ret;
@@ -698,8 +686,7 @@ test_client_auth_login_success(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_plain_parallel_failure(void)
+static bool test_client_auth_plain_parallel_failure(void)
 {
 	const char *error;
 	int ret;
@@ -712,8 +699,7 @@ test_client_auth_plain_parallel_failure(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_plain_parallel_success(void)
+static bool test_client_auth_plain_parallel_success(void)
 {
 	const char *error;
 	int ret;
@@ -726,8 +712,7 @@ test_client_auth_plain_parallel_success(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_login_parallel_failure1(void)
+static bool test_client_auth_login_parallel_failure1(void)
 {
 	const char *error;
 	int ret;
@@ -740,8 +725,7 @@ test_client_auth_login_parallel_failure1(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_login_parallel_failure2(void)
+static bool test_client_auth_login_parallel_failure2(void)
 {
 	const char *error;
 	int ret;
@@ -754,8 +738,7 @@ test_client_auth_login_parallel_failure2(void)
 	return FALSE;
 }
 
-static bool
-test_client_auth_login_parallel_success(void)
+static bool test_client_auth_login_parallel_success(void)
 {
 	const char *error;
 	int ret;
@@ -904,11 +887,11 @@ test_client_auth_callback(struct auth_client_request *request,
 		resp_b64 = t_str_new(64);
 		if (++login_req->state == 1) {
 			base64_encode(login_test->username,
-				strlen(login_test->username), resp_b64);
+				      strlen(login_test->username), resp_b64);
 		} else {
 			test_assert(login_req->state == 2);
 			base64_encode(login_test->password,
-				strlen(login_test->password), resp_b64);
+				      strlen(login_test->password), resp_b64);
 		}
 		auth_client_request_continue(request, str_c(resp_b64));
 		return;
@@ -943,8 +926,7 @@ test_client_auth_connected(struct auth_client *client ATTR_UNUSED,
 	io_loop_stop(login_test->ioloop);
 }
 
-static void
-test_client_progress_timeout(void *context ATTR_UNUSED)
+static void test_client_progress_timeout(void *context ATTR_UNUSED)
 {
 	/* Terminate test due to lack of progress */
 	test_assert(FALSE);
@@ -1081,16 +1063,14 @@ test_client_auth_simple(const char *mech, const char *username,
 
 /* client connection */
 
-static void
-server_connection_input(struct connection *_conn)
+static void server_connection_input(struct connection *_conn)
 {
 	struct server_connection *conn = (struct server_connection *)_conn;
 
 	test_server_input(conn);
 }
 
-static void
-server_connection_init(int fd)
+static void server_connection_init(int fd)
 {
 	struct server_connection *conn;
 	pool_t pool;
@@ -1101,15 +1081,14 @@ server_connection_init(int fd)
 	conn = p_new(pool, struct server_connection, 1);
 	conn->pool = pool;
 
-	connection_init_server
-		(server_conn_list, &conn->conn, "server connection", fd, fd);
+	connection_init_server(server_conn_list, &conn->conn,
+			       "server connection", fd, fd);
 
 	if (test_server_init != NULL)
 		test_server_init(conn);
 }
 
-static void
-server_connection_deinit(struct server_connection **_conn)
+static void server_connection_deinit(struct server_connection **_conn)
 {
 	struct server_connection *conn = *_conn;
 
@@ -1122,17 +1101,14 @@ server_connection_deinit(struct server_connection **_conn)
 	pool_unref(&conn->pool);
 }
 
-static void
-server_connection_destroy(struct connection *_conn)
+static void server_connection_destroy(struct connection *_conn)
 {
-	struct server_connection *conn =
-		(struct server_connection *)_conn;
+	struct server_connection *conn = (struct server_connection *)_conn;
 
 	server_connection_deinit(&conn);
 }
 
-static void
-server_connection_accept(void *context ATTR_UNUSED)
+static void server_connection_accept(void *context ATTR_UNUSED)
 {
 	int fd;
 
@@ -1140,9 +1116,8 @@ server_connection_accept(void *context ATTR_UNUSED)
 	fd = net_accept(fd_listen, NULL, NULL);
 	if (fd == -1)
 		return;
-	if (fd == -2) {
+	if (fd == -2)
 		i_fatal("test server: accept() failed: %m");
-	}
 
 	server_connection_init(fd);
 }
@@ -1150,8 +1125,8 @@ server_connection_accept(void *context ATTR_UNUSED)
 /* */
 
 static struct connection_settings server_connection_set = {
-	.input_max_size = (size_t)-1,
-	.output_max_size = (size_t)-1,
+	.input_max_size = SIZE_MAX,
+	.output_max_size = SIZE_MAX,
 	.client = FALSE
 };
 
@@ -1163,8 +1138,7 @@ static const struct connection_vfuncs server_connection_vfuncs = {
 static void test_server_run(void)
 {
 	/* open server socket */
-	io_listen = io_add(fd_listen,
-		IO_READ, server_connection_accept, NULL);
+	io_listen = io_add(fd_listen, IO_READ, server_connection_accept, NULL);
 
 	server_conn_list = connection_list_init(&server_connection_set,
 						&server_connection_vfuncs);
@@ -1193,60 +1167,35 @@ static int test_open_server_fd(void)
 	return fd;
 }
 
-static void test_server_kill(void)
+static int test_run_server(test_server_init_t *server_test)
 {
-	if (server_pid != (pid_t)-1) {
-		(void)kill(server_pid, SIGKILL);
-		(void)waitpid(server_pid, NULL, 0);
-		server_pid = -1;
-	}
+	main_deinit();
+	master_service_deinit_forked(&master_service);
+
+	i_set_failure_prefix("SERVER: ");
+
+	if (debug)
+		i_debug("PID=%s", my_pid);
+
+	ioloop = io_loop_create();
+	server_test();
+	io_loop_destroy(&ioloop);
+
+	if (debug)
+		i_debug("Terminated");
+
+	i_close_fd(&fd_listen);
+	return 0;
 }
 
-static void
-test_run_client_server(test_client_init_t *client_test,
-		       test_server_init_t *server_test)
+static void test_run_client(test_client_init_t *client_test)
 {
-	if (server_test != NULL) {
-		lib_signals_ioloop_detach();
+	i_set_failure_prefix("CLIENT: ");
 
-		server_pid = (pid_t)-1;
+	if (debug)
+		i_debug("PID=%s", my_pid);
 
-		fd_listen = test_open_server_fd();
-
-		if ((server_pid = fork()) == (pid_t)-1)
-			i_fatal("fork() failed: %m");
-		if (server_pid == 0) {
-			server_pid = (pid_t)-1;
-			hostpid_init();
-			while (current_ioloop != NULL) {
-				ioloop = current_ioloop;
-				io_loop_destroy(&ioloop);
-			}
-			lib_signals_deinit();
-			if (debug)
-				i_debug("server: PID=%s", my_pid);
-			/* child: server */
-			ioloop = io_loop_create();
-			server_test();
-			io_loop_destroy(&ioloop);
-			if (fd_listen != -1)
-				i_close_fd(&fd_listen);
-			/* wait for it to be killed; this way, valgrind will not
-			   object to this process going away inelegantly. */
-			sleep(60);
-			exit(1);
-		}
-		if (fd_listen != -1)
-			i_close_fd(&fd_listen);
-		if (debug)
-			i_debug("client: PID=%s", my_pid);
-
-		lib_signals_ioloop_attach();
-	}
-
-	/* parent: client */
-
-	usleep(100000); /* wait a little for server setup */
+	i_sleep_intr_msecs(100); /* wait a little for server setup */
 
 	ioloop = io_loop_create();
 	if (client_test())
@@ -1254,35 +1203,45 @@ test_run_client_server(test_client_init_t *client_test,
 	test_client_deinit();
 	io_loop_destroy(&ioloop);
 
-	test_server_kill();
-	i_unlink_if_exists(TEST_SOCKET);
+	if (debug)
+		i_debug("Terminated");
+}
+
+static void
+test_run_client_server(test_client_init_t *client_test,
+		       test_server_init_t *server_test)
+{
+	if (server_test != NULL) {
+		/* Fork server */
+		fd_listen = test_open_server_fd();
+		test_subprocess_fork(test_run_server, server_test, FALSE);
+		i_close_fd(&fd_listen);
+	}
+
+	/* Run client */
+	test_run_client(client_test);
+
+	i_unset_failure_prefix();
+	test_subprocess_kill_all(SERVER_KILL_TIMEOUT_SECS);
 }
 
 /*
  * Main
  */
 
-volatile sig_atomic_t terminating = 0;
-
-static void
-test_signal_handler(int signo)
+static void main_cleanup(void)
 {
-	if (terminating != 0)
-		raise(signo);
-	terminating = 1;
-
-	/* make sure we don't leave any pesky children alive */
-	test_server_kill();
-	(void)unlink(TEST_SOCKET);
-
-	(void)signal(signo, SIG_DFL);
-	raise(signo);
+	i_unlink_if_exists(TEST_SOCKET);
 }
 
-static void test_atexit(void)
+static void main_init(void)
 {
-	test_server_kill();
-	(void)unlink(TEST_SOCKET);
+	/* nothing yet */
+}
+
+static void main_deinit(void)
+{
+	/* nothing yet; also called from sub-processes */
 }
 
 int main(int argc, char *argv[])
@@ -1294,16 +1253,9 @@ int main(int argc, char *argv[])
 	int c;
 	int ret;
 
-	atexit(test_atexit);
-	(void)signal(SIGCHLD, SIG_IGN);
-	(void)signal(SIGTERM, test_signal_handler);
-	(void)signal(SIGQUIT, test_signal_handler);
-	(void)signal(SIGINT, test_signal_handler);
-	(void)signal(SIGSEGV, test_signal_handler);
-	(void)signal(SIGABRT, test_signal_handler);
-
 	master_service = master_service_init("test-auth-master", service_flags,
 					     &argc, &argv, "D");
+	main_init();
 
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
@@ -1316,9 +1268,13 @@ int main(int argc, char *argv[])
 	}
 
 	master_service_init_finish(master_service);
+	test_subprocesses_init(debug);
+	test_subprocess_set_cleanup_callback(main_cleanup);
 
 	ret = test_run(test_functions);
 
+	test_subprocesses_deinit();
+	main_deinit();
 	master_service_deinit(&master_service);
 
 	return ret;

@@ -135,19 +135,17 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_mysql.m4 $(top_srcdir)/m4/want_pam.m4 \
 	$(top_srcdir)/m4/want_passwd.m4 $(top_srcdir)/m4/want_pgsql.m4 \
 	$(top_srcdir)/m4/want_prefetch.m4 \
-	$(top_srcdir)/m4/want_shadow.m4 $(top_srcdir)/m4/want_sia.m4 \
+	$(top_srcdir)/m4/want_shadow.m4 \
 	$(top_srcdir)/m4/want_sodium.m4 $(top_srcdir)/m4/want_solr.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
-	$(top_srcdir)/m4/want_unwind.m4 \
-	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_unwind.m4 $(top_srcdir)/m4/want_zlib.m4 \
+	$(top_srcdir)/m4/want_zstd.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
-	$(am__DIST_COMMON)
+DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
+	$(pkginc_lib_HEADERS) $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
@@ -251,7 +249,7 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-HEADERS = $(pkginc_lib_HEADERS)
+HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -287,6 +285,7 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 BINARY_CFLAGS = @BINARY_CFLAGS@
 BINARY_LDFLAGS = @BINARY_LDFLAGS@
+BISON = @BISON@
 CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
 CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
@@ -317,6 +316,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
+FLEX = @FLEX@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -510,6 +510,9 @@ pkginc_lib_HEADERS = \
 	iostream-lz4.h \
 	istream-zlib.h \
 	ostream-zlib.h
+
+noinst_HEADERS = \
+	iostream-zstd-private.h
 
 pkglib_LTLIBRARIES = libdovecot-compression.la
 libdovecot_compression_la_SOURCES = 

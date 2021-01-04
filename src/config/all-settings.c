@@ -98,7 +98,8 @@ struct mail_storage_settings {
 
 	const char *const *parsed_mail_attachment_content_type_filter;
 	bool parsed_mail_attachment_exclude_inlined;
-	bool parsed_mail_attachment_detection_add_flags_on_save;
+	bool parsed_mail_attachment_detection_add_flags;
+	bool parsed_mail_attachment_detection_no_flags_on_fetch;
 };
 struct mail_namespace_settings {
 	const char *name;
@@ -570,8 +571,11 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 		while(*options != NULL) {
 			const char *opt = *options;
 
-			if (strcmp(opt, "add-flags-on-save") == 0) {
-				set->parsed_mail_attachment_detection_add_flags_on_save = TRUE;
+			if (strcmp(opt, "add-flags") == 0 ||
+			    strcmp(opt, "add-flags-on-save") == 0) {
+				set->parsed_mail_attachment_detection_add_flags = TRUE;
+			} else if (strcmp(opt, "no-flags-on-fetch") == 0) {
+				set->parsed_mail_attachment_detection_no_flags_on_fetch = TRUE;
 			} else if (strcmp(opt, "exclude-inlined") == 0) {
 				set->parsed_mail_attachment_exclude_inlined = TRUE;
 			} else if (str_begins(opt, "content-type=")) {
@@ -928,10 +932,10 @@ const struct setting_parser_info mail_storage_setting_parser_info = {
 	.defines = mail_storage_setting_defines,
 	.defaults = &mail_storage_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct mail_storage_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &mail_user_setting_parser_info,
 
 	.check_func = mail_storage_settings_check,
@@ -968,7 +972,7 @@ const struct setting_parser_info mailbox_setting_parser_info = {
 	.type_offset = offsetof(struct mailbox_settings, name),
 	.struct_size = sizeof(struct mailbox_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &mail_user_setting_parser_info,
 
 	.check_func = mailbox_settings_check
@@ -1104,10 +1108,10 @@ const struct setting_parser_info mail_user_setting_parser_info = {
 	.defines = mail_user_setting_defines,
 	.defaults = &mail_user_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct mail_user_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = mail_user_settings_check,
 #ifndef CONFIG_BINARY
@@ -1205,10 +1209,10 @@ static const struct setting_parser_info pop3c_setting_parser_info = {
 	.defines = pop3c_setting_defines,
 	.defaults = &pop3c_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct pop3c_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &mail_user_setting_parser_info,
 
         .check_func = pop3c_settings_check
@@ -1246,10 +1250,10 @@ static const struct setting_parser_info mbox_setting_parser_info = {
 	.defines = mbox_setting_defines,
 	.defaults = &mbox_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct mbox_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &mail_user_setting_parser_info
 };
 /* ../../src/lib-storage/index/maildir/maildir-settings.c */
@@ -1275,10 +1279,10 @@ static const struct setting_parser_info maildir_setting_parser_info = {
 	.defines = maildir_setting_defines,
 	.defaults = &maildir_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct maildir_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &mail_user_setting_parser_info
 };
 /* ../../src/lib-storage/index/imapc/imapc-settings.c */
@@ -1426,10 +1430,10 @@ static const struct setting_parser_info imapc_setting_parser_info = {
 	.defines = imapc_setting_defines,
 	.defaults = &imapc_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct imapc_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &mail_user_setting_parser_info,
 
 	.check_func = imapc_settings_check
@@ -1455,10 +1459,10 @@ static const struct setting_parser_info mdbox_setting_parser_info = {
 	.defines = mdbox_setting_defines,
 	.defaults = &mdbox_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct mdbox_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &mail_user_setting_parser_info
 };
 /* ../../src/lib-settings/settings.c */
@@ -1504,10 +1508,10 @@ const struct setting_parser_info lda_setting_parser_info = {
 	.defines = lda_setting_defines,
 	.defaults = &lda_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct lda_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 #ifndef CONFIG_BINARY
 	.check_func = lda_settings_check,
@@ -1680,15 +1684,12 @@ struct stats_exporter_settings {
 struct stats_metric_settings {
 	const char *metric_name;
 	const char *description;
-	const char *event_name;
-	const char *source_location;
-	const char *categories;
 	const char *fields;
 	const char *group_by;
-	ARRAY(const char *) filter;
+	const char *filter;
 
-	unsigned int parsed_source_linenum;
 	ARRAY(struct stats_metric_settings_group_by) parsed_group_by;
+	struct event_filter *parsed_filter;
 
 	/* exporter related fields */
 	const char *exporter;
@@ -1813,6 +1814,8 @@ struct login_settings {
 	const char *login_proxy_notify_path;
 	const char *login_plugin_dir;
 	const char *login_plugins;
+	unsigned int login_proxy_timeout;
+	unsigned int login_proxy_max_reconnects;
 	unsigned int login_proxy_max_disconnect_delay;
 	const char *director_username_hash;
 
@@ -2114,7 +2117,7 @@ struct service_settings tcpwrap_service_settings = {
 	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -2140,7 +2143,7 @@ struct service_settings health_check_service_settings = {
 	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -2238,7 +2241,7 @@ struct service_settings submission_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &submission_unix_listeners_buf,
 			      sizeof(submission_unix_listeners[0]) } },
@@ -2335,10 +2338,10 @@ const struct setting_parser_info submission_setting_parser_info = {
 	.defines = submission_setting_defines,
 	.defaults = &submission_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct submission_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = submission_settings_verify,
 	.dependencies = submission_setting_dependencies
@@ -2375,7 +2378,7 @@ struct service_settings submission_login_service_settings = {
 	.client_limit = 0,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -2408,9 +2411,9 @@ const struct setting_parser_info submission_login_setting_parser_info = {
 	.defines = submission_login_setting_defines,
 	.defaults = &submission_login_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct submission_login_settings),
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 #ifndef CONFIG_BINARY
 	.check_func = submission_login_settings_check,
@@ -2426,6 +2429,7 @@ const struct setting_parser_info *submission_login_setting_roots[] = {
 extern const struct setting_parser_info stats_metric_setting_parser_info;
 extern const struct setting_parser_info stats_exporter_setting_parser_info;
 /* <settings checks> */
+#include "event-filter.h"
 #include <math.h>
 /* </settings checks> */
 /* <settings checks> */
@@ -2744,23 +2748,21 @@ static bool parse_metric_group_by(struct stats_metric_settings *set,
 static bool stats_metric_settings_check(void *_set, pool_t pool, const char **error_r)
 {
 	struct stats_metric_settings *set = _set;
-	const char *p;
 
 	if (set->metric_name[0] == '\0') {
 		*error_r = "Metric name can't be empty";
 		return FALSE;
 	}
-	if (set->source_location[0] != '\0') {
-		if ((p = strchr(set->source_location, ':')) == NULL) {
-			*error_r = "source_location is missing ':'";
-			return FALSE;
-		}
-		if (str_to_uint(p+1, &set->parsed_source_linenum) < 0 ||
-		    set->parsed_source_linenum == 0) {
-			*error_r = "source_location has invalid line number after ':'";
-			return FALSE;
-		}
+
+	if (set->filter[0] == '\0') {
+		*error_r = t_strdup_printf("metric %s { filter } is empty - "
+					   "will not match anything", set->metric_name);
+		return FALSE;
 	}
+
+	set->parsed_filter = event_filter_create_fragment(pool);
+	if (event_filter_parse(set->filter, set->parsed_filter, error_r) < 0)
+		return FALSE;
 
 	if (!parse_metric_group_by(set, pool, error_r))
 		return FALSE;
@@ -2822,7 +2824,7 @@ struct service_settings stats_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = UINT_MAX,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &stats_unix_listeners_buf,
 			      sizeof(stats_unix_listeners[0]) } },
@@ -2855,7 +2857,7 @@ const struct setting_parser_info stats_exporter_setting_parser_info = {
 	.type_offset = offsetof(struct stats_exporter_settings, name),
 	.struct_size = sizeof(struct stats_exporter_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.check_func = stats_exporter_settings_check,
 };
 #undef DEF
@@ -2863,12 +2865,9 @@ const struct setting_parser_info stats_exporter_setting_parser_info = {
 	{ type, #name, offsetof(struct stats_metric_settings, name), NULL }
 static const struct setting_define stats_metric_setting_defines[] = {
 	DEF(SET_STR, metric_name),
-	DEF(SET_STR, event_name),
-	DEF(SET_STR, source_location),
-	DEF(SET_STR, categories),
 	DEF(SET_STR, fields),
 	DEF(SET_STR, group_by),
-	{ SET_STRLIST, "filter", offsetof(struct stats_metric_settings, filter), NULL },
+	DEF(SET_STR, filter),
 	DEF(SET_STR, exporter),
 	DEF(SET_STR, exporter_include),
 	DEF(SET_STR, description),
@@ -2876,10 +2875,8 @@ static const struct setting_define stats_metric_setting_defines[] = {
 };
 static const struct stats_metric_settings stats_metric_default_settings = {
 	.metric_name = "",
-	.event_name = "",
-	.source_location = "",
-	.categories = "",
 	.fields = "",
+	.filter = "",
 	.exporter = "",
 	.group_by = "",
 	.exporter_include = "name hostname timestamps categories fields",
@@ -2892,7 +2889,7 @@ const struct setting_parser_info stats_metric_setting_parser_info = {
 	.type_offset = offsetof(struct stats_metric_settings, metric_name),
 	.struct_size = sizeof(struct stats_metric_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.check_func = stats_metric_settings_check,
 };
 #undef DEF
@@ -2920,10 +2917,10 @@ const struct setting_parser_info stats_setting_parser_info = {
 	.defines = stats_setting_defines,
 	.defaults = &stats_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct stats_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.check_func = stats_settings_check,
 };
 /* ../../src/replication/replicator/replicator-settings.c */
@@ -2958,7 +2955,7 @@ struct service_settings replicator_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = UINT_MAX,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &replicator_unix_listeners_buf,
 			      sizeof(replicator_unix_listeners[0]) } },
@@ -2993,10 +2990,10 @@ const struct setting_parser_info replicator_setting_parser_info = {
 	.defines = replicator_setting_defines,
 	.defaults = &replicator_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct replicator_settings),
 
-	.parent_offset = (size_t)-1
+	.parent_offset = SIZE_MAX
 };
 /* ../../src/replication/aggregator/aggregator-settings.c */
 /* <settings checks> */
@@ -3038,7 +3035,7 @@ struct service_settings aggregator_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &aggregator_unix_listeners_buf,
 			      sizeof(aggregator_unix_listeners[0]) } },
@@ -3064,10 +3061,10 @@ const struct setting_parser_info aggregator_setting_parser_info = {
 	.defines = aggregator_setting_defines,
 	.defaults = &aggregator_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct aggregator_settings),
 
-	.parent_offset = (size_t)-1
+	.parent_offset = SIZE_MAX
 };
 /* ../../src/pop3/pop3-settings.c */
 /* <settings checks> */
@@ -3166,7 +3163,7 @@ struct service_settings pop3_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &pop3_unix_listeners_buf,
 			      sizeof(pop3_unix_listeners[0]) } },
@@ -3222,10 +3219,10 @@ const struct setting_parser_info pop3_setting_parser_info = {
 	.defines = pop3_setting_defines,
 	.defaults = &pop3_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct pop3_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = pop3_settings_verify,
 	.dependencies = pop3_setting_dependencies
@@ -3263,7 +3260,7 @@ struct service_settings pop3_login_service_settings = {
 	.client_limit = 0,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -3281,8 +3278,8 @@ const struct setting_parser_info pop3_login_setting_parser_info = {
 	.module_name = "pop3-login",
 	.defines = pop3_login_setting_defines,
 
-	.type_offset = (size_t)-1,
-	.parent_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
+	.parent_offset = SIZE_MAX,
 
 	.dependencies = pop3_login_setting_dependencies
 };
@@ -3311,10 +3308,10 @@ const struct setting_parser_info quota_status_setting_parser_info = {
 	.defines = quota_status_setting_defines,
 	.defaults = &quota_status_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct quota_status_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.dependencies = quota_status_setting_dependencies
 };
 /* ../../src/plugins/mail-crypt/fs-crypt-settings.c */
@@ -3337,10 +3334,10 @@ const struct setting_parser_info fs_crypt_setting_parser_info = {
 	.defines = fs_crypt_setting_defines,
 	.defaults = &fs_crypt_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct fs_crypt_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.dependencies = fs_crypt_setting_dependencies
 };
 /* ../../src/old-stats/stats-settings.c */
@@ -3385,7 +3382,7 @@ struct service_settings old_stats_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = UINT_MAX,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &old_stats_unix_listeners_buf,
 			      sizeof(old_stats_unix_listeners[0]) } },
@@ -3428,10 +3425,10 @@ const struct setting_parser_info old_stats_setting_parser_info = {
 	.defines = old_stats_setting_defines,
 	.defaults = &old_stats_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct old_stats_settings),
 
-	.parent_offset = (size_t)-1
+	.parent_offset = SIZE_MAX
 };
 /* ../../src/master/master-settings.c */
 extern const struct setting_parser_info service_setting_parser_info;
@@ -3852,7 +3849,7 @@ static const struct setting_parser_info file_listener_setting_parser_info = {
 	.type_offset = offsetof(struct file_listener_settings, path),
 	.struct_size = sizeof(struct file_listener_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &service_setting_parser_info
 };
 #undef DEF
@@ -3883,7 +3880,7 @@ static const struct setting_parser_info inet_listener_setting_parser_info = {
 	.type_offset = offsetof(struct inet_listener_settings, name),
 	.struct_size = sizeof(struct inet_listener_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &service_setting_parser_info
 };
 #undef DEF
@@ -3942,7 +3939,7 @@ static const struct service_settings service_default_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -4026,10 +4023,10 @@ const struct setting_parser_info master_setting_parser_info = {
 	.defines = master_setting_defines,
 	.defaults = &master_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct master_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = master_settings_verify
 };
@@ -4063,6 +4060,8 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR_VARS, login_proxy_notify_path),
 	DEF(SET_STR, login_plugin_dir),
 	DEF(SET_STR, login_plugins),
+	DEF(SET_TIME_MSECS, login_proxy_timeout),
+	DEF(SET_UINT, login_proxy_max_reconnects),
 	DEF(SET_TIME, login_proxy_max_disconnect_delay),
 	DEF(SET_STR, director_username_hash),
 
@@ -4088,6 +4087,8 @@ static const struct login_settings login_default_settings = {
 	.login_proxy_notify_path = "proxy-notify",
 	.login_plugin_dir = MODULEDIR"/login",
 	.login_plugins = "",
+	.login_proxy_timeout = 30*1000,
+	.login_proxy_max_reconnects = 3,
 	.login_proxy_max_disconnect_delay = 0,
 	.director_username_hash = "%u",
 
@@ -4106,10 +4107,10 @@ const struct setting_parser_info login_setting_parser_info = {
 	.defines = login_setting_defines,
 	.defaults = &login_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct login_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = login_settings_check
 };
@@ -4144,7 +4145,7 @@ struct service_settings log_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = UINT_MAX,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &log_unix_listeners_buf,
 			      sizeof(log_unix_listeners[0]) } },
@@ -4249,7 +4250,7 @@ struct service_settings lmtp_service_settings = {
 	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &lmtp_unix_listeners_buf,
 			      sizeof(lmtp_unix_listeners[0]) } },
@@ -4306,10 +4307,10 @@ const struct setting_parser_info lmtp_setting_parser_info = {
 	.defines = lmtp_setting_defines,
 	.defaults = &lmtp_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct lmtp_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = lmtp_settings_check,
 	.dependencies = lmtp_setting_dependencies
@@ -4346,7 +4347,7 @@ struct service_settings ipc_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &ipc_unix_listeners_buf,
 			      sizeof(ipc_unix_listeners[0]) } },
@@ -4385,7 +4386,7 @@ struct service_settings indexer_worker_service_settings = {
 	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &indexer_worker_unix_listeners_buf,
 			      sizeof(indexer_worker_unix_listeners[0]) } },
@@ -4423,7 +4424,7 @@ struct service_settings indexer_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &indexer_unix_listeners_buf,
 			      sizeof(indexer_unix_listeners[0]) } },
@@ -4527,7 +4528,7 @@ struct service_settings imap_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &imap_unix_listeners_buf,
 			      sizeof(imap_unix_listeners[0]) } },
@@ -4596,10 +4597,10 @@ const struct setting_parser_info imap_setting_parser_info = {
 	.defines = imap_setting_defines,
 	.defaults = &imap_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct imap_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = imap_settings_verify,
 	.dependencies = imap_setting_dependencies
@@ -4634,7 +4635,7 @@ struct service_settings imap_urlauth_worker_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &imap_urlauth_worker_unix_listeners_buf,
 			      sizeof(imap_urlauth_worker_unix_listeners[0]) } },
@@ -4667,10 +4668,10 @@ const struct setting_parser_info imap_urlauth_worker_setting_parser_info = {
 	.defines = imap_urlauth_worker_setting_defines,
 	.defaults = &imap_urlauth_worker_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct imap_urlauth_worker_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.dependencies = imap_urlauth_worker_setting_dependencies
 };
@@ -4704,7 +4705,7 @@ struct service_settings imap_urlauth_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &imap_urlauth_unix_listeners_buf,
 			      sizeof(imap_urlauth_unix_listeners[0]) } },
@@ -4745,10 +4746,10 @@ const struct setting_parser_info imap_urlauth_setting_parser_info = {
 	.defines = imap_urlauth_setting_defines,
 	.defaults = &imap_urlauth_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct imap_urlauth_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.dependencies = imap_urlauth_setting_dependencies
 };
@@ -4784,7 +4785,7 @@ struct service_settings imap_urlauth_login_service_settings = {
 	.client_limit = 0,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &imap_urlauth_login_unix_listeners_buf,
 			      sizeof(imap_urlauth_login_unix_listeners[0]) } },
@@ -4802,8 +4803,8 @@ const struct setting_parser_info imap_urlauth_login_setting_parser_info = {
 	.module_name = "imap-urlauth-login",
 	.defines = imap_urlauth_login_setting_defines,
 
-	.type_offset = (size_t)-1,
-	.parent_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
+	.parent_offset = SIZE_MAX,
 
 	.dependencies = imap_urlauth_login_setting_dependencies
 };
@@ -4844,7 +4845,7 @@ struct service_settings imap_login_service_settings = {
 	.client_limit = 0,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = ARRAY_INIT,
 	.fifo_listeners = ARRAY_INIT,
@@ -4879,10 +4880,10 @@ static const struct setting_parser_info imap_login_setting_parser_info = {
 	.defines = imap_login_setting_defines,
 	.defaults = &imap_login_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct imap_login_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.dependencies = imap_login_setting_dependencies
 };
 const struct setting_parser_info *imap_login_setting_roots[] = {
@@ -4920,7 +4921,7 @@ struct service_settings imap_hibernate_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &imap_hibernate_unix_listeners_buf,
 			      sizeof(imap_hibernate_unix_listeners[0]) } },
@@ -5017,7 +5018,7 @@ struct service_settings doveadm_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &doveadm_unix_listeners_buf,
 			      sizeof(doveadm_unix_listeners[0]) } },
@@ -5091,10 +5092,10 @@ const struct setting_parser_info doveadm_setting_parser_info = {
 	.defines = doveadm_setting_defines,
 	.defaults = &doveadm_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct doveadm_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.check_func = doveadm_settings_check,
 	.dependencies = doveadm_setting_dependencies
 };
@@ -5130,7 +5131,7 @@ struct service_settings dns_client_service_settings = {
 	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &dns_client_unix_listeners_buf,
 			      sizeof(dns_client_unix_listeners[0]) } },
@@ -5195,7 +5196,7 @@ struct service_settings director_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = UINT_MAX,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &director_unix_listeners_buf,
 			      sizeof(director_unix_listeners[0]) } },
@@ -5245,10 +5246,10 @@ const struct setting_parser_info director_setting_parser_info = {
 	.defines = director_setting_defines,
 	.defaults = &director_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct director_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = director_settings_verify
 };
@@ -5292,7 +5293,7 @@ struct service_settings dict_service_settings = {
 	.client_limit = 1,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &dict_unix_listeners_buf,
 			      sizeof(dict_unix_listeners[0]) } },
@@ -5317,7 +5318,7 @@ struct service_settings dict_async_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &dict_async_unix_listeners_buf,
 			      sizeof(dict_async_unix_listeners[0]) } },
@@ -5348,10 +5349,10 @@ const struct setting_parser_info dict_setting_parser_info = {
 	.defines = dict_setting_defines,
 	.defaults = &dict_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct dict_server_settings),
 
-	.parent_offset = (size_t)-1
+	.parent_offset = SIZE_MAX
 };
 /* ../../src/config/config-settings.c */
 /* <settings checks> */
@@ -5383,7 +5384,7 @@ struct service_settings config_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = UINT_MAX,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &config_unix_listeners_buf,
 			      sizeof(config_unix_listeners[0]) } },
@@ -5606,7 +5607,7 @@ struct service_settings auth_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &auth_unix_listeners_buf,
 			      sizeof(auth_unix_listeners[0]) } },
@@ -5633,7 +5634,7 @@ struct service_settings auth_worker_service_settings = {
 	.client_limit = 1,
 	.service_count = 1,
 	.idle_kill = 0,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &auth_worker_unix_listeners_buf,
 			      sizeof(auth_worker_unix_listeners[0]) } },
@@ -5690,7 +5691,7 @@ const struct setting_parser_info auth_passdb_setting_parser_info = {
 	.type_offset = offsetof(struct auth_passdb_settings, name),
 	.struct_size = sizeof(struct auth_passdb_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &auth_setting_parser_info,
 
 	.check_func = auth_passdb_settings_check
@@ -5736,7 +5737,7 @@ const struct setting_parser_info auth_userdb_setting_parser_info = {
 	.type_offset = offsetof(struct auth_userdb_settings, name),
 	.struct_size = sizeof(struct auth_userdb_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.parent = &auth_setting_parser_info,
 
 	.check_func = auth_userdb_settings_check
@@ -5869,10 +5870,10 @@ const struct setting_parser_info auth_setting_parser_info = {
 	.defines = auth_setting_defines,
 	.defaults = &auth_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct auth_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = auth_settings_check
 };
@@ -5908,7 +5909,7 @@ struct service_settings anvil_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = UINT_MAX,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &anvil_unix_listeners_buf,
 			      sizeof(anvil_unix_listeners[0]) } },
