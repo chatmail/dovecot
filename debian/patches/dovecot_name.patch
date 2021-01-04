@@ -19,10 +19,10 @@ Last-Update: 2020-05-23
  6 files changed, 13 insertions(+), 8 deletions(-)
 
 diff --git a/configure.ac b/configure.ac
-index 00baa68..8424ce2 100644
+index 0d4d89f..d67d675 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -300,7 +300,12 @@ AM_ICONV
+@@ -292,7 +292,12 @@ AM_ICONV
  # SIZE_MAX is missing without this
  CXXFLAGS="$CXXFLAGS -D__STDC_LIMIT_MACROS"
  
@@ -37,10 +37,10 @@ index 00baa68..8424ce2 100644
  AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", [Dovecot version])
  
 diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index cb93fa2..40cde51 100644
+index 5890e8e..59e3995 100644
 --- a/src/config/all-settings.c
 +++ b/src/config/all-settings.c
-@@ -2259,7 +2259,7 @@ static const struct submission_settings submission_default_settings = {
+@@ -2297,7 +2297,7 @@ static const struct submission_settings submission_default_settings = {
  
  	.hostname = "",
  
@@ -49,7 +49,7 @@ index cb93fa2..40cde51 100644
  	.login_trusted_networks = "",
  
  	.recipient_delimiter = "+",
-@@ -3849,7 +3849,7 @@ static const struct setting_define login_setting_defines[] = {
+@@ -4080,7 +4080,7 @@ static const struct setting_define login_setting_defines[] = {
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
@@ -58,7 +58,7 @@ index cb93fa2..40cde51 100644
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
-@@ -4059,7 +4059,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+@@ -4292,7 +4292,7 @@ static const struct lmtp_settings lmtp_default_settings = {
  
  	.lmtp_client_workarounds = "",
  
@@ -68,7 +68,7 @@ index cb93fa2..40cde51 100644
  
  	.mail_plugins = "",
 diff --git a/src/lib-smtp/smtp-server.c b/src/lib-smtp/smtp-server.c
-index cf5ea43..5aed46e 100644
+index d70c61b..1714a87 100644
 --- a/src/lib-smtp/smtp-server.c
 +++ b/src/lib-smtp/smtp-server.c
 @@ -47,7 +47,7 @@ struct smtp_server *smtp_server_init(const struct smtp_server_settings *set)
@@ -81,7 +81,7 @@ index cf5ea43..5aed46e 100644
  		server->set.capabilities = SMTP_SERVER_DEFAULT_CAPABILITIES;
  	} else  {
 diff --git a/src/lmtp/lmtp-settings.c b/src/lmtp/lmtp-settings.c
-index d6da86e..e408032 100644
+index 3b4a307..1065791 100644
 --- a/src/lmtp/lmtp-settings.c
 +++ b/src/lmtp/lmtp-settings.c
 @@ -91,7 +91,7 @@ static const struct lmtp_settings lmtp_default_settings = {
@@ -94,10 +94,10 @@ index d6da86e..e408032 100644
  
  	.mail_plugins = "",
 diff --git a/src/login-common/login-settings.c b/src/login-common/login-settings.c
-index cb52247..60a47e1 100644
+index 40bb161..d30643b 100644
 --- a/src/login-common/login-settings.c
 +++ b/src/login-common/login-settings.c
-@@ -48,7 +48,7 @@ static const struct setting_define login_setting_defines[] = {
+@@ -50,7 +50,7 @@ static const struct setting_define login_setting_defines[] = {
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
@@ -107,7 +107,7 @@ index cb52247..60a47e1 100644
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
 diff --git a/src/submission/submission-settings.c b/src/submission/submission-settings.c
-index ab41165..c3f5b37 100644
+index 29ecbfe..de73b91 100644
 --- a/src/submission/submission-settings.c
 +++ b/src/submission/submission-settings.c
 @@ -103,7 +103,7 @@ static const struct submission_settings submission_default_settings = {

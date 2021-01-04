@@ -1,18 +1,22 @@
-From: Jaldhar H. Vyas <jaldhar@debian.org>
-Date: Mon, 04 Feb 2013 15:55:06 +0000
+From: "Jaldhar H. Vyas" <jaldhar@debian.org>
+Date: Mon, 4 Feb 2013 15:55:06 +0000
 Subject: wrong pointer to exampledir
-Description: The file /etc/dovecot/README sends the user to a directory
-/usr/share/doc/dovecot/example-config/, but the real path should be
-/usr/share/doc/dovecot-core/example-config/
+
 Bug: #698941
 
- doc/example-config/Makefile.in        |    2 +-
- doc/example-config/conf.d/Makefile.in |    2 +-
+The file /etc/dovecot/README sends the user to a directory
+/usr/share/doc/dovecot/example-config/, but the real path should be
+/usr/share/doc/dovecot-core/example-config/
+---
+ doc/example-config/Makefile.in        | 2 +-
+ doc/example-config/conf.d/Makefile.in | 2 +-
  2 files changed, 2 insertions(+), 2 deletions(-)
 
+diff --git a/doc/example-config/Makefile.in b/doc/example-config/Makefile.in
+index 6062db0..3d6483f 100644
 --- a/doc/example-config/Makefile.in
 +++ b/doc/example-config/Makefile.in
-@@ -455,7 +455,7 @@
+@@ -472,7 +472,7 @@ top_srcdir = @top_srcdir@
  SUBDIRS = conf.d
  pkgsysconfdir = $(sysconfdir)/dovecot
  nodist_pkgsysconf_DATA = README
@@ -21,9 +25,11 @@ Bug: #698941
  example_DATA = \
  	dovecot.conf \
  	dovecot-dict-auth.conf.ext \
+diff --git a/doc/example-config/conf.d/Makefile.in b/doc/example-config/conf.d/Makefile.in
+index ab22ad5..51a9030 100644
 --- a/doc/example-config/conf.d/Makefile.in
 +++ b/doc/example-config/conf.d/Makefile.in
-@@ -392,7 +392,7 @@
+@@ -409,7 +409,7 @@ top_build_prefix = @top_build_prefix@
  top_builddir = @top_builddir@
  top_srcdir = @top_srcdir@
  pkgsysconfdir = $(sysconfdir)/dovecot

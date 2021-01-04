@@ -1,19 +1,21 @@
-From: Jaldhar H. Vyas <jaldhar@debian.org>
+From: "Jaldhar H. Vyas" <jaldhar@debian.org>
 Date: Tue, 25 Sep 2012 01:12:07 -0400
-Last-Update: Sun, 30 Nov 2014 23:59:07 -0500
 Subject: SSL cert location
-Description: Move dovecots generated X.509 certificate out of /etc/ssl where
- it doesn't belong.  Turn off ssl by default.
-Bug: #608719
----
- doc/example-config/conf.d/10-ssl.conf | 6 ++--
- doc/mkcert.sh                         | 4 ++--
- 2 files changed, 5 insertions(+), 5 deletions(-)
 
-Index: dovecot/doc/example-config/conf.d/10-ssl.conf
-===================================================================
---- dovecot.orig/doc/example-config/conf.d/10-ssl.conf
-+++ dovecot/doc/example-config/conf.d/10-ssl.conf
+Last-Update: Sun, 30 Nov 2014 23:59:07 -0500
+Bug: #608719
+
+Move dovecots generated X.509 certificate out of /etc/ssl where
+it doesn't belong.  Turn off ssl by default.
+---
+ doc/example-config/conf.d/10-ssl.conf |  7 ++++---
+ doc/mkcert.sh                         | 10 +++++-----
+ 2 files changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/doc/example-config/conf.d/10-ssl.conf b/doc/example-config/conf.d/10-ssl.conf
+index 9be3f91..ea1c1a8 100644
+--- a/doc/example-config/conf.d/10-ssl.conf
++++ b/doc/example-config/conf.d/10-ssl.conf
 @@ -3,14 +3,14 @@
  ##
  
@@ -40,10 +42,10 @@ Index: dovecot/doc/example-config/conf.d/10-ssl.conf
  #ssl_client_ca_file =
  
  # Require valid cert when connecting to a remote server
-Index: dovecot/doc/mkcert.sh
-===================================================================
---- dovecot.orig/doc/mkcert.sh
-+++ dovecot/doc/mkcert.sh
+diff --git a/doc/mkcert.sh b/doc/mkcert.sh
+index f7e484c..efcf85e 100644
+--- a/doc/mkcert.sh
++++ b/doc/mkcert.sh
 @@ -8,19 +8,19 @@ OPENSSL=${OPENSSL-openssl}
  SSLDIR=${SSLDIR-/etc/ssl}
  OPENSSLCONFIG=${OPENSSLCONFIG-dovecot-openssl.cnf}

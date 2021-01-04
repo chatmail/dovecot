@@ -1,14 +1,19 @@
-From: Jaldhar H. Vyas <jaldhar@debian.org>
+From: "Jaldhar H. Vyas" <jaldhar@debian.org>
 Date: Fri, 16 Sep 2011 00:55:02 +0200
 Subject: default location for user mailboxes
-Description: Set a default for the case where a user has no mail so auto-
- detection of mailboxes doesn't work.  See also: chgrp-error.patch
+
 Bug: #623440
 Last-Update: 2017-09-20
----
- doc/example-config/conf.d/10-mail.conf |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
 
+Set a default for the case where a user has no mail so auto-
+detection of mailboxes doesn't work.
+See also: chgrp-error.patch
+---
+ doc/example-config/conf.d/10-mail.conf | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/example-config/conf.d/10-mail.conf b/doc/example-config/conf.d/10-mail.conf
+index 24daa04..a69224f 100644
 --- a/doc/example-config/conf.d/10-mail.conf
 +++ b/doc/example-config/conf.d/10-mail.conf
 @@ -27,7 +27,7 @@
@@ -20,7 +25,7 @@ Last-Update: 2017-09-20
  
  # If you need to set multiple mailbox locations or want to change default
  # namespace settings, you can do it by defining namespace sections.
-@@ -111,7 +111,7 @@
+@@ -111,7 +111,7 @@ namespace inbox {
  # Group to enable temporarily for privileged operations. Currently this is
  # used only with INBOX when either its initial creation or dotlocking fails.
  # Typically this is set to "mail" to give access to /var/mail.

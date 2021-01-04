@@ -1,13 +1,18 @@
 From: Noah Meyerhans <noahm@debian.org>
 Date: Thu, 21 May 2020 21:48:59 -0700
 Subject: Don't try to build doc/rfc subdir components
+
 Forwarded: no (Debian-specific)
 ---
+ pigeonhole/configure.ac    | 1 -
+ pigeonhole/doc/Makefile.am | 1 -
+ pigeonhole/doc/Makefile.in | 1 -
+ 3 files changed, 3 deletions(-)
 
-Index: dovecot/pigeonhole/configure.ac
-===================================================================
---- dovecot.orig/pigeonhole/configure.ac
-+++ dovecot/pigeonhole/configure.ac
+diff --git a/pigeonhole/configure.ac b/pigeonhole/configure.ac
+index d7b96f5..d7e4f1b 100644
+--- a/pigeonhole/configure.ac
++++ b/pigeonhole/configure.ac
 @@ -176,7 +176,6 @@ doc/Makefile
  doc/man/Makefile
  doc/example-config/Makefile
@@ -16,10 +21,10 @@ Index: dovecot/pigeonhole/configure.ac
  doc/extensions/Makefile
  doc/locations/Makefile
  doc/plugins/Makefile
-Index: dovecot/pigeonhole/doc/Makefile.am
-===================================================================
---- dovecot.orig/pigeonhole/doc/Makefile.am
-+++ dovecot/pigeonhole/doc/Makefile.am
+diff --git a/pigeonhole/doc/Makefile.am b/pigeonhole/doc/Makefile.am
+index 5131ece..258c135 100644
+--- a/pigeonhole/doc/Makefile.am
++++ b/pigeonhole/doc/Makefile.am
 @@ -1,7 +1,6 @@
  SUBDIRS = \
  	man \
@@ -28,10 +33,10 @@ Index: dovecot/pigeonhole/doc/Makefile.am
  	extensions \
  	locations \
  	plugins
-Index: dovecot/pigeonhole/doc/Makefile.in
-===================================================================
---- dovecot.orig/pigeonhole/doc/Makefile.in
-+++ dovecot/pigeonhole/doc/Makefile.in
+diff --git a/pigeonhole/doc/Makefile.in b/pigeonhole/doc/Makefile.in
+index 4326dd9..203a82f 100644
+--- a/pigeonhole/doc/Makefile.in
++++ b/pigeonhole/doc/Makefile.in
 @@ -399,7 +399,6 @@ top_srcdir = @top_srcdir@
  SUBDIRS = \
  	man \

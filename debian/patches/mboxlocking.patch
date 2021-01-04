@@ -13,7 +13,7 @@ Bug: #720502
  3 files changed, 9 insertions(+), 3 deletions(-)
 
 diff --git a/doc/example-config/conf.d/10-mail.conf b/doc/example-config/conf.d/10-mail.conf
-index 425612a..d95112a 100644
+index a69224f..b47235f 100644
 --- a/doc/example-config/conf.d/10-mail.conf
 +++ b/doc/example-config/conf.d/10-mail.conf
 @@ -320,8 +320,14 @@ protocol !indexer-worker {
@@ -33,10 +33,10 @@ index 425612a..d95112a 100644
  # Maximum time to wait for lock (all of them) before aborting.
  #mbox_lock_timeout = 5 mins
 diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index f3e0661..cb93fa2 100644
+index bf59820..5890e8e 100644
 --- a/src/config/all-settings.c
 +++ b/src/config/all-settings.c
-@@ -1225,7 +1225,7 @@ static const struct setting_define mbox_setting_defines[] = {
+@@ -1236,7 +1236,7 @@ static const struct setting_define mbox_setting_defines[] = {
  };
  static const struct mbox_settings mbox_default_settings = {
  	.mbox_read_locks = "fcntl",
@@ -46,7 +46,7 @@ index f3e0661..cb93fa2 100644
  	.mbox_dotlock_change_timeout = 2*60,
  	.mbox_min_index_size = 0,
 diff --git a/src/lib-storage/index/mbox/mbox-settings.c b/src/lib-storage/index/mbox/mbox-settings.c
-index 53aaf8d..c4ae8e7 100644
+index ea051ec..803167f 100644
 --- a/src/lib-storage/index/mbox/mbox-settings.c
 +++ b/src/lib-storage/index/mbox/mbox-settings.c
 @@ -27,7 +27,7 @@ static const struct setting_define mbox_setting_defines[] = {

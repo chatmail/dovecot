@@ -1,11 +1,19 @@
-Author: Apollon Oikonomopoulos <apoikos@debian.org>
-Description: Set DH params location
- This is mandatory for SSL support in 2.3
-Last-Update: 2018-03-24
-Forwarded: no (Debian-specific)
+From: Apollon Oikonomopoulos <apoikos@debian.org>
+Date: Sat, 24 Mar 2018 00:24:55 +0200
+Subject: Set DH params location
+
+Forwarded: not-needed
+
+This is mandatory for SSL support in 2.3
+---
+ doc/example-config/conf.d/10-ssl.conf | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/example-config/conf.d/10-ssl.conf b/doc/example-config/conf.d/10-ssl.conf
+index ea1c1a8..134b7b3 100644
 --- a/doc/example-config/conf.d/10-ssl.conf
 +++ b/doc/example-config/conf.d/10-ssl.conf
-@@ -47,7 +47,7 @@
+@@ -52,7 +52,7 @@ ssl_client_ca_dir = /etc/ssl/certs
  # Generate new params with `openssl dhparam -out /etc/dovecot/dh.pem 4096`
  # Or migrate from old ssl-parameters.dat file with the command dovecot
  # gives on startup when ssl_dh is unset.
