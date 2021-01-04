@@ -1,3 +1,24 @@
+dovecot (1:2.3.13+dfsg1-1) UNRELEASED; urgency=medium
+
+  [ Noah Meyerhans ]
+  * [f641320] Note closure of #930919 with 2.3.10.1+dfsg1-1
+  * [3f738da] Note closure of #921529 in 1:2.2.34-1
+  * [a908d4b] Note closure of #928492 with 2.3.10.1+dfsg1-1
+
+  [ Christian Göttsche ]
+  * [6829237] New upstream version 2.3.13
+    - CVE-2020-24386: IMAP hibernation allows accessing other peoples mail
+    - CVE-2020-25275: MIME parsing crashes with particular messages
+
+  * [6d25736] Add libzstd-dev to build-dependencies (Closes: #969165)
+  * [5956798] Rebase patches
+  * [2cb63c3] Bump to standards version 4.5.1 (no further changes)
+  * [548bac5] Drop unmatched copyright src/lib-ntlm/* wildcard
+  * [6f33f3f] Ignore package-contains-documentation-outside-usr-share-doc
+    false-positives
+
+ -- Christian Göttsche <cgzones@googlemail.com>  Mon, 04 Jan 2021 15:29:15 +0100
+
 dovecot (1:2.3.11.3+dfsg1-2) unstable; urgency=medium
 
   [ Christian Göttsche ]
