@@ -1,0 +1,79 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Mon, 4 Jan 2021 16:06:43 +0100
+Subject: Fix 32bit sign comparisons
+
+In file included from test-lib.h:5,
+                 from test-time-util.c:3:
+test-time-util.c: In function 'test_str_to_timeval':
+test-time-util.c:387:29: warning: comparison of integer expressions of different signedness: '__time_t' {aka 'long int'} and 'unsigned int' [-Wsign-compare]
+  387 |   test_assert_idx(tv.tv_sec == tests[i].tv_sec, i);
+      |                             ^~
+../../src/lib-test/test-common.h:26:9: note: in definition of macro 'test_assert_idx'
+   26 |   if (!(code)) test_assert_failed_idx(#code, __FILE__, __LINE__, i); \
+      |         ^~~~
+test-time-util.c:388:30: warning: comparison of integer expressions of different signedness: '__suseconds_t' {aka 'long int'} and 'unsigned int' [-Wsign-compare]
+  388 |   test_assert_idx(tv.tv_usec == tests[i].tv_usec, i);
+      |                              ^~
+../../src/lib-test/test-common.h:26:9: note: in definition of macro 'test_assert_idx'
+   26 |   if (!(code)) test_assert_failed_idx(#code, __FILE__, __LINE__, i); \
+      |         ^~~~
+
+test-message-header-decode.c: In function 'check_encode_decode_result':
+test-message-header-decode.c:125:23: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]
+  125 |      (poutend - pout) >= rep_char_len &&
+      |                       ^~
+../../src/lib-test/test-common.h:26:9: note: in definition of macro 'test_assert_idx'
+   26 |   if (!(code)) test_assert_failed_idx(#code, __FILE__, __LINE__, i); \
+      |         ^~~~
+
+login-proxy.c: In function 'login_proxy_connect':
+login-proxy.c:319:58: warning: comparison of integer expressions of different signedness: '__time_t' {aka 'long int'} and 'unsigned int' [-Wsign-compare]
+  319 |      rec->last_failure.tv_sec - rec->last_success.tv_sec >
+      |                                                          ^
+---
+ src/lib-mail/test-message-header-decode.c | 2 +-
+ src/lib/test-time-util.c                  | 4 ++--
+ src/login-common/login-proxy.c            | 2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/lib-mail/test-message-header-decode.c b/src/lib-mail/test-message-header-decode.c
+index 7934c7b..d50df3f 100644
+--- a/src/lib-mail/test-message-header-decode.c
++++ b/src/lib-mail/test-message-header-decode.c
+@@ -122,7 +122,7 @@ check_encode_decode_result(const unsigned char *inbuf, size_t inbuf_len,
+ 				/* Only one character is substituted for a run
+ 				   of bad stuff. */
+ 				test_assert_idx(
+-					(poutend - pout) >= rep_char_len &&
++					(size_t)(poutend - pout) >= rep_char_len &&
+ 					memcmp(pout, rep_char,
+ 					       rep_char_len) == 0, test_idx);
+ 				pout += rep_char_len;
+diff --git a/src/lib/test-time-util.c b/src/lib/test-time-util.c
+index cfa3220..5f906e8 100644
+--- a/src/lib/test-time-util.c
++++ b/src/lib/test-time-util.c
+@@ -384,8 +384,8 @@ static void test_str_to_timeval(void)
+ 	test_begin("str_to_timeval");
+ 	for (unsigned int i = 0; i < N_ELEMENTS(tests); i++) {
+ 		test_assert_idx(str_to_timeval(tests[i].str, &tv) == 0, i);
+-		test_assert_idx(tv.tv_sec == tests[i].tv_sec, i);
+-		test_assert_idx(tv.tv_usec == tests[i].tv_usec, i);
++		test_assert_idx(tv.tv_sec == (time_t)tests[i].tv_sec, i);
++		test_assert_idx(tv.tv_usec == (suseconds_t)tests[i].tv_usec, i);
+ 	}
+ 	for (unsigned int i = 0; i < N_ELEMENTS(test_failures); i++)
+ 		test_assert_idx(str_to_timeval(test_failures[i], &tv) == -1, i);
+diff --git a/src/login-common/login-proxy.c b/src/login-common/login-proxy.c
+index 53c4f9b..0b81808 100644
+--- a/src/login-common/login-proxy.c
++++ b/src/login-common/login-proxy.c
+@@ -317,7 +317,7 @@ static int login_proxy_connect(struct login_proxy *proxy)
+ 	if (proxy->host_immediate_failure_after_secs != 0 &&
+ 	    timeval_cmp(&rec->last_failure, &rec->last_success) > 0 &&
+ 	    rec->last_failure.tv_sec - rec->last_success.tv_sec >
+-	    	proxy->host_immediate_failure_after_secs &&
++	    	(time_t)proxy->host_immediate_failure_after_secs &&
+ 	    rec->num_waiting_connections > 1) {
+ 		/* the server is down. fail immediately */
+ 		proxy->disable_reconnect = TRUE;
