@@ -13,12 +13,25 @@ ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
   export DEB_LDFLAGS_MAINT_STRIP = -Wl,-Bsymbolic-functions
 endif
 
+DOV_DEB_CFLAGS=
+DOV_DEB_CXXFLAGS=
+DOV_DEB_LDFLAGS=
+
 # Ensure that stacktrace generation works:
-export DEB_LDFLAGS_MAINT_APPEND = -rdynamic
+DOV_DEB_LDFLAGS += -rdynamic
 include /usr/share/dpkg/architecture.mk
 ifneq ($(filter armel armhf, $(DEB_HOST_ARCH)),)
-  export DEB_CFLAGS_MAINT_APPEND = -funwind-tables
+  DOV_DEB_CFLAGS += -funwind-tables
 endif
+
+DOV_DEB_CFLAGS += -flto
+DOV_DEB_CXXFLAGS += -flto
+DOV_DEB_LDFLAGS += -flto
+
+export DEB_CFLAGS_MAINT_APPEND = $(DOV_DEB_CFLAGS)
+export DEB_CXXFLAGS_MAINT_APPEND = $(DOV_DEB_CXXFLAGS)
+export DEB_LDFLAGS_MAINT_APPEND = $(DOV_DEB_LDFLAGS)
+
 
 ifeq ($(DEB_HOST_ARCH_OS),linux)
   CONFIGURE_APPARMOR = --with-apparmor

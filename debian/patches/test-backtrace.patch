@@ -9,7 +9,7 @@ something that appears in all the traces on the platforms we support.
  1 file changed, 2 insertions(+), 4 deletions(-)
 
 diff --git a/src/lib/test-backtrace.c b/src/lib/test-backtrace.c
-index fdebe0f..78bd096 100644
+index fdebe0f..19c819a 100644
 --- a/src/lib/test-backtrace.c
 +++ b/src/lib/test-backtrace.c
 @@ -17,8 +17,7 @@ static void test_backtrace_append(void)
@@ -18,7 +18,7 @@ index fdebe0f..78bd096 100644
  	test_assert(backtrace_append(bt) == 0);
 -	/* it should have some kind of main in it */
 -	test_assert(strstr(str_c(bt), "main") != NULL);
-+	test_assert(strstr(str_c(bt), "backtrace_append") != NULL);
++	test_assert(strstr(str_c(bt), "backtrace_append") != NULL || strstr(str_c(bt), "main") != NULL);
  #else
  	/* should not work in this context */
  	test_assert(backtrace_append(bt) == -1);
@@ -28,7 +28,7 @@ index fdebe0f..78bd096 100644
  	test_assert(backtrace_get(&bt) == 0);
 -	/* it should have some kind of main in it */
 -	test_assert(strstr(bt, "main") != NULL);
-+	test_assert(strstr(bt, "backtrace_append") != NULL);
++	test_assert(strstr(bt, "backtrace_append") != NULL || strstr(bt, "main") != NULL);
  #else
  	/* should not work in this context */
  	test_assert(backtrace_get(&bt) == -1);
