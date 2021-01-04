@@ -89,6 +89,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 pkglibexec_PROGRAMS = imap$(EXEEXT)
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/imap
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -133,15 +134,13 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_mysql.m4 $(top_srcdir)/m4/want_pam.m4 \
 	$(top_srcdir)/m4/want_passwd.m4 $(top_srcdir)/m4/want_pgsql.m4 \
 	$(top_srcdir)/m4/want_prefetch.m4 \
-	$(top_srcdir)/m4/want_shadow.m4 $(top_srcdir)/m4/want_sia.m4 \
+	$(top_srcdir)/m4/want_shadow.m4 \
 	$(top_srcdir)/m4/want_sodium.m4 $(top_srcdir)/m4/want_solr.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
-	$(top_srcdir)/m4/want_unwind.m4 \
-	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_unwind.m4 $(top_srcdir)/m4/want_zlib.m4 \
+	$(top_srcdir)/m4/want_zstd.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(pkginc_lib_HEADERS) \
@@ -150,9 +149,10 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
+am__EXEEXT_1 = test-imap-client-hibernate$(EXEEXT)
 am__installdirs = "$(DESTDIR)$(pkglibexecdir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
-PROGRAMS = $(pkglibexec_PROGRAMS)
+PROGRAMS = $(noinst_PROGRAMS) $(pkglibexec_PROGRAMS)
 am__objects_1 = cmd-append.$(OBJEXT) cmd-capability.$(OBJEXT) \
 	cmd-cancelupdate.$(OBJEXT) cmd-check.$(OBJEXT) \
 	cmd-close.$(OBJEXT) cmd-copy.$(OBJEXT) cmd-create.$(OBJEXT) \
@@ -170,7 +170,7 @@ am__objects_1 = cmd-append.$(OBJEXT) cmd-capability.$(OBJEXT) \
 	cmd-unselect.$(OBJEXT) cmd-unsubscribe.$(OBJEXT) \
 	cmd-urlfetch.$(OBJEXT) cmd-x-cancel.$(OBJEXT) \
 	cmd-x-state.$(OBJEXT)
-am_imap_OBJECTS = $(am__objects_1) imap-client.$(OBJEXT) \
+am__objects_2 = $(am__objects_1) imap-client.$(OBJEXT) \
 	imap-client-hibernate.$(OBJEXT) imap-commands.$(OBJEXT) \
 	imap-commands-util.$(OBJEXT) imap-expunge.$(OBJEXT) \
 	imap-feature.$(OBJEXT) imap-fetch.$(OBJEXT) \
@@ -179,7 +179,8 @@ am_imap_OBJECTS = $(am__objects_1) imap-client.$(OBJEXT) \
 	imap-search.$(OBJEXT) imap-search-args.$(OBJEXT) \
 	imap-settings.$(OBJEXT) imap-status.$(OBJEXT) \
 	imap-state.$(OBJEXT) imap-sync.$(OBJEXT) \
-	mail-storage-callbacks.$(OBJEXT) main.$(OBJEXT)
+	mail-storage-callbacks.$(OBJEXT)
+am_imap_OBJECTS = $(am__objects_2) main.$(OBJEXT)
 imap_OBJECTS = $(am_imap_OBJECTS)
 am__DEPENDENCIES_1 =
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -189,6 +190,12 @@ am__v_lt_1 =
 imap_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(imap_LDFLAGS) $(LDFLAGS) -o $@
+am_test_imap_client_hibernate_OBJECTS =  \
+	test-imap-client-hibernate.$(OBJEXT) $(am__objects_2)
+test_imap_client_hibernate_OBJECTS =  \
+	$(am_test_imap_client_hibernate_OBJECTS)
+am__DEPENDENCIES_2 = ../lib-imap-urlauth/libimap-urlauth.la \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -223,8 +230,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(imap_SOURCES)
-DIST_SOURCES = $(imap_SOURCES)
+SOURCES = $(imap_SOURCES) $(test_imap_client_hibernate_SOURCES)
+DIST_SOURCES = $(imap_SOURCES) $(test_imap_client_hibernate_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -294,6 +301,7 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 BINARY_CFLAGS = @BINARY_CFLAGS@
 BINARY_LDFLAGS = @BINARY_LDFLAGS@
+BISON = @BISON@
 CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
 CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
@@ -324,6 +332,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
+FLEX = @FLEX@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -491,6 +500,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-master \
@@ -555,7 +565,7 @@ cmds = \
 	cmd-x-cancel.c \
 	cmd-x-state.c
 
-imap_SOURCES = \
+common_sources = \
 	$(cmds) \
 	imap-client.c \
 	imap-client-hibernate.c \
@@ -574,7 +584,10 @@ imap_SOURCES = \
 	imap-status.c \
 	imap-state.c \
 	imap-sync.c \
-	mail-storage-callbacks.c \
+	mail-storage-callbacks.c
+
+imap_SOURCES = \
+	$(common_sources) \
 	main.c
 
 headers = \
@@ -598,6 +611,14 @@ headers = \
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
+test_programs = \
+	test-imap-client-hibernate
+
+test_imap_client_hibernate_SOURCES = \
+	test-imap-client-hibernate.c $(common_sources)
+
+test_imap_client_hibernate_LDADD = $(imap_LDADD)
+test_imap_client_hibernate_DEPENDENCIES = $(imap_DEPENDENCIES)
 all: all-am
 
 .SUFFIXES:
@@ -631,6 +652,15 @@ $(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
 install-pkglibexecPROGRAMS: $(pkglibexec_PROGRAMS)
 	@$(NORMAL_INSTALL)
 	@list='$(pkglibexec_PROGRAMS)'; test -n "$(pkglibexecdir)" || list=; \
@@ -684,6 +714,10 @@ clean-pkglibexecPROGRAMS:
 imap$(EXEEXT): $(imap_OBJECTS) $(imap_DEPENDENCIES) $(EXTRA_imap_DEPENDENCIES) 
 	@rm -f imap$(EXEEXT)
 	$(AM_V_CCLD)$(imap_LINK) $(imap_OBJECTS) $(imap_LDADD) $(LIBS)
+
+test-imap-client-hibernate$(EXEEXT): $(test_imap_client_hibernate_OBJECTS) $(test_imap_client_hibernate_DEPENDENCIES) $(EXTRA_test_imap_client_hibernate_DEPENDENCIES) 
+	@rm -f test-imap-client-hibernate$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_imap_client_hibernate_OBJECTS) $(test_imap_client_hibernate_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -747,6 +781,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imap-sync.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-storage-callbacks.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-imap-client-hibernate.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -879,6 +914,7 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-am
 all-am: Makefile $(PROGRAMS) $(HEADERS)
 installdirs:
@@ -917,8 +953,8 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-libtool clean-pkglibexecPROGRAMS \
-	mostlyclean-am
+clean-am: clean-generic clean-libtool clean-noinstPROGRAMS \
+	clean-pkglibexecPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -986,11 +1022,12 @@ ps-am:
 
 uninstall-am: uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
 
-.MAKE: install-am install-strip
+.MAKE: check-am install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am check check-am clean clean-generic \
-	clean-libtool clean-pkglibexecPROGRAMS cscopelist-am ctags \
-	ctags-am distclean distclean-compile distclean-generic \
+.PHONY: CTAGS GTAGS TAGS all all-am check check-am check-local clean \
+	clean-generic clean-libtool clean-noinstPROGRAMS \
+	clean-pkglibexecPROGRAMS cscopelist-am ctags ctags-am \
+	distclean distclean-compile distclean-generic \
 	distclean-libtool distclean-tags distdir dvi dvi-am html \
 	html-am info info-am install install-am install-data \
 	install-data-am install-dvi install-dvi-am install-exec \
@@ -1006,6 +1043,11 @@ uninstall-am: uninstall-pkginc_libHEADERS uninstall-pkglibexecPROGRAMS
 
 .PRECIOUS: Makefile
 
+
+check-local:
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

@@ -1,7 +1,6 @@
 /* Copyright (c) 2019 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "lib-signals.h"
 #include "str.h"
 #include "strescape.h"
 #include "hostpid.h"
@@ -10,6 +9,7 @@
 #include "istream-chain.h"
 #include "ostream.h"
 #include "time-util.h"
+#include "sleep.h"
 #include "unlink-directory.h"
 #include "write-full.h"
 #include "randgen.h"
@@ -17,18 +17,15 @@
 #include "master-service.h"
 #include "master-interface.h"
 #include "test-common.h"
+#include "test-subprocess.h"
 
 #include "master-auth.h"
 #include "master-login-auth.h"
 
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
-#include <signal.h>
-#include <unistd.h>
-#include <fcntl.h>
-
 #define TEST_SOCKET "./master-login-auth-test"
+#define SERVER_KILL_TIMEOUT_SECS    20
+
+static void main_deinit(void);
 
 /*
  * Types
@@ -56,7 +53,6 @@ static bool debug = FALSE;
 /* server */
 static struct io *io_listen;
 static int fd_listen = -1;
-static pid_t server_pid;
 static struct connection_list *server_conn_list;
 static void (*test_server_input)(struct server_connection *conn);
 static void (*test_server_init)(struct server_connection *conn);
@@ -92,16 +88,15 @@ test_run_client_server(test_client_init_t *client_test,
 
 /* server */
 
-static void
-test_server_connection_refused(void)
+static void test_server_connection_refused(void)
 {
 	i_close_fd(&fd_listen);
+	i_sleep_intr_secs(500);
 }
 
 /* client */
 
-static bool
-test_client_connection_refused(void)
+static bool test_client_connection_refused(void)
 {
 	const char *error;
 	int ret;
@@ -131,10 +126,9 @@ static void test_connection_refused(void)
 
 /* server */
 
-static void
-test_connection_timed_out_input(struct server_connection *conn)
+static void test_connection_timed_out_input(struct server_connection *conn)
 {
-	sleep(5);
+	i_sleep_intr_secs(5);
 	server_connection_deinit(&conn);
 }
 
@@ -146,8 +140,7 @@ static void test_server_connection_timed_out(void)
 
 /* client */
 
-static bool
-test_client_connection_timed_out(void)
+static bool test_client_connection_timed_out(void)
 {
 	time_t time;
 	const char *error;
@@ -183,19 +176,15 @@ static void test_connection_timed_out(void)
 
 /* server */
 
-static void
-test_bad_version_input(struct server_connection *conn)
+static void test_bad_version_input(struct server_connection *conn)
 {
 	server_connection_deinit(&conn);
 }
 
-static void
-test_bad_version_init(struct server_connection *conn)
+static void test_bad_version_init(struct server_connection *conn)
 {
-	o_stream_nsend_str(conn->conn.output,
-		"VERSION\t666\t666\n");
-	o_stream_nsend_str(conn->conn.output,
-		"SPID\t23234\n");
+	o_stream_nsend_str(conn->conn.output, "VERSION\t666\t666\n");
+	o_stream_nsend_str(conn->conn.output, "SPID\t23234\n");
 }
 
 static void test_server_bad_version(void)
@@ -207,8 +196,7 @@ static void test_server_bad_version(void)
 
 /* client */
 
-static bool
-test_client_bad_version(void)
+static bool test_client_bad_version(void)
 {
 	const char *error;
 	int ret;
@@ -238,8 +226,7 @@ static void test_bad_version(void)
 
 /* server */
 
-static void
-test_disconnect_version_input(struct server_connection *conn)
+static void test_disconnect_version_input(struct server_connection *conn)
 {
 	const char *line;
 
@@ -252,13 +239,10 @@ test_disconnect_version_input(struct server_connection *conn)
 	server_connection_deinit(&conn);
 }
 
-static void
-test_disconnect_version_init(struct server_connection *conn)
+static void test_disconnect_version_init(struct server_connection *conn)
 {
-	o_stream_nsend_str(conn->conn.output,
-		"VERSION\t1\t0\n");
-	o_stream_nsend_str(conn->conn.output,
-		"SPID\t23234\n");
+	o_stream_nsend_str(conn->conn.output, "VERSION\t1\t0\n");
+	o_stream_nsend_str(conn->conn.output, "SPID\t23234\n");
 }
 
 static void test_server_disconnect_version(void)
@@ -270,8 +254,7 @@ static void test_server_disconnect_version(void)
 
 /* client */
 
-static bool
-test_client_disconnect_version(void)
+static bool test_client_disconnect_version(void)
 {
 	const char *error;
 	int ret;
@@ -301,8 +284,7 @@ static void test_disconnect_version(void)
 
 /* server */
 
-static void
-test_changed_spid_input(struct server_connection *conn)
+static void test_changed_spid_input(struct server_connection *conn)
 {
 	const char *line;
 
@@ -315,13 +297,10 @@ test_changed_spid_input(struct server_connection *conn)
 	server_connection_deinit(&conn);
 }
 
-static void
-test_changed_spid_init(struct server_connection *conn)
+static void test_changed_spid_init(struct server_connection *conn)
 {
-	o_stream_nsend_str(conn->conn.output,
-		"VERSION\t1\t0\n");
-	o_stream_nsend_str(conn->conn.output,
-		"SPID\t35341\n");
+	o_stream_nsend_str(conn->conn.output, "VERSION\t1\t0\n");
+	o_stream_nsend_str(conn->conn.output, "SPID\t35341\n");
 }
 
 static void test_server_changed_spid(void)
@@ -333,8 +312,7 @@ static void test_server_changed_spid(void)
 
 /* client */
 
-static bool
-test_client_changed_spid(void)
+static bool test_client_changed_spid(void)
 {
 	const char *error;
 	int ret;
@@ -375,8 +353,7 @@ struct _request_fail_server {
 	bool not_found:1;
 };
 
-static void
-test_request_fail_input(struct server_connection *conn)
+static void test_request_fail_input(struct server_connection *conn)
 {
 	struct _request_fail_server *ctx =
 		(struct _request_fail_server *)conn->context;
@@ -415,14 +392,15 @@ test_request_fail_input(struct server_connection *conn)
 			if (client_pid == 2324) {
 				line = t_strdup_printf("NOTFOUND\t%u\n", id);
 			} else if (client_pid == 2325) {
-				sleep(5);
+				i_sleep_intr_secs(5);
 				server_connection_deinit(&conn);
 				return;
 			} else if (client_pid == 2326) {
 				server_connection_deinit(&conn);
 				return;
 			} else {
-				line = t_strdup_printf("FAIL\t%u\t"
+				line = t_strdup_printf(
+					"FAIL\t%u\t"
 					"reason=REQUEST DENIED\n", id);
 			}
 			o_stream_nsend_str(conn->conn.output, line);
@@ -433,18 +411,15 @@ test_request_fail_input(struct server_connection *conn)
 	}
 }
 
-static void
-test_request_fail_init(struct server_connection *conn)
+static void test_request_fail_init(struct server_connection *conn)
 {
 	struct _request_fail_server *ctx;
 
 	ctx = p_new(conn->pool, struct _request_fail_server, 1);
 	conn->context = (void*)ctx;
 
-	o_stream_nsend_str(conn->conn.output,
-		"VERSION\t1\t0\n");
-	o_stream_nsend_str(conn->conn.output,
-		"SPID\t23234\n");
+	o_stream_nsend_str(conn->conn.output, "VERSION\t1\t0\n");
+	o_stream_nsend_str(conn->conn.output, "SPID\t23234\n");
 }
 
 static void test_server_request_fail(void)
@@ -456,8 +431,7 @@ static void test_server_request_fail(void)
 
 /* client */
 
-static bool
-test_client_request_fail(void)
+static bool test_client_request_fail(void)
 {
 	const char *error;
 	int ret;
@@ -470,8 +444,7 @@ test_client_request_fail(void)
 	return FALSE;
 }
 
-static bool
-test_client_request_notfound(void)
+static bool test_client_request_notfound(void)
 {
 	const char *error;
 	int ret;
@@ -484,8 +457,7 @@ test_client_request_notfound(void)
 	return FALSE;
 }
 
-static bool
-test_client_request_timeout(void)
+static bool test_client_request_timeout(void)
 {
 	const char *error;
 	int ret;
@@ -498,8 +470,7 @@ test_client_request_timeout(void)
 	return FALSE;
 }
 
-static bool
-test_client_request_disconnect(void)
+static bool test_client_request_disconnect(void)
 {
 	const char *error;
 	int ret;
@@ -512,8 +483,7 @@ test_client_request_disconnect(void)
 	return FALSE;
 }
 
-static bool
-test_client_request_reconnect(void)
+static bool test_client_request_reconnect(void)
 {
 	const char *error;
 	int ret;
@@ -576,8 +546,7 @@ struct _request_login_server {
 	enum _request_login_state state;
 };
 
-static void
-test_request_login_input(struct server_connection *conn)
+static void test_request_login_input(struct server_connection *conn)
 {
 	struct _request_login_server *ctx =
 		(struct _request_login_server *)conn->context;
@@ -620,18 +589,15 @@ test_request_login_input(struct server_connection *conn)
 	}
 }
 
-static void
-test_request_login_init(struct server_connection *conn)
+static void test_request_login_init(struct server_connection *conn)
 {
 	struct _request_login_server *ctx;
 
 	ctx = p_new(conn->pool, struct _request_login_server, 1);
 	conn->context = (void*)ctx;
 
-	o_stream_nsend_str(conn->conn.output,
-		"VERSION\t1\t0\n");
-	o_stream_nsend_str(conn->conn.output,
-		"SPID\t23234\n");
+	o_stream_nsend_str(conn->conn.output, "VERSION\t1\t0\n");
+	o_stream_nsend_str(conn->conn.output, "SPID\t23234\n");
 }
 
 static void test_server_request_login(void)
@@ -643,8 +609,7 @@ static void test_server_request_login(void)
 
 /* client */
 
-static bool
-test_client_request_login(void)
+static bool test_client_request_login(void)
 {
 	const char *error;
 	int ret;
@@ -655,8 +620,7 @@ test_client_request_login(void)
 	return FALSE;
 }
 
-static bool
-test_client_request_login_parallel(void)
+static bool test_client_request_login_parallel(void)
 {
 	const char *error;
 	int ret;
@@ -809,16 +773,14 @@ test_client_request_simple(pid_t client_pid, bool retry, const char **error_r)
 
 /* client connection */
 
-static void
-server_connection_input(struct connection *_conn)
+static void server_connection_input(struct connection *_conn)
 {
 	struct server_connection *conn = (struct server_connection *)_conn;
 
 	test_server_input(conn);
 }
 
-static void
-server_connection_init(int fd)
+static void server_connection_init(int fd)
 {
 	struct server_connection *conn;
 	pool_t pool;
@@ -829,15 +791,14 @@ server_connection_init(int fd)
 	conn = p_new(pool, struct server_connection, 1);
 	conn->pool = pool;
 
-	connection_init_server
-		(server_conn_list, &conn->conn, "server connection", fd, fd);
+	connection_init_server(server_conn_list, &conn->conn,
+			       "server connection", fd, fd);
 
 	if (test_server_init != NULL)
 		test_server_init(conn);
 }
 
-static void
-server_connection_deinit(struct server_connection **_conn)
+static void server_connection_deinit(struct server_connection **_conn)
 {
 	struct server_connection *conn = *_conn;
 
@@ -850,8 +811,7 @@ server_connection_deinit(struct server_connection **_conn)
 	pool_unref(&conn->pool);
 }
 
-static void
-server_connection_destroy(struct connection *_conn)
+static void server_connection_destroy(struct connection *_conn)
 {
 	struct server_connection *conn =
 		(struct server_connection *)_conn;
@@ -859,8 +819,7 @@ server_connection_destroy(struct connection *_conn)
 	server_connection_deinit(&conn);
 }
 
-static void
-server_connection_accept(void *context ATTR_UNUSED)
+static void server_connection_accept(void *context ATTR_UNUSED)
 {
 	int fd;
 
@@ -878,8 +837,8 @@ server_connection_accept(void *context ATTR_UNUSED)
 /* */
 
 static struct connection_settings server_connection_set = {
-	.input_max_size = (size_t)-1,
-	.output_max_size = (size_t)-1,
+	.input_max_size = SIZE_MAX,
+	.output_max_size = SIZE_MAX,
 	.client = FALSE
 };
 
@@ -921,60 +880,35 @@ static int test_open_server_fd(void)
 	return fd;
 }
 
-static void test_server_kill(void)
+static int test_run_server(test_server_init_t *server_test)
 {
-	if (server_pid != (pid_t)-1) {
-		(void)kill(server_pid, SIGKILL);
-		(void)waitpid(server_pid, NULL, 0);
-		server_pid = -1;
-	}
+	main_deinit();
+	master_service_deinit_forked(&master_service);
+
+	i_set_failure_prefix("SERVER: ");
+
+	if (debug)
+		i_debug("PID=%s", my_pid);
+
+	ioloop = io_loop_create();
+	server_test();
+	io_loop_destroy(&ioloop);
+
+	if (debug)
+		i_debug("Terminated");
+
+	i_close_fd(&fd_listen);
+	return 0;
 }
 
-static void
-test_run_client_server(test_client_init_t *client_test,
-		       test_server_init_t *server_test)
+static void test_run_client(test_client_init_t *client_test)
 {
-	if (server_test != NULL) {
-		lib_signals_ioloop_detach();
+	i_set_failure_prefix("CLIENT: ");
 
-		server_pid = (pid_t)-1;
+	if (debug)
+		i_debug("PID=%s", my_pid);
 
-		fd_listen = test_open_server_fd();
-
-		if ((server_pid = fork()) == (pid_t)-1)
-			i_fatal("fork() failed: %m");
-		if (server_pid == 0) {
-			server_pid = (pid_t)-1;
-			hostpid_init();
-			while (current_ioloop != NULL) {
-				ioloop = current_ioloop;
-				io_loop_destroy(&ioloop);
-			}
-			lib_signals_deinit();
-			if (debug)
-				i_debug("server: PID=%s", my_pid);
-			/* child: server */
-			ioloop = io_loop_create();
-			server_test();
-			io_loop_destroy(&ioloop);
-			if (fd_listen != -1)
-				i_close_fd(&fd_listen);
-			/* wait for it to be killed; this way, valgrind will not
-			   object to this process going away inelegantly. */
-			sleep(60);
-			exit(1);
-		}
-		if (fd_listen != -1)
-			i_close_fd(&fd_listen);
-		if (debug)
-			i_debug("client: PID=%s", my_pid);
-
-		lib_signals_ioloop_attach();
-	}
-
-	/* parent: client */
-
-	usleep(100000); /* wait a little for server setup */
+	i_sleep_intr_msecs(100); /* wait a little for server setup */
 
 	ioloop = io_loop_create();
 	if (client_test())
@@ -982,35 +916,45 @@ test_run_client_server(test_client_init_t *client_test,
 	test_client_deinit();
 	io_loop_destroy(&ioloop);
 
-	test_server_kill();
-	i_unlink_if_exists(TEST_SOCKET);
+	if (debug)
+		i_debug("Terminated");
+}
+
+static void
+test_run_client_server(test_client_init_t *client_test,
+		       test_server_init_t *server_test)
+{
+	if (server_test != NULL) {
+		/* Fork server */
+		fd_listen = test_open_server_fd();
+		test_subprocess_fork(test_run_server, server_test, FALSE);
+		i_close_fd(&fd_listen);
+	}
+
+	/* Run client */
+	test_run_client(client_test);
+
+	i_unset_failure_prefix();
+	test_subprocess_kill_all(SERVER_KILL_TIMEOUT_SECS);
 }
 
 /*
  * Main
  */
 
-volatile sig_atomic_t terminating = 0;
-
-static void
-test_signal_handler(int signo)
+static void main_cleanup(void)
 {
-	if (terminating != 0)
-		raise(signo);
-	terminating = 1;
-
-	/* make sure we don't leave any pesky children alive */
-	test_server_kill();
-	(void)unlink(TEST_SOCKET);
-
-	(void)signal(signo, SIG_DFL);
-	raise(signo);
+	i_unlink_if_exists(TEST_SOCKET);
 }
 
-static void test_atexit(void)
+static void main_init(void)
 {
-	test_server_kill();
-	(void)unlink(TEST_SOCKET);
+	/* nothing yet */
+}
+
+static void main_deinit(void)
+{
+	/* nothing yet; also called from sub-processes */
 }
 
 int main(int argc, char *argv[])
@@ -1022,16 +966,9 @@ int main(int argc, char *argv[])
 	int c;
 	int ret;
 
-	atexit(test_atexit);
-	(void)signal(SIGCHLD, SIG_IGN);
-	(void)signal(SIGTERM, test_signal_handler);
-	(void)signal(SIGQUIT, test_signal_handler);
-	(void)signal(SIGINT, test_signal_handler);
-	(void)signal(SIGSEGV, test_signal_handler);
-	(void)signal(SIGABRT, test_signal_handler);
-
 	master_service = master_service_init("test-auth-master", service_flags,
 					     &argc, &argv, "D");
+	main_init();
 
 	while ((c = master_getopt(master_service)) > 0) {
 		switch (c) {
@@ -1044,9 +981,13 @@ int main(int argc, char *argv[])
 	}
 
 	master_service_init_finish(master_service);
+	test_subprocesses_init(debug);
+	test_subprocess_set_cleanup_callback(main_cleanup);
 
 	ret = test_run(test_functions);
 
+	test_subprocesses_deinit();
+	main_deinit();
 	master_service_deinit(&master_service);
 
 	return ret;

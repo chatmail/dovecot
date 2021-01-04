@@ -96,15 +96,23 @@ static bool is_compressed_zstd(struct istream *input)
 	return le32_to_cpu_unaligned(data) == ZSTD_MAGICNUMBER;
 }
 
-const struct compression_handler *compression_lookup_handler(const char *name)
+int compression_lookup_handler(const char *name,
+			       const struct compression_handler **handler_r)
 {
 	unsigned int i;
 
 	for (i = 0; compression_handlers[i].name != NULL; i++) {
-		if (strcmp(name, compression_handlers[i].name) == 0)
-			return &compression_handlers[i];
+		if (strcmp(name, compression_handlers[i].name) == 0) {
+			if (compression_handlers[i].create_istream == NULL ||
+			    compression_handlers[i].create_ostream == NULL) {
+				/* Handler is known but not compiled in */
+				return 0;
+			}
+			(*handler_r) = &compression_handlers[i];
+			return 1;
+		}
 	}
-	return NULL;
+	return -1;
 }
 
 const struct compression_handler *
@@ -120,8 +128,8 @@ compression_detect_handler(struct istream *input)
 	return NULL;
 }
 
-const struct compression_handler *
-compression_lookup_handler_from_ext(const char *path)
+int compression_lookup_handler_from_ext(const char *path,
+					const struct compression_handler **handler_r)
 {
 	unsigned int i;
 	size_t len, path_len = strlen(path);
@@ -132,10 +140,17 @@ compression_lookup_handler_from_ext(const char *path)
 
 		len = strlen(compression_handlers[i].ext);
 		if (path_len > len &&
-		    strcmp(path + path_len - len, compression_handlers[i].ext) == 0)
-			return &compression_handlers[i];
+		    strcmp(path + path_len - len, compression_handlers[i].ext) == 0) {
+			if (compression_handlers[i].create_istream == NULL ||
+			    compression_handlers[i].create_ostream == NULL) {
+				/* Handler is known but not compiled in */
+				return 0;
+			}
+			(*handler_r) = &compression_handlers[i];
+			return 1;
+		}
 	}
-	return NULL;
+	return -1;
 }
 
 const struct compression_handler compression_handlers[] = {
@@ -151,5 +166,6 @@ const struct compression_handler compression_handlers[] = {
 	  i_stream_create_lz4, o_stream_create_lz4 },
 	{ "zstd", ".zstd", is_compressed_zstd,
 	  i_stream_create_zstd, o_stream_create_zstd },
+	{ "unsupported", NULL, NULL, NULL, NULL },
 	{ NULL, NULL, NULL, NULL, NULL }
 };

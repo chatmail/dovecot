@@ -18,6 +18,9 @@ struct sis_queue_fs_file {
 	struct sis_queue_fs *fs;
 };
 
+#define SISQUEUE_FS(ptr)	container_of((ptr), struct sis_queue_fs, fs)
+#define SISQUEUE_FILE(ptr)	container_of((ptr), struct sis_queue_fs_file, file)
+
 static struct fs *fs_sis_queue_alloc(void)
 {
 	struct sis_queue_fs *fs;
@@ -31,7 +34,7 @@ static int
 fs_sis_queue_init(struct fs *_fs, const char *args,
 		  const struct fs_settings *set, const char **error_r)
 {
-	struct sis_queue_fs *fs = (struct sis_queue_fs *)_fs;
+	struct sis_queue_fs *fs = SISQUEUE_FS(_fs);
 	const char *p, *parent_name, *parent_args;
 
 	/* <queue_dir>:<parent fs>[:<args>] */
@@ -55,11 +58,10 @@ fs_sis_queue_init(struct fs *_fs, const char *args,
 	return 0;
 }
 
-static void fs_sis_queue_deinit(struct fs *_fs)
+static void fs_sis_queue_free(struct fs *_fs)
 {
-	struct sis_queue_fs *fs = (struct sis_queue_fs *)_fs;
+	struct sis_queue_fs *fs = SISQUEUE_FS(_fs);
 
-	fs_deinit(&_fs->parent);
 	i_free(fs->queue_dir);
 	i_free(fs);
 }
@@ -74,8 +76,8 @@ static void
 fs_sis_queue_file_init(struct fs_file *_file, const char *path,
 		       enum fs_open_mode mode, enum fs_open_flags flags)
 {
-	struct sis_queue_fs_file *file = (struct sis_queue_fs_file *)_file;
-	struct sis_queue_fs *fs = (struct sis_queue_fs *)_file->fs;
+	struct sis_queue_fs_file *file = SISQUEUE_FILE(_file);
+	struct sis_queue_fs *fs = SISQUEUE_FS(_file->fs);
 
 	file->file.path = i_strdup(path);
 	file->fs = fs;
@@ -88,7 +90,7 @@ fs_sis_queue_file_init(struct fs_file *_file, const char *path,
 
 static void fs_sis_queue_file_deinit(struct fs_file *_file)
 {
-	struct sis_queue_fs_file *file = (struct sis_queue_fs_file *)_file;
+	struct sis_queue_fs_file *file = SISQUEUE_FILE(_file);
 
 	fs_file_free(_file);
 	i_free(file->file.path);
@@ -97,7 +99,7 @@ static void fs_sis_queue_file_deinit(struct fs_file *_file)
 
 static void fs_sis_queue_add(struct sis_queue_fs_file *file)
 {
-	struct sis_queue_fs *fs = (struct sis_queue_fs *)file->file.fs;
+	struct sis_queue_fs *fs = SISQUEUE_FS(file->file.fs);
 	struct fs_file *queue_file;
 	const char *fname, *path, *queue_path;
 
@@ -117,7 +119,7 @@ static void fs_sis_queue_add(struct sis_queue_fs_file *file)
 
 static int fs_sis_queue_write(struct fs_file *_file, const void *data, size_t size)
 {
-	struct sis_queue_fs_file *file = (struct sis_queue_fs_file *)_file;
+	struct sis_queue_fs_file *file = SISQUEUE_FILE(_file);
 
 	if (_file->parent == NULL)
 		return -1;
@@ -144,7 +146,7 @@ static void fs_sis_queue_write_stream(struct fs_file *_file)
 
 static int fs_sis_queue_write_stream_finish(struct fs_file *_file, bool success)
 {
-	struct sis_queue_fs_file *file = (struct sis_queue_fs_file *)_file;
+	struct sis_queue_fs_file *file = SISQUEUE_FILE(_file);
 
 	if (!success) {
 		if (_file->parent != NULL)
@@ -173,7 +175,8 @@ const struct fs fs_class_sis_queue = {
 	.v = {
 		fs_sis_queue_alloc,
 		fs_sis_queue_init,
-		fs_sis_queue_deinit,
+		NULL,
+		fs_sis_queue_free,
 		fs_wrapper_get_properties,
 		fs_sis_queue_file_alloc,
 		fs_sis_queue_file_init,

@@ -1,24 +1,646 @@
-2020-06-30 11:53:28 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (6c69c917)
+2020-12-12 19:47:56 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (cdd19fe3)
 
-    NEWS: Add news for 0.5.11
+    NEWS: Add news for 0.5.13
 
 
 M	NEWS
 
-2020-06-30 11:51:26 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (ebadd718)
+2020-11-05 16:03:26 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (f148e171)
 
-    configure.ac: Update version
+    configure: Update version to 0.5.13
 
 
 M	configure.ac
 
-2020-05-19 15:40:04 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (cb631066)
+2020-06-18 00:28:02 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (a1c1ca78)
+
+    lib-sieve: plugins: editheader: Fix infinite loop occurring when header
+    setting is invalid.
+
+
+M	src/lib-sieve/plugins/editheader/ext-editheader-common.c
+M	tests/extensions/editheader/protected.svtest
+
+2020-03-25 20:36:15 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (4187a868)
+
+    lib-sieve: plugins: editheader: Reformat ext-editheader-common.h.
+
+
+M	src/lib-sieve/plugins/editheader/ext-editheader-common.h
+
+2020-03-25 20:33:38 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (879d2121)
+
+    lib-sieve: plugins: editheader: Reformat ext-editheader-common.c.
+
+
+M	src/lib-sieve/plugins/editheader/ext-editheader-common.c
+
+2020-06-11 20:53:26 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (fc605f10)
+
+    testsuite: cmd-test-mailbox - Check mailbox name validity.
+
+    Fixes assert failure occurring either at compiletime or at runtime
+    (depending on whether the value originates from variable).
+
+M	src/testsuite/cmd-test-mailbox.c
+
+2020-06-11 20:53:24 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (5c0c25fd)
+
+    lib-sieve: plugins: special-use: tst-specialuse-exists - Check mailbox name
+    validity.
+
+    Fixes assert failure occurring either at compiletime or at runtime
+    (depending on whether the value originates from variable).
+
+M	src/lib-sieve/plugins/special-use/tst-specialuse-exists.c
+M	tests/extensions/special-use/errors.svtest
+A	tests/extensions/special-use/errors/specialuse_exists-bad-utf8.sieve
+M	tests/extensions/special-use/errors/syntax.sieve
+
+2020-06-11 20:53:23 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (c65f1c4c)
+
+    lib-sieve: plugins: mailbox: tst-mailboxexists - Check mailbox name validity
+    at runtime.
+
+    Fixes assert failure occurring at runtime (when value originates from
+    variable).
+
+M	src/lib-sieve/plugins/mailbox/tst-mailboxexists.c
+M	tests/extensions/mailbox/errors.svtest
+A	tests/extensions/mailbox/errors/mailboxexists-bad-utf8.sieve
+
+2020-06-11 20:53:23 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (0659935e)
+
+    lib-sieve: ext-fileinto - Consistently use sieve_mailbox_check_name().
+
+
+M	src/lib-sieve/ext-fileinto.c
+
+2020-06-11 22:33:36 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (dcb93b58)
+
+    tests: extensions: metadata: Add tests for bad UTF-8 in mailbox names.
+
+
+M	tests/extensions/metadata/errors.svtest
+A	tests/extensions/metadata/errors/metadata-bad-utf8.sieve
+A	tests/extensions/metadata/errors/metadataexists-bad-utf8.sieve
+M	tests/extensions/metadata/errors/syntax.sieve
+
+2020-06-11 21:56:44 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (f87ddf2b)
+
+    tests: extensions: mailbox: Add tests for syntax errors.
+
+
+M	Makefile.am
+A	tests/extensions/mailbox/errors.svtest
+A	tests/extensions/mailbox/errors/syntax.sieve
+
+2020-06-11 21:35:47 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (b62d83a2)
+
+    tests: execute: Add tests for fileinto command executed with bad UTF-8 in
+    folder name.
+
+    Compile error is avoided by putting the mailbox name in a variable, which is
+    (currently) only evaluated at runtime.
+
+M	tests/execute/errors.svtest
+A	tests/execute/errors/fileinto-bad-utf8.sieve
+
+2020-06-11 21:26:56 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (cb916cca)
+
+    tests: compile: Add tests for fileinto command compile errors.
+
+
+M	tests/compile/errors.svtest
+A	tests/compile/errors/fileinto.sieve
+
+2020-06-11 20:53:22 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (01b3eaa3)
+
+    lib-sieve: sieve-actions - Fix error message in sieve_mailbox_check_name().
+
+
+M	src/lib-sieve/sieve-actions.c
+
+2020-06-11 20:53:22 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (2085ed3d)
+
+    lib-sieve: plugins: metadata: tst-metadataexists - Fix warning message
+    prefix in tst_metadataexists_operation_execute().
+
+
+M	src/lib-sieve/plugins/metadata/tst-metadataexists.c
+
+2020-06-11 20:53:22 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (ac91b1fa)
+
+    testsuite: cmd-test-mailbox - Move runtime execution to separate functions.
+
+    Reduces code indent.
+
+M	src/testsuite/cmd-test-mailbox.c
+
+2020-06-11 20:53:21 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (2ada0123)
+
+    lib-sieve: plugins: special-use: tst-specialuse-exists - Restructure
+    tst_specialuse_exists_operation_execute().
+
+    Reduces indent.
+
+M	src/lib-sieve/plugins/special-use/tst-specialuse-exists.c
+
+2020-06-11 20:53:21 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (ceb4a50b)
+
+    lib-sieve: plugins: special-use: tst-specialuse-exists - Split off
+    tst_specialuse_exists_check_flag().
+
+    Reduces code indent.
+
+M	src/lib-sieve/plugins/special-use/tst-specialuse-exists.c
+
+2020-06-11 20:53:20 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (3bf389e2)
+
+    lib-sieve: plugins: metadata: tst-metadataexists - Split off
+    tst_metadataexists_check_annotation().
+
+    Reduces code indent.
+
+M	src/lib-sieve/plugins/metadata/tst-metadataexists.c
+
+2020-06-11 20:53:20 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (d58ba0b3)
+
+    lib-sieve: plugins: mailbox: tst-mailboxexists - Restructure
+    tst_mailboxexists_operation_execute().
+
+    Reduces code indent.
+
+M	src/lib-sieve/plugins/mailbox/tst-mailboxexists.c
+
+2020-06-11 20:53:20 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (d27a2ca2)
+
+    lib-sieve: plugins: mailbox: tst-mailboxexists - Split off
+    tst_mailboxexists_test_mailbox().
+
+    Reduces code indent.
+
+M	src/lib-sieve/plugins/mailbox/tst-mailboxexists.c
+
+2020-06-11 20:53:19 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (06034e01)
+
+    lib-sieve: ext-fileinto - Improve error message for invalid folder name.
+
+
+M	src/lib-sieve/ext-fileinto.c
+
+2020-06-11 20:53:19 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (3a8094f0)
+
+    lib-sieve: ext-fileinto - Always check validity of folder name at runtime.
+
+
+M	src/lib-sieve/ext-fileinto.c
+
+2020-06-11 20:53:19 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (d09d71a8)
+
+    testsuite: cmd-test-mailbox - Fix comment in
+    cmd_test_mailbox_operation_execute().
+
+
+M	src/testsuite/cmd-test-mailbox.c
+
+2020-06-11 20:53:18 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (aed6f90c)
+
+    lib-sieve: plugins: special-use: Reformat tst-specialuse-exists.c.
+
+
+M	src/lib-sieve/plugins/special-use/tst-specialuse-exists.c
+
+2020-06-11 20:53:18 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (7793c0dc)
+
+    lib-sieve: plugins: metadata: Reformat tst-metadataexists.c.
+
+
+M	src/lib-sieve/plugins/metadata/tst-metadataexists.c
+
+2020-06-11 20:53:17 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (22e3c512)
+
+    lib-sieve: plugins: metadata: Reformat tst-metadata.c.
+
+
+M	src/lib-sieve/plugins/metadata/tst-metadata.c
+
+2020-06-11 20:53:15 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (64ec8a73)
+
+    lib-sieve: plugins: mailbox: Reformat tst-mailboxexists.c.
+
+
+M	src/lib-sieve/plugins/mailbox/tst-mailboxexists.c
+
+2020-06-11 20:53:08 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (c80f315d)
+
+    lib-sieve: Reformat ext-fileinto.c.
+
+
+M	src/lib-sieve/ext-fileinto.c
+
+2020-08-13 20:25:11 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (529fc691)
+
+    testsuite: cmd-test-fail - Remove unused _get_generator_context().
+
+
+M	src/testsuite/cmd-test-fail.c
+
+2020-05-19 15:40:04 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (33c8d372)
 
     lib-sieve: Adjust to message_parser_init() API change
 
 
 M	src/lib-sieve/plugins/notify/ext-notify-common.c
 M	src/lib-sieve/sieve-message.c
+
+2020-06-30 11:53:28 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (cf9062c7)
+
+    NEWS: Add news for 0.5.11
+
+
+M	NEWS
+
+2020-07-09 02:45:26 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (d8bd2c73)
+
+    lib-sieve: plugins: duplicate: Only save duplicate entry when the last
+    script executed successfully.
+
+    This prevents prematurely marking duplicates when errors occur during result 
+    execution. Before, the pending duplicate database changes were committed
+    after each script executed in the sequence. If a later script failed,
+    duplicate tests would mark duplicate messages prematurely.
+
+    Disadvantage is that actions in earlier scripts that are shielded by a
+    duplicate test can be executed twice erroneously when errors occurred in
+    later scripts in the previous delivery. Still, unexpected duplicate action
+    execution is better than losing mail due to erroneous duplicate detections.
+
+    Fixing this properly requires extensively restructuring result execution.
+
+M	src/lib-sieve/plugins/duplicate/ext-duplicate-common.c
+
+2020-07-27 22:27:09 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (caca3091)
+
+    lib-sieve: sieve - Explicitly finish the result in
+    sieve_multiscript_finish().
+
+
+M	src/lib-sieve/sieve.c
+
+2020-07-27 22:26:39 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (ab3bb29b)
+
+    lib-sieve: sieve-result - Add sieve_result_finish().
+
+
+M	src/lib-sieve/sieve-result.c
+M	src/lib-sieve/sieve-result.h
+
+2019-10-01 21:49:33 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (b3899bd5)
+
+    lib-sieve: sieve-actions - Add "last" parameter to action finish method.
+
+    This indicates whether the last script in the sequence is being executed.
+
+M	src/lib-sieve/plugins/duplicate/ext-duplicate-common.c
+M	src/lib-sieve/sieve-actions.h
+M	src/lib-sieve/sieve-result.c
+M	src/lib-sieve/sieve-result.h
+M	src/lib-sieve/sieve.c
+M	src/testsuite/testsuite-result.c
+
+2020-07-09 02:42:29 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (58d81c59)
+
+    lib-sieve: plugins: duplicate: ext-duplicate-common - Restructure
+    act_duplicate_mark_finish().
+
+
+M	src/lib-sieve/plugins/duplicate/ext-duplicate-common.c
+
+2020-06-08 19:26:58 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (d71045c1)
+
+    testsuite: Reliably terminate tests upon failure.
+
+    Before, it would only terminate the test when it failed explicitly using the 
+    test_fail command.
+
+M	Makefile.am
+M	src/testsuite/cmd-test-config.c
+M	src/testsuite/cmd-test-fail.c
+M	src/testsuite/cmd-test-mailbox.c
+M	src/testsuite/cmd-test-message.c
+M	src/testsuite/cmd-test.c
+M	src/testsuite/testsuite-common.c
+M	src/testsuite/testsuite-common.h
+A	tests/failures/fuzz1.svtest
+A	tests/failures/fuzz2.svtest
+
+2020-06-10 12:27:08 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (6359033b)
+
+    testsuite: testsuite-mailstore - Preserve all allocated mails until result
+    is reset.
+
+    The actions contained in the result may keep references to the overriden
+    mail struct, so these need to be preserved.
+
+M	src/testsuite/testsuite-mailstore.c
+M	src/testsuite/testsuite-mailstore.h
+M	src/testsuite/testsuite-result.c
+
+2020-06-08 19:26:50 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (2f20547d)
+
+    testsuite: testsuite-message - Preserve all allocated mails until result is
+    reset.
+
+    The actions contained in the result may keep references to the overriden
+    mail struct, so these need to be preserved.
+
+M	src/testsuite/cmd-test-result.c
+M	src/testsuite/testsuite-message.c
+M	src/testsuite/testsuite-message.h
+M	src/testsuite/testsuite-result.c
+M	src/testsuite/testsuite.c
+
+2020-06-08 19:26:47 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (c3fca0a1)
+
+    testsuite: Drop needless result reference in testsuite_run().
+
+    This holds a reference to the initial result, causing it to linger after 
+    test_result_reset, thereby also holding a reference to the message context, 
+    preventing it from being cleared. This in turn, can keep references to
+    modified message versions that cause the main message object to remain
+    referenced. This causes a panic in specific cases upon test_result_reset:
+
+    Panic: Input stream data unexpectedly has references
+
+M	src/testsuite/testsuite.c
+M	tests/extensions/editheader/execute.svtest
+
+2020-06-08 19:26:45 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (4635acae)
+
+    testsuite: Properly check address value parsed from message.
+
+    Caused a panic when input was not valid. This is only relevant to the test
+    suite and doesn't occur anywhere else (apart from the previous similar
+    commit for lib-sieve-tool).
+
+    Panic was:
+
+    Panic in file smtp-address.c: line 684 (smtp_address_write): assertion
+    failed: (smtp_char_is_qpair(*p))`
+
+M	src/testsuite/testsuite-message.c
+M	tests/extensions/vacation/smtp.svtest
+
+2020-06-10 13:02:10 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (39e9b39e)
+
+    lib-sieve-tool: sieve-tool - Properly check address value parsed from
+    message.
+
+
+M	src/lib-sieve-tool/sieve-tool.c
+
+2020-06-08 19:26:42 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (89ddd79d)
+
+    lib-sieve-tool: Add sieve_tool_get_mail_raw_user().
+
+
+M	src/lib-sieve-tool/sieve-tool.c
+M	src/lib-sieve-tool/sieve-tool.h
+
+2020-06-08 19:26:40 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (571964e9)
+
+    lib-sieve: sieve-interpreter - Add sieve_interpreter_program_jump_to().
+
+
+M	src/lib-sieve/sieve-interpreter.c
+M	src/lib-sieve/sieve-interpreter.h
+
+2020-06-08 19:26:38 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (b5ccedae)
+
+    lib-sieve: sieve-interpreter - Split off
+    sieve_interpreter_do_program_jump().
+
+
+M	src/lib-sieve/sieve-interpreter.c
+
+2020-06-08 19:26:35 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (3e0a599e)
+
+    lib-sieve: sieve-interpreter - Split off
+    sieve_interpreter_check_program_jump().
+
+
+M	src/lib-sieve/sieve-interpreter.c
+
+2020-06-08 19:26:33 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (ad7bb544)
+
+    lib-sieve: sieve-interpreter - Restructure sieve_interpreter_program_jump().
+
+
+M	src/lib-sieve/sieve-interpreter.c
+
+2020-06-08 19:26:30 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (cba117cc)
+
+    lib-sieve: sieve-interpreter - Drop needless result reference in
+    sieve_interpreter_run().
+
+    It is immediately referenced in sieve_interpreter_continue(), called from
+    there.
+
+M	src/lib-sieve/sieve-interpreter.c
+
+2020-06-08 19:26:19 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (de09a841)
+
+    lib-sieve: sieve-address - Require error_r parameters to not be NULL.
+
+    The error string is currently always used and it must be, so there is no
+    need to allow for the error_r paramerter to be NULL and unused.
+
+M	src/lib-sieve/sieve-address.c
+
+2020-07-30 23:33:04 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (2028ada8)
+
+    testsuite: Add support for test cases with expected failure.
+
+
+M	src/testsuite/testsuite-common.c
+M	src/testsuite/testsuite-common.h
+M	src/testsuite/testsuite.c
+
+2020-06-09 12:43:16 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (2f645637)
+
+    testsuite: Reformat cmd-test.c.
+
+
+M	src/testsuite/cmd-test.c
+
+2020-06-09 12:37:48 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (ecc4a3ac)
+
+    testsuite: Reformat cmd-test-result.c.
+
+
+M	src/testsuite/cmd-test-result.c
+
+2020-06-09 12:32:42 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (6d250020)
+
+    testsuite: Reformat cmd-test-message.c.
+
+
+M	src/testsuite/cmd-test-message.c
+
+2020-06-09 12:15:54 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (2dbd2890)
+
+    testsuite: Reformat cmd-test-mailbox.c.
+
+
+M	src/testsuite/cmd-test-mailbox.c
+
+2020-06-09 12:08:22 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (89dd012a)
+
+    testsuite: Reformat cmd-test-fail.c.
+
+
+M	src/testsuite/cmd-test-fail.c
+
+2020-06-09 12:00:28 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (bc26d8b6)
+
+    testsuite: Reformat testsuite-mailstore.h.
+
+
+M	src/testsuite/testsuite-mailstore.h
+
+2020-06-09 12:00:13 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (ad35af9c)
+
+    testsuite: Reformat testsuite-mailstore.c.
+
+
+M	src/testsuite/testsuite-mailstore.c
+
+2020-06-09 02:36:54 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (0324c6dd)
+
+    testsuite: Reformat testsuite-common.c.
+
+
+M	src/testsuite/testsuite-common.c
+
+2020-06-09 02:30:42 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (f5a7bbb0)
+
+    testsuite: Reformat testsuite-common.h.
+
+
+M	src/testsuite/testsuite-common.h
+
+2020-06-09 11:51:38 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (6dc7b477)
+
+    lib-sieve-tool: Reformat sieve-tool.h.
+
+
+M	src/lib-sieve-tool/sieve-tool.h
+
+2020-06-09 11:51:09 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (76d6da31)
+
+    lib-sieve-tool: Reformat sieve-tool.c.
+
+
+M	src/lib-sieve-tool/sieve-tool.c
+
+2020-03-09 10:50:07 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (fc8940b1)
+
+    lib-sieve: Reformat sieve-address.h.
+
+
+M	src/lib-sieve/sieve-address.h
+
+2020-03-09 10:49:57 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (f8effd5c)
+
+    lib-sieve: Reformat sieve-address.c.
+
+
+M	src/lib-sieve/sieve-address.c
+
+2020-06-11 14:49:24 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (0cf888a0)
+
+    lib-sieve: plugins: relational: Fix segfault occurring in
+    mcht_relational_validate().
+
+    The segfault happens when this match type is the last argument of the test 
+    command. This situation is not possible in a valid script; positional
+    arguments are normally present after that, which would prevent the segfault.
+    A variant of this bug occurs when the match type also has no argument of its
+    own. In either case the segfault is caused by referring to absent tag
+    arguments, which causes a NULL dereference.
+
+M	src/lib-sieve/plugins/relational/ext-relational-common.c
+M	tests/extensions/relational/errors.svtest
+A	tests/extensions/relational/errors/syntax.sieve
+
+2020-06-17 23:54:17 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (0b96fb53)
+
+    lib-sieve: plugins: relational: Reformat ext-relational-common.h.
+
+
+M	src/lib-sieve/plugins/relational/ext-relational-common.h
+
+2020-06-17 23:53:56 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (81083e3e)
+
+    lib-sieve: plugins: relational: Reformat ext-relational-common.c.
+
+
+M	src/lib-sieve/plugins/relational/ext-relational-common.c
+
+2020-05-20 02:03:17 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (1b9b5ce2)
+
+    tests: plugins: extprograms: pipe/errors.svtest - Fix "Timeout" test.
+
+
+M	tests/plugins/extprograms/pipe/errors.svtest
+
+2020-05-07 14:44:12 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (1a8be20e)
+
+    managesieve-login: proxy - Forward remote AUTHENTICATE TRYLATER failures
+
+
+M	src/managesieve-login/managesieve-proxy.c
+
+2020-05-06 20:37:03 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (bb5c14a1)
+
+    managesieve-login: proxy: Reconnect on temporary authentication failures
+
+
+M	src/managesieve-login/managesieve-proxy.c
+
+2020-05-07 15:01:43 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (613eb103)
+
+    managesieve-login: proxy - Parse AUTHENTICATE reply more correctly
+
+    It's still not fully correct, but we don't have existing code that supports 
+    parsing it.
+
+M	src/managesieve-login/managesieve-proxy.c
+
+2020-05-06 20:40:14 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (b817b261)
+
+    managesieve-login: Adjust to proxy_error() -> proxy_failed() API change
+
+
+M	src/managesieve-login/client.c
+M	src/managesieve-login/managesieve-proxy.c
+M	src/managesieve-login/managesieve-proxy.h
+
+2020-05-06 18:10:30 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (27bb1903)
+
+    managesieve-login: Replace e_error()+client_proxy_failed() calls with
+    login_proxy_failed()
+
+
+M	src/managesieve-login/managesieve-proxy.c
+
+2020-05-06 16:54:15 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (7a6cc989)
+
+    managesieve-login: Remove redundant/early freeing of proxy_password
+
+
+M	src/managesieve-login/managesieve-proxy.c
 
 2020-02-18 23:27:03 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (038274fe)
 

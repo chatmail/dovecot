@@ -29,7 +29,7 @@
 
 static const struct smtp_server_callbacks lmtp_callbacks;
 static const struct lmtp_client_vfuncs lmtp_client_vfuncs;
-	
+
 struct lmtp_module_register lmtp_module_register = { 0 };
 
 static struct client *clients = NULL;
@@ -147,6 +147,10 @@ static void client_read_settings(struct client *client, bool ssl)
 struct client *client_create(int fd_in, int fd_out,
 			     const struct master_service_connection *conn)
 {
+	static const char *rcpt_param_extensions[] = {
+		LMTP_RCPT_FORWARD_PARAMETER, NULL };
+	static const struct smtp_capability_extra cap_rcpt_forward = {
+		.name = LMTP_RCPT_FORWARD_CAPABILITY };
 	enum lmtp_client_workarounds workarounds;
 	struct smtp_server_settings lmtp_set;
 	struct client *client;
@@ -191,7 +195,8 @@ struct client *client_create(int fd_in, int fd_out,
 		lmtp_set.capabilities |= SMTP_CAPABILITY_STARTTLS;
 	lmtp_set.hostname = client->unexpanded_lda_set->hostname;
 	lmtp_set.login_greeting = client->lmtp_set->login_greeting;
-	lmtp_set.max_message_size = (uoff_t)-1;
+	lmtp_set.max_message_size = UOFF_T_MAX;
+	lmtp_set.rcpt_param_extensions = rcpt_param_extensions;
 	lmtp_set.rcpt_domain_optional = TRUE;
 	lmtp_set.max_client_idle_time_msecs = CLIENT_IDLE_TIMEOUT_MSECS;
 	lmtp_set.rawlog_dir = client->lmtp_set->lmtp_rawlog_dir;
@@ -207,10 +212,14 @@ struct client *client_create(int fd_in, int fd_out,
 			SMTP_SERVER_WORKAROUND_MAILBOX_FOR_PATH;
 	}
 
-	client->conn = smtp_server_connection_create
-		(lmtp_server, fd_in, fd_out,
-			&conn->remote_ip, conn->remote_port,
-			conn->ssl, &lmtp_set, &lmtp_callbacks, client);
+	client->conn = smtp_server_connection_create(
+		lmtp_server, fd_in, fd_out,
+		&conn->remote_ip, conn->remote_port, conn->ssl,
+		&lmtp_set, &lmtp_callbacks, client);
+	if (smtp_server_connection_is_trusted(client->conn)) {
+		smtp_server_connection_add_extra_capability(
+			client->conn, &cap_rcpt_forward);
+	}
 
 	DLLIST_PREPEND(&clients, client);
 	clients_count++;
@@ -287,8 +296,8 @@ void client_disconnect(struct client *client, const char *enh_code,
 			        smtp_server_state_names[client->state.state]);
 
 	if (conn != NULL) {
-		smtp_server_connection_terminate(&conn,
-			(enh_code == NULL ? "4.0.0" : enh_code), reason);
+		smtp_server_connection_terminate(
+			&conn, (enh_code == NULL ? "4.0.0" : enh_code), reason);
 	}
 }
 
@@ -395,7 +404,7 @@ static bool client_connection_is_trusted(void *context)
 			break;
 		}
 
-		if (net_is_in_network(&client->remote_ip, &net_ip, bits))
+		if (net_is_in_network(&client->real_remote_ip, &net_ip, bits))
 			return TRUE;
 	}
 	return FALSE;

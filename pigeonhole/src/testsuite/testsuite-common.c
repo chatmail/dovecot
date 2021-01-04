@@ -50,6 +50,7 @@ char *testsuite_test_path = NULL;
 /* Test context */
 
 static string_t *test_name;
+static sieve_size_t test_block_end;
 static unsigned int test_index;
 static unsigned int test_failures;
 
@@ -68,7 +69,8 @@ bool testsuite_validator_context_initialize(struct sieve_validator *valdtr)
 		p_new(pool, struct testsuite_validator_context, 1);
 
 	/* Setup object registry */
-	ctx->object_registrations = sieve_validator_object_registry_create(valdtr);
+	ctx->object_registrations =
+		sieve_validator_object_registry_create(valdtr);
 	testsuite_register_core_objects(ctx);
 
 	sieve_validator_extension_set_context(valdtr, testsuite_ext, ctx);
@@ -76,8 +78,8 @@ bool testsuite_validator_context_initialize(struct sieve_validator *valdtr)
 	return TRUE;
 }
 
-struct testsuite_validator_context *testsuite_validator_context_get
-(struct sieve_validator *valdtr)
+struct testsuite_validator_context *
+testsuite_validator_context_get(struct sieve_validator *valdtr)
 {
 	return (struct testsuite_validator_context *)
 		sieve_validator_extension_get_context(valdtr, testsuite_ext);
@@ -87,8 +89,8 @@ struct testsuite_validator_context *testsuite_validator_context_get
  * Generator context
  */
 
-bool testsuite_generator_context_initialize
-(struct sieve_generator *gentr, const struct sieve_extension *this_ext)
+bool testsuite_generator_context_initialize(
+	struct sieve_generator *gentr, const struct sieve_extension *this_ext)
 {
 	pool_t pool = sieve_generator_pool(gentr);
 	struct sieve_binary_block *sblock = sieve_generator_get_block(gentr);
@@ -107,37 +109,38 @@ bool testsuite_generator_context_initialize
  * Interpreter context
  */
 
-static void testsuite_interpreter_free
-(const struct sieve_extension *ext ATTR_UNUSED,
-	struct sieve_interpreter *interp ATTR_UNUSED, void *context)
+static void
+testsuite_interpreter_free(const struct sieve_extension *ext ATTR_UNUSED,
+			   struct sieve_interpreter *interp ATTR_UNUSED,
+			   void *context)
 {
 	struct testsuite_interpreter_context *ctx =
 		(struct testsuite_interpreter_context *)context;
 
-	if ( ctx->compiled_script != NULL )
+	if (ctx->compiled_script != NULL)
 		sieve_binary_unref(&ctx->compiled_script);
 }
 
-const struct sieve_interpreter_extension
-testsuite_interpreter_ext = {
+const struct sieve_interpreter_extension testsuite_interpreter_ext = {
 	.ext_def = &testsuite_extension,
 	.free = testsuite_interpreter_free,
 };
 
-bool testsuite_interpreter_context_initialize
-(struct sieve_interpreter *interp, const struct sieve_extension *this_ext)
+bool testsuite_interpreter_context_initialize(
+	struct sieve_interpreter *interp, const struct sieve_extension *this_ext)
 {
 	pool_t pool = sieve_interpreter_pool(interp);
 	struct testsuite_interpreter_context *ctx =
 		p_new(pool, struct testsuite_interpreter_context, 1);
 
-	sieve_interpreter_extension_register
-		(interp, this_ext, &testsuite_interpreter_ext, ctx);
+	sieve_interpreter_extension_register(interp, this_ext,
+					     &testsuite_interpreter_ext, ctx);
 	return TRUE;
 }
 
-struct testsuite_interpreter_context *testsuite_interpreter_context_get
-(struct sieve_interpreter *interp, const struct sieve_extension *this_ext)
+struct testsuite_interpreter_context *
+testsuite_interpreter_context_get(struct sieve_interpreter *interp,
+				  const struct sieve_extension *this_ext)
 {
 	struct testsuite_interpreter_context *ctx =
 		sieve_interpreter_extension_get_context(interp, this_ext);
@@ -152,56 +155,77 @@ struct testsuite_interpreter_context *testsuite_interpreter_context_get
 static void testsuite_test_context_init(void)
 {
 	test_name = str_new(default_pool, 128);
+	test_block_end = 0;
 	test_index = 0;
 	test_failures = 0;
 }
 
-void testsuite_test_start(string_t *name)
+int testsuite_test_start(const struct sieve_runtime_env *renv,
+			 string_t *name, sieve_size_t block_end)
 {
+	if (test_block_end != 0) {
+		sieve_runtime_trace_error(renv, "already inside test block");
+		return SIEVE_EXEC_BIN_CORRUPT;
+	}
 	str_truncate(test_name, 0);
 	str_append_str(test_name, name);
 
+	test_block_end = block_end;
 	test_index++;
+
+	return SIEVE_EXEC_OK;
 }
 
-void testsuite_test_fail(string_t *reason)
+int testsuite_test_fail(const struct sieve_runtime_env *renv,
+			string_t *reason)
 {
-	testsuite_test_fail_cstr(str_c(reason));
+	return testsuite_test_fail_cstr(renv, str_c(reason));
 }
 
-void testsuite_test_failf(const char *fmt, ...)
+int testsuite_test_failf(const struct sieve_runtime_env *renv,
+			 const char *fmt, ...)
 {
 	va_list args;
+	int ret;
+
 	va_start(args, fmt);
-
-	testsuite_test_fail_cstr(t_strdup_vprintf(fmt, args));
-
+	ret = testsuite_test_fail_cstr(renv, t_strdup_vprintf(fmt, args));
 	va_end(args);
+
+	return ret;
 }
 
-void testsuite_test_fail_cstr(const char *reason)
+int testsuite_test_fail_cstr(const struct sieve_runtime_env *renv,
+			     const char *reason)
 {
-	if ( str_len(test_name) == 0 ) {
-		if ( reason == NULL || *reason == '\0' )
+	sieve_size_t end = test_block_end;
+
+	if (str_len(test_name) == 0) {
+		if (reason == NULL || *reason == '\0')
 			printf("%2d: Test FAILED\n", test_index);
 		else
 			printf("%2d: Test FAILED: %s\n", test_index, reason);
 	} else {
-		if ( reason == NULL || *reason == '\0' )
-			printf("%2d: Test '%s' FAILED\n", test_index, str_c(test_name));
-		else
-			printf("%2d: Test '%s' FAILED: %s\n", test_index,
-				str_c(test_name), reason);
+		if (reason == NULL || *reason == '\0') {
+			printf("%2d: Test '%s' FAILED\n",
+			       test_index, str_c(test_name));
+		} else {
+			printf("%2d: Test '%s' FAILED: %s\n",
+			       test_index, str_c(test_name), reason);
+		}
 	}
 
 	str_truncate(test_name, 0);
+	test_block_end = 0;
 
 	test_failures++;
+
+	return sieve_interpreter_program_jump_to(renv->interp, end, FALSE);
 }
 
 void testsuite_testcase_fail(const char *reason)
 {
-	if ( reason == NULL || *reason == '\0' )
+	if (reason == NULL || *reason == '\0')
 		printf("XX: Test CASE FAILED\n");
 	else
 		printf("XX: Test CASE FAILED: %s\n", reason);
@@ -209,21 +233,44 @@ void testsuite_testcase_fail(const char *reason)
 	test_failures++;
 }
 
-void testsuite_test_succeed(string_t *reason)
+int testsuite_test_succeed(const struct sieve_runtime_env *renv,
+			   sieve_size_t *address, string_t *reason)
 {
-	if ( str_len(test_name) == 0 ) {
-		if ( reason == NULL || str_len(reason) == 0 )
+	sieve_size_t end = test_block_end;
+	int ret;
+
+	if (str_len(test_name) == 0) {
+		if (reason == NULL || str_len(reason) == 0)
 			printf("%2d: Test SUCCEEDED\n", test_index);
-		else
-			printf("%2d: Test SUCCEEDED: %s\n", test_index, str_c(reason));
+		else {
+			printf("%2d: Test SUCCEEDED: %s\n",
+			       test_index, str_c(reason));
+		}
 	} else {
-		if ( reason == NULL || str_len(reason) == 0 )
-			printf("%2d: Test '%s' SUCCEEDED\n", test_index, str_c(test_name));
-		else
+		if (reason == NULL || str_len(reason) == 0) {
+			printf("%2d: Test '%s' SUCCEEDED\n",
+			       test_index, str_c(test_name));
+		} else {
 			printf("%2d: Test '%s' SUCCEEDED: %s\n", test_index,
 				str_c(test_name), str_c(reason));
+		}
 	}
+
 	str_truncate(test_name, 0);
+	test_block_end = 0;
+
+	if (*address > end) {
+		sieve_runtime_trace_error(
+			renv, "invalid test block end offset");
+		return SIEVE_EXEC_BIN_CORRUPT;
+	} else if (*address < end) {
+		ret = sieve_interpreter_program_jump_to(
+			renv->interp, end, FALSE);
+		if (ret <= 0)
+			return ret;
+	}
+
+	return SIEVE_EXEC_OK;
 }
 
 static void testsuite_test_context_deinit(void)
@@ -231,10 +278,23 @@ static void testsuite_test_context_deinit(void)
 	str_free(&test_name);
 }
 
-bool testsuite_testcase_result(void)
+bool testsuite_testcase_result(bool expect_failure)
 {
-	if ( test_failures > 0 ) {
-		printf("\nFAIL: %d of %d tests failed.\n\n", test_failures, test_index);
+	if (expect_failure) {
+		if (test_failures < test_index) {
+			printf("\nFAIL: Only %d of %d tests failed "
+			       "(all expected to fail).\n\n",
+			       test_failures, test_index);
+			return FALSE;
+		}
+
+		printf("\nPASS: %d tests failed.\n\n", test_index);
+		return TRUE;
+	}
+
+	if (test_failures > 0) {
+		printf("\nFAIL: %d of %d tests failed.\n\n",
+		       test_failures, test_index);
 		return FALSE;
 	}
 
@@ -250,10 +310,11 @@ static char *testsuite_tmp_dir;
 
 static void testsuite_tmp_dir_init(void)
 {
-	testsuite_tmp_dir = i_strdup_printf
-		("/tmp/dsieve-testsuite.%s.%s", dec2str(time(NULL)), dec2str(getpid()));
+	testsuite_tmp_dir = i_strdup_printf("/tmp/dsieve-testsuite.%s.%s",
+					    dec2str(time(NULL)),
+					    dec2str(getpid()));
 
-	if ( mkdir(testsuite_tmp_dir, 0700) < 0 ) {
+	if (mkdir(testsuite_tmp_dir, 0700) < 0) {
 		i_fatal("failed to create temporary directory '%s': %m.",
 			testsuite_tmp_dir);
 	}
@@ -263,9 +324,10 @@ static void testsuite_tmp_dir_deinit(void)
 {
 	const char *error;
 
-	if ( unlink_directory(testsuite_tmp_dir, UNLINK_DIRECTORY_FLAG_RMDIR, &error) < 0 )
+	if (unlink_directory(testsuite_tmp_dir,
+			     UNLINK_DIRECTORY_FLAG_RMDIR, &error) < 0)
 		i_warning("failed to remove temporary directory '%s': %s.",
-			testsuite_tmp_dir, error);
+			  testsuite_tmp_dir, error);
 
 	i_free(testsuite_tmp_dir);
 }
@@ -279,8 +341,8 @@ const char *testsuite_tmp_dir_get(void)
  * Main testsuite init/deinit
  */
 
-void testsuite_init
-(struct sieve_instance *svinst, const char *test_path, bool log_stdout)
+void testsuite_init(struct sieve_instance *svinst, const char *test_path,
+		    bool log_stdout)
 {
 	testsuite_sieve_instance = svinst;
 
@@ -292,9 +354,8 @@ void testsuite_init
 	testsuite_binary_init();
 	testsuite_smtp_init();
 
-	testsuite_ext = sieve_extension_register
-		(svinst, &testsuite_extension, TRUE);
-
+	testsuite_ext =
+		sieve_extension_register(svinst, &testsuite_extension, TRUE);
 
 	testsuite_test_path = i_strdup(test_path);
 }
@@ -311,4 +372,3 @@ void testsuite_deinit(void)
 	testsuite_log_deinit();
 	testsuite_test_context_deinit();
 }
-

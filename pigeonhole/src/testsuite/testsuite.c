@@ -47,7 +47,7 @@ const struct sieve_script_env *testsuite_scriptenv;
 static void print_help(void)
 {
 	printf(
-"Usage: testsuite [-D] [-E] [-d <dump-filename>]\n"
+"Usage: testsuite [-D] [-E] [-F] [-d <dump-filename>]\n"
 "                 [-t <trace-filename>] [-T <trace-option>]\n"
 "                 [-P <plugin>] [-x <extensions>]\n"
 "                 <scriptfile>\n"
@@ -69,9 +69,7 @@ testsuite_run(struct sieve_binary *sbin, struct sieve_error_handler *ehandler)
 
 	/* Run the interpreter */
 	result = testsuite_result_get();
-	sieve_result_ref(result);
 	ret = sieve_interpreter_run(interp, result);
-	sieve_result_unref(&result);
 
 	/* Free the interpreter */
 	sieve_interpreter_free(&interp);
@@ -86,11 +84,11 @@ int main(int argc, char **argv)
 	struct sieve_trace_config trace_config;
 	struct sieve_binary *sbin;
 	const char *sieve_dir, *cwd, *error;
-	bool log_stdout = FALSE;
+	bool log_stdout = FALSE, expect_failure = FALSE;
 	int ret, c;
 
 	sieve_tool = sieve_tool_init("testsuite", &argc, &argv,
-				     "d:t:T:EDP:", TRUE);
+				     "d:t:T:EFDP:", TRUE);
 
 	/* Parse arguments */
 	dumpfile = tracefile = NULL;
@@ -111,6 +109,9 @@ int main(int argc, char **argv)
 			break;
 		case 'E':
 			log_stdout = TRUE;
+			break;
+		case 'F':
+			expect_failure = TRUE;
 			break;
 		default:
 			print_help();
@@ -226,9 +227,9 @@ int main(int argc, char **argv)
 		sieve_close(&sbin);
 
 		/* De-initialize message environment */
+		testsuite_result_deinit();
 		testsuite_message_deinit();
 		testsuite_mailstore_deinit();
-		testsuite_result_deinit();
 
 		if (trace_log != NULL)
 			sieve_trace_log_free(&trace_log);
@@ -244,7 +245,7 @@ int main(int argc, char **argv)
 
 	sieve_tool_deinit(&sieve_tool);
 
-	if (!testsuite_testcase_result())
+	if (!testsuite_testcase_result(expect_failure))
 		return EXIT_FAILURE;
 
 	return EXIT_SUCCESS;
