@@ -15,3 +15,4 @@ test-backtrace.patch
 doveadm-director.1-drop-acute-accent.patch
 Fix-32bit-sign-comparisons.patch
 Fix-32-bit-test-case.patch
+Improve-cross-compile-support.patch

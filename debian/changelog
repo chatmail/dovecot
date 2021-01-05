@@ -21,7 +21,10 @@ dovecot (1:2.3.13+dfsg1-1) UNRELEASED; urgency=medium
   * [15fcb1d] d/{control,rules}: disable apparmor support on !linux archs
     (Closes: #951869)
 
- -- Christian Göttsche <cgzones@googlemail.com>  Mon, 04 Jan 2021 15:38:02 +0100
+  [ Helmut Grohne ]
+  * [17fc2db] d/patches: improve cross-compile support (Closes: #979370)
+
+ -- Christian Göttsche <cgzones@googlemail.com>  Wed, 06 Jan 2021 11:38:52 +0100
 
 dovecot (1:2.3.11.3+dfsg1-2) unstable; urgency=medium
 
