@@ -1,10 +1,5 @@
 dovecot (1:2.3.13+dfsg1-1) UNRELEASED; urgency=medium
 
-  [ Noah Meyerhans ]
-  * [f641320] Note closure of #930919 with 2.3.10.1+dfsg1-1
-  * [3f738da] Note closure of #921529 in 1:2.2.34-1
-  * [a908d4b] Note closure of #928492 with 2.3.10.1+dfsg1-1
-
   [ Christian Göttsche ]
   * [6829237] New upstream version 2.3.13
     - CVE-2020-24386: IMAP hibernation allows accessing other peoples mail
@@ -16,15 +11,16 @@ dovecot (1:2.3.13+dfsg1-1) UNRELEASED; urgency=medium
   * [548bac5] Drop unmatched copyright src/lib-ntlm/* wildcard
   * [6f33f3f] Ignore package-contains-documentation-outside-usr-share-doc
     false-positives
+  * [dde9c94] Handle removed configuration file in postinst
 
   [ Pino Toscano ]
-  * [15fcb1d] d/{control,rules}: disable apparmor support on !linux archs
+  * [04a60e3] d/{control,rules}: disable apparmor support on !linux archs
     (Closes: #951869)
 
   [ Helmut Grohne ]
-  * [17fc2db] d/patches: improve cross-compile support (Closes: #979370)
+  * [e5f9fcb] d/patches: improve cross-compile support (Closes: #979370)
 
- -- Christian Göttsche <cgzones@googlemail.com>  Wed, 06 Jan 2021 11:38:52 +0100
+ -- Christian Göttsche <cgzones@googlemail.com>  Tue, 12 Jan 2021 17:43:59 +0100
 
 dovecot (1:2.3.11.3+dfsg1-2) unstable; urgency=medium
 
