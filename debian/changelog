@@ -1,7 +1,7 @@
 dovecot (1:2.3.13+dfsg1-1) UNRELEASED; urgency=medium
 
   [ Christian Göttsche ]
-  * [6829237] New upstream version 2.3.13
+  * [6829237] New upstream version 2.3.13 (Closes: #979363)
     - CVE-2020-24386: IMAP hibernation allows accessing other peoples mail
     - CVE-2020-25275: MIME parsing crashes with particular messages
 
