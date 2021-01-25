@@ -25,8 +25,8 @@ static struct connection_settings client_set = {
 	.major_version = 2,
 	.minor_version = 0,
 	.allow_empty_args_input = TRUE,
-	.input_max_size = (size_t)-1,
-	.output_max_size = (size_t)-1,
+	.input_max_size = SIZE_MAX,
+	.output_max_size = SIZE_MAX,
 	.client = TRUE,
 };
 
@@ -47,7 +47,7 @@ bool test_stats_callback(struct event *event,
 static const char *settings_blob_1 =
 "metric=test\n"
 "metric/test/metric_name=test\n"
-"metric/test/event_name=test\n"
+"metric/test/filter=event=test\n"
 "\n";
 
 static int test_reader_server_input_args(struct connection *conn ATTR_UNUSED,
@@ -126,7 +126,7 @@ static void test_client_reader(void)
 static const char *settings_blob_2 =
 "metric=test\n"
 "metric/test/metric_name=test\n"
-"metric/test/event_name=test\n"
+"metric/test/filter=event=test\n"
 "metric/test/group_by=test_name\n"
 "\n";
 

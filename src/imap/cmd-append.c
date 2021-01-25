@@ -122,10 +122,7 @@ static void client_input_append(struct client_command_context *cmd)
 	cmd_sync_delayed(client);
 	o_stream_uncork(client->output);
 
-	if (client->disconnected)
-		client_destroy(client, NULL);
-	else
-		client_continue_pending_input(client);
+	client_continue_pending_input(client);
 }
 
 static void cmd_append_finish(struct cmd_append_context *ctx)
@@ -261,7 +258,7 @@ static void cmd_append_catenate_text(struct client_command_context *cmd)
 {
 	struct cmd_append_context *ctx = cmd->context;
 
-	if (ctx->literal_size > (uoff_t)-1 - ctx->cat_msg_size &&
+	if (ctx->literal_size > UOFF_T_MAX - ctx->cat_msg_size &&
 	    !ctx->failed) {
 		client_send_tagline(cmd,
 			"NO [TOOBIG] Composed message grows too big.");

@@ -1,15 +1,19 @@
 From: Marco Nenciarini <mnencia@debian.org>
 Date: Fri, 16 Sep 2011 00:55:02 +0200
 Subject: fix mail_plugin_dir default
-Description: Fix mail_plugin_dir default value in conf.d/10-mail.conf
-Bug: #624294
----
- doc/example-config/conf.d/10-mail.conf |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
 
+Bug: #624294
+
+Fix mail_plugin_dir default value in conf.d/10-mail.conf
+---
+ doc/example-config/conf.d/10-mail.conf | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/doc/example-config/conf.d/10-mail.conf b/doc/example-config/conf.d/10-mail.conf
+index de48f92..24daa04 100644
 --- a/doc/example-config/conf.d/10-mail.conf
 +++ b/doc/example-config/conf.d/10-mail.conf
-@@ -211,7 +211,7 @@
+@@ -211,7 +211,7 @@ namespace inbox {
  #auth_socket_path = /var/run/dovecot/auth-userdb
  
  # Directory where to look up mail plugins.

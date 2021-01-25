@@ -98,3 +98,18 @@ dovecot-core: executable-in-usr-lib usr/lib/dovecot/tcpwrap
 dovecot-core: executable-in-usr-lib usr/lib/dovecot/xml2text
 # ignore equal stub files
 dovecot-core: duplicate-files usr/share/doc/dovecot-core/wiki/Pigeonhole.ManageSieve.Install.txt usr/share/doc/dovecot-core/wiki/Plugins.Stats.txt
+# ignore stopwords txt files not in /usr/share/doc
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_da.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_de.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_en.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_es.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_fi.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_fr.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_it.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_nl.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_no.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_pt.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_ro.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_ru.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_sv.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_tr.txt

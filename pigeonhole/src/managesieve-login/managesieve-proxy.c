@@ -31,15 +31,6 @@ static const char *managesieve_proxy_state_names[MSIEVE_PROXY_STATE_COUNT] = {
 	"none", "tls-start", "tls-ready", "xclient", "auth"
 };
 
-static void proxy_free_password(struct client *client)
-{
-	if (client->proxy_password == NULL)
-		return;
-
-	safe_memset(client->proxy_password, 0, strlen(client->proxy_password));
-	i_free_and_null(client->proxy_password);
-}
-
 static void proxy_write_xclient
 (struct managesieve_client *client, string_t *str)
 {
@@ -77,7 +68,9 @@ static int proxy_write_auth
 	if ( !client->proxy_sasl ) {
 		/* Prevent sending credentials to a server that has login disabled;
 		   i.e., due to the lack of TLS */
-		e_error(login_proxy_get_event(client->common.login_proxy),
+		login_proxy_failed(client->common.login_proxy,
+			login_proxy_get_event(client->common.login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_REMOTE_CONFIG,
 			"Server has disabled authentication (TLS required?)");
 		return -1;
 	}
@@ -99,9 +92,12 @@ static int proxy_write_auth
 	managesieve_quote_append_string(str, mech_name, FALSE);
 	if (dsasl_client_output(client->common.proxy_sasl_client,
 				&output, &len, &error) < 0) {
-		e_error(login_proxy_get_event(client->common.login_proxy),
+		const char *reason = t_strdup_printf(
 			"SASL mechanism %s init failed: %s",
 			mech_name, error);
+		login_proxy_failed(client->common.login_proxy,
+			login_proxy_get_event(client->common.login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_INTERNAL, reason);
 		return -1;
 	}
 	if (len > 0) {
@@ -109,7 +105,6 @@ static int proxy_write_auth
 		proxy_write_auth_data(output, len, str);
 	}
 	str_append(str, "\r\n");
-	proxy_free_password(&client->common);
 	return 0;
 }
 
@@ -142,9 +137,12 @@ static int proxy_input_auth_challenge
 		if ( ret > 0 && managesieve_arg_get_string(&args[0], &challenge) ) {
 			*challenge_r = t_strdup(challenge);
 		} else {
-			e_error(login_proxy_get_event(client->common.login_proxy),
+			const char *reason = t_strdup_printf(
 				"Server sent invalid SASL challenge line: %s",
 				str_sanitize(line,160));
+			login_proxy_failed(client->common.login_proxy,
+				login_proxy_get_event(client->common.login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 			fatal = TRUE;
 		}
 
@@ -157,9 +155,12 @@ static int proxy_input_auth_challenge
 		error_str = (error_str != NULL ? error_str : "unknown (bug)" );
 
 		/* Do not accept faulty server */
-		e_error(login_proxy_get_event(client->common.login_proxy),
+		const char *reason = t_strdup_printf(
 			"Protocol parse error(%d) int SASL challenge line: %s (line=`%s')",
 			ret, error_str, line);
+		login_proxy_failed(client->common.login_proxy,
+			login_proxy_get_event(client->common.login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 		fatal = TRUE;
 	}
 
@@ -183,7 +184,9 @@ static int proxy_write_auth_response
 	int ret;
 
 	if (base64_decode(challenge, strlen(challenge), NULL, str) < 0) {
-		e_error(login_proxy_get_event(client->common.login_proxy),
+		login_proxy_failed(client->common.login_proxy,
+			login_proxy_get_event(client->common.login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_PROTOCOL,
 			"Server sent invalid base64 data in AUTHENTICATE response");
 		return -1;
 	}
@@ -194,8 +197,11 @@ static int proxy_write_auth_response
 					  &data, &data_len, &error);
 	}
 	if (ret < 0) {
-		e_error(login_proxy_get_event(client->common.login_proxy),
+		const char *reason = t_strdup_printf(
 			"Server sent invalid authentication data: %s", error);
+		login_proxy_failed(client->common.login_proxy,
+			login_proxy_get_event(client->common.login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 		return -1;
 	}
 	i_assert(ret == 0);
@@ -260,18 +266,25 @@ static int proxy_input_capability
 	ret = managesieve_parser_read_args(parser, 2, 0, &args);
 
 	if ( ret == 0 ) {
-		e_error(login_proxy_get_event(client->common.login_proxy),
+		const char *reason = t_strdup_printf(
 			"Remote returned with invalid capability/greeting line: %s",
 			str_sanitize(line,160));
+		login_proxy_failed(client->common.login_proxy,
+			login_proxy_get_event(client->common.login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 		fatal = TRUE;
 	} else if ( ret > 0 ) {
 		if ( args[0].type == MANAGESIEVE_ARG_ATOM ) {
 			*resp_r = proxy_read_response(args);
 
 			if ( *resp_r == MANAGESIEVE_RESPONSE_NONE ) {
-				e_error(login_proxy_get_event(client->common.login_proxy),
+				const char *reason = t_strdup_printf(
 					"Remote sent invalid response: %s",
 					str_sanitize(line,160));
+				login_proxy_failed(client->common.login_proxy,
+					login_proxy_get_event(client->common.login_proxy),
+					LOGIN_PROXY_FAILURE_TYPE_PROTOCOL,
+					reason);
 
 				fatal = TRUE;
 			}
@@ -291,7 +304,9 @@ static int proxy_input_capability
 					}
 
 				} else {
-					e_error(login_proxy_get_event(client->common.login_proxy),
+					login_proxy_failed(client->common.login_proxy,
+						login_proxy_get_event(client->common.login_proxy),
+						LOGIN_PROXY_FAILURE_TYPE_PROTOCOL,
 						"Server returned erroneous SASL capability");
 					fatal = TRUE;
 				}
@@ -304,9 +319,12 @@ static int proxy_input_capability
 
 		} else {
 			/* Do not accept faulty server */
-			e_error(login_proxy_get_event(client->common.login_proxy),
+			const char *reason = t_strdup_printf(
 				"Remote returned with invalid capability/greeting line: %s",
 				str_sanitize(line,160));
+			login_proxy_failed(client->common.login_proxy,
+				login_proxy_get_event(client->common.login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 			fatal = TRUE;
 		}
 
@@ -319,9 +337,12 @@ static int proxy_input_capability
 		error_str = (error_str != NULL ? error_str : "unknown (bug)" );
 
 		/* Do not accept faulty server */
-		e_error(login_proxy_get_event(client->common.login_proxy),
+		const char *reason = t_strdup_printf(
 			"Protocol parse error(%d) in capability/greeting line: %s (line=`%s')",
 			ret, error_str, line);
+		login_proxy_failed(client->common.login_proxy,
+			login_proxy_get_event(client->common.login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 		fatal = TRUE;
 	}
 
@@ -336,6 +357,51 @@ static int proxy_input_capability
 	if ( *resp_r == MANAGESIEVE_RESPONSE_NONE ) return 1;
 
 	return 0;
+}
+
+static void
+managesieve_proxy_parse_auth_reply(const char *line,
+				   const char **reason_r, bool *trylater_r)
+{
+	struct managesieve_parser *parser;
+	const struct managesieve_arg *args;
+	struct istream *input;
+	const char *reason;
+	int ret;
+
+	*trylater_r = FALSE;
+
+	if (strncasecmp(line, "NO ", 3) != 0) {
+		*reason_r = line;
+		return;
+	}
+	line += 3;
+	*reason_r = line;
+
+	if (line[0] == '(') {
+		/* Parse optional resp-code. FIXME: The current
+		   managesieve-parser can't really handle this properly, so
+		   we'll just assume that there aren't any strings with ')'
+		   in them. */
+		if (strncasecmp(line, "(TRYLATER) ", 11) == 0) {
+			*trylater_r = TRUE;
+			line += 11;
+		} else {
+			line = strstr(line, ") ");
+			if (line == NULL)
+				return;
+			line += 2;
+		}
+	}
+
+	/* parse the string */
+	input = i_stream_create_from_data(line, strlen(line));
+	parser = managesieve_parser_create(input, (size_t)-1);
+	(void)i_stream_read(input);
+	ret = managesieve_parser_finish_line(parser, 0, 0, &args);
+	if (ret == 1 && managesieve_arg_get_string(&args[0], &reason))
+		*reason_r = t_strdup(reason);
+	managesieve_parser_destroy(&parser);
 }
 
 int managesieve_proxy_parse_line(struct client *client, const char *line)
@@ -354,16 +420,15 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 	switch ( msieve_client->proxy_state ) {
 	case MSIEVE_PROXY_STATE_NONE:
 		if ( (ret=proxy_input_capability
-			(msieve_client, line, &response)) < 0 ) {
-			client_proxy_failed(client, TRUE);
+			(msieve_client, line, &response)) < 0 )
 			return -1;
-		}
 
 		if ( ret == 0 ) {
 			if ( response != MANAGESIEVE_RESPONSE_OK ) {
-				e_error(login_proxy_get_event(client->login_proxy),
+				login_proxy_failed(client->login_proxy,
+					login_proxy_get_event(client->login_proxy),
+					LOGIN_PROXY_FAILURE_TYPE_PROTOCOL,
 					"Remote sent unexpected NO/BYE instead of capability response");
-				client_proxy_failed(client, TRUE);
 				return -1;
 			}
 
@@ -372,9 +437,10 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 			ssl_flags = login_proxy_get_ssl_flags(client->login_proxy);
 			if ((ssl_flags & PROXY_SSL_FLAG_STARTTLS) != 0) {
 				if ( !msieve_client->proxy_starttls ) {
-					e_error(login_proxy_get_event(client->login_proxy),
+					login_proxy_failed(client->login_proxy,
+						login_proxy_get_event(client->login_proxy),
+						LOGIN_PROXY_FAILURE_TYPE_REMOTE_CONFIG,
 						"Remote doesn't support STARTTLS");
-						client_proxy_failed(client, TRUE);
 					return -1;
 				}
 
@@ -386,10 +452,8 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 				msieve_client->proxy_state = MSIEVE_PROXY_STATE_XCLIENT;
 
 			} else {
-				if ( proxy_write_auth(msieve_client, command) < 0 ) {
-					client_proxy_failed(client, TRUE);
+				if ( proxy_write_auth(msieve_client, command) < 0 )
 					return -1;
-				}
 				msieve_client->proxy_state = MSIEVE_PROXY_STATE_AUTH;
 			}
 
@@ -402,10 +466,8 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 			( strlen(line) == 2 || line[2] == ' ' ) ) {
 
 			/* STARTTLS successful, begin TLS negotiation. */
-			if ( login_proxy_starttls(client->login_proxy) < 0 ) {
-				client_proxy_failed(client, TRUE);
+			if ( login_proxy_starttls(client->login_proxy) < 0 )
 				return -1;
-			}
 
 			msieve_client->proxy_sasl = FALSE;
 			msieve_client->proxy_xclient = FALSE;
@@ -413,24 +475,25 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 			return 1;
 		}
 
-		e_error(login_proxy_get_event(client->login_proxy),
+		login_proxy_failed(client->login_proxy,
+			login_proxy_get_event(client->login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_REMOTE,
 			"Remote refused STARTTLS command");
-		client_proxy_failed(client, TRUE);
 		return -1;
 
 	case MSIEVE_PROXY_STATE_TLS_READY:
-		if ( (ret=proxy_input_capability(msieve_client, line, &response)) < 0 ) {
-			client_proxy_failed(client, TRUE);
+		if ( (ret=proxy_input_capability(msieve_client, line, &response)) < 0 )
 			return -1;
-		}
 
 		if ( ret == 0 ) {
 			if ( response != MANAGESIEVE_RESPONSE_OK ) {
 				/* STARTTLS failed */
-				e_error(login_proxy_get_event(client->login_proxy),
+				const char *reason = t_strdup_printf(
 					"Remote STARTTLS failed: %s",
 					str_sanitize(line, 160));
-				client_proxy_failed(client, TRUE);
+				login_proxy_failed(client->login_proxy,
+					login_proxy_get_event(client->login_proxy),
+					LOGIN_PROXY_FAILURE_TYPE_REMOTE, reason);
 				return -1;
 			}
 
@@ -440,10 +503,8 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 				msieve_client->proxy_state = MSIEVE_PROXY_STATE_XCLIENT;
 
 			} else {
-				if ( proxy_write_auth(msieve_client, command) < 0 ) {
-					client_proxy_failed(client, TRUE);
+				if ( proxy_write_auth(msieve_client, command) < 0 )
 					return -1;
-				}
 				msieve_client->proxy_state = MSIEVE_PROXY_STATE_AUTH;
 			}
 			o_stream_nsend(output, str_data(command), str_len(command));
@@ -455,19 +516,19 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 			( strlen(line) == 2 || line[2] == ' ' ) ) {
 
 			command = t_str_new(128);
-			if ( proxy_write_auth(msieve_client, command) < 0 ) {
-				client_proxy_failed(client, TRUE);
+			if ( proxy_write_auth(msieve_client, command) < 0 )
 				return -1;
-			}
 			o_stream_nsend(output, str_data(command), str_len(command));
 			msieve_client->proxy_state = MSIEVE_PROXY_STATE_AUTH;
 			return 0;
 		}
 
-		e_error(login_proxy_get_event(client->login_proxy),
+		const char *reason = t_strdup_printf(
 			"Remote XCLIENT failed: %s",
 			str_sanitize(line, 160));
-		client_proxy_failed(client, TRUE);
+		login_proxy_failed(client->login_proxy,
+			login_proxy_get_event(client->login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_REMOTE, reason);
 		return -1;
 
 	case MSIEVE_PROXY_STATE_AUTH:
@@ -476,16 +537,12 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 			const char *challenge;
 
 			if ( proxy_input_auth_challenge
-				(msieve_client, line, &challenge) < 0 ) {
-				client_proxy_failed(client, TRUE);
+				(msieve_client, line, &challenge) < 0 )
 				return -1;
-			}
 			command = t_str_new(128);
 			if ( proxy_write_auth_response
-				(msieve_client, challenge, command) < 0 ) {
-				client_proxy_failed(client, TRUE);
+				(msieve_client, challenge, command) < 0 )
 				return -1;
-			}
 			o_stream_nsend(output, str_data(command), str_len(command));
 			return 0;
 		}
@@ -510,24 +567,24 @@ int managesieve_proxy_parse_line(struct client *client, const char *line)
 		}
 
 		/* Authentication failed */
-		if ( client->set->auth_verbose ) {
-			const char *log_line = line;
-
-			if (strncasecmp(log_line, "NO ", 3) == 0)
-				log_line += 3;
-			client_proxy_log_failure(client, log_line);
-		}
-
-		/* FIXME: properly parse and handle response codes */
+		bool try_later;
+		(void)managesieve_proxy_parse_auth_reply(line, &reason, &try_later);
 
 		/* Login failed. Send our own failure reply so client can't
 		 * figure out if user exists or not just by looking at the
 		 * reply string.
 		 */
-		client_send_no(client, AUTH_FAILED_MSG);
+		enum login_proxy_failure_type failure_type;
+		if (try_later)
+			failure_type = LOGIN_PROXY_FAILURE_TYPE_AUTH_TEMPFAIL;
+		else {
+			failure_type = LOGIN_PROXY_FAILURE_TYPE_AUTH;
+			client_send_no(client, AUTH_FAILED_MSG);
+		}
 
-		client->proxy_auth_failed = TRUE;
-		client_proxy_failed(client, FALSE);
+		login_proxy_failed(client->login_proxy,
+			login_proxy_get_event(client->login_proxy),
+			failure_type, reason);
 		return -1;
 
 	default:
@@ -550,9 +607,41 @@ void managesieve_proxy_reset(struct client *client)
 	msieve_client->proxy_state = MSIEVE_PROXY_STATE_NONE;
 }
 
-void managesieve_proxy_error(struct client *client, const char *text)
+static void
+managesieve_proxy_send_failure_reply(struct client *client,
+				     enum login_proxy_failure_type type,
+				     const char *reason)
 {
-	client_send_reply_code(client, MANAGESIEVE_CMD_REPLY_NO, "TRYLATER", text);
+	switch (type) {
+	case LOGIN_PROXY_FAILURE_TYPE_CONNECT:
+	case LOGIN_PROXY_FAILURE_TYPE_INTERNAL:
+	case LOGIN_PROXY_FAILURE_TYPE_REMOTE:
+	case LOGIN_PROXY_FAILURE_TYPE_PROTOCOL:
+		client_send_reply_code(client, MANAGESIEVE_CMD_REPLY_NO,
+				       "TRYLATER", LOGIN_PROXY_FAILURE_MSG);
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_INTERNAL_CONFIG:
+	case LOGIN_PROXY_FAILURE_TYPE_REMOTE_CONFIG:
+		client_send_reply_code(client, MANAGESIEVE_CMD_REPLY_NO,
+				       NULL, LOGIN_PROXY_FAILURE_MSG);
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_AUTH_TEMPFAIL:
+		client_send_reply_code(client, MANAGESIEVE_CMD_REPLY_NO,
+				       "TRYLATER", reason);
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_AUTH:
+		/* reply was already sent */
+		break;
+	}
+}
+
+void managesieve_proxy_failed(struct client *client,
+			      enum login_proxy_failure_type type,
+			      const char *reason, bool reconnecting)
+{
+	if (!reconnecting)
+		managesieve_proxy_send_failure_reply(client, type, reason);
+	client_common_proxy_failed(client, type, reason, reconnecting);
 }
 
 const char *managesieve_proxy_get_state(struct client *client)

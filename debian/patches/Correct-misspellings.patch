@@ -15,10 +15,10 @@ Found by Lintian
  8 files changed, 10 insertions(+), 10 deletions(-)
 
 diff --git a/ChangeLog b/ChangeLog
-index c97c79c..b306f77 100644
+index b58e5a8..879eb1e 100644
 --- a/ChangeLog
 +++ b/ChangeLog
-@@ -42050,7 +42050,7 @@ M	src/lib-storage/index/index-mail.c
+@@ -54098,7 +54098,7 @@ M	src/lib-storage/index/index-mail.c
      lib-index: Add mail_cache_close_mail() to smartly drop cached data with
      INDEX=MEMORY
  
@@ -27,7 +27,7 @@ index c97c79c..b306f77 100644
      just drop mails have have been marked closed with mail_cache_close_mail(). 
      If that's not enough, continue deleting forcibly until the buffer is below 
      256 kB.
-@@ -61950,7 +61950,7 @@ M	src/lib-storage/index/dbox-single/sdbox-storage.c
+@@ -73998,7 +73998,7 @@ M	src/lib-storage/index/dbox-single/sdbox-storage.c
  
  2016-09-21 20:50:24 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2e5e2047a)
  
@@ -36,7 +36,7 @@ index c97c79c..b306f77 100644
  
      Broken by c8eb8314a, which moved adding num_waiting_connections earlier. 
      After that it was never 0 at the check time.
-@@ -78892,7 +78892,7 @@ M	src/login-common/ssl-proxy-openssl.c
+@@ -90940,7 +90940,7 @@ M	src/login-common/ssl-proxy-openssl.c
  
  2015-12-07 11:29:29 +0200 Timo Sirainen <tss@iki.fi> (975c2cdc1)
  
@@ -46,10 +46,10 @@ index c97c79c..b306f77 100644
      multiple commands in a single doveadm-server connection.
  
 diff --git a/NEWS b/NEWS
-index 077c1d1..2df4890 100644
+index 9249b42..b78fb65 100644
 --- a/NEWS
 +++ b/NEWS
-@@ -1292,7 +1292,7 @@ v2.2.26 2016-10-27  Timo Sirainen <tss@iki.fi>
+@@ -1518,7 +1518,7 @@ v2.2.26 2016-10-27  Timo Sirainen <tss@iki.fi>
  	- zlib, IMAP BINARY: Fixed internal caching when accessing multiple
  	  newly created mails. They all had UID=0 and the next mail could have
  	  wrongly used the previously cached mail.
@@ -59,23 +59,23 @@ index 077c1d1..2df4890 100644
  	  using with mail stats.
  	- quota count: Fixed deadlocks when updating vsize header.
 diff --git a/pigeonhole/src/lib-sieve/sieve-address.c b/pigeonhole/src/lib-sieve/sieve-address.c
-index 2e81d99..eef0d75 100644
+index f9456f8..c0d982a 100644
 --- a/pigeonhole/src/lib-sieve/sieve-address.c
 +++ b/pigeonhole/src/lib-sieve/sieve-address.c
-@@ -433,7 +433,7 @@ static bool parse_mailbox_address
- 
+@@ -449,7 +449,7 @@ parse_mailbox_address(struct sieve_message_address_parser *ctx,
  	if (ctx->parser.data != ctx->parser.end) {
- 		if ( *ctx->parser.data == ',' )
--			sieve_address_error(ctx, "not a single addres (found ',')");
-+			sieve_address_error(ctx, "not a single address (found ',')");
- 		else
- 			sieve_address_error(ctx, "address ends in invalid characters");
- 		return FALSE;
+ 		if (*ctx->parser.data == ',') {
+ 			sieve_address_error(
+-				ctx, "not a single addres (found ',')");
++				ctx, "not a single address (found ',')");
+ 		} else {
+ 			sieve_address_error(
+ 				ctx, "address ends in invalid characters");
 diff --git a/src/director/director-connection.c b/src/director/director-connection.c
-index 028d3db..75bb86c 100644
+index 8208898..77b443c 100644
 --- a/src/director/director-connection.c
 +++ b/src/director/director-connection.c
-@@ -875,7 +875,7 @@ static bool director_cmd_director(struct director_connection *conn,
+@@ -895,7 +895,7 @@ static bool director_cmd_director(struct director_connection *conn,
  
  		/* already have this. just reset its last_network_failure
  		   timestamp, since it might be up now, but only if this
@@ -98,10 +98,10 @@ index 360e597..d39cbe2 100644
  		reset = array_idx_modifiable(&t->ext_resets, ext_id);
  		if (reset->new_reset_id == (uint32_t)-1)
 diff --git a/src/lib-index/mail-index.h b/src/lib-index/mail-index.h
-index a54c41d..067cb9d 100644
+index b9ab3aa..6c84cda 100644
 --- a/src/lib-index/mail-index.h
 +++ b/src/lib-index/mail-index.h
-@@ -325,7 +325,7 @@ void mail_index_set_lock_method(struct mail_index *index,
+@@ -327,7 +327,7 @@ void mail_index_set_lock_method(struct mail_index *index,
     use the default. */
  void mail_index_set_optimization_settings(struct mail_index *index,
  	const struct mail_index_optimization_settings *set);
@@ -111,10 +111,10 @@ index a54c41d..067cb9d 100644
  void mail_index_set_ext_init_data(struct mail_index *index, uint32_t ext_id,
  				  const void *data, size_t size);
 diff --git a/src/lib-index/mail-transaction-log-file.c b/src/lib-index/mail-transaction-log-file.c
-index 5bd5e33..52ab9a8 100644
+index 9a18cb8..cd99cb6 100644
 --- a/src/lib-index/mail-transaction-log-file.c
 +++ b/src/lib-index/mail-transaction-log-file.c
-@@ -759,7 +759,7 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
+@@ -760,7 +760,7 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
  		return -1;
  
  	if (reset) {

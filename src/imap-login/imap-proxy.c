@@ -65,23 +65,16 @@ static void proxy_write_id(struct imap_client *client, string_t *str)
 	str_append(str, ")\r\n");
 }
 
-static void proxy_free_password(struct client *client)
-{
-	if (client->proxy_password == NULL)
-		return;
-
-	safe_memset(client->proxy_password, 0, strlen(client->proxy_password));
-	i_free_and_null(client->proxy_password);
-}
-
 static int proxy_write_starttls(struct imap_client *client, string_t *str)
 {
 	enum login_proxy_ssl_flags ssl_flags = login_proxy_get_ssl_flags(client->common.login_proxy);
 	if ((ssl_flags & PROXY_SSL_FLAG_STARTTLS) != 0) {
 		if (client->proxy_backend_capability != NULL &&
 		    !str_array_icase_find(t_strsplit(client->proxy_backend_capability, " "), "STARTTLS")) {
-			e_error(login_proxy_get_event(client->common.login_proxy),
-				"Remote doesn't support STARTTLS");
+			login_proxy_failed(client->common.login_proxy,
+				login_proxy_get_event(client->common.login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_REMOTE_CONFIG,
+				"STARTTLS not supported");
 			return -1;
 		}
 		str_append(str, "S STARTTLS\r\n");
@@ -120,8 +113,10 @@ static int proxy_write_login(struct imap_client *client, string_t *str)
 		/* logging in normally - use LOGIN command */
 		if (client->proxy_logindisabled &&
 		    login_proxy_get_ssl_flags(client->common.login_proxy) == 0) {
-			e_error(login_proxy_get_event(client->common.login_proxy),
-				"Remote advertised LOGINDISABLED and SSL/TLS not enabled");
+			login_proxy_failed(client->common.login_proxy,
+				login_proxy_get_event(client->common.login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_REMOTE_CONFIG,
+				"LOGINDISABLED advertised, but SSL/TLS not enabled");
 			return -1;
 		}
 		str_append(str, "L LOGIN ");
@@ -131,7 +126,6 @@ static int proxy_write_login(struct imap_client *client, string_t *str)
 		str_append(str, "\r\n");
 
 		client->proxy_sent_state |= IMAP_PROXY_SENT_STATE_LOGIN;
-		proxy_free_password(&client->common);
 		return 0;
 	}
 
@@ -150,9 +144,12 @@ static int proxy_write_login(struct imap_client *client, string_t *str)
 	if (client->proxy_sasl_ir) {
 		if (dsasl_client_output(client->common.proxy_sasl_client,
 					&output, &len, &error) < 0) {
-			e_error(login_proxy_get_event(client->common.login_proxy),
+			const char *reason = t_strdup_printf(
 				"SASL mechanism %s init failed: %s",
 				mech_name, error);
+			login_proxy_failed(client->common.login_proxy,
+				login_proxy_get_event(client->common.login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_INTERNAL, reason);
 			return -1;
 		}
 		str_append_c(str, ' ');
@@ -162,7 +159,6 @@ static int proxy_write_login(struct imap_client *client, string_t *str)
 			base64_encode(output, len, str);
 	}
 	str_append(str, "\r\n");
-	proxy_free_password(&client->common);
 	client->proxy_sent_state |= IMAP_PROXY_SENT_STATE_AUTHENTICATE;
 	return 0;
 }
@@ -175,9 +171,11 @@ static int proxy_input_banner(struct imap_client *client,
 	int ret;
 
 	if (!str_begins(line, "* OK ")) {
-		e_error(login_proxy_get_event(client->common.login_proxy),
-			"Remote returned invalid banner: %s",
+		const char *reason = t_strdup_printf("Invalid banner: %s",
 			str_sanitize(line, 160));
+		login_proxy_failed(client->common.login_proxy,
+			login_proxy_get_event(client->common.login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 		return -1;
 	}
 
@@ -249,6 +247,13 @@ client_send_login_reply(struct imap_client *client, string_t *str,
 	str_append(str, "\r\n");
 }
 
+static bool auth_resp_code_is_tempfail(const char *resp_code)
+{
+	/* Dovecot uses [UNAVAILABLE] for failures that can be retried.
+	   Non-retriable failures are [SERVERBUG]. */
+	return strcasecmp(resp_code, IMAP_RESP_CODE_UNAVAILABLE) == 0;
+}
+
 int imap_proxy_parse_line(struct client *client, const char *line)
 {
 	struct imap_client *imap_client = (struct imap_client *)client;
@@ -266,10 +271,8 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 		/* this is a banner */
 		imap_client->proxy_rcvd_state = IMAP_PROXY_RCVD_STATE_BANNER;
 		imap_client->proxy_seen_banner = TRUE;
-		if (proxy_input_banner(imap_client, output, line) < 0) {
-			client_proxy_failed(client, TRUE);
+		if (proxy_input_banner(imap_client, output, line) < 0)
 			return -1;
-		}
 		return 0;
 	} else if (*line == '+') {
 		/* AUTHENTICATE started. finish it. */
@@ -277,15 +280,17 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 			/* used literals with LOGIN command, just ignore. */
 			return 0;
 		}
-		imap_client->proxy_sent_state &= ~IMAP_PROXY_SENT_STATE_AUTHENTICATE;
+		imap_client->proxy_sent_state &= ENUM_NEGATE(IMAP_PROXY_SENT_STATE_AUTHENTICATE);
 		imap_client->proxy_rcvd_state = IMAP_PROXY_RCVD_STATE_AUTH_CONTINUE;
 
 		str = t_str_new(128);
 		if (line[1] != ' ' ||
 		    base64_decode(line+2, strlen(line+2), NULL, str) < 0) {
-			e_error(login_proxy_get_event(client->login_proxy),
-				"Server sent invalid base64 data in AUTHENTICATE response");
-			client_proxy_failed(client, TRUE);
+			const char *reason = t_strdup_printf(
+				"Invalid base64 data in AUTHENTICATE response");
+			login_proxy_failed(client->login_proxy,
+				login_proxy_get_event(client->login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 			return -1;
 		}
 		ret = dsasl_client_input(client->proxy_sasl_client,
@@ -295,10 +300,11 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 						  &data, &data_len, &error);
 		}
 		if (ret < 0) {
-			e_error(login_proxy_get_event(client->login_proxy),
-				"Server sent invalid authentication data: %s",
-				error);
-			client_proxy_failed(client, TRUE);
+			const char *reason = t_strdup_printf(
+				"Invalid authentication data: %s", error);
+			login_proxy_failed(client->login_proxy,
+				login_proxy_get_event(client->login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 			return -1;
 		}
 		i_assert(ret == 0);
@@ -311,34 +317,32 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 		o_stream_nsend(output, str_data(str), str_len(str));
 		return 0;
 	} else if (str_begins(line, "S ")) {
-		imap_client->proxy_sent_state &= ~IMAP_PROXY_SENT_STATE_STARTTLS;
+		imap_client->proxy_sent_state &= ENUM_NEGATE(IMAP_PROXY_SENT_STATE_STARTTLS);
 		imap_client->proxy_rcvd_state = IMAP_PROXY_RCVD_STATE_STARTTLS;
 
 		if (!str_begins(line, "S OK ")) {
 			/* STARTTLS failed */
-			e_error(login_proxy_get_event(client->login_proxy),
-				"Remote STARTTLS failed: %s",
+			const char *reason = t_strdup_printf(
+				"STARTTLS failed: %s",
 				str_sanitize(line + 5, 160));
-			client_proxy_failed(client, TRUE);
+			login_proxy_failed(client->login_proxy,
+				login_proxy_get_event(client->login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_REMOTE, reason);
 			return -1;
 		}
 		/* STARTTLS successful, begin TLS negotiation. */
-		if (login_proxy_starttls(client->login_proxy) < 0) {
-			client_proxy_failed(client, TRUE);
+		if (login_proxy_starttls(client->login_proxy) < 0)
 			return -1;
-		}
 		/* i/ostreams changed. */
 		output = login_proxy_get_ostream(client->login_proxy);
 		str = t_str_new(128);
-		if (proxy_write_login(imap_client, str) < 0) {
-			client_proxy_failed(client, TRUE);
+		if (proxy_write_login(imap_client, str) < 0)
 			return -1;
-		}
 		o_stream_nsend(output, str_data(str), str_len(str));
 		return 1;
 	} else if (str_begins(line, "L OK ")) {
 		/* Login successful. Send this line to client. */
-		imap_client->proxy_sent_state &= ~IMAP_PROXY_SENT_STATE_LOGIN;
+		imap_client->proxy_sent_state &= ENUM_NEGATE(IMAP_PROXY_SENT_STATE_LOGIN);
 		imap_client->proxy_rcvd_state = IMAP_PROXY_RCVD_STATE_LOGIN;
 		str = t_str_new(128);
 		client_send_login_reply(imap_client, str, line + 5);
@@ -347,17 +351,15 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 		client_proxy_finish_destroy_client(client);
 		return 1;
 	} else if (str_begins(line, "L ")) {
-		imap_client->proxy_sent_state &= ~IMAP_PROXY_SENT_STATE_LOGIN;
+		imap_client->proxy_sent_state &= ENUM_NEGATE(IMAP_PROXY_SENT_STATE_LOGIN);
 		imap_client->proxy_rcvd_state = IMAP_PROXY_RCVD_STATE_LOGIN;
 
 		line += 2;
-		if (client->set->auth_verbose) {
-			const char *log_line = line;
-
-			if (strncasecmp(log_line, "NO ", 3) == 0)
-				log_line += 3;
-			client_proxy_log_failure(client, log_line);
-		}
+		const char *log_line = line;
+		if (strncasecmp(log_line, "NO ", 3) == 0)
+			log_line += 3;
+		enum login_proxy_failure_type failure_type =
+			LOGIN_PROXY_FAILURE_TYPE_AUTH;
 #define STR_NO_IMAP_RESP_CODE_AUTHFAILED "NO ["IMAP_RESP_CODE_AUTHFAILED"]"
 		if (str_begins(line, STR_NO_IMAP_RESP_CODE_AUTHFAILED)) {
 			/* the remote sent a generic "authentication failed"
@@ -370,8 +372,13 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 					       AUTH_FAILED_MSG);
 		} else if (str_begins(line, "NO [")) {
 			/* remote sent some other resp-code. forward it. */
-			client_send_raw(client, t_strconcat(
-				imap_client->cmd_tag, " ", line, "\r\n", NULL));
+			const char *resp_code = t_strcut(line + 4, ']');
+			if (auth_resp_code_is_tempfail(resp_code))
+				failure_type = LOGIN_PROXY_FAILURE_TYPE_AUTH_TEMPFAIL;
+			else {
+				client_send_raw(client, t_strconcat(
+					imap_client->cmd_tag, " ", line, "\r\n", NULL));
+			}
 		} else {
 			/* there was no [resp-code], so remote isn't Dovecot
 			   v1.2+. we could either forward the line as-is and
@@ -385,8 +392,9 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 					       AUTH_FAILED_MSG);
 		}
 
-		client->proxy_auth_failed = TRUE;
-		client_proxy_failed(client, FALSE);
+		login_proxy_failed(client->login_proxy,
+				   login_proxy_get_event(client->login_proxy),
+				   failure_type, log_line);
 		return -1;
 	} else if (strncasecmp(line, "* CAPABILITY ", 13) == 0) {
 		i_free(imap_client->proxy_backend_capability);
@@ -394,10 +402,12 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 		return 0;
 	} else if (str_begins(line, "C ")) {
 		/* Reply to CAPABILITY command we sent */
-		imap_client->proxy_sent_state &= ~IMAP_PROXY_SENT_STATE_CAPABILITY;
+		imap_client->proxy_sent_state &= ENUM_NEGATE(IMAP_PROXY_SENT_STATE_CAPABILITY);
 		imap_client->proxy_rcvd_state = IMAP_PROXY_RCVD_STATE_CAPABILITY;
 		if (str_begins(line, "C OK ") &&
-		    client->proxy_password != NULL) {
+		    HAS_NO_BITS(imap_client->proxy_sent_state,
+				IMAP_PROXY_SENT_STATE_AUTHENTICATE |
+				IMAP_PROXY_SENT_STATE_LOGIN)) {
 			/* pipelining was disabled, send the login now. */
 			str = t_str_new(128);
 			if (proxy_write_login(imap_client, str) < 0)
@@ -410,7 +420,7 @@ int imap_proxy_parse_line(struct client *client, const char *line)
 		/* Reply to ID command we sent, ignore it unless
 		   pipelining is disabled, in which case send
 		   either STARTTLS or login */
-		imap_client->proxy_sent_state &= ~IMAP_PROXY_SENT_STATE_ID;
+		imap_client->proxy_sent_state &= ENUM_NEGATE(IMAP_PROXY_SENT_STATE_ID);
 		imap_client->proxy_rcvd_state = IMAP_PROXY_RCVD_STATE_ID;
 
 		if (client->proxy_nopipelining) {
@@ -453,10 +463,46 @@ void imap_proxy_reset(struct client *client)
 	imap_client->proxy_rcvd_state = IMAP_PROXY_RCVD_STATE_NONE;
 }
 
-void imap_proxy_error(struct client *client, const char *text)
+static void
+imap_proxy_send_failure_reply(struct imap_client *imap_client,
+			      enum login_proxy_failure_type type,
+			      const char *reason)
 {
-	client_send_reply_code(client, IMAP_CMD_REPLY_NO,
-			       IMAP_RESP_CODE_UNAVAILABLE, text);
+	switch (type) {
+	case LOGIN_PROXY_FAILURE_TYPE_CONNECT:
+	case LOGIN_PROXY_FAILURE_TYPE_INTERNAL:
+	case LOGIN_PROXY_FAILURE_TYPE_REMOTE:
+	case LOGIN_PROXY_FAILURE_TYPE_PROTOCOL:
+		client_send_reply_code(&imap_client->common, IMAP_CMD_REPLY_NO,
+				       IMAP_RESP_CODE_UNAVAILABLE,
+				       LOGIN_PROXY_FAILURE_MSG);
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_REMOTE_CONFIG:
+	case LOGIN_PROXY_FAILURE_TYPE_INTERNAL_CONFIG:
+		client_send_reply_code(&imap_client->common, IMAP_CMD_REPLY_NO,
+				       IMAP_RESP_CODE_SERVERBUG,
+				       LOGIN_PROXY_FAILURE_MSG);
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_AUTH_TEMPFAIL:
+		client_send_raw(&imap_client->common, t_strconcat(
+			imap_client->cmd_tag, " NO ", reason, "\r\n", NULL));
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_AUTH:
+		/* reply was already sent */
+		break;
+	}
+}
+
+void imap_proxy_failed(struct client *client,
+		       enum login_proxy_failure_type type,
+		       const char *reason, bool reconnecting)
+{
+	struct imap_client *imap_client =
+		container_of(client, struct imap_client, common);
+
+	if (!reconnecting)
+		imap_proxy_send_failure_reply(imap_client, type, reason);
+	client_common_proxy_failed(client, type, reason, reconnecting);
 }
 
 const char *imap_proxy_get_state(struct client *client)

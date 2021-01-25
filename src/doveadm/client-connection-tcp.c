@@ -80,7 +80,8 @@ doveadm_server_log_handler(const struct failure_context *ctx,
 
 		/* since we can get here from just about anywhere, make sure
 		   the log ostream uses the connection's ioloop. */
-		io_loop_set_current(conn->ioloop);
+		if (conn->ioloop != NULL)
+			io_loop_set_current(conn->ioloop);
 
 		c = doveadm_log_type_to_char(ctx->type);
 		corked = o_stream_is_corked(log_out);
@@ -547,7 +548,7 @@ client_connection_tcp_input(struct client_connection_tcp *conn)
 		conn->io_setup = TRUE;
                 if (conn->use_multiplex) {
                         struct ostream *os = conn->output;
-                        conn->output = o_stream_create_multiplex(os, (size_t)-1);
+                        conn->output = o_stream_create_multiplex(os, SIZE_MAX);
                         o_stream_set_name(conn->output, o_stream_get_name(os));
                         o_stream_set_no_error_handling(conn->output, TRUE);
                         o_stream_unref(&os);
@@ -662,7 +663,7 @@ client_connection_tcp_create(int fd, int listen_fd, bool ssl)
 	doveadm_print_init(DOVEADM_PRINT_TYPE_SERVER);
 
 	conn->input = i_stream_create_fd(fd, MAX_INBUF_SIZE);
-	conn->output = o_stream_create_fd(fd, (size_t)-1);
+	conn->output = o_stream_create_fd(fd, SIZE_MAX);
 	i_stream_set_name(conn->input, conn->conn.name);
 	o_stream_set_name(conn->output, conn->conn.name);
 	o_stream_set_no_error_handling(conn->output, TRUE);

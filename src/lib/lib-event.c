@@ -88,10 +88,21 @@ static void event_copy_parent_defaults(struct event *event,
 }
 
 static bool
-event_find_category(struct event *event, const struct event_category *category);
+event_find_category(const struct event *event,
+		    const struct event_category *category);
 
 static struct event_field *
-event_find_field_int(struct event *event, const char *key);
+event_find_field_int(const struct event *event, const char *key);
+
+static void event_set_changed(struct event *event)
+{
+	event->change_id++;
+	/* It's unlikely that change_id will ever wrap, but lets be safe
+	   anyway. */
+	if (event->change_id == 0 ||
+	    event->change_id == event->sent_to_stats_id)
+		event->change_id++;
+}
 
 static bool
 event_call_callbacks(struct event *event, enum event_callback_type type,
@@ -131,8 +142,8 @@ void event_copy_categories(struct event *to, struct event *from)
 {
 	unsigned int cat_count;
 	struct event_category *const *categories = event_get_categories(from, &cat_count);
-	while (cat_count-- > 0)
-		event_add_category(to, categories[cat_count]);
+	for (unsigned int i = 1; i <= cat_count; i++)
+		event_add_category(to, categories[cat_count-i]);
 }
 
 void event_copy_fields(struct event *to, struct event *from)
@@ -312,7 +323,7 @@ struct event *event_minimize(struct event *event)
 	/* find the bound for field/category flattening */
 	flatten_bound = NULL;
 	for (cur = event->parent; cur != NULL; cur = cur->parent) {
-		if (!cur->id_sent_to_stats &&
+		if (cur->sent_to_stats_id == 0 &&
 		    timeval_cmp(&cur->tv_created_ioloop,
 				&event->tv_created_ioloop) == 0)
 			continue;
@@ -324,7 +335,7 @@ struct event *event_minimize(struct event *event)
 	/* continue to find the bound for empty event skipping */
 	skip_bound = NULL;
 	for (; cur != NULL; cur = cur->parent) {
-		if (!cur->id_sent_to_stats &&
+		if (cur->sent_to_stats_id == 0 &&
 		    (!array_is_created(&cur->fields) || array_is_empty(&cur->fields)) &&
 		    (!array_is_created(&cur->categories) || array_is_empty(&cur->categories)))
 			continue;
@@ -367,6 +378,7 @@ event_create_internal(struct event *parent, const char *source_filename,
 	i_gettimeofday(&event->tv_created);
 	event->source_filename = p_strdup(pool, source_filename);
 	event->source_linenum = source_linenum;
+	event->change_id = 1;
 	if (parent != NULL) {
 		event->parent = parent;
 		event_ref(event->parent);
@@ -612,7 +624,7 @@ struct event *event_set_ptr(struct event *event, const char *key, void *value)
 	return event;
 }
 
-void *event_get_ptr(struct event *event, const char *key)
+void *event_get_ptr(const struct event *event, const char *key)
 {
 	const struct event_pointer *p;
 
@@ -732,9 +744,14 @@ static struct event_category *event_category_register(struct event_category *cat
 }
 
 static bool
-event_find_category(struct event *event, const struct event_category *category)
+event_find_category(const struct event *event,
+		    const struct event_category *category)
 {
+	struct event_internal_category *internal = category->internal;
 	struct event_category *const *categoryp;
+
+	/* make sure we're always looking for a representative */
+	i_assert(category == &internal->representative);
 
 	array_foreach(&event->categories, categoryp) {
 		if (*categoryp == category)
@@ -754,9 +771,10 @@ event_add_categories(struct event *event,
 
 	for (unsigned int i = 0; categories[i] != NULL; i++) {
 		representative = event_category_register(categories[i]);
-		if (!event_find_category(event, categories[i]))
+		if (!event_find_category(event, representative))
 			array_push_back(&event->categories, &representative);
 	}
+	event_set_changed(event);
 	event->debug_level_checked = FALSE;
 	return event;
 }
@@ -769,7 +787,7 @@ event_add_category(struct event *event, struct event_category *category)
 }
 
 static struct event_field *
-event_find_field_int(struct event *event, const char *key)
+event_find_field_int(const struct event *event, const char *key)
 {
 	struct event_field *field;
 
@@ -784,7 +802,7 @@ event_find_field_int(struct event *event, const char *key)
 }
 
 const struct event_field *
-event_find_field(struct event *event, const char *key)
+event_find_field(const struct event *event, const char *key)
 {
 	const struct event_field *field = event_find_field_int(event, key);
 	if (field != NULL || event->parent == NULL)
@@ -793,7 +811,7 @@ event_find_field(struct event *event, const char *key)
 }
 
 const char *
-event_find_field_str(struct event *event, const char *key)
+event_find_field_str(const struct event *event, const char *key)
 {
 	const struct event_field *field;
 
@@ -826,6 +844,7 @@ event_get_field(struct event *event, const char *key)
 		field = array_append_space(&event->fields);
 		field->key = p_strdup(event->pool, key);
 	}
+	event_set_changed(event);
 	return field;
 }
 
@@ -868,6 +887,7 @@ event_inc_int(struct event *event, const char *key, intmax_t num)
 		return event_add_int(event, key, num);
 
 	field->value.intmax += num;
+	event_set_changed(event);
 	return event;
 }
 
@@ -904,23 +924,23 @@ void event_field_clear(struct event *event, const char *key)
 	event_add_str(event, key, "");
 }
 
-struct event *event_get_parent(struct event *event)
+struct event *event_get_parent(const struct event *event)
 {
 	return event->parent;
 }
 
-void event_get_create_time(struct event *event, struct timeval *tv_r)
+void event_get_create_time(const struct event *event, struct timeval *tv_r)
 {
 	*tv_r = event->tv_created;
 }
 
-bool event_get_last_send_time(struct event *event, struct timeval *tv_r)
+bool event_get_last_send_time(const struct event *event, struct timeval *tv_r)
 {
 	*tv_r = event->tv_last_sent;
 	return tv_r->tv_sec != 0;
 }
 
-void event_get_last_duration(struct event *event, intmax_t *duration_r)
+void event_get_last_duration(const struct event *event, intmax_t *duration_r)
 {
 	if (event->tv_last_sent.tv_sec == 0) {
 		*duration_r = 0;
@@ -930,7 +950,7 @@ void event_get_last_duration(struct event *event, intmax_t *duration_r)
 }
 
 const struct event_field *
-event_get_fields(struct event *event, unsigned int *count_r)
+event_get_fields(const struct event *event, unsigned int *count_r)
 {
 	if (!array_is_created(&event->fields)) {
 		*count_r = 0;
@@ -940,7 +960,7 @@ event_get_fields(struct event *event, unsigned int *count_r)
 }
 
 struct event_category *const *
-event_get_categories(struct event *event, unsigned int *count_r)
+event_get_categories(const struct event *event, unsigned int *count_r)
 {
 	if (!array_is_created(&event->categories)) {
 		*count_r = 0;
@@ -1121,7 +1141,8 @@ bool event_import_unescaped(struct event *event, const char *const *args,
 			}
 			if (!array_is_created(&event->categories))
 				p_array_init(&event->categories, event->pool, 4);
-			array_push_back(&event->categories, &category);
+			if (!event_find_category(event, category))
+				array_push_back(&event->categories, &category);
 			break;
 		}
 		case EVENT_CODE_TV_LAST_SENT:
@@ -1173,6 +1194,11 @@ bool event_import_unescaped(struct event *event, const char *const *args,
 				}
 				break;
 			case EVENT_CODE_FIELD_STR:
+				if (field->value_type == EVENT_FIELD_VALUE_TYPE_STR &&
+				    null_strcmp(field->value.str, *args) == 0) {
+					/* already identical value */
+					break;
+				}
 				field->value_type = EVENT_FIELD_VALUE_TYPE_STR;
 				field->value.str = p_strdup(event->pool, *args);
 				break;

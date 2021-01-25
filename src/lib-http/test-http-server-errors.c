@@ -10,16 +10,17 @@
 #include "sleep.h"
 #include "connection.h"
 #include "test-common.h"
+#include "test-subprocess.h"
 #include "http-url.h"
 #include "http-request.h"
 #include "http-server.h"
 
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <signal.h>
 #include <unistd.h>
 
 #define SERVER_MAX_TIMEOUT_MSECS 10*1000
+#define CLIENT_KILL_TIMEOUT_SECS 20
+
+static void main_deinit(void);
 
 /*
  * Types
@@ -52,9 +53,7 @@ static int fd_listen = -1;
 static void (*test_server_request)(struct http_server_request *req);
 
 /* client */
-static pid_t *client_pids = NULL;
 static struct connection_list *client_conn_list;
-static unsigned int client_pids_count = 0;
 static unsigned int client_index;
 static void (*test_client_connected)(struct client_connection *conn);
 static void (*test_client_input)(struct client_connection *conn);
@@ -638,7 +637,7 @@ test_server_response_ostream_disconnect_output(
 
 	o_stream_set_max_buffer_size(output, IO_BLOCK_SIZE);
 	res = o_stream_send_istream(output, ctx->payload_input);
-	o_stream_set_max_buffer_size(output, (size_t)-1);
+	o_stream_set_max_buffer_size(output, SIZE_MAX);
 
 	switch (res) {
 	case OSTREAM_SEND_ISTREAM_RESULT_FINISHED:
@@ -802,8 +801,8 @@ static void client_connection_destroy(struct connection *_conn)
 /* */
 
 static struct connection_settings client_connection_set = {
-	.input_max_size = (size_t)-1,
-	.output_max_size = (size_t)-1,
+	.input_max_size = SIZE_MAX,
+	.output_max_size = SIZE_MAX,
 	.client = TRUE
 };
 
@@ -906,6 +905,11 @@ static void test_server_run(const struct http_server_settings *http_set)
  * Tests
  */
 
+struct test_client_data {
+	unsigned int index;
+	test_client_init_t client_test;
+};
+
 static int test_open_server_fd(void)
 {
 	int fd = net_listen(&bind_ip, &bind_port, 128);
@@ -918,20 +922,44 @@ static int test_open_server_fd(void)
 	return fd;
 }
 
-static void test_clients_kill_all(void)
+static int test_run_client(struct test_client_data *data)
 {
-	unsigned int i;
+	i_close_fd(&fd_listen);
 
-	if (client_pids_count > 0) {
-		for (i = 0; i < client_pids_count; i++) {
-			if (client_pids[i] != (pid_t)-1) {
-				(void)kill(client_pids[i], SIGKILL);
-				(void)waitpid(client_pids[i], NULL, 0);
-				client_pids[i] = -1;
-			}
-		}
-	}
-	client_pids_count = 0;
+	i_set_failure_prefix("CLIENT[%u]: ", data->index + 1);
+
+	if (debug)
+		i_debug("PID=%s", my_pid);
+
+	/* Wait a little for server setup */
+	i_sleep_msecs(100);
+
+	ioloop = io_loop_create();
+	data->client_test(data->index);
+	io_loop_destroy(&ioloop);
+
+	if (debug)
+		i_debug("Terminated");
+
+	main_deinit();
+	return 0;
+}
+
+static void
+test_run_server(const struct http_server_settings *server_set,
+		test_server_init_t server_test)
+{
+	i_set_failure_prefix("SERVER: ");
+
+	if (debug)
+		i_debug("PID=%s", my_pid);
+
+	ioloop = io_loop_create();
+	server_test(server_set);
+	io_loop_destroy(&ioloop);
+
+	if (debug)
+		i_debug("Terminated");
 }
 
 static void
@@ -942,97 +970,50 @@ test_run_client_server(const struct http_server_settings *server_set,
 {
 	unsigned int i;
 
-	client_pids = NULL;
-	client_pids_count = 0;
-
 	fd_listen = test_open_server_fd();
 
 	if (client_tests_count > 0) {
-		client_pids = i_new(pid_t, client_tests_count);
-		for (i = 0; i < client_tests_count; i++)
-			client_pids[i] = (pid_t)-1;
-		client_pids_count = client_tests_count;
-
 		for (i = 0; i < client_tests_count; i++) {
-			if ((client_pids[i] = fork()) == (pid_t)-1)
-				i_fatal("fork() failed: %m");
-			if (client_pids[i] == 0) {
-				client_pids[i] = (pid_t)-1;
-				client_pids_count = 0;
-				hostpid_init();
-				if (debug) {
-					i_debug("client[%d]: PID=%s",
-						i+1, my_pid);
-				}
-				i_set_failure_prefix("CLIENT[%u]: ", i + 1);
-				/* Child: client */
-				/* Wait a little for server setup */
-				i_sleep_msecs(100);
-				i_close_fd(&fd_listen);
-				ioloop = io_loop_create();
-				client_test(i);
-				io_loop_destroy(&ioloop);
-				i_free(client_pids);
-				/* Wait for it to be killed; this way, valgrind
-				   will not object to this process going away
-				   inelegantly. */
-				sleep(60);
-				exit(1);
-			}
+			struct test_client_data data;
+
+			i_zero(&data);
+			data.index = i;
+			data.client_test = client_test;
+
+			/* Fork client */
+			test_subprocess_fork(test_run_client, &data, FALSE);
 		}
-		if (debug)
-			i_debug("server: PID=%s", my_pid);
-		i_set_failure_prefix("SERVER: ");
 	}
 
-	/* Parent: server */
+	/* Run server */
+	test_run_server(server_set, server_test);
 
-	ioloop = io_loop_create();
-	server_test(server_set);
-	io_loop_destroy(&ioloop);
-
+	i_unset_failure_prefix();
 	i_close_fd(&fd_listen);
-
-	test_clients_kill_all();
-	i_free(client_pids);
+	test_subprocess_kill_all(CLIENT_KILL_TIMEOUT_SECS);
 }
 
 /*
  * Main
  */
 
-volatile sig_atomic_t terminating = 0;
-
-static void test_signal_handler(int signo)
+static void main_init(void)
 {
-	if (terminating != 0)
-		raise(signo);
-	terminating = 1;
-
-	/* make sure we don't leave any pesky children alive */
-	test_clients_kill_all();
-
-	(void)signal(signo, SIG_DFL);
-	raise(signo);
+	/* nothing yet */
 }
 
-static void test_atexit(void)
+static void main_deinit(void)
 {
-	test_clients_kill_all();
+	/* nothing yet; also called from sub-processes */
 }
 
 int main(int argc, char *argv[])
 {
 	int c;
+	int ret;
 
-	atexit(test_atexit);
-	(void)signal(SIGCHLD, SIG_IGN);
-	(void)signal(SIGPIPE, SIG_IGN);
-	(void)signal(SIGTERM, test_signal_handler);
-	(void)signal(SIGQUIT, test_signal_handler);
-	(void)signal(SIGINT, test_signal_handler);
-	(void)signal(SIGSEGV, test_signal_handler);
-	(void)signal(SIGABRT, test_signal_handler);
+	lib_init();
+	main_init();
 
 	while ((c = getopt(argc, argv, "D")) > 0) {
 		switch (c) {
@@ -1044,10 +1025,18 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	test_subprocesses_init(debug);
+
 	/* listen on localhost */
 	i_zero(&bind_ip);
 	bind_ip.family = AF_INET;
 	bind_ip.u.ip4.s_addr = htonl(INADDR_LOOPBACK);	
 
-	return test_run(test_functions);
+	ret = test_run(test_functions);
+
+	test_subprocesses_deinit();
+	main_deinit();
+	lib_deinit();
+	
+	return ret;
 }

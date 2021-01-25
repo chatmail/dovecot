@@ -1,7 +1,6 @@
 /* Copyright (c) 2016-2018 Dovecot authors, see the included COPYING file */
 
 #include "lib.h"
-#include "lib-signals.h"
 #include "str.h"
 #include "hostpid.h"
 #include "ioloop.h"
@@ -10,20 +9,26 @@
 #include "istream-chain.h"
 #include "istream-failure-at.h"
 #include "ostream.h"
+#include "iostream-ssl.h"
+#include "iostream-ssl-test.h"
+#ifdef HAVE_OPENSSL
+#  include "iostream-openssl.h"
+#endif
 #include "time-util.h"
 #include "sleep.h"
 #include "connection.h"
 #include "test-common.h"
+#include "test-subprocess.h"
 #include "smtp-client.h"
 #include "smtp-client-connection.h"
 #include "smtp-client-transaction.h"
 
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <signal.h>
 #include <unistd.h>
 
 #define CLIENT_PROGRESS_TIMEOUT     10
+#define SERVER_KILL_TIMEOUT_SECS    20
+
+static void main_deinit(void);
 
 /*
  * Types
@@ -41,16 +46,20 @@ struct server_connection {
 	struct connection conn;
 	void *context;
 
+	struct ssl_iostream *ssl_iostream;
+
 	enum server_connection_state state;
 	char *file_path;
 	struct istream *dot_input;
 
 	pool_t pool;
+
+	bool version_sent:1;
 };
 
 typedef void (*test_server_init_t)(unsigned int index);
-typedef bool (*test_client_init_t)
-	(const struct smtp_client_settings *client_set);
+typedef bool
+(*test_client_init_t)(const struct smtp_client_settings *client_set);
 typedef void (*test_dns_init_t)(void);
 
 /*
@@ -63,21 +72,19 @@ static in_port_t *bind_ports = 0;
 static struct ioloop *ioloop;
 static bool debug = FALSE;
 
-/* dns */
-static pid_t dns_pid = (pid_t)-1;
-
 /* server */
 static struct io *io_listen;
 static int fd_listen = -1;
-static pid_t *server_pids = NULL;
-static unsigned int server_pids_count = 0;
 static struct connection_list *server_conn_list;
 static unsigned int server_index;
+struct ssl_iostream_context *server_ssl_ctx = NULL;
+bool test_server_ssl = FALSE;
 static void (*test_server_input)(struct server_connection *conn);
-static int (*test_server_input_line)(struct server_connection *conn,
-	const char *line);
-static int (*test_server_input_data)(struct server_connection *conn,
-	const unsigned char *data, size_t size);
+static int
+(*test_server_input_line)(struct server_connection *conn, const char *line);
+static int
+(*test_server_input_data)(struct server_connection *conn,
+			  const unsigned char *data, size_t size);
 static int (*test_server_init)(struct server_connection *conn);
 static void (*test_server_deinit)(struct server_connection *conn);
 
@@ -91,22 +98,19 @@ static struct smtp_client *smtp_client = NULL;
 
 /* server */
 static void test_server_run(unsigned int index);
-static void
-server_connection_deinit(struct server_connection **_conn);
+static void server_connection_deinit(struct server_connection **_conn);
 
 /* client */
-static void
-test_client_defaults(struct smtp_client_settings *smtp_set);
+static void test_client_defaults(struct smtp_client_settings *smtp_set);
 static void test_client_deinit(void);
 
 /* test*/
-static void test_run_client_server(
-	const struct smtp_client_settings *client_set,
-	test_client_init_t client_test,
-	test_server_init_t server_test,
-	unsigned int server_tests_count,
-	test_dns_init_t dns_test)
-	ATTR_NULL(3);
+static void
+test_run_client_server(const struct smtp_client_settings *client_set,
+		       test_client_init_t client_test,
+		       test_server_init_t server_test,
+		       unsigned int server_tests_count,
+		       test_dns_init_t dns_test) ATTR_NULL(3);
 
 /*
  * Unconfigured SSL
@@ -115,16 +119,14 @@ static void test_run_client_server(
 /* server */
 
 static void
-test_server_unconfigured_ssl_input(
-	struct server_connection *conn ATTR_UNUSED)
+test_server_unconfigured_ssl_input(struct server_connection *conn ATTR_UNUSED)
 {
 	/* nothing */
 }
 
-static void
-test_server_unconfigured_ssl(unsigned int index)
+static void test_server_unconfigured_ssl(unsigned int index)
 {
-	sleep(100);
+	i_sleep_intr_secs(100);
 	test_server_input = test_server_unconfigured_ssl_input;
 	test_server_run(index);
 }
@@ -137,7 +139,7 @@ struct _unconfigured_ssl {
 
 static void
 test_client_unconfigured_ssl_reply(const struct smtp_reply *reply,
-	void *context)
+				   void *context)
 {
 	struct _unconfigured_ssl *ctx = (struct _unconfigured_ssl *)context;
 
@@ -165,17 +167,17 @@ test_client_unconfigured_ssl(const struct smtp_client_settings *client_set)
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "127.0.0.1", bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "127.0.0.1", bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn,
 		test_client_unconfigured_ssl_reply, ctx);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "127.0.0.1", bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "127.0.0.1", bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
-	smtp_client_connection_connect(sconn,
-		test_client_unconfigured_ssl_reply, ctx);
+	smtp_client_connection_connect(
+		sconn, test_client_unconfigured_ssl_reply, ctx);
 
 	return TRUE;
 }
@@ -190,8 +192,8 @@ static void test_unconfigured_ssl(void)
 
 	test_begin("unconfigured ssl");
 	test_run_client_server(&smtp_client_set,
-		test_client_unconfigured_ssl,
-		test_server_unconfigured_ssl, 1, NULL);
+			       test_client_unconfigured_ssl,
+			       test_server_unconfigured_ssl, 1, NULL);
 	test_end();
 }
 
@@ -208,10 +210,9 @@ test_server_unconfigured_ssl_abort_input(
 	/* nothing */
 }
 
-static void
-test_server_unconfigured_ssl_abort(unsigned int index)
+static void test_server_unconfigured_ssl_abort(unsigned int index)
 {
-	sleep(100);
+	i_sleep_intr_secs(100);
 	test_server_input = test_server_unconfigured_ssl_abort_input;
 	test_server_run(index);
 }
@@ -223,7 +224,8 @@ struct _unconfigured_ssl_abort {
 };
 
 static void
-test_client_unconfigured_ssl_abort_reply1(const struct smtp_reply *reply,
+test_client_unconfigured_ssl_abort_reply1(
+	const struct smtp_reply *reply,
 	struct _unconfigured_ssl_abort *ctx ATTR_UNUSED)
 {
 	if (debug)
@@ -234,7 +236,7 @@ test_client_unconfigured_ssl_abort_reply1(const struct smtp_reply *reply,
 
 static void
 test_client_unconfigured_ssl_abort_reply2(const struct smtp_reply *reply,
-	struct _unconfigured_ssl_abort *ctx)
+					  struct _unconfigured_ssl_abort *ctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
@@ -260,22 +262,22 @@ test_client_unconfigured_ssl_abort(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "127.0.0.1", bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "127.0.0.1", bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_unconfigured_ssl_abort_reply1, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_unconfigured_ssl_abort_reply1, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 	smtp_client_command_abort(&scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "127.0.0.1", bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "127.0.0.1", bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_unconfigured_ssl_abort_reply2, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_unconfigured_ssl_abort_reply2, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -292,8 +294,8 @@ static void test_unconfigured_ssl_abort(void)
 
 	test_begin("unconfigured ssl abort");
 	test_run_client_server(&smtp_client_set,
-		test_client_unconfigured_ssl_abort,
-		test_server_unconfigured_ssl_abort, 1, NULL);
+			       test_client_unconfigured_ssl_abort,
+			       test_server_unconfigured_ssl_abort, 1, NULL);
 	test_end();
 }
 
@@ -309,12 +311,13 @@ struct _host_lookup_failed {
 
 static void
 test_client_host_lookup_failed_reply(const struct smtp_reply *reply,
-	struct _host_lookup_failed *ctx)
+				     struct _host_lookup_failed *ctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
 
-	test_assert(reply->status == SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED);
+	test_assert(reply->status ==
+		    SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED);
 
 	if (--ctx->count == 0) {
 		i_free(ctx);
@@ -323,8 +326,7 @@ test_client_host_lookup_failed_reply(const struct smtp_reply *reply,
 }
 
 static bool
-test_client_host_lookup_failed(
-	const struct smtp_client_settings *client_set)
+test_client_host_lookup_failed(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_command *scmd;
@@ -337,21 +339,21 @@ test_client_host_lookup_failed(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "host.in-addr.arpa", 465,
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "host.in-addr.arpa", 465,
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_host_lookup_failed_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_host_lookup_failed_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "host.in-addr.arpa", 465,
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "host.in-addr.arpa", 465,
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_host_lookup_failed_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_host_lookup_failed_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -368,8 +370,7 @@ static void test_host_lookup_failed(void)
 
 	test_begin("host lookup failed");
 	test_run_client_server(&smtp_client_set,
-		test_client_host_lookup_failed,
-		NULL, 0, NULL);
+			       test_client_host_lookup_failed, NULL, 0, NULL);
 	test_end();
 }
 
@@ -379,8 +380,7 @@ static void test_host_lookup_failed(void)
 
 /* server */
 
-static void
-test_server_connection_refused(unsigned int index ATTR_UNUSED)
+static void test_server_connection_refused(unsigned int index ATTR_UNUSED)
 {
 	i_close_fd(&fd_listen);
 }
@@ -393,7 +393,7 @@ struct _connection_refused {
 
 static void
 test_client_connection_refused_reply(const struct smtp_reply *reply,
-	struct _connection_refused *ctx)
+				     struct _connection_refused *ctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
@@ -407,8 +407,7 @@ test_client_connection_refused_reply(const struct smtp_reply *reply,
 }
 
 static bool
-test_client_connection_refused(
-	const struct smtp_client_settings *client_set)
+test_client_connection_refused(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_command *scmd;
@@ -421,21 +420,23 @@ test_client_connection_refused(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_connection_refused_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_connection_refused_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_connection_refused_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_connection_refused_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -452,8 +453,8 @@ static void test_connection_refused(void)
 
 	test_begin("connection refused");
 	test_run_client_server(&smtp_client_set,
-		test_client_connection_refused,
-		test_server_connection_refused, 1, NULL);
+			       test_client_connection_refused,
+			       test_server_connection_refused, 1, NULL);
 	test_end();
 }
 
@@ -471,7 +472,7 @@ test_connection_lost_prematurely_input(struct server_connection *conn)
 	line = i_stream_read_next_line(conn->conn.input);
 	if (line == NULL) {
 		if (conn->conn.input->eof ||
-			conn->conn.input->stream_errno != 0) {
+		    conn->conn.input->stream_errno != 0) {
 			server_connection_deinit(&conn);
 		}
 		return;
@@ -479,8 +480,7 @@ test_connection_lost_prematurely_input(struct server_connection *conn)
 	server_connection_deinit(&conn);
 }
 
-static int
-test_connection_lost_prematurely_init(struct server_connection *conn)
+static int test_connection_lost_prematurely_init(struct server_connection *conn)
 {
 	o_stream_nsend_str(conn->conn.output,
 		"220 testserver ESMTP Testfix (Frop/GNU)\r\n");
@@ -501,7 +501,8 @@ struct _connection_lost_prematurely {
 };
 
 static void
-test_client_connection_lost_prematurely_reply(const struct smtp_reply *reply,
+test_client_connection_lost_prematurely_reply(
+	const struct smtp_reply *reply,
 	struct _connection_lost_prematurely *ctx)
 {
 	if (debug)
@@ -528,21 +529,23 @@ test_client_connection_lost_prematurely(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_connection_lost_prematurely_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_connection_lost_prematurely_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_connection_lost_prematurely_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_connection_lost_prematurely_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -559,8 +562,9 @@ static void test_connection_lost_prematurely(void)
 
 	test_begin("connection lost prematurely");
 	test_run_client_server(&smtp_client_set,
-		test_client_connection_lost_prematurely,
-		test_server_connection_lost_prematurely, 1, NULL);
+			       test_client_connection_lost_prematurely,
+			       test_server_connection_lost_prematurely,
+			       1, NULL);
 	test_end();
 }
 
@@ -572,7 +576,7 @@ static void test_connection_lost_prematurely(void)
 
 static void test_server_connection_timed_out(unsigned int index ATTR_UNUSED)
 {
-	sleep(10);
+	i_sleep_intr_secs(10);
 }
 
 /* client */
@@ -583,7 +587,7 @@ struct _connection_timed_out {
 
 static void
 test_client_connection_timed_out_reply(const struct smtp_reply *reply,
-	struct _connection_timed_out *ctx)
+				       struct _connection_timed_out *ctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
@@ -597,8 +601,7 @@ test_client_connection_timed_out_reply(const struct smtp_reply *reply,
 }
 
 static bool
-test_client_connection_timed_out(
-	const struct smtp_client_settings *client_set)
+test_client_connection_timed_out(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_command *scmd;
@@ -611,21 +614,23 @@ test_client_connection_timed_out(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_connection_timed_out_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_connection_timed_out_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_connection_timed_out_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_connection_timed_out_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -643,8 +648,8 @@ static void test_connection_timed_out(void)
 
 	test_begin("connection timed out");
 	test_run_client_server(&smtp_client_set,
-		test_client_connection_timed_out,
-		test_server_connection_timed_out, 1, NULL);
+			       test_client_connection_timed_out,
+			       test_server_connection_timed_out, 1, NULL);
 	test_end();
 }
 
@@ -656,7 +661,7 @@ static void test_connection_timed_out(void)
 
 static int
 test_broken_payload_input_line(struct server_connection *conn ATTR_UNUSED,
-	const char *line ATTR_UNUSED)
+			       const char *line ATTR_UNUSED)
 {
 	return 0;
 }
@@ -668,16 +673,16 @@ static void test_server_broken_payload(unsigned int index)
 }
 
 static int
-test_broken_payload_chunking_input_line(
-	struct server_connection *conn, const char *line ATTR_UNUSED)
+test_broken_payload_chunking_input_line(struct server_connection *conn,
+					const char *line ATTR_UNUSED)
 {
 	if (conn->state == SERVER_CONNECTION_STATE_EHLO) {
 		o_stream_nsend_str(conn->conn.output,
-			"250-testserver\r\n"
-			"250-PIPELINING\r\n"
-			"250-CHUNKING\r\n"
-			"250-ENHANCEDSTATUSCODES\r\n"
-			"250 DSN\r\n");
+				   "250-testserver\r\n"
+				   "250-PIPELINING\r\n"
+				   "250-CHUNKING\r\n"
+				   "250-ENHANCEDSTATUSCODES\r\n"
+				   "250 DSN\r\n");
 		return 1;
 	}
 	return 0;
@@ -693,14 +698,14 @@ static void test_server_broken_payload_chunking(unsigned int index)
 
 static void
 test_client_broken_payload_rcpt_to_cb(const struct smtp_reply *reply,
-	void *context ATTR_UNUSED)
+				      void *context ATTR_UNUSED)
 {
 	test_assert(smtp_reply_is_success(reply));
 }
 
 static void
 test_client_broken_payload_rcpt_data_cb(const struct smtp_reply *reply,
-	void *context ATTR_UNUSED)
+					void *context ATTR_UNUSED)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
@@ -710,7 +715,7 @@ test_client_broken_payload_rcpt_data_cb(const struct smtp_reply *reply,
 
 static void
 test_client_broken_payload_data_cb(const struct smtp_reply *reply,
-	void *context ATTR_UNUSED)
+				   void *context ATTR_UNUSED)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
@@ -718,15 +723,13 @@ test_client_broken_payload_data_cb(const struct smtp_reply *reply,
 	test_assert(reply->status == SMTP_CLIENT_COMMAND_ERROR_BROKEN_PAYLOAD);
 }
 
-static void
-test_client_broken_payload_finished(void *context ATTR_UNUSED)
+static void test_client_broken_payload_finished(void *context ATTR_UNUSED)
 {
 	io_loop_stop(ioloop);
 }
 
 static bool
-test_client_broken_payload(
-	const struct smtp_client_settings *client_set)
+test_client_broken_payload(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_transaction *strans;
@@ -739,30 +742,32 @@ test_client_broken_payload(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
-	strans = smtp_client_transaction_create(sconn,
-		&((struct smtp_address){.localpart = "sender",
-					.domain = "example.com"}), NULL, 0,
+	strans = smtp_client_transaction_create(
+		sconn, &((struct smtp_address){
+			.localpart = "sender",
+			.domain = "example.com"}), NULL, 0,
 		test_client_broken_payload_finished, NULL);
 	smtp_client_connection_unref(&sconn);
 
-	smtp_client_transaction_add_rcpt(strans,
-		&((struct smtp_address){.localpart = "rcpt",
-					.domain = "example.com"}), NULL,
+	smtp_client_transaction_add_rcpt(
+		strans, &((struct smtp_address){
+			.localpart = "rcpt",
+			.domain = "example.com"}), NULL,
 		test_client_broken_payload_rcpt_to_cb,
 		test_client_broken_payload_rcpt_data_cb, NULL);
-	smtp_client_transaction_send(strans, input,
-		test_client_broken_payload_data_cb, NULL);
+	smtp_client_transaction_send(
+		strans, input, test_client_broken_payload_data_cb, NULL);
 	i_stream_unref(&input);
 
 	return TRUE;
 }
 
 static bool
-test_client_broken_payload_later(
-	const struct smtp_client_settings *client_set)
+test_client_broken_payload_later(const struct smtp_client_settings *client_set)
 {
 	static const char *message =
 		"From: lucifer@example.com\r\n"
@@ -800,22 +805,25 @@ test_client_broken_payload_later(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
-	strans = smtp_client_transaction_create(sconn,
-		&((struct smtp_address){.localpart = "sender",
-					.domain = "example.com"}), NULL, 0,
+	strans = smtp_client_transaction_create(
+		sconn, &((struct smtp_address){
+			.localpart = "sender",
+			.domain = "example.com"}), NULL, 0,
 		test_client_broken_payload_finished, NULL);
 	smtp_client_connection_unref(&sconn);
 
-	smtp_client_transaction_add_rcpt(strans,
-		&((struct smtp_address){.localpart = "rcpt",
-					.domain = "example.com"}), NULL,
+	smtp_client_transaction_add_rcpt(
+		strans, &((struct smtp_address){
+			.localpart = "rcpt",
+			.domain = "example.com"}), NULL,
 		test_client_broken_payload_rcpt_to_cb,
 		test_client_broken_payload_rcpt_data_cb, NULL);
-	smtp_client_transaction_send
-		(strans, input, test_client_broken_payload_data_cb, NULL);
+	smtp_client_transaction_send(
+		strans, input, test_client_broken_payload_data_cb, NULL);
 	i_stream_unref(&input);
 
 	return TRUE;
@@ -832,20 +840,20 @@ static void test_broken_payload(void)
 
 	test_begin("broken payload");
 	test_run_client_server(&smtp_client_set,
-		test_client_broken_payload,
-		test_server_broken_payload, 1, NULL);
+			       test_client_broken_payload,
+			       test_server_broken_payload, 1, NULL);
 	test_end();
 
 	test_begin("broken payload (later)");
 	test_run_client_server(&smtp_client_set,
-		test_client_broken_payload_later,
-		test_server_broken_payload, 1, NULL);
+			       test_client_broken_payload_later,
+			       test_server_broken_payload, 1, NULL);
 	test_end();
 
 	test_begin("broken payload (later, chunking)");
 	test_run_client_server(&smtp_client_set,
-		test_client_broken_payload_later,
-		test_server_broken_payload_chunking, 1, NULL);
+			       test_client_broken_payload_later,
+			       test_server_broken_payload_chunking, 1, NULL);
 	test_end();
 }
 
@@ -857,13 +865,13 @@ static void test_broken_payload(void)
 
 static int
 test_connection_lost_input_line(struct server_connection *conn,
-	const char *line ATTR_UNUSED)
+				const char *line ATTR_UNUSED)
 {
 	switch (conn->state) {
 	case SERVER_CONNECTION_STATE_EHLO:
 		if (server_index == 0) {
 			conn->state = SERVER_CONNECTION_STATE_MAIL_FROM;
-			sleep(1);
+			i_sleep_intr_secs(1);
 			server_connection_deinit(&conn);
 			return -1;
 		}
@@ -871,7 +879,7 @@ test_connection_lost_input_line(struct server_connection *conn,
 	case SERVER_CONNECTION_STATE_MAIL_FROM:
 		if (server_index == 1) {
 			conn->state = SERVER_CONNECTION_STATE_RCPT_TO;
-			sleep(1);
+			i_sleep_intr_secs(1);
 			server_connection_deinit(&conn);
 			return -1;
 		}
@@ -879,7 +887,7 @@ test_connection_lost_input_line(struct server_connection *conn,
 	case SERVER_CONNECTION_STATE_RCPT_TO:
 		if (server_index == 2) {
 			conn->state = SERVER_CONNECTION_STATE_DATA;
-			sleep(1);
+			i_sleep_intr_secs(1);
 			server_connection_deinit(&conn);
 			return -1;
 		}
@@ -887,7 +895,7 @@ test_connection_lost_input_line(struct server_connection *conn,
 	case SERVER_CONNECTION_STATE_DATA:
 		if (server_index == 3) {
 			conn->state = SERVER_CONNECTION_STATE_FINISH;
-			sleep(1);
+			i_sleep_intr_secs(1);
 			server_connection_deinit(&conn);
 			return -1;
 		}
@@ -900,9 +908,10 @@ test_connection_lost_input_line(struct server_connection *conn,
 
 static int
 test_connection_lost_input_data(struct server_connection *conn,
-	const unsigned char *data ATTR_UNUSED, size_t size ATTR_UNUSED)
+				const unsigned char *data ATTR_UNUSED,
+				size_t size ATTR_UNUSED)
 {
-	sleep(1);
+	i_sleep_intr_secs(1);
 	server_connection_deinit(&conn);
 	return -1;
 }
@@ -927,7 +936,7 @@ struct _connection_lost_peer {
 
 static void
 test_client_connection_lost_rcpt_to_cb(const struct smtp_reply *reply,
-	struct _connection_lost_peer *pctx)
+				       struct _connection_lost_peer *pctx)
 {
 	if (debug) {
 		i_debug("RCPT TO REPLY[%u]: %s",
@@ -937,15 +946,15 @@ test_client_connection_lost_rcpt_to_cb(const struct smtp_reply *reply,
 	switch (pctx->index) {
 	case 0:
 		test_assert(reply->status ==
-			SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST);
+			    SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST);
 		break;
 	case 1:
 		test_assert(reply->status ==
-			SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST);
+			    SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST);
 		break;
 	case 2:
 		test_assert(reply->status ==
-			SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST);
+			    SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST);
 		break;
 	case 3:
 		test_assert(smtp_reply_is_success(reply));
@@ -955,7 +964,7 @@ test_client_connection_lost_rcpt_to_cb(const struct smtp_reply *reply,
 
 static void
 test_client_connection_lost_rcpt_data_cb(const struct smtp_reply *reply,
-	struct _connection_lost_peer *pctx)
+					 struct _connection_lost_peer *pctx)
 {
 	if (debug) {
 		i_debug("RCPT DATA REPLY[%u]: %s",
@@ -973,14 +982,15 @@ test_client_connection_lost_rcpt_data_cb(const struct smtp_reply *reply,
 		test_assert(FALSE);
 		break;
 	case 3:
-		test_assert(reply->status == SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST);
+		test_assert(reply->status ==
+			    SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST);
 		break;
 	}
 }
 
 static void
 test_client_connection_lost_data_cb(const struct smtp_reply *reply,
-	struct _connection_lost_peer *pctx)
+				    struct _connection_lost_peer *pctx)
 {
 	if (debug) {
 		i_debug("DATA REPLY[%u]: %s",
@@ -1026,28 +1036,30 @@ test_client_connection_lost_submit(struct _connection_lost *ctx,
 	input = i_stream_create_from_data(message, strlen(message));
 	i_stream_set_name(input, "message");
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[index],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[index],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
-	strans = smtp_client_transaction_create(sconn,
-		&((struct smtp_address){.localpart = "sender",
-					.domain = "example.com"}), NULL, 0,
+	strans = smtp_client_transaction_create(
+		sconn, &((struct smtp_address){
+			.localpart = "sender",
+			.domain = "example.com"}), NULL, 0,
 		test_client_connection_lost_finished, pctx);
 	smtp_client_connection_unref(&sconn);
 
-	smtp_client_transaction_add_rcpt(strans,
-		&((struct smtp_address){.localpart = "rcpt",
-					.domain = "example.com"}), NULL,
+	smtp_client_transaction_add_rcpt(
+		strans, &((struct smtp_address){
+			.localpart = "rcpt",
+			.domain = "example.com"}), NULL,
 		test_client_connection_lost_rcpt_to_cb,
 		test_client_connection_lost_rcpt_data_cb, pctx);
-	smtp_client_transaction_send
-		(strans, input, test_client_connection_lost_data_cb, pctx);
+	smtp_client_transaction_send(
+		strans, input, test_client_connection_lost_data_cb, pctx);
 	i_stream_unref(&input);
 }
 
 static bool
-test_client_connection_lost(
-	const struct smtp_client_settings *client_set)
+test_client_connection_lost(const struct smtp_client_settings *client_set)
 {
 	struct _connection_lost *ctx;
 	unsigned int i;
@@ -1073,8 +1085,8 @@ static void test_connection_lost(void)
 
 	test_begin("connection lost");
 	test_run_client_server(&smtp_client_set,
-		test_client_connection_lost,
-		test_server_connection_lost, 5, NULL);
+			       test_client_connection_lost,
+			       test_server_connection_lost, 5, NULL);
 	test_end();
 }
 
@@ -1088,11 +1100,11 @@ static int
 test_unexpected_reply_init(struct server_connection *conn)
 {
 	if (server_index == 5) {
-		o_stream_nsend_str(conn->conn.output,
-			"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
-		o_stream_nsend_str(conn->conn.output,
-			"421 testserver Server shutting down for maintenance\r\n");
-		sleep(4);
+		o_stream_nsend_str(conn->conn.output, "220 testserver "
+				   "ESMTP Testfix (Debian/GNU)\r\n");
+		o_stream_nsend_str(conn->conn.output, "421 testserver "
+				   "Server shutting down for maintenance\r\n");
+		i_sleep_intr_secs(4);
 		server_connection_deinit(&conn);
 		return 1;
 	}
@@ -1107,13 +1119,14 @@ test_unexpected_reply_input_line(struct server_connection *conn,
 	case SERVER_CONNECTION_STATE_EHLO:
 		if (server_index == 4) {
 			o_stream_nsend_str(conn->conn.output,
-				"250-testserver\r\n"
-				"250-PIPELINING\r\n"
-				"250-ENHANCEDSTATUSCODES\r\n"
-				"250 DSN\r\n");
-			o_stream_nsend_str(conn->conn.output,
-				"421 testserver Server shutting down for maintenance\r\n");
-			sleep(4);
+					   "250-testserver\r\n"
+					   "250-PIPELINING\r\n"
+					   "250-ENHANCEDSTATUSCODES\r\n"
+					   "250 DSN\r\n");
+			o_stream_nsend_str(
+				conn->conn.output, "421 testserver "
+				"Server shutting down for maintenance\r\n");
+			i_sleep_intr_secs(4);
 			server_connection_deinit(&conn);
 			return -1;
 		}
@@ -1121,10 +1134,11 @@ test_unexpected_reply_input_line(struct server_connection *conn,
 	case SERVER_CONNECTION_STATE_MAIL_FROM:
 		if (server_index == 3) {
 			o_stream_nsend_str(conn->conn.output,
-				"250 2.1.0 Ok\r\n");
-			o_stream_nsend_str(conn->conn.output,
-				"421 testserver Server shutting down for maintenance\r\n");
-			sleep(4);
+					   "250 2.1.0 Ok\r\n");
+			o_stream_nsend_str(
+				conn->conn.output, "421 testserver "
+				"Server shutting down for maintenance\r\n");
+			i_sleep_intr_secs(4);
 			server_connection_deinit(&conn);
 			return -1;
 		}
@@ -1132,21 +1146,24 @@ test_unexpected_reply_input_line(struct server_connection *conn,
 	case SERVER_CONNECTION_STATE_RCPT_TO:
 		if (server_index == 2) {
 			o_stream_nsend_str(conn->conn.output,
-				"250 2.1.5 Ok\r\n");
-			o_stream_nsend_str(conn->conn.output,
-				"421 testserver Server shutting down for maintenance\r\n");
-			sleep(4);
+					   "250 2.1.5 Ok\r\n");
+			o_stream_nsend_str(
+				conn->conn.output, "421 testserver "
+				"Server shutting down for maintenance\r\n");
+			i_sleep_intr_secs(4);
 			server_connection_deinit(&conn);
 			return -1;
 		}
 		break;
 	case SERVER_CONNECTION_STATE_DATA:
 		if (server_index == 1) {
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				"354 End data with <CR><LF>.<CR><LF>\r\n");
-			o_stream_nsend_str(conn->conn.output,
-				"421 testserver Server shutting down for maintenance\r\n");
-			sleep(4);
+			o_stream_nsend_str(
+				conn->conn.output, "421 testserver "
+				"Server shutting down for maintenance\r\n");
+			i_sleep_intr_secs(4);
 			server_connection_deinit(&conn);
 			return -1;
 		}
@@ -1187,15 +1204,17 @@ struct _unexpected_reply_peer {
 
 static void
 test_client_unexpected_reply_login_cb(const struct smtp_reply *reply,
-	void *context)
+				      void *context)
 {
 	struct _unexpected_reply_peer *pctx =
 		(struct _unexpected_reply_peer *)context;
 
 	pctx->login_callback = TRUE;
 
-	if (debug)
-		i_debug("LOGIN REPLY[%u]: %s", pctx->index, smtp_reply_log(reply));
+	if (debug) {
+		i_debug("LOGIN REPLY[%u]: %s",
+			pctx->index, smtp_reply_log(reply));
+	}
 
 	switch (pctx->index) {
 	case 0: case 1: case 2: case 3: case 4:
@@ -1209,10 +1228,12 @@ test_client_unexpected_reply_login_cb(const struct smtp_reply *reply,
 
 static void
 test_client_unexpected_reply_mail_from_cb(const struct smtp_reply *reply,
-	struct _unexpected_reply_peer *pctx)
+					  struct _unexpected_reply_peer *pctx)
 {
-	if (debug)
-		i_debug("MAIL FROM REPLY[%u]: %s", pctx->index, smtp_reply_log(reply));
+	if (debug) {
+		i_debug("MAIL FROM REPLY[%u]: %s",
+			pctx->index, smtp_reply_log(reply));
+	}
 
 	pctx->mail_from_callback = TRUE;
 
@@ -1228,10 +1249,12 @@ test_client_unexpected_reply_mail_from_cb(const struct smtp_reply *reply,
 
 static void
 test_client_unexpected_reply_rcpt_to_cb(const struct smtp_reply *reply,
-	struct _unexpected_reply_peer *pctx)
+					struct _unexpected_reply_peer *pctx)
 {
-	if (debug)
-		i_debug("RCPT TO REPLY[%u]: %s", pctx->index, smtp_reply_log(reply));
+	if (debug) {
+		i_debug("RCPT TO REPLY[%u]: %s",
+			pctx->index, smtp_reply_log(reply));
+	}
 
 	pctx->rcpt_to_callback = TRUE;
 
@@ -1247,10 +1270,12 @@ test_client_unexpected_reply_rcpt_to_cb(const struct smtp_reply *reply,
 
 static void
 test_client_unexpected_reply_rcpt_data_cb(const struct smtp_reply *reply,
-	struct _unexpected_reply_peer *pctx)
+					  struct _unexpected_reply_peer *pctx)
 {
-	if (debug)
-		i_debug("RCPT DATA REPLY[%u]: %s", pctx->index, smtp_reply_log(reply));
+	if (debug) {
+		i_debug("RCPT DATA REPLY[%u]: %s",
+			pctx->index, smtp_reply_log(reply));
+	}
 
 	pctx->rcpt_data_callback = TRUE;
 
@@ -1268,10 +1293,12 @@ test_client_unexpected_reply_rcpt_data_cb(const struct smtp_reply *reply,
 
 static void
 test_client_unexpected_reply_data_cb(const struct smtp_reply *reply,
-	struct _unexpected_reply_peer *pctx)
+				     struct _unexpected_reply_peer *pctx)
 {
-	if (debug)
-		i_debug("DATA REPLY[%u]: %s", pctx->index, smtp_reply_log(reply));
+	if (debug) {
+		i_debug("DATA REPLY[%u]: %s",
+			pctx->index, smtp_reply_log(reply));
+	}
 
 	pctx->data_callback = TRUE;
 
@@ -1334,8 +1361,8 @@ test_client_unexpected_reply_submit2(struct _unexpected_reply_peer *pctx)
 	input = i_stream_create_from_data(message, strlen(message));
 	i_stream_set_name(input, "message");
 
-	smtp_client_transaction_send
-		(strans, input, test_client_unexpected_reply_data_cb, pctx);
+	smtp_client_transaction_send(
+		strans, input, test_client_unexpected_reply_data_cb, pctx);
 	i_stream_unref(&input);
 }
 
@@ -1344,19 +1371,20 @@ test_client_unexpected_reply_submit1(struct _unexpected_reply_peer *pctx)
 {
 	timeout_remove(&pctx->to);
 
-	smtp_client_transaction_add_rcpt(pctx->trans,
-		&((struct smtp_address){.localpart = "rcpt",
-					.domain = "example.com"}), NULL,
+	smtp_client_transaction_add_rcpt(
+		pctx->trans, &((struct smtp_address){
+			.localpart = "rcpt",
+			.domain = "example.com"}), NULL,
 		test_client_unexpected_reply_rcpt_to_cb,
 		test_client_unexpected_reply_rcpt_data_cb, pctx);
 
-	pctx->to = timeout_add_short(500,
-		test_client_unexpected_reply_submit2, pctx);
+	pctx->to = timeout_add_short(
+		500, test_client_unexpected_reply_submit2, pctx);
 }
 
 static void
 test_client_unexpected_reply_submit(struct _unexpected_reply *ctx,
-	unsigned int index)
+				    unsigned int index)
 {
 	struct _unexpected_reply_peer *pctx;
 
@@ -1364,26 +1392,28 @@ test_client_unexpected_reply_submit(struct _unexpected_reply *ctx,
 	pctx->context = ctx;
 	pctx->index = index;
 
-	pctx->conn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[index],
+	pctx->conn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[index],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
-	pctx->trans = smtp_client_transaction_create(pctx->conn,
-		&((struct smtp_address){.localpart = "sender",
-					.domain = "example.com"}), NULL, 0,
+	pctx->trans = smtp_client_transaction_create(
+		pctx->conn, &((struct smtp_address){
+			.localpart = "sender",
+			.domain = "example.com"}), NULL, 0,
 		test_client_unexpected_reply_finished, pctx);
-	smtp_client_connection_connect(pctx->conn,
-		test_client_unexpected_reply_login_cb, (void *)pctx);
-	smtp_client_transaction_start(pctx->trans,
-		test_client_unexpected_reply_mail_from_cb, pctx);
+	smtp_client_connection_connect(
+		pctx->conn, test_client_unexpected_reply_login_cb,
+		(void *)pctx);
+	smtp_client_transaction_start(
+		pctx->trans, test_client_unexpected_reply_mail_from_cb, pctx);
 	smtp_client_connection_unref(&pctx->conn);
 
-	pctx->to = timeout_add_short(500,
-		test_client_unexpected_reply_submit1, pctx);
+	pctx->to = timeout_add_short(
+		500, test_client_unexpected_reply_submit1, pctx);
 }
 
 static bool
-test_client_unexpected_reply(
-	const struct smtp_client_settings *client_set)
+test_client_unexpected_reply(const struct smtp_client_settings *client_set)
 {
 	struct _unexpected_reply *ctx;
 	unsigned int i;
@@ -1409,8 +1439,8 @@ static void test_unexpected_reply(void)
 
 	test_begin("unexpected reply");
 	test_run_client_server(&smtp_client_set,
-		test_client_unexpected_reply,
-		test_server_unexpected_reply, 6, NULL);
+			       test_client_unexpected_reply,
+			       test_server_unexpected_reply, 6, NULL);
 	test_end();
 }
 
@@ -1422,7 +1452,7 @@ static void test_unexpected_reply(void)
 
 static int
 test_partial_reply_input_line(struct server_connection *conn,
-	const char *line ATTR_UNUSED)
+			      const char *line ATTR_UNUSED)
 {
 	if (conn->state == SERVER_CONNECTION_STATE_EHLO)
 		return 0;
@@ -1446,7 +1476,7 @@ struct _partial_reply {
 
 static void
 test_client_partial_reply_reply(const struct smtp_reply *reply,
-	struct _partial_reply *ctx)
+				struct _partial_reply *ctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
@@ -1460,8 +1490,7 @@ test_client_partial_reply_reply(const struct smtp_reply *reply,
 }
 
 static bool
-test_client_partial_reply(
-	const struct smtp_client_settings *client_set)
+test_client_partial_reply(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_command *scmd;
@@ -1472,21 +1501,23 @@ test_client_partial_reply(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_partial_reply_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_partial_reply_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_partial_reply_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_partial_reply_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -1503,8 +1534,8 @@ static void test_partial_reply(void)
 
 	test_begin("partial reply");
 	test_run_client_server(&smtp_client_set,
-		test_client_partial_reply,
-		test_server_partial_reply, 1, NULL);
+			       test_client_partial_reply,
+			       test_server_partial_reply, 1, NULL);
 	test_end();
 }
 
@@ -1518,13 +1549,14 @@ static int
 test_premature_reply_init(struct server_connection *conn)
 {
 	if (server_index == 5) {
-		o_stream_nsend_str(conn->conn.output,
+		o_stream_nsend_str(
+			conn->conn.output,
 			"220 testserver ESMTP Testfix (Debian/GNU)\r\n"
 			"250-testserver\r\n"
 			"250-PIPELINING\r\n"
 			"250-ENHANCEDSTATUSCODES\r\n"
 			"250 DSN\r\n");
-		sleep(4);
+		i_sleep_intr_secs(4);
 		server_connection_deinit(&conn);
 		return 1;
 	}
@@ -1542,11 +1574,11 @@ test_premature_reply_input_line(struct server_connection *conn, const char *line
 			i_debug("[%u] EHLO", server_index);
 		if (server_index == 4) {
 			o_stream_nsend_str(conn->conn.output,
-				"250-testserver\r\n"
-				"250-PIPELINING\r\n"
-				"250-ENHANCEDSTATUSCODES\r\n"
-				"250 DSN\r\n"
-				"250 2.1.0 Ok\r\n");
+					   "250-testserver\r\n"
+					   "250-PIPELINING\r\n"
+					   "250-ENHANCEDSTATUSCODES\r\n"
+					   "250 DSN\r\n"
+					   "250 2.1.0 Ok\r\n");
 			conn->state = SERVER_CONNECTION_STATE_MAIL_FROM;
 			return 1;
 		}
@@ -1558,29 +1590,31 @@ test_premature_reply_input_line(struct server_connection *conn, const char *line
 		}
 		if (server_index == 3) {
 			o_stream_nsend_str(conn->conn.output,
-				"250 2.1.0 Ok\r\n"
-				"250 2.1.5 Ok\r\n");
-			sleep(4);
+					   "250 2.1.0 Ok\r\n"
+					   "250 2.1.5 Ok\r\n");
+			i_sleep_intr_secs(4);
 			server_connection_deinit(&conn);
 			return -1;
 		}
 		break;
 	case SERVER_CONNECTION_STATE_RCPT_TO:
 		if (server_index == 2) {
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				"250 2.1.5 Ok\r\n"
 				"354 End data with <CR><LF>.<CR><LF>\r\n");
-			sleep(4);
+			i_sleep_intr_secs(4);
 			server_connection_deinit(&conn);
 			return -1;
 		}
 		break;
 	case SERVER_CONNECTION_STATE_DATA:
 		if (server_index == 1) {
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				"354 End data with <CR><LF>.<CR><LF>\r\n"
 				"250 2.0.0 Ok: queued as 35424ed4af24\r\n");
-			sleep(4);
+			i_sleep_intr_secs(4);
 			server_connection_deinit(&conn);
 			return -1;
 		}
@@ -1621,7 +1655,7 @@ struct _premature_reply_peer {
 
 static void
 test_client_premature_reply_login_cb(const struct smtp_reply *reply,
-	void *context)
+				     void *context)
 {
 	struct _premature_reply_peer *pctx =
 		(struct _premature_reply_peer *)context;
@@ -1649,7 +1683,7 @@ test_client_premature_reply_login_cb(const struct smtp_reply *reply,
 
 static void
 test_client_premature_reply_mail_from_cb(const struct smtp_reply *reply,
-	struct _premature_reply_peer *pctx)
+				         struct _premature_reply_peer *pctx)
 {
 	if (debug) {
 		i_debug("MAIL FROM REPLY[%u]: %s",
@@ -1671,7 +1705,7 @@ test_client_premature_reply_mail_from_cb(const struct smtp_reply *reply,
 
 static void
 test_client_premature_reply_rcpt_to_cb(const struct smtp_reply *reply,
-	struct _premature_reply_peer *pctx)
+				       struct _premature_reply_peer *pctx)
 {
 	if (debug) {
 		i_debug("RCPT TO REPLY[%u]: %s",
@@ -1693,7 +1727,7 @@ test_client_premature_reply_rcpt_to_cb(const struct smtp_reply *reply,
 
 static void
 test_client_premature_reply_rcpt_data_cb(const struct smtp_reply *reply,
-	struct _premature_reply_peer *pctx)
+					 struct _premature_reply_peer *pctx)
 {
 	if (debug) {
 		i_debug("RCPT DATA REPLY[%u]: %s",
@@ -1717,7 +1751,7 @@ test_client_premature_reply_rcpt_data_cb(const struct smtp_reply *reply,
 
 static void
 test_client_premature_reply_data_cb(const struct smtp_reply *reply,
-	struct _premature_reply_peer *pctx)
+				    struct _premature_reply_peer *pctx)
 {
 	if (debug) {
 		i_debug("DATA REPLY[%u]: %s",
@@ -1794,8 +1828,8 @@ test_client_premature_reply_submit3(struct _premature_reply_peer *pctx)
 	input = i_stream_create_from_data(message, strlen(message));
 	i_stream_set_name(input, "message");
 
-	smtp_client_transaction_send
-		(strans, input, test_client_premature_reply_data_cb, pctx);
+	smtp_client_transaction_send(
+		strans, input, test_client_premature_reply_data_cb, pctx);
 	i_stream_unref(&input);
 }
 
@@ -1807,16 +1841,16 @@ test_client_premature_reply_submit2(struct _premature_reply_peer *pctx)
 	if (debug)
 		i_debug("SUBMIT2[%u]", pctx->index);
 
-	smtp_client_transaction_add_rcpt(pctx->trans,
-		&((struct smtp_address){.localpart = "rcpt",
-					.domain = "example.com"}), NULL,
+	smtp_client_transaction_add_rcpt(
+		pctx->trans, &((struct smtp_address){
+			.localpart = "rcpt",
+			.domain = "example.com"}), NULL,
 		test_client_premature_reply_rcpt_to_cb,
 		test_client_premature_reply_rcpt_data_cb, pctx);
 
-	pctx->to = timeout_add_short(500,
-		test_client_premature_reply_submit3, pctx);
+	pctx->to = timeout_add_short(
+		500, test_client_premature_reply_submit3, pctx);
 }
-
 
 static void
 test_client_premature_reply_submit1(struct _premature_reply_peer *pctx)
@@ -1826,16 +1860,16 @@ test_client_premature_reply_submit1(struct _premature_reply_peer *pctx)
 	if (debug)
 		i_debug("SUBMIT1[%u]", pctx->index);
 
-	smtp_client_transaction_start(pctx->trans,
-		test_client_premature_reply_mail_from_cb, pctx);
+	smtp_client_transaction_start(
+		pctx->trans, test_client_premature_reply_mail_from_cb, pctx);
 
-	pctx->to = timeout_add_short(500,
-		test_client_premature_reply_submit2, pctx);
+	pctx->to = timeout_add_short(
+		500, test_client_premature_reply_submit2, pctx);
 }
 
 static void
 test_client_premature_reply_submit(struct _premature_reply *ctx,
-	unsigned int index)
+				   unsigned int index)
 {
 	struct _premature_reply_peer *pctx;
 	struct smtp_client_connection *conn;
@@ -1844,24 +1878,25 @@ test_client_premature_reply_submit(struct _premature_reply *ctx,
 	pctx->context = ctx;
 	pctx->index = index;
 
-	pctx->conn = conn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[index],
+	pctx->conn = conn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[index],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
-	pctx->trans = smtp_client_transaction_create(conn,
-		&((struct smtp_address){.localpart = "sender",
-					.domain = "example.com"}), NULL, 0,
+	pctx->trans = smtp_client_transaction_create(
+		conn, &((struct smtp_address){
+			.localpart = "sender",
+			.domain = "example.com"}), NULL, 0,
 		test_client_premature_reply_finished, pctx);
-	smtp_client_connection_connect(conn,
-		test_client_premature_reply_login_cb, (void *)pctx);
+	smtp_client_connection_connect(
+		conn, test_client_premature_reply_login_cb, (void *)pctx);
 	smtp_client_connection_unref(&conn);
 
-	pctx->to = timeout_add_short(500,
-		test_client_premature_reply_submit1, pctx);
+	pctx->to = timeout_add_short(
+		500, test_client_premature_reply_submit1, pctx);
 }
 
 static bool
-test_client_premature_reply(
-	const struct smtp_client_settings *client_set)
+test_client_premature_reply(const struct smtp_client_settings *client_set)
 {
 	struct _premature_reply *ctx;
 	unsigned int i;
@@ -1887,8 +1922,8 @@ static void test_premature_reply(void)
 
 	test_begin("premature reply");
 	test_run_client_server(&smtp_client_set,
-		test_client_premature_reply,
-		test_server_premature_reply, 6, NULL);
+			       test_client_premature_reply,
+			       test_server_premature_reply, 6, NULL);
 	test_end();
 }
 
@@ -1916,7 +1951,7 @@ test_early_data_reply_input_line(struct server_connection *conn ATTR_UNUSED,
 		if (debug)
 			i_debug("[%u] REPLIED 354", server_index);
 		o_stream_nsend_str(conn->conn.output,
-			"354 End data with <CR><LF>.<CR><LF>\r\n");
+				   "354 End data with <CR><LF>.<CR><LF>\r\n");
 		conn->context = (void*)1;
 		return 1;
 	}
@@ -1926,7 +1961,7 @@ test_early_data_reply_input_line(struct server_connection *conn ATTR_UNUSED,
 			i_debug("[%u] FINISHED TRANSACTION",
 				server_index);
 		o_stream_nsend_str(conn->conn.output,
-			"250 2.0.0 Ok: queued as 73BDE342129\r\n");
+				   "250 2.0.0 Ok: queued as 73BDE342129\r\n");
 		return 1;
 	}
 
@@ -1936,10 +1971,12 @@ test_early_data_reply_input_line(struct server_connection *conn ATTR_UNUSED,
 				server_index);
 
 		if (server_index == 0) {
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				"250 2.0.0 Ok: queued as 73BDE342129\r\n");
 		} else {
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				"452 4.3.1 Mail system full\r\n");
 		}
 	}
@@ -2012,8 +2049,8 @@ test_client_early_data_reply_rcpt_to_cb(const struct smtp_reply *reply,
 
 	test_assert(smtp_reply_is_success(reply));
 
-	pctx->to = timeout_add_short(1000,
-		test_client_early_data_reply_submit1, pctx);
+	pctx->to = timeout_add_short(
+		1000, test_client_early_data_reply_submit1, pctx);
 }
 
 static void
@@ -2127,19 +2164,22 @@ test_client_early_data_reply_submit(struct _early_data_reply *ctx,
 	input = i_stream_create_fd_autoclose(&pipefd[0], 1024);
 	pctx->output = o_stream_create_fd_autoclose(&pipefd[1], 1024);
 
-	pctx->conn = conn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[index],
+	pctx->conn = conn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[index],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(conn,
 		test_client_early_data_reply_login_cb, (void *)pctx);
 
-	pctx->trans = smtp_client_transaction_create(conn,
-		&((struct smtp_address){.localpart = "sender",
-					.domain = "example.com"}), NULL, 0,
+	pctx->trans = smtp_client_transaction_create(
+		conn, &((struct smtp_address){
+			.localpart = "sender",
+			.domain = "example.com"}), NULL, 0,
 		test_client_early_data_reply_finished, pctx);
-	smtp_client_transaction_add_rcpt(pctx->trans,
-		&((struct smtp_address){.localpart = "rcpt",
-					.domain = "example.com"}), NULL,
+	smtp_client_transaction_add_rcpt(
+		pctx->trans, &((struct smtp_address){
+			.localpart = "rcpt",
+			.domain = "example.com"}), NULL,
 		test_client_early_data_reply_rcpt_to_cb,
 		test_client_early_data_reply_rcpt_data_cb, pctx);
 	smtp_client_transaction_start(pctx->trans,
@@ -2155,8 +2195,7 @@ test_client_early_data_reply_submit(struct _early_data_reply *ctx,
 }
 
 static bool
-test_client_early_data_reply(
-	const struct smtp_client_settings *client_set)
+test_client_early_data_reply(const struct smtp_client_settings *client_set)
 {
 	struct _early_data_reply *ctx;
 	unsigned int i;
@@ -2182,8 +2221,8 @@ static void test_early_data_reply(void)
 
 	test_begin("early data reply");
 	test_run_client_server(&smtp_client_set,
-		test_client_early_data_reply,
-		test_server_early_data_reply, 3, NULL);
+			       test_client_early_data_reply,
+			       test_server_early_data_reply, 3, NULL);
 	test_end();
 }
 
@@ -2200,7 +2239,7 @@ test_bad_reply_input_line(struct server_connection *conn,
 	if (conn->state == SERVER_CONNECTION_STATE_EHLO)
 		return 0;
 	o_stream_nsend_str(conn->conn.output,
-		"666 Really bad reply\r\n");
+			   "666 Really bad reply\r\n");
 	server_connection_deinit(&conn);
 	return -1;
 }
@@ -2245,21 +2284,23 @@ test_client_bad_reply(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_bad_reply_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_bad_reply_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_bad_reply_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_bad_reply_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -2276,8 +2317,8 @@ static void test_bad_reply(void)
 
 	test_begin("bad reply");
 	test_run_client_server(&smtp_client_set,
-		test_client_bad_reply,
-		test_server_bad_reply, 1, NULL);
+			       test_client_bad_reply,
+			       test_server_bad_reply, 1, NULL);
 	test_end();
 }
 
@@ -2287,8 +2328,7 @@ static void test_bad_reply(void)
 
 /* server */
 
-static int
-test_bad_greeting_init(struct server_connection *conn)
+static int test_bad_greeting_init(struct server_connection *conn)
 {
 	switch (server_index) {
 	case 0:
@@ -2327,7 +2367,7 @@ struct _bad_greeting_peer {
 
 static void
 test_client_bad_greeting_reply(const struct smtp_reply *reply,
-	struct _bad_greeting_peer *pctx)
+			       struct _bad_greeting_peer *pctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
@@ -2354,8 +2394,7 @@ test_client_bad_greeting_reply(const struct smtp_reply *reply,
 }
 
 static void
-test_client_bad_greeting_submit(struct _bad_greeting *ctx,
-	unsigned int index)
+test_client_bad_greeting_submit(struct _bad_greeting *ctx, unsigned int index)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_command *scmd;
@@ -2365,19 +2404,19 @@ test_client_bad_greeting_submit(struct _bad_greeting *ctx,
 	pctx->context = ctx;
 	pctx->index = index;
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[index],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[index],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_bad_greeting_reply, pctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_bad_greeting_reply, pctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 }
 
 static bool
-test_client_bad_greeting(
-	const struct smtp_client_settings *client_set)
+test_client_bad_greeting(const struct smtp_client_settings *client_set)
 {
 	struct _bad_greeting *ctx;
 
@@ -2402,8 +2441,8 @@ static void test_bad_greeting(void)
 
 	test_begin("bad greeting");
 	test_run_client_server(&smtp_client_set,
-		test_client_bad_greeting,
-		test_server_bad_greeting, 3, NULL);
+			       test_client_bad_greeting,
+			       test_server_bad_greeting, 3, NULL);
 	test_end();
 }
 
@@ -2415,11 +2454,11 @@ static void test_bad_greeting(void)
 
 static int
 test_command_timed_out_input_line(struct server_connection *conn,
-	const char *line ATTR_UNUSED)
+				  const char *line ATTR_UNUSED)
 {
 	if (conn->state == SERVER_CONNECTION_STATE_EHLO)
 		return 0;
-	sleep(10);
+	i_sleep_intr_secs(10);
 	server_connection_deinit(&conn);
 	return -1;
 }
@@ -2438,7 +2477,7 @@ struct _command_timed_out {
 
 static void
 test_client_command_timed_out_reply(const struct smtp_reply *reply,
-	struct _command_timed_out *ctx)
+				    struct _command_timed_out *ctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
@@ -2452,8 +2491,7 @@ test_client_command_timed_out_reply(const struct smtp_reply *reply,
 }
 
 static bool
-test_client_command_timed_out(
-	const struct smtp_client_settings *client_set)
+test_client_command_timed_out(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_command *scmd;
@@ -2466,12 +2504,13 @@ test_client_command_timed_out(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_command_timed_out_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_command_timed_out_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -2489,8 +2528,8 @@ static void test_command_timed_out(void)
 
 	test_begin("command timed out");
 	test_run_client_server(&smtp_client_set,
-		test_client_command_timed_out,
-		test_server_command_timed_out, 1, NULL);
+			       test_client_command_timed_out,
+			       test_server_command_timed_out, 1, NULL);
 	test_end();
 }
 
@@ -2502,12 +2541,12 @@ static void test_command_timed_out(void)
 
 static int
 test_command_aborted_early_input_line(struct server_connection *conn,
-	const char *line ATTR_UNUSED)
+				      const char *line ATTR_UNUSED)
 {
 	if (conn->state == SERVER_CONNECTION_STATE_EHLO)
 		return 0;
 
-	sleep(1);
+	i_sleep_intr_secs(1);
 	o_stream_nsend_str(conn->conn.output, "200 OK\r\n");
 	server_connection_deinit(&conn);
 	return -1;
@@ -2527,7 +2566,8 @@ struct _command_aborted_early {
 };
 
 static void
-test_client_command_aborted_early_reply(const struct smtp_reply *reply,
+test_client_command_aborted_early_reply(
+	const struct smtp_reply *reply,
 	struct _command_aborted_early *ctx ATTR_UNUSED)
 {
 	if (debug)
@@ -2538,8 +2578,7 @@ test_client_command_aborted_early_reply(const struct smtp_reply *reply,
 }
 
 static void
-test_client_command_aborted_early_timeout(
-	struct _command_aborted_early *ctx)
+test_client_command_aborted_early_timeout(struct _command_aborted_early *ctx)
 {
 	timeout_remove(&ctx->to);
 
@@ -2552,8 +2591,8 @@ test_client_command_aborted_early_timeout(
 
 		/* wait a little for server to actually respond to an
 		   already aborted request */
-		ctx->to = timeout_add_short(1000,
-			test_client_command_aborted_early_timeout, ctx);
+		ctx->to = timeout_add_short(
+			1000, test_client_command_aborted_early_timeout, ctx);
 	} else {
 		if (debug)
 			i_debug("FINISHED");
@@ -2565,8 +2604,7 @@ test_client_command_aborted_early_timeout(
 }
 
 static bool
-test_client_command_aborted_early(
-	const struct smtp_client_settings *client_set)
+test_client_command_aborted_early(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct _command_aborted_early *ctx;
@@ -2600,8 +2638,8 @@ static void test_command_aborted_early(void)
 
 	test_begin("command aborted early");
 	test_run_client_server(&smtp_client_set,
-		test_client_command_aborted_early,
-		test_server_command_aborted_early, 1, NULL);
+			       test_client_command_aborted_early,
+			       test_server_command_aborted_early, 1, NULL);
 	test_end();
 }
 
@@ -2613,12 +2651,12 @@ static void test_command_aborted_early(void)
 
 static int
 test_client_deinit_early_input_line(struct server_connection *conn,
-	const char *line ATTR_UNUSED)
+				    const char *line ATTR_UNUSED)
 {
 	if (conn->state == SERVER_CONNECTION_STATE_EHLO)
 		return 0;
 
-	sleep(1);
+	i_sleep_intr_secs(1);
 	o_stream_nsend_str(conn->conn.output, "200 OK\r\n");
 	server_connection_deinit(&conn);
 	return -1;
@@ -2638,7 +2676,8 @@ struct _client_deinit_early {
 };
 
 static void
-test_client_client_deinit_early_reply(const struct smtp_reply *reply,
+test_client_client_deinit_early_reply(
+	const struct smtp_reply *reply,
 	struct _client_deinit_early *ctx ATTR_UNUSED)
 {
 	if (debug)
@@ -2649,8 +2688,7 @@ test_client_client_deinit_early_reply(const struct smtp_reply *reply,
 }
 
 static void
-test_client_client_deinit_early_timeout(
-	struct _client_deinit_early *ctx)
+test_client_client_deinit_early_timeout(struct _client_deinit_early *ctx)
 {
 	timeout_remove(&ctx->to);
 
@@ -2663,8 +2701,7 @@ test_client_client_deinit_early_timeout(
 }
 
 static bool
-test_client_client_deinit_early(
-	const struct smtp_client_settings *client_set)
+test_client_client_deinit_early(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct _client_deinit_early *ctx;
@@ -2673,17 +2710,18 @@ test_client_client_deinit_early(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[0],
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[0],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	ctx->cmd = smtp_client_command_new(sconn, 0,
-		test_client_client_deinit_early_reply, ctx);
+	ctx->cmd = smtp_client_command_new(
+		sconn, 0, test_client_client_deinit_early_reply, ctx);
 	smtp_client_command_write(ctx->cmd, "FROP");
 	smtp_client_command_submit(ctx->cmd);
 
-	ctx->to = timeout_add_short(500,
-		test_client_client_deinit_early_timeout, ctx);
+	ctx->to = timeout_add_short(
+		500, test_client_client_deinit_early_timeout, ctx);
 
 	return TRUE;
 }
@@ -2699,8 +2737,8 @@ static void test_client_deinit_early(void)
 
 	test_begin("client deinit early");
 	test_run_client_server(&smtp_client_set,
-		test_client_client_deinit_early,
-		test_server_client_deinit_early, 1, NULL);
+			       test_client_client_deinit_early,
+			       test_server_client_deinit_early, 1, NULL);
 	test_end();
 }
 
@@ -2716,12 +2754,13 @@ struct _dns_service_failure {
 
 static void
 test_client_dns_service_failure_reply(const struct smtp_reply *reply,
-	struct _dns_service_failure *ctx)
+				      struct _dns_service_failure *ctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
 
-	test_assert(reply->status == SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED);
+	test_assert(reply->status ==
+		    SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED);
 
 	if (--ctx->count == 0) {
 		i_free(ctx);
@@ -2730,8 +2769,7 @@ test_client_dns_service_failure_reply(const struct smtp_reply *reply,
 }
 
 static bool
-test_client_dns_service_failure(
-	const struct smtp_client_settings *client_set)
+test_client_dns_service_failure(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_command *scmd;
@@ -2744,21 +2782,21 @@ test_client_dns_service_failure(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "host.in-addr.arpa", 465,
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "host.in-addr.arpa", 465,
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_dns_service_failure_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_dns_service_failure_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "host.in-addr.arpa", 465,
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "host.in-addr.arpa", 465,
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_dns_service_failure_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_dns_service_failure_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -2776,8 +2814,7 @@ static void test_dns_service_failure(void)
 
 	test_begin("dns service failure");
 	test_run_client_server(&smtp_client_set,
-		test_client_dns_service_failure,
-		NULL, 0, NULL);
+			       test_client_dns_service_failure, NULL, 0, NULL);
 	test_end();
 }
 
@@ -2787,11 +2824,14 @@ static void test_dns_service_failure(void)
 
 /* dns */
 
-static void
-test_dns_timeout_input(struct server_connection *conn ATTR_UNUSED)
+static void test_dns_timeout_input(struct server_connection *conn ATTR_UNUSED)
 {
 	/* hang */
-	sleep(100);
+	i_sleep_intr_secs(100);
+
+	io_loop_stop(current_ioloop);
+	io_remove(&io_listen);
+	i_close_fd(&fd_listen);
 	server_connection_deinit(&conn);
 }
 
@@ -2809,12 +2849,13 @@ struct _dns_timeout {
 
 static void
 test_client_dns_timeout_reply(const struct smtp_reply *reply,
-	struct _dns_timeout *ctx)
+			      struct _dns_timeout *ctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
 
-	test_assert(reply->status == SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED);
+	test_assert(reply->status ==
+		    SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED);
 
 	if (--ctx->count == 0) {
 		i_free(ctx);
@@ -2823,8 +2864,7 @@ test_client_dns_timeout_reply(const struct smtp_reply *reply,
 }
 
 static bool
-test_client_dns_timeout(
-	const struct smtp_client_settings *client_set)
+test_client_dns_timeout(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_command *scmd;
@@ -2837,21 +2877,21 @@ test_client_dns_timeout(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "example.com", 465,
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "example.com", 465,
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_dns_timeout_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_dns_timeout_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "example.com", 465,
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "example.com", 465,
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_dns_timeout_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_dns_timeout_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -2870,8 +2910,8 @@ static void test_dns_timeout(void)
 
 	test_begin("dns timeout");
 	test_run_client_server(&smtp_client_set,
-		test_client_dns_timeout, NULL, 0,
-		test_dns_dns_timeout);
+			       test_client_dns_timeout, NULL, 0,
+			       test_dns_dns_timeout);
 	test_end();
 }
 
@@ -2884,7 +2924,8 @@ static void test_dns_timeout(void)
 static void
 test_dns_lookup_failure_input(struct server_connection *conn)
 {
-	o_stream_nsend_str(conn->conn.output,
+	o_stream_nsend_str(
+		conn->conn.output,
 		t_strdup_printf("VERSION\tdns\t1\t0\n%d\tFAIL\n", EAI_FAIL));
 	server_connection_deinit(&conn);
 }
@@ -2903,12 +2944,13 @@ struct _dns_lookup_failure {
 
 static void
 test_client_dns_lookup_failure_reply(const struct smtp_reply *reply,
-	struct _dns_lookup_failure *ctx)
+				     struct _dns_lookup_failure *ctx)
 {
 	if (debug)
 		i_debug("REPLY: %s", smtp_reply_log(reply));
 
-	test_assert(reply->status == SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED);
+	test_assert(reply->status ==
+		    SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED);
 
 	if (--ctx->count == 0) {
 		i_free(ctx);
@@ -2917,8 +2959,7 @@ test_client_dns_lookup_failure_reply(const struct smtp_reply *reply,
 }
 
 static bool
-test_client_dns_lookup_failure(
-	const struct smtp_client_settings *client_set)
+test_client_dns_lookup_failure(const struct smtp_client_settings *client_set)
 {
 	struct smtp_client_connection *sconn;
 	struct smtp_client_command *scmd;
@@ -2931,21 +2972,21 @@ test_client_dns_lookup_failure(
 
 	smtp_client = smtp_client_init(client_set);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "example.com", 465,
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "example.com", 465,
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_dns_lookup_failure_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_dns_lookup_failure_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
-	sconn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, "example.com", 465,
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "example.com", 465,
 		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
 	smtp_client_connection_connect(sconn, NULL, NULL);
-	scmd = smtp_client_command_new(sconn, 0,
-		test_client_dns_lookup_failure_reply, ctx);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_dns_lookup_failure_reply, ctx);
 	smtp_client_command_write(scmd, "FROP");
 	smtp_client_command_submit(scmd);
 
@@ -2963,8 +3004,8 @@ static void test_dns_lookup_failure(void)
 
 	test_begin("dns lookup failure");
 	test_run_client_server(&smtp_client_set,
-		test_client_dns_lookup_failure, NULL, 0,
-		test_dns_dns_lookup_failure);
+			       test_client_dns_lookup_failure, NULL, 0,
+			       test_dns_dns_lookup_failure);
 	test_end();
 }
 
@@ -2976,12 +3017,13 @@ static void test_dns_lookup_failure(void)
 
 static int
 test_authentication_failed_input_line(struct server_connection *conn,
-	const char *line ATTR_UNUSED)
+				      const char *line ATTR_UNUSED)
 {
 	switch (conn->state) {
 	case SERVER_CONNECTION_STATE_EHLO:
 		if (server_index == 1) {
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				"250-testserver\r\n"
 				"250-PIPELINING\r\n"
 				"250-ENHANCEDSTATUSCODES\r\n"
@@ -2993,10 +3035,11 @@ test_authentication_failed_input_line(struct server_connection *conn,
 		break;
 	case SERVER_CONNECTION_STATE_MAIL_FROM:
 		if (server_index == 1) {
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				"535 5.7.8 "
 				"Authentication credentials invalid\r\n");
-			sleep(10);
+			i_sleep_intr_secs(10);
 			server_connection_deinit(&conn);
 			return -1;
 		}
@@ -3029,7 +3072,7 @@ struct _authentication_failed_peer {
 
 static void
 test_client_authentication_failed_login_cb(const struct smtp_reply *reply,
-	void *context)
+					   void *context)
 {
 	struct _authentication_failed_peer *pctx =
 		(struct _authentication_failed_peer *)context;
@@ -3042,7 +3085,7 @@ test_client_authentication_failed_login_cb(const struct smtp_reply *reply,
 	switch (pctx->index) {
 	case 0:
 		test_assert(reply->status ==
-			SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED);
+			    SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED);
 		break;
 	case 1:
 		test_assert(reply->status == 535);
@@ -3051,7 +3094,8 @@ test_client_authentication_failed_login_cb(const struct smtp_reply *reply,
 }
 
 static void
-test_client_authentication_failed_mail_from_cb(const struct smtp_reply *reply,
+test_client_authentication_failed_mail_from_cb(
+	const struct smtp_reply *reply,
 	struct _authentication_failed_peer *pctx)
 {
 	if (debug) {
@@ -3062,7 +3106,7 @@ test_client_authentication_failed_mail_from_cb(const struct smtp_reply *reply,
 	switch (pctx->index) {
 	case 0:
 		test_assert(reply->status ==
-			SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED);
+			    SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED);
 		break;
 	case 1:
 		test_assert(reply->status == 535);
@@ -3071,7 +3115,8 @@ test_client_authentication_failed_mail_from_cb(const struct smtp_reply *reply,
 }
 
 static void
-test_client_authentication_failed_rcpt_to_cb(const struct smtp_reply *reply,
+test_client_authentication_failed_rcpt_to_cb(
+	const struct smtp_reply *reply,
 	struct _authentication_failed_peer *pctx)
 {
 	if (debug) {
@@ -3082,7 +3127,7 @@ test_client_authentication_failed_rcpt_to_cb(const struct smtp_reply *reply,
 	switch (pctx->index) {
 	case 0:
 		test_assert(reply->status ==
-			SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED);
+			    SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED);
 		break;
 	case 1:
 		test_assert(reply->status == 535);
@@ -3091,7 +3136,8 @@ test_client_authentication_failed_rcpt_to_cb(const struct smtp_reply *reply,
 }
 
 static void
-test_client_authentication_failed_rcpt_data_cb(const struct smtp_reply *reply,
+test_client_authentication_failed_rcpt_data_cb(
+	const struct smtp_reply *reply,
 	struct _authentication_failed_peer *pctx)
 {
 	if (debug) {
@@ -3103,7 +3149,8 @@ test_client_authentication_failed_rcpt_data_cb(const struct smtp_reply *reply,
 }
 
 static void
-test_client_authentication_failed_data_cb(const struct smtp_reply *reply,
+test_client_authentication_failed_data_cb(
+	const struct smtp_reply *reply,
 	struct _authentication_failed_peer *pctx)
 {
 	if (debug) {
@@ -3114,7 +3161,7 @@ test_client_authentication_failed_data_cb(const struct smtp_reply *reply,
 	switch (pctx->index) {
 	case 0:
 		test_assert(reply->status ==
-			SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED);
+			    SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED);
 		break;
 	case 1:
 		test_assert(reply->status == 535);
@@ -3123,7 +3170,8 @@ test_client_authentication_failed_data_cb(const struct smtp_reply *reply,
 }
 
 static void
-test_client_authentication_failed_finished(struct _authentication_failed_peer *pctx)
+test_client_authentication_failed_finished(
+	struct _authentication_failed_peer *pctx)
 {
 	struct _authentication_failed *ctx = pctx->context;
 
@@ -3140,7 +3188,7 @@ test_client_authentication_failed_finished(struct _authentication_failed_peer *p
 
 static void
 test_client_authentication_failed_submit(struct _authentication_failed *ctx,
-	unsigned int index)
+					 unsigned int index)
 {
 	struct _authentication_failed_peer *pctx;
 	struct smtp_client_settings smtp_set;
@@ -3160,36 +3208,41 @@ test_client_authentication_failed_submit(struct _authentication_failed *ctx,
 	smtp_set.username = "peter.wolfsen";
 	smtp_set.password = "crybaby";
 
-	pctx->conn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[index],
+	pctx->conn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[index],
 		SMTP_CLIENT_SSL_MODE_NONE, &smtp_set);
-	pctx->trans = smtp_client_transaction_create(pctx->conn,
-		&((struct smtp_address){.localpart = "sender",
-					.domain = "example.com"}), NULL, 0,
+	pctx->trans = smtp_client_transaction_create(
+		pctx->conn, &((struct smtp_address){
+			.localpart = "sender",
+			.domain = "example.com"}), NULL, 0,
 		test_client_authentication_failed_finished, pctx);
-	smtp_client_connection_connect(pctx->conn,
-		test_client_authentication_failed_login_cb, (void *)pctx);
-	smtp_client_transaction_start(pctx->trans,
-		test_client_authentication_failed_mail_from_cb, pctx);
+	smtp_client_connection_connect(
+		pctx->conn, test_client_authentication_failed_login_cb,
+		(void *)pctx);
+	smtp_client_transaction_start(
+		pctx->trans, test_client_authentication_failed_mail_from_cb,
+		pctx);
 	smtp_client_connection_unref(&pctx->conn);
 
-	smtp_client_transaction_add_rcpt(pctx->trans,
-		&((struct smtp_address){.localpart = "rcpt",
-					.domain = "example.com"}), NULL,
+	smtp_client_transaction_add_rcpt(
+		pctx->trans, &((struct smtp_address){
+			.localpart = "rcpt",
+			.domain = "example.com"}), NULL,
 		test_client_authentication_failed_rcpt_to_cb,
 		test_client_authentication_failed_rcpt_data_cb, pctx);
 
 	input = i_stream_create_from_data(message, strlen(message));
 	i_stream_set_name(input, "message");
 
-	smtp_client_transaction_send(pctx->trans,
-		input, test_client_authentication_failed_data_cb, pctx);
+	smtp_client_transaction_send(
+		pctx->trans, input,
+		test_client_authentication_failed_data_cb, pctx);
 	i_stream_unref(&input);
 }
 
 static bool
-test_client_authentication_failed(
-	const struct smtp_client_settings *client_set)
+test_client_authentication_failed(const struct smtp_client_settings *client_set)
 {
 	struct _authentication_failed *ctx;
 	unsigned int i;
@@ -3216,8 +3269,8 @@ static void test_authentication_failed(void)
 	test_begin("authentication failed");
 	test_expect_errors(1);
 	test_run_client_server(&smtp_client_set,
-		test_client_authentication_failed,
-		test_server_authentication_failed, 2, NULL);
+			       test_client_authentication_failed,
+			       test_server_authentication_failed, 2, NULL);
 	test_end();
 }
 
@@ -3229,22 +3282,22 @@ static void test_authentication_failed(void)
 
 static int
 test_transaction_timeout_input_line(struct server_connection *conn,
-	const char *line ATTR_UNUSED)
+				    const char *line ATTR_UNUSED)
 {
 	switch (conn->state) {
 	case SERVER_CONNECTION_STATE_EHLO:
 		break;
 	case SERVER_CONNECTION_STATE_MAIL_FROM:
 		if (server_index == 0)
-			sleep(20);
+			i_sleep_intr_secs(20);
 		break;
 	case SERVER_CONNECTION_STATE_RCPT_TO:
 		if (server_index == 1)
-			sleep(20);
+			i_sleep_intr_secs(20);
 		break;
 	case SERVER_CONNECTION_STATE_DATA:
 		if (server_index == 2)
-			sleep(20);
+			i_sleep_intr_secs(20);
 		break;
 	case SERVER_CONNECTION_STATE_FINISH:
 		break;
@@ -3254,6 +3307,7 @@ test_transaction_timeout_input_line(struct server_connection *conn,
 
 static void test_server_transaction_timeout(unsigned int index)
 {
+	test_expect_errors(1);
 	test_server_input_line = test_transaction_timeout_input_line;
 	test_server_run(index);
 }
@@ -3280,11 +3334,14 @@ struct _transaction_timeout_peer {
 };
 
 static void
-test_client_transaction_timeout_mail_from_cb(const struct smtp_reply *reply,
+test_client_transaction_timeout_mail_from_cb(
+	const struct smtp_reply *reply,
 	struct _transaction_timeout_peer *pctx)
 {
-	if (debug)
-		i_debug("MAIL FROM REPLY[%u]: %s", pctx->index, smtp_reply_log(reply));
+	if (debug) {
+		i_debug("MAIL FROM REPLY[%u]: %s",
+			pctx->index, smtp_reply_log(reply));
+	}
 
 	pctx->mail_from_callback = TRUE;
 
@@ -3299,11 +3356,13 @@ test_client_transaction_timeout_mail_from_cb(const struct smtp_reply *reply,
 }
 
 static void
-test_client_transaction_timeout_rcpt_to_cb(const struct smtp_reply *reply,
-	struct _transaction_timeout_peer *pctx)
+test_client_transaction_timeout_rcpt_to_cb(
+	const struct smtp_reply *reply, struct _transaction_timeout_peer *pctx)
 {
-	if (debug)
-		i_debug("RCPT TO REPLY[%u]: %s", pctx->index, smtp_reply_log(reply));
+	if (debug) {
+		i_debug("RCPT TO REPLY[%u]: %s",
+			pctx->index, smtp_reply_log(reply));
+	}
 
 	pctx->rcpt_to_callback = TRUE;
 
@@ -3318,11 +3377,13 @@ test_client_transaction_timeout_rcpt_to_cb(const struct smtp_reply *reply,
 }
 
 static void
-test_client_transaction_timeout_rcpt_data_cb(const struct smtp_reply *reply,
-	struct _transaction_timeout_peer *pctx)
+test_client_transaction_timeout_rcpt_data_cb(
+	const struct smtp_reply *reply, struct _transaction_timeout_peer *pctx)
 {
-	if (debug)
-		i_debug("RCPT DATA REPLY[%u]: %s", pctx->index, smtp_reply_log(reply));
+	if (debug) {
+		i_debug("RCPT DATA REPLY[%u]: %s",
+			pctx->index, smtp_reply_log(reply));
+	}
 
 	pctx->rcpt_data_callback = TRUE;
 
@@ -3340,10 +3401,12 @@ test_client_transaction_timeout_rcpt_data_cb(const struct smtp_reply *reply,
 
 static void
 test_client_transaction_timeout_data_cb(const struct smtp_reply *reply,
-	struct _transaction_timeout_peer *pctx)
+					struct _transaction_timeout_peer *pctx)
 {
-	if (debug)
-		i_debug("DATA REPLY[%u]: %s", pctx->index, smtp_reply_log(reply));
+	if (debug) {
+		i_debug("DATA REPLY[%u]: %s",
+			pctx->index, smtp_reply_log(reply));
+	}
 
 	pctx->data_callback = TRUE;
 
@@ -3406,8 +3469,8 @@ test_client_transaction_timeout_submit2(struct _transaction_timeout_peer *pctx)
 	input = i_stream_create_from_data(message, strlen(message));
 	i_stream_set_name(input, "message");
 
-	smtp_client_transaction_send
-		(strans, input, test_client_transaction_timeout_data_cb, pctx);
+	smtp_client_transaction_send(
+		strans, input, test_client_transaction_timeout_data_cb, pctx);
 	i_stream_unref(&input);
 }
 
@@ -3416,19 +3479,20 @@ test_client_transaction_timeout_submit1(struct _transaction_timeout_peer *pctx)
 {
 	timeout_remove(&pctx->to);
 
-	smtp_client_transaction_add_rcpt(pctx->trans,
-		&((struct smtp_address){.localpart = "rcpt",
-					.domain = "example.com"}), NULL,
+	smtp_client_transaction_add_rcpt(
+		pctx->trans, &((struct smtp_address){
+			.localpart = "rcpt",
+			.domain = "example.com"}), NULL,
 		test_client_transaction_timeout_rcpt_to_cb,
 		test_client_transaction_timeout_rcpt_data_cb, pctx);
 
-	pctx->to = timeout_add_short(500,
-		test_client_transaction_timeout_submit2, pctx);
+	pctx->to = timeout_add_short(
+		500, test_client_transaction_timeout_submit2, pctx);
 }
 
 static void
 test_client_transaction_timeout_submit(struct _transaction_timeout *ctx,
-	unsigned int index)
+				       unsigned int index)
 {
 	struct _transaction_timeout_peer *pctx;
 
@@ -3436,25 +3500,27 @@ test_client_transaction_timeout_submit(struct _transaction_timeout *ctx,
 	pctx->context = ctx;
 	pctx->index = index;
 
-	pctx->conn = smtp_client_connection_create(smtp_client,
-		SMTP_PROTOCOL_SMTP, net_ip2addr(&bind_ip), bind_ports[index],
+	pctx->conn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP,
+		net_ip2addr(&bind_ip), bind_ports[index],
 		SMTP_CLIENT_SSL_MODE_NONE, NULL);
-	pctx->trans = smtp_client_transaction_create(pctx->conn,
-		&((struct smtp_address){.localpart = "sender",
-					.domain = "example.com"}), NULL, 0,
+	pctx->trans = smtp_client_transaction_create(
+		pctx->conn, &((struct smtp_address){
+			.localpart = "sender",
+			.domain = "example.com"}), NULL, 0,
 		test_client_transaction_timeout_finished, pctx);
 	smtp_client_transaction_set_timeout(pctx->trans, 1000);
-	smtp_client_transaction_start(pctx->trans,
-		test_client_transaction_timeout_mail_from_cb, pctx);
+	smtp_client_transaction_start(
+		pctx->trans, test_client_transaction_timeout_mail_from_cb,
+		pctx);
 	smtp_client_connection_unref(&pctx->conn);
 
-	pctx->to = timeout_add_short(500,
-		test_client_transaction_timeout_submit1, pctx);
+	pctx->to = timeout_add_short(
+		500, test_client_transaction_timeout_submit1, pctx);
 }
 
 static bool
-test_client_transaction_timeout(
-	const struct smtp_client_settings *client_set)
+test_client_transaction_timeout(const struct smtp_client_settings *client_set)
 {
 	struct _transaction_timeout *ctx;
 	unsigned int i;
@@ -3480,10 +3546,161 @@ static void test_transaction_timeout(void)
 
 	test_begin("transaction timeout");
 	test_run_client_server(&smtp_client_set,
-		test_client_transaction_timeout,
-		test_server_transaction_timeout, 6, NULL);
+			       test_client_transaction_timeout,
+			       test_server_transaction_timeout, 6, NULL);
 	test_end();
 }
+
+/*
+ * Invalid SSL certificate
+ */
+
+#ifdef HAVE_OPENSSL
+
+/* dns */
+
+static void
+test_dns_invalid_ssl_certificate_input(struct server_connection *conn)
+{
+	const char *line;
+
+	if (!conn->version_sent) {
+		conn->version_sent = TRUE;
+		o_stream_nsend_str(conn->conn.output, "VERSION\tdns\t1\t0\n");
+	}
+
+
+	while ((line = i_stream_read_next_line(conn->conn.input)) != NULL) {
+		if (debug)
+			i_debug("DNS REQUEST: %s", line);
+
+		o_stream_nsend_str(conn->conn.output,
+				   t_strdup_printf("0\t%s\n",
+						   net_ip2addr(&bind_ip)));
+	}
+}
+
+static void test_dns_invalid_ssl_certificate(void)
+{
+	test_server_input = test_dns_invalid_ssl_certificate_input;
+	test_server_run(0);
+}
+
+/* server */
+
+static void
+test_invalid_ssl_certificate_input(struct server_connection *conn)
+{
+	const char *line;
+
+	line = i_stream_read_next_line(conn->conn.input);
+	if (line == NULL) {
+		if (conn->conn.input->eof ||
+		    conn->conn.input->stream_errno != 0)
+			server_connection_deinit(&conn);
+		return;
+	}
+	server_connection_deinit(&conn);
+}
+
+static int
+test_invalid_ssl_certificate_init(struct server_connection *conn)
+{
+	sleep(1);
+	o_stream_nsend_str(conn->conn.output,
+		"220 testserver ESMTP Testfix (Frop/GNU)\r\n");
+	return 1;
+}
+
+static void test_server_invalid_ssl_certificate(unsigned int index)
+{
+	test_server_ssl = TRUE;
+	test_server_init = test_invalid_ssl_certificate_init;
+	test_server_input = test_invalid_ssl_certificate_input;
+	test_server_run(index);
+}
+
+/* client */
+
+struct _invalid_ssl_certificate {
+	unsigned int count;
+};
+
+static void
+test_client_invalid_ssl_certificate_reply(const struct smtp_reply *reply,
+					  struct _invalid_ssl_certificate *ctx)
+{
+	if (debug)
+		i_debug("REPLY: %s", smtp_reply_log(reply));
+
+	test_assert(reply->status == SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED);
+
+	if (--ctx->count == 0) {
+		i_free(ctx);
+		io_loop_stop(ioloop);
+	}
+}
+
+static bool
+test_client_invalid_ssl_certificate(
+	const struct smtp_client_settings *client_set)
+{
+	struct smtp_client_connection *sconn;
+	struct smtp_client_command *scmd;
+	struct _invalid_ssl_certificate *ctx;
+
+	test_expect_errors(2);
+
+	ctx = i_new(struct _invalid_ssl_certificate, 1);
+	ctx->count = 2;
+
+	smtp_client = smtp_client_init(client_set);
+
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "example.com", bind_ports[0],
+		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
+	smtp_client_connection_connect(sconn, NULL, NULL);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_invalid_ssl_certificate_reply, ctx);
+	smtp_client_command_write(scmd, "FROP");
+	smtp_client_command_submit(scmd);
+
+	sconn = smtp_client_connection_create(
+		smtp_client, SMTP_PROTOCOL_SMTP, "example.com", bind_ports[0],
+		SMTP_CLIENT_SSL_MODE_IMMEDIATE, NULL);
+	smtp_client_connection_connect(sconn, NULL, NULL);
+	scmd = smtp_client_command_new(
+		sconn, 0, test_client_invalid_ssl_certificate_reply, ctx);
+	smtp_client_command_write(scmd, "FROP");
+	smtp_client_command_submit(scmd);
+
+	return TRUE;
+}
+
+/* test */
+
+static void test_invalid_ssl_certificate(void)
+{
+	struct smtp_client_settings smtp_client_set;
+	struct ssl_iostream_settings ssl_set;
+
+	/* ssl settings */
+	ssl_iostream_test_settings_client(&ssl_set);
+	ssl_set.verbose = debug;
+
+	test_client_defaults(&smtp_client_set);
+	smtp_client_set.dns_client_socket_path = "./dns-test";
+	smtp_client_set.ssl = &ssl_set;
+
+	test_begin("invalid ssl certificate");
+	test_run_client_server(&smtp_client_set,
+			       test_client_invalid_ssl_certificate,
+			       test_server_invalid_ssl_certificate, 1,
+			       test_dns_invalid_ssl_certificate);
+	test_end();
+}
+
+#endif
 
 /*
  * All tests
@@ -3512,6 +3729,9 @@ static void (*const test_functions[])(void) = {
 	test_dns_lookup_failure,
 	test_authentication_failed,
 	test_transaction_timeout,
+#ifdef HAVE_OPENSSL
+	test_invalid_ssl_certificate,
+#endif
 	NULL
 };
 
@@ -3519,8 +3739,7 @@ static void (*const test_functions[])(void) = {
  * Test client
  */
 
-static void
-test_client_defaults(struct smtp_client_settings *smtp_set)
+static void test_client_defaults(struct smtp_client_settings *smtp_set)
 {
 	/* client settings */
 	i_zero(smtp_set);
@@ -3528,8 +3747,7 @@ test_client_defaults(struct smtp_client_settings *smtp_set)
 	smtp_set->debug = debug;
 }
 
-static void
-test_client_progress_timeout(void *context ATTR_UNUSED)
+static void test_client_progress_timeout(void *context ATTR_UNUSED)
 {
 	/* Terminate test due to lack of progress */
 	test_assert(FALSE);
@@ -3546,7 +3764,7 @@ test_client_init(test_client_init_t client_test,
 		return FALSE;
 
 	to_client_progress = timeout_add(CLIENT_PROGRESS_TIMEOUT*1000,
-		test_client_progress_timeout, NULL);
+					 test_client_progress_timeout, NULL);
 
 	return TRUE;
 }
@@ -3574,6 +3792,43 @@ test_client_run(test_client_init_t client_test,
 
 /* client connection */
 
+static int
+server_connection_init_ssl(struct server_connection *conn)
+{
+	struct ssl_iostream_settings ssl_set;
+	const char *error;
+
+	if (!test_server_ssl)
+		return 0;
+
+	connection_input_halt(&conn->conn);
+
+	ssl_iostream_test_settings_server(&ssl_set);
+	ssl_set.verbose = debug;
+
+	if (server_ssl_ctx == NULL &&
+	    ssl_iostream_context_init_server(&ssl_set, &server_ssl_ctx,
+					     &error) < 0) {
+		i_error("SSL context initialization failed: %s", error);
+		return -1;
+	}
+
+	if (io_stream_create_ssl_server(server_ssl_ctx, &ssl_set,
+					&conn->conn.input, &conn->conn.output,
+					&conn->ssl_iostream, &error) < 0) {
+		i_error("SSL init failed: %s", error);
+		return -1;
+	}
+	if (ssl_iostream_handshake(conn->ssl_iostream) < 0) {
+		i_error("SSL handshake failed: %s",
+			ssl_iostream_get_last_error(conn->ssl_iostream));
+		return -1;
+	}
+
+	connection_input_resume(&conn->conn);
+	return 0;
+}
+
 static void
 server_connection_input(struct connection *_conn)
 {
@@ -3592,12 +3847,15 @@ server_connection_input(struct connection *_conn)
 			size_t size;
 			int ret;
 
-			if (conn->dot_input == NULL)
-				conn->dot_input = i_stream_create_dot(conn->conn.input, TRUE);
-			while ((ret=i_stream_read_more(conn->dot_input,
-				&data, &size)) > 0) {
+			if (conn->dot_input == NULL) {
+				conn->dot_input = i_stream_create_dot(
+					conn->conn.input, TRUE);
+			}
+			while ((ret = i_stream_read_more(conn->dot_input,
+							 &data, &size)) > 0) {
 				if (test_server_input_data != NULL) {
-					if (test_server_input_data(conn, data, size) < 0)
+					if (test_server_input_data(
+						conn, data, size) < 0)
 						return;
 				}
 				i_stream_skip(conn->dot_input, size);
@@ -3606,13 +3864,16 @@ server_connection_input(struct connection *_conn)
 			if (ret == 0)
 				return;
 			if (conn->dot_input->stream_errno != 0) {
-				i_error("Failed to read message payload: %s",
-					i_stream_get_error(conn->dot_input));
+				if (debug) {
+					i_debug("Failed to read message payload: %s",
+						i_stream_get_error(conn->dot_input));
+				}
 				server_connection_deinit(&conn);
 				return;
 			}
 
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				"250 2.0.0 Ok: queued as 73BDE342129\r\n");
 			conn->state = SERVER_CONNECTION_STATE_MAIL_FROM;
 			continue;
@@ -3621,13 +3882,13 @@ server_connection_input(struct connection *_conn)
 		line = i_stream_read_next_line(conn->conn.input);
 		if (line == NULL) {
 			if (conn->conn.input->eof ||
-				conn->conn.input->stream_errno != 0)
+			    conn->conn.input->stream_errno != 0)
 				server_connection_deinit(&conn);
 			return;
 		}
 
 		if (test_server_input_line != NULL) {
-			if ((ret=test_server_input_line(conn, line)) < 0)
+			if ((ret = test_server_input_line(conn, line)) < 0)
 				return;
 			if (ret > 0)
 				continue;
@@ -3636,30 +3897,31 @@ server_connection_input(struct connection *_conn)
 		switch (conn->state) {
 		case SERVER_CONNECTION_STATE_EHLO:
 			o_stream_nsend_str(conn->conn.output,
-				"250-testserver\r\n"
-				"250-PIPELINING\r\n"
-				"250-ENHANCEDSTATUSCODES\r\n"
-				"250 DSN\r\n");
+					   "250-testserver\r\n"
+					   "250-PIPELINING\r\n"
+					   "250-ENHANCEDSTATUSCODES\r\n"
+					   "250 DSN\r\n");
 			conn->state = SERVER_CONNECTION_STATE_MAIL_FROM;
 			return;
 		case SERVER_CONNECTION_STATE_MAIL_FROM:
 			if (str_begins(line, "AUTH ")) {
-				o_stream_nsend_str(conn->conn.output,
-					"235 2.7.0 "
+				o_stream_nsend_str(
+					conn->conn.output, "235 2.7.0 "
 					"Authentication successful\r\n");
 				continue;
 			}
 			o_stream_nsend_str(conn->conn.output,
-				"250 2.1.0 Ok\r\n");
+					   "250 2.1.0 Ok\r\n");
 			conn->state = SERVER_CONNECTION_STATE_RCPT_TO;
 			continue;
 		case SERVER_CONNECTION_STATE_RCPT_TO:
 			o_stream_nsend_str(conn->conn.output,
-				"250 2.1.5 Ok\r\n");
+					   "250 2.1.5 Ok\r\n");
 			conn->state = SERVER_CONNECTION_STATE_DATA;
 			continue;
 		case SERVER_CONNECTION_STATE_DATA:
-			o_stream_nsend_str(conn->conn.output,
+			o_stream_nsend_str(
+				conn->conn.output,
 				"354 End data with <CR><LF>.<CR><LF>\r\n");
 			conn->state = SERVER_CONNECTION_STATE_FINISH;
 			continue;
@@ -3670,8 +3932,7 @@ server_connection_input(struct connection *_conn)
 	}
 }
 
-static void
-server_connection_init(int fd)
+static void server_connection_init(int fd)
 {
 	struct server_connection *conn;
 	pool_t pool;
@@ -3682,8 +3943,13 @@ server_connection_init(int fd)
 	conn = p_new(pool, struct server_connection, 1);
 	conn->pool = pool;
 
-	connection_init_server
-		(server_conn_list, &conn->conn, "server connection", fd, fd);
+	connection_init_server(server_conn_list, &conn->conn,
+			       "server connection", fd, fd);
+
+	if (server_connection_init_ssl(conn) < 0) {
+		server_connection_deinit(&conn);
+		return;
+	}
 
 	if (test_server_init != NULL) {
 		if (test_server_init(conn) != 0)
@@ -3691,13 +3957,13 @@ server_connection_init(int fd)
 	}
 
 	if (test_server_input == NULL) {
-		o_stream_nsend_str(conn->conn.output,
+		o_stream_nsend_str(
+			conn->conn.output,
 			"220 testserver ESMTP Testfix (Debian/GNU)\r\n");
 	}
 }
 
-static void
-server_connection_deinit(struct server_connection **_conn)
+static void server_connection_deinit(struct server_connection **_conn)
 {
 	struct server_connection *conn = *_conn;
 
@@ -3708,12 +3974,12 @@ server_connection_deinit(struct server_connection **_conn)
 
 	i_stream_unref(&conn->dot_input);
 
+	ssl_iostream_destroy(&conn->ssl_iostream);
 	connection_deinit(&conn->conn);
 	pool_unref(&conn->pool);
 }
 
-static void
-server_connection_destroy(struct connection *_conn)
+static void server_connection_destroy(struct connection *_conn)
 {
 	struct server_connection *conn =
 		(struct server_connection *)_conn;
@@ -3721,8 +3987,7 @@ server_connection_destroy(struct connection *_conn)
 	server_connection_deinit(&conn);
 }
 
-static void
-server_connection_accept(void *context ATTR_UNUSED)
+static void server_connection_accept(void *context ATTR_UNUSED)
 {
 	int fd;
 
@@ -3730,9 +3995,8 @@ server_connection_accept(void *context ATTR_UNUSED)
 	fd = net_accept(fd_listen, NULL, NULL);
 	if (fd == -1)
 		return;
-	if (fd == -2) {
+	if (fd == -2)
 		i_fatal("test server: accept() failed: %m");
-	}
 
 	server_connection_init(fd);
 }
@@ -3740,14 +4004,14 @@ server_connection_accept(void *context ATTR_UNUSED)
 /* */
 
 static struct connection_settings server_connection_set = {
-	.input_max_size = (size_t)-1,
-	.output_max_size = (size_t)-1,
-	.client = FALSE
+	.input_max_size = SIZE_MAX,
+	.output_max_size = SIZE_MAX,
+	.client = FALSE,
 };
 
 static const struct connection_vfuncs server_connection_vfuncs = {
 	.destroy = server_connection_destroy,
-	.input = server_connection_input
+	.input = server_connection_input,
 };
 
 static void test_server_run(unsigned int index)
@@ -3755,11 +4019,10 @@ static void test_server_run(unsigned int index)
 	server_index = index;
 
 	/* open server socket */
-	io_listen = io_add(fd_listen,
-		IO_READ, server_connection_accept, NULL);
+	io_listen = io_add(fd_listen, IO_READ, server_connection_accept, NULL);
 
-	server_conn_list = connection_list_init
-		(&server_connection_set, &server_connection_vfuncs);
+	server_conn_list = connection_list_init(&server_connection_set,
+						&server_connection_vfuncs);
 
 	io_loop_run(ioloop);
 
@@ -3767,11 +4030,19 @@ static void test_server_run(unsigned int index)
 	io_remove(&io_listen);
 
 	connection_list_deinit(&server_conn_list);
+
+	if (server_ssl_ctx != NULL)
+		ssl_iostream_context_unref(&server_ssl_ctx);
 }
 
 /*
  * Tests
  */
+
+struct test_server_data {
+	unsigned int index;
+	test_server_init_t server_test;
+};
 
 static int test_open_server_fd(in_port_t *bind_port)
 {
@@ -3785,80 +4056,95 @@ static int test_open_server_fd(in_port_t *bind_port)
 	return fd;
 }
 
-static void test_servers_kill_all(void)
+static int test_run_server(struct test_server_data *data)
 {
-	unsigned int i;
+	i_set_failure_prefix("SERVER[%u]: ", data->index + 1);
 
-	if (server_pids_count > 0) {
-		for (i = 0; i < server_pids_count; i++) {
-			if (server_pids[i] != (pid_t)-1) {
-				(void)kill(server_pids[i], SIGKILL);
-				(void)waitpid(server_pids[i], NULL, 0);
-				server_pids[i] = -1;
-			}
-		}
-	}
-	server_pids_count = 0;
+	if (debug)
+		i_debug("PID=%s", my_pid);
 
-	if (dns_pid != (pid_t)-1) {
-		(void)kill(dns_pid, SIGKILL);
-		(void)waitpid(dns_pid, NULL, 0);
-		dns_pid = (pid_t)-1;
-	}
+	server_ssl_ctx = NULL;
+
+	ioloop = io_loop_create();
+	data->server_test(data->index);
+	io_loop_destroy(&ioloop);
+
+	if (debug)
+		i_debug("Terminated");
+
+	i_close_fd(&fd_listen);
+	i_free(bind_ports);
+	main_deinit();
+	return 0;
 }
 
-static void test_run_client_server(
-	const struct smtp_client_settings *client_set,
-	test_client_init_t client_test,
-	test_server_init_t server_test,
-	unsigned int server_tests_count,
-	test_dns_init_t dns_test)
+static int test_run_dns(test_dns_init_t dns_test)
+{
+	i_set_failure_prefix("DNS: ");
+
+	if (debug)
+		i_debug("PID=%s", my_pid);
+
+	ioloop = io_loop_create();
+	dns_test();
+	io_loop_destroy(&ioloop);
+
+	if (debug)
+		i_debug("Terminated");
+
+	i_close_fd(&fd_listen);
+	i_free(bind_ports);
+	main_deinit();
+	return 0;
+}
+
+static void
+test_run_client(const struct smtp_client_settings *client_set,
+		test_client_init_t client_test)
+{
+	i_set_failure_prefix("CLIENT: ");
+
+	if (debug)
+		i_debug("PID=%s", my_pid);
+
+	i_sleep_msecs(100); /* wait a little for server setup */
+
+	ioloop = io_loop_create();
+	test_client_run(client_test, client_set);
+	io_loop_destroy(&ioloop);
+
+	if (debug)
+		i_debug("Terminated");
+}
+
+static void
+test_run_client_server(const struct smtp_client_settings *client_set,
+		       test_client_init_t client_test,
+		       test_server_init_t server_test,
+		       unsigned int server_tests_count,
+		       test_dns_init_t dns_test)
 {
 	unsigned int i;
-
-	server_pids = NULL;
-	server_pids_count = 0;
 
 	if (server_tests_count > 0) {
 		int fds[server_tests_count];
 
 		bind_ports = i_new(in_port_t, server_tests_count);
-
-		server_pids = i_new(pid_t, server_tests_count);
-		for (i = 0; i < server_tests_count; i++)
-			server_pids[i] = (pid_t)-1;
-		server_pids_count = server_tests_count;
-
 		for (i = 0; i < server_tests_count; i++)
 			fds[i] = test_open_server_fd(&bind_ports[i]);
 
 		for (i = 0; i < server_tests_count; i++) {
+			struct test_server_data data;
+
+			i_zero(&data);
+			data.index = i;
+			data.server_test = server_test;
+
+			/* Fork server */
 			fd_listen = fds[i];
-			if ((server_pids[i] = fork()) == (pid_t)-1)
-				i_fatal("fork() failed: %m");
-			if (server_pids[i] == 0) {
-				lib_signals_ignore(SIGPIPE, TRUE);
-				server_pids[i] = (pid_t)-1;
-				server_pids_count = 0;
-				hostpid_init();
-				if (debug)
-					i_debug("server[%d]: PID=%s", i+1, my_pid);
-				/* child: server */
-				ioloop = io_loop_create();
-				server_test(i);
-				io_loop_destroy(&ioloop);
-				i_close_fd(&fd_listen);
-				i_free(bind_ports);
-				i_free(server_pids);
-				/* wait for it to be killed; this way, valgrind will not
-				   object to this process going away inelegantly. */
-				sleep(60);
-				exit(1);
-			}
+			test_subprocess_fork(test_run_server, &data, FALSE);
 			i_close_fd(&fd_listen);
 		}
-		if (debug)
-			i_debug("client: PID=%s", my_pid);
 	}
 
 	if (dns_test != NULL) {
@@ -3870,39 +4156,17 @@ static void test_run_client_server(
 			i_fatal("listen(./dns-test) failed: %m");
 		}
 
+		/* Fork DNS service */
 		fd_listen = fd;
-		if ((dns_pid = fork()) == (pid_t)-1)
-			i_fatal("fork() failed: %m");
-		if (dns_pid == 0) {
-			lib_signals_ignore(SIGPIPE, TRUE);
-			dns_pid = (pid_t)-1;
-			hostpid_init();
-			if (debug)
-				i_debug("dns server: PID=%s", my_pid);
-			/* child: server */
-			ioloop = io_loop_create();
-			dns_test();
-			io_loop_destroy(&ioloop);
-			i_close_fd(&fd_listen);
-			/* wait for it to be killed; this way, valgrind will not
-			   object to this process going away inelegantly. */
-			sleep(60);
-			exit(1);
-		}
+		test_subprocess_fork(test_run_dns, dns_test, FALSE);
 		i_close_fd(&fd_listen);
 	}
 
-	/* parent: client */
+	/* Run client */
+	test_run_client(client_set, client_test);
 
-	i_sleep_msecs(100); /* wait a little for server setup */
-
-	lib_signals_ignore(SIGPIPE, TRUE);
-	ioloop = io_loop_create();
-	test_client_run(client_test, client_set);
-	io_loop_destroy(&ioloop);
-
-	test_servers_kill_all();
-	i_free(server_pids);
+	i_unset_failure_prefix();
+	test_subprocess_kill_all(SERVER_KILL_TIMEOUT_SECS);
 	i_free(bind_ports);
 
 	i_unlink_if_exists("./dns-test");
@@ -3912,38 +4176,28 @@ static void test_run_client_server(
  * Main
  */
 
-volatile sig_atomic_t terminating = 0;
-
-static void
-test_signal_handler(int signo)
+static void main_init(void)
 {
-	if (terminating != 0)
-		raise(signo);
-	terminating = 1;
-
-	/* make sure we don't leave any pesky children alive */
-	test_servers_kill_all();
-
-	(void)signal(signo, SIG_DFL);
-	raise(signo);
+#ifdef HAVE_OPENSSL
+	ssl_iostream_openssl_init();
+#endif
 }
 
-static void test_atexit(void)
+static void main_deinit(void)
 {
-	test_servers_kill_all();
+	ssl_iostream_context_cache_free();
+#ifdef HAVE_OPENSSL
+	ssl_iostream_openssl_deinit();
+#endif
 }
 
 int main(int argc, char *argv[])
 {
 	int c;
+	int ret;
 
-	atexit(test_atexit);
-	(void)signal(SIGCHLD, SIG_IGN);
-	(void)signal(SIGTERM, test_signal_handler);
-	(void)signal(SIGQUIT, test_signal_handler);
-	(void)signal(SIGINT, test_signal_handler);
-	(void)signal(SIGSEGV, test_signal_handler);
-	(void)signal(SIGABRT, test_signal_handler);
+	lib_init();
+	main_init();
 
 	while ((c = getopt(argc, argv, "D")) > 0) {
 		switch (c) {
@@ -3955,10 +4209,18 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	test_subprocesses_init(debug);
+
 	/* listen on localhost */
 	i_zero(&bind_ip);
 	bind_ip.family = AF_INET;
 	bind_ip.u.ip4.s_addr = htonl(INADDR_LOOPBACK);
 
-	return test_run(test_functions);
+	ret = test_run(test_functions);
+
+	test_subprocesses_deinit();
+	main_deinit();
+	lib_deinit();
+
+	return ret;
 }

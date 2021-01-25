@@ -1,11 +1,8 @@
 ---
 include:
-  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/salsa-ci.yml
-  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/pipeline-jobs.yml
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/debian.yml
 
+# The test suite does not pass reprotest
 variables:
   SALSA_CI_LINTIAN_FAIL_WARNING: 1
-
-reprotest:
-  allow_failure: true
-
+  SALSA_CI_DISABLE_REPROTEST: 1

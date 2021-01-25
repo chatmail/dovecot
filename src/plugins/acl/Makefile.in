@@ -15,6 +15,7 @@
 @SET_MAKE@
 
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -89,6 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/plugins/acl
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -133,15 +135,13 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_mysql.m4 $(top_srcdir)/m4/want_pam.m4 \
 	$(top_srcdir)/m4/want_passwd.m4 $(top_srcdir)/m4/want_pgsql.m4 \
 	$(top_srcdir)/m4/want_prefetch.m4 \
-	$(top_srcdir)/m4/want_shadow.m4 $(top_srcdir)/m4/want_sia.m4 \
+	$(top_srcdir)/m4/want_shadow.m4 \
 	$(top_srcdir)/m4/want_sodium.m4 $(top_srcdir)/m4/want_solr.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
-	$(top_srcdir)/m4/want_unwind.m4 \
-	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_unwind.m4 $(top_srcdir)/m4/want_zlib.m4 \
+	$(top_srcdir)/m4/want_zstd.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -204,6 +204,13 @@ lib10_doveadm_acl_plugin_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(lib10_doveadm_acl_plugin_la_LDFLAGS) \
 	$(LDFLAGS) -o $@
+am__EXEEXT_1 = test-acl$(EXEEXT)
+PROGRAMS = $(noinst_PROGRAMS)
+am_test_acl_OBJECTS = test-acl.$(OBJEXT)
+test_acl_OBJECTS = $(am_test_acl_OBJECTS)
+am__DEPENDENCIES_1 =
+am__DEPENDENCIES_2 = $(module_LTLIBRARIES) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -239,9 +246,9 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(lib01_acl_plugin_la_SOURCES) \
-	$(lib10_doveadm_acl_plugin_la_SOURCES)
+	$(lib10_doveadm_acl_plugin_la_SOURCES) $(test_acl_SOURCES)
 DIST_SOURCES = $(lib01_acl_plugin_la_SOURCES) \
-	$(lib10_doveadm_acl_plugin_la_SOURCES)
+	$(lib10_doveadm_acl_plugin_la_SOURCES) $(test_acl_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -283,6 +290,7 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 BINARY_CFLAGS = @BINARY_CFLAGS@
 BINARY_LDFLAGS = @BINARY_LDFLAGS@
+BISON = @BISON@
 CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
 CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
@@ -313,6 +321,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
+FLEX = @FLEX@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -481,6 +490,7 @@ top_srcdir = @top_srcdir@
 doveadm_moduledir = $(moduledir)/doveadm
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-dict \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-imap \
@@ -530,6 +540,22 @@ doveadm_module_LTLIBRARIES = \
 lib10_doveadm_acl_plugin_la_SOURCES = \
 	doveadm-acl.c
 
+test_programs = \
+	test-acl
+
+test_libs = \
+	$(module_LTLIBRARIES) \
+	$(LIBDOVECOT_STORAGE) \
+	$(LIBDOVECOT)
+
+test_deps = \
+	$(module_LTLIBRARIES) \
+	$(LIBDOVECOT_STORAGE_DEPS) \
+	$(LIBDOVECOT_DEPS)
+
+test_acl_SOURCES = test-acl.c
+test_acl_LDADD = $(test_libs)
+test_acl_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -640,6 +666,19 @@ lib01_acl_plugin.la: $(lib01_acl_plugin_la_OBJECTS) $(lib01_acl_plugin_la_DEPEND
 lib10_doveadm_acl_plugin.la: $(lib10_doveadm_acl_plugin_la_OBJECTS) $(lib10_doveadm_acl_plugin_la_DEPENDENCIES) $(EXTRA_lib10_doveadm_acl_plugin_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(lib10_doveadm_acl_plugin_la_LINK) -rpath $(doveadm_moduledir) $(lib10_doveadm_acl_plugin_la_OBJECTS) $(lib10_doveadm_acl_plugin_la_LIBADD) $(LIBS)
 
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
+test-acl$(EXEEXT): $(test_acl_OBJECTS) $(test_acl_DEPENDENCIES) $(EXTRA_test_acl_DEPENDENCIES) 
+	@rm -f test-acl$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_acl_OBJECTS) $(test_acl_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -661,6 +700,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/acl-shared-storage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/acl-storage.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveadm-acl.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-acl.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -793,8 +833,9 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-am
-all-am: Makefile $(LTLIBRARIES) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(doveadm_moduledir)" "$(DESTDIR)$(moduledir)" "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -832,7 +873,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-doveadm_moduleLTLIBRARIES clean-generic clean-libtool \
-	clean-moduleLTLIBRARIES mostlyclean-am
+	clean-moduleLTLIBRARIES clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
@@ -902,17 +943,17 @@ ps-am:
 uninstall-am: uninstall-doveadm_moduleLTLIBRARIES \
 	uninstall-moduleLTLIBRARIES uninstall-pkginc_libHEADERS
 
-.MAKE: install-am install-strip
+.MAKE: check-am install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am check check-am clean \
+.PHONY: CTAGS GTAGS TAGS all all-am check check-am check-local clean \
 	clean-doveadm_moduleLTLIBRARIES clean-generic clean-libtool \
-	clean-moduleLTLIBRARIES cscopelist-am ctags ctags-am distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-am install-data install-data-am \
-	install-doveadm_moduleLTLIBRARIES install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-info install-info-am install-man \
+	clean-moduleLTLIBRARIES clean-noinstPROGRAMS cscopelist-am \
+	ctags ctags-am distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-data \
+	install-data-am install-doveadm_moduleLTLIBRARIES install-dvi \
+	install-dvi-am install-exec install-exec-am install-html \
+	install-html-am install-info install-info-am install-man \
 	install-moduleLTLIBRARIES install-pdf install-pdf-am \
 	install-pkginc_libHEADERS install-ps install-ps-am \
 	install-strip installcheck installcheck-am installdirs \
@@ -924,6 +965,11 @@ uninstall-am: uninstall-doveadm_moduleLTLIBRARIES \
 
 .PRECIOUS: Makefile
 
+
+check-local:
+	for bin in $(test_programs); do \
+	  if ! env $(test_options) $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

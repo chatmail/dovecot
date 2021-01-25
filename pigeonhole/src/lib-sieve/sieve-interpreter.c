@@ -762,62 +762,101 @@ sieve_size_t sieve_interpreter_program_counter(struct sieve_interpreter *interp)
 	return interp->runenv.pc;
 }
 
+static int
+sieve_interpreter_check_program_jump(struct sieve_interpreter *interp,
+				     sieve_size_t jmp_target, bool break_loops)
+{
+	const struct sieve_runtime_env *renv = &interp->runenv;
+	sieve_size_t loop_limit = (break_loops ? 0 : interp->loop_limit);
+
+	if (jmp_target == 0 ||
+	    jmp_target > sieve_binary_block_get_size(renv->sblock) ||
+	    (loop_limit > 0 && jmp_target >= loop_limit)) {
+		if (interp->loop_limit != 0) {
+			sieve_runtime_trace_error(
+				renv, "jump target crosses loop boundary");
+		} else {
+			sieve_runtime_trace_error(
+				renv, "jump target out of range");
+		}
+		return SIEVE_EXEC_BIN_CORRUPT;
+	}
+	return SIEVE_EXEC_OK;
+}
+
+static int
+sieve_interpreter_do_program_jump(struct sieve_interpreter *interp,
+				  sieve_size_t jmp_target, bool break_loops)
+{
+	const struct sieve_runtime_env *renv = &interp->runenv;
+	sieve_size_t *address = &(interp->runenv.pc);
+	int ret;
+
+	if (sieve_runtime_trace_active(renv, SIEVE_TRLVL_COMMANDS)) {
+		unsigned int jmp_line =
+			sieve_runtime_get_source_location(renv, jmp_target);
+
+		if (sieve_runtime_trace_hasflag(renv, SIEVE_TRFLG_ADDRESSES)) {
+			sieve_runtime_trace(renv, 0, "jumping to line %d [%08llx]",
+					    jmp_line,
+					    (long long unsigned int)jmp_target);
+		} else {
+			sieve_runtime_trace(renv, 0, "jumping to line %d",
+					    jmp_line);
+		}
+	}
+
+	if (break_loops &&
+	    (ret = sieve_interpreter_loop_break_out(interp,
+						    jmp_target)) <= 0)
+		return ret;
+
+	*address = jmp_target;
+	return SIEVE_EXEC_OK;
+}
+
+int sieve_interpreter_program_jump_to(struct sieve_interpreter *interp,
+				      sieve_size_t jmp_target,
+				      bool break_loops)
+{
+	int ret;
+
+	ret = sieve_interpreter_check_program_jump(interp, jmp_target,
+						   break_loops);
+	if (ret <= 0)
+		return ret;
+
+	return sieve_interpreter_do_program_jump(
+		interp, jmp_target, break_loops);
+}
+
 int sieve_interpreter_program_jump(struct sieve_interpreter *interp,
 				   bool jump, bool break_loops)
 {
 	const struct sieve_runtime_env *renv = &interp->runenv;
 	sieve_size_t *address = &(interp->runenv.pc);
 	sieve_size_t jmp_start = *address, jmp_target;
-	sieve_size_t loop_limit = (break_loops ? 0 : interp->loop_limit);
 	sieve_offset_t jmp_offset;
 	int ret;
 
-	if (!sieve_binary_read_offset(renv->sblock, address, &jmp_offset))
-	{
+	if (!sieve_binary_read_offset(renv->sblock, address, &jmp_offset)) {
 		sieve_runtime_trace_error(renv, "invalid jump offset");
 		return SIEVE_EXEC_BIN_CORRUPT;
 	}
-
 	jmp_target = jmp_start + jmp_offset;
-	if (jmp_target <= sieve_binary_block_get_size(renv->sblock) &&
-	    (loop_limit == 0 || jmp_target < loop_limit) &&
-	    jmp_start + jmp_offset > 0)
-	{
-		if (jump) {
-			if (sieve_runtime_trace_active(renv, SIEVE_TRLVL_COMMANDS)) {
-				unsigned int jmp_line =
-					sieve_runtime_get_source_location(renv, jmp_target);
 
-				if (sieve_runtime_trace_hasflag(renv, SIEVE_TRFLG_ADDRESSES)) {
-					sieve_runtime_trace(renv, 0, "jumping to line %d [%08llx]",
-							    jmp_line,
-							    (long long unsigned int) jmp_target);
-				} else {
-					sieve_runtime_trace(renv, 0, "jumping to line %d",
-							    jmp_line);
-				}
-			}
+	ret = sieve_interpreter_check_program_jump(interp, jmp_target,
+						   break_loops);
+	if (ret <= 0)
+		return ret;
 
-			if (break_loops && 
-			    (ret = sieve_interpreter_loop_break_out(interp,
-								    jmp_target)) <= 0)
-				return ret;
-			*address = jmp_target;
-		} else {
-			sieve_runtime_trace(renv, 0, "not jumping");
-		}
-
+	if (!jump) {
+		sieve_runtime_trace(renv, 0, "not jumping");
 		return SIEVE_EXEC_OK;
 	}
 
-	if (interp->loop_limit != 0) {
-		sieve_runtime_trace_error(
-			renv, "jump offset crosses loop boundary");
-	} else {
-		sieve_runtime_trace_error(
-			renv, "jump offset out of range");
-	}
-	return SIEVE_EXEC_BIN_CORRUPT;
+	return sieve_interpreter_do_program_jump(
+		interp, jmp_target, break_loops);
 }
 
 /*
@@ -976,16 +1015,9 @@ int sieve_interpreter_start(struct sieve_interpreter *interp,
 int sieve_interpreter_run(struct sieve_interpreter *interp,
 			  struct sieve_result *result)
 {
-	int ret = 0;
-
 	sieve_interpreter_reset(interp);
-	sieve_result_ref(result);
 
-	ret = sieve_interpreter_start(interp, result, NULL);
-
-	sieve_result_unref(&result);
-
-	return ret;
+	return sieve_interpreter_start(interp, result, NULL);
 }
 
 /*

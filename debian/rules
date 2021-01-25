@@ -20,6 +20,10 @@ ifneq ($(filter armel armhf, $(DEB_HOST_ARCH)),)
   export DEB_CFLAGS_MAINT_APPEND = -funwind-tables
 endif
 
+ifeq ($(DEB_HOST_ARCH_OS),linux)
+  CONFIGURE_APPARMOR = --with-apparmor
+endif
+
 # Macros to help move files to the module packages
 CORE_DIR=$(CURDIR)/debian/dovecot-core
 PKG_DIR=$(CURDIR)/debian/dovecot-PKG
@@ -102,7 +106,7 @@ override_dh_auto_configure:
 		    --with-icu \
 	            --with-libwrap \
 	            --with-lucene \
-		    --with-apparmor \
+		    $(CONFIGURE_APPARMOR) \
 		    --with-lz4 \
 		    --with-lua=plugin \
 		    --with-sodium \

@@ -14,8 +14,10 @@
 #include <ctype.h>
 
 /*
- * SMTP parameter parsing
+ * Common
  */
+
+/* parse */
 
 static int
 smtp_param_do_parse(struct smtp_parser *parser, struct smtp_param *param_r)
@@ -88,6 +90,72 @@ int smtp_param_parse(pool_t pool, const char *text,
 	return 1;
 }
 
+/* manipulate */
+
+void smtp_params_copy(pool_t pool, ARRAY_TYPE(smtp_param) *dst,
+		      const ARRAY_TYPE(smtp_param) *src)
+{
+	const struct smtp_param *param;
+
+	if (!array_is_created(src))
+		return;
+
+	p_array_init(dst, pool, array_count(src));
+	array_foreach(src, param) {
+		struct smtp_param param_new;
+
+		param_new.keyword = p_strdup(pool, param->keyword);
+		param_new.value = p_strdup(pool, param->value);
+		array_push_back(dst, &param_new);
+	}
+}
+
+void smtp_params_add_one(ARRAY_TYPE(smtp_param) *params, pool_t pool,
+			 const char *keyword, const char *value)
+{
+	struct smtp_param param;
+
+	if (!array_is_created(params))
+		p_array_init(params, pool, 4);
+
+	i_zero(&param);
+	param.keyword = p_strdup(pool, keyword);
+	param.value = p_strdup(pool, value);
+	array_push_back(params, &param);
+}
+
+void smtp_params_add_encoded(ARRAY_TYPE(smtp_param) *params, pool_t pool,
+			     const char *keyword, const unsigned char *value,
+			     size_t value_len)
+{
+	string_t *value_enc = t_str_new(value_len * 2);
+
+	smtp_xtext_encode(value_enc, value, value_len);
+	smtp_params_add_one(params, pool, keyword, str_c(value_enc));
+}
+
+bool smtp_params_drop_one(ARRAY_TYPE(smtp_param) *params, const char *keyword,
+			  const char **value_r)
+{
+	const struct smtp_param *param;
+
+	if (!array_is_created(params))
+		return FALSE;
+
+	array_foreach(params, param) {
+		if (strcasecmp(param->keyword, keyword) == 0) {
+			if (value_r != NULL)
+				*value_r = param->value;
+			array_delete(params,
+				     array_foreach_idx(params, param), 1);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+/* write */
+
 static bool smtp_param_value_valid(const char *value)
 {
 	const char *p = value;
@@ -105,6 +173,79 @@ void smtp_param_write(string_t *out, const struct smtp_param *param)
 		str_append_c(out, '=');
 		str_append(out, param->value);
 	}
+}
+
+static void
+smtp_params_write(string_t *buffer, const ARRAY_TYPE(smtp_param) *params)
+{
+	const struct smtp_param *param;
+
+	if (!array_is_created(params))
+		return;
+
+	array_foreach(params, param) {
+		smtp_param_write(buffer, param);
+		str_append_c(buffer, ' ');
+	}
+}
+
+/* evaluate */
+
+const struct smtp_param *
+smtp_params_get_param(const ARRAY_TYPE(smtp_param) *params,
+		      const char *keyword)
+{
+	const struct smtp_param *param;
+
+	if (!array_is_created(params))
+		return NULL;
+
+	array_foreach(params, param) {
+		if (strcasecmp(param->keyword, keyword) == 0)
+			return param;
+	}
+	return NULL;
+}
+
+int smtp_params_decode_param(const ARRAY_TYPE(smtp_param) *params,
+			     const char *keyword, string_t **value_r,
+			     bool allow_nul, const char **error_r)
+{
+	const struct smtp_param *param;
+
+	param = smtp_params_get_param(params, keyword);
+	if (param == NULL)
+		return 0;
+
+	*value_r = t_str_new(strlen(param->value) * 2);
+	if (smtp_xtext_decode(*value_r, param->value, allow_nul, error_r) <= 0)
+		return -1;
+	return 1;
+}
+
+bool smtp_params_equal(const ARRAY_TYPE(smtp_param) *params1,
+		       const ARRAY_TYPE(smtp_param) *params2)
+{
+	const struct smtp_param *param1, *param2;
+
+	if (!array_is_created(params1) || array_count(params1) == 0) {
+		return (!array_is_created(params2) ||
+			array_count(params2) == 0);
+	}
+	if (!array_is_created(params2) || array_count(params2) == 0)
+		return FALSE;
+
+	if (array_count(params1) != array_count(params2))
+		return FALSE;
+
+	array_foreach(params1, param1) {
+		param2 = smtp_params_get_param(params2, param1->keyword);
+		if (param2 == NULL)
+			return FALSE;
+		if (null_strcmp(param1->value, param2->value) != 0)
+			return FALSE;
+	}
+	return TRUE;
 }
 
 /*
@@ -445,53 +586,28 @@ void smtp_params_mail_copy(pool_t pool, struct smtp_params_mail *dst,
 	dst->ret = src->ret;
 	dst->size = src->size;
 
-	if (array_is_created(&src->extra_params)) {
-		const struct smtp_param *param;
-		struct smtp_param param_new;
-
-		p_array_init(&dst->extra_params, pool,
-			     array_count(&src->extra_params));
-		array_foreach(&src->extra_params, param) {
-			param_new.keyword = p_strdup(pool, param->keyword);
-			param_new.value = p_strdup(pool, param->value);
-			array_push_back(&dst->extra_params, &param_new);
-		}
-	}
+	smtp_params_copy(pool, &dst->extra_params, &src->extra_params);
 }
 
 void smtp_params_mail_add_extra(struct smtp_params_mail *params, pool_t pool,
 				const char *keyword, const char *value)
 {
-	struct smtp_param param;
+	smtp_params_add_one(&params->extra_params, pool, keyword, value);
+}
 
-	if (!array_is_created(&params->extra_params))
-		p_array_init(&params->extra_params, pool, 4);
-
-	i_zero(&param);
-	param.keyword = p_strdup(pool, keyword);
-	param.value = p_strdup(pool, value);
-	array_push_back(&params->extra_params, &param);
+void smtp_params_mail_encode_extra(struct smtp_params_mail *params, pool_t pool,
+				   const char *keyword,
+				   const unsigned char *value,
+				   size_t value_len)
+{
+	smtp_params_add_encoded(&params->extra_params, pool,
+				keyword, value, value_len);
 }
 
 bool smtp_params_mail_drop_extra(struct smtp_params_mail *params,
 				 const char *keyword, const char **value_r)
 {
-	const struct smtp_param *param;
-
-	if (!array_is_created(&params->extra_params))
-		return FALSE;
-
-	array_foreach(&params->extra_params, param) {
-		if (strcasecmp(param->keyword, keyword) == 0) {
-			if (value_r != NULL)
-				*value_r = param->value;
-			array_delete(&params->extra_params,
-				     array_foreach_idx(&params->extra_params,
-						       param), 1);
-			return TRUE;
-		}
-	}
-	return FALSE;
+	return smtp_params_drop_one(&params->extra_params, keyword, value_r);
 }
 
 /* write */
@@ -617,14 +733,7 @@ void smtp_params_mail_write(string_t *buffer, enum smtp_capability caps,
 	smtp_params_mail_write_ret(buffer, caps, params);
 	smtp_params_mail_write_size(buffer, caps, params);
 
-	if (array_is_created(&params->extra_params)) {
-		const struct smtp_param *param;
-
-		array_foreach(&params->extra_params, param) {
-			smtp_param_write(buffer, param);
-			str_append_c(buffer, ' ');
-		}
-	}
+	smtp_params_write(buffer, &params->extra_params);
 
 	if (str_len(buffer) > init_len)
 		str_truncate(buffer, str_len(buffer)-1);
@@ -636,16 +745,15 @@ const struct smtp_param *
 smtp_params_mail_get_extra(const struct smtp_params_mail *params,
 			   const char *keyword)
 {
-	const struct smtp_param *param;
+	return smtp_params_get_param(&params->extra_params, keyword);
+}
 
-	if (!array_is_created(&params->extra_params))
-		return NULL;
-
-	array_foreach(&params->extra_params, param) {
-		if (strcasecmp(param->keyword, keyword) == 0)
-			return param;
-	}
-	return NULL;
+int smtp_params_mail_decode_extra(const struct smtp_params_mail *params,
+				  const char *keyword, string_t **value_r,
+				  bool allow_nul, const char **error_r)
+{
+	return smtp_params_decode_param(&params->extra_params,
+					keyword, value_r, allow_nul, error_r);
 }
 
 /* events */
@@ -1045,53 +1153,28 @@ void smtp_params_rcpt_copy(pool_t pool, struct smtp_params_rcpt *dst,
 	dst->orcpt.addr_raw = p_strdup(pool, src->orcpt.addr_raw);
 	dst->orcpt.addr = smtp_address_clone(pool, src->orcpt.addr);
 
-	if (array_is_created(&src->extra_params)) {
-		const struct smtp_param *param;
-		struct smtp_param param_new;
-
-		p_array_init(&dst->extra_params, pool,
-			array_count(&src->extra_params));
-		array_foreach(&src->extra_params, param) {
-			param_new.keyword = p_strdup(pool, param->keyword);
-			param_new.value = p_strdup(pool, param->value);
-			array_push_back(&dst->extra_params, &param_new);
-		}
-	}
+	smtp_params_copy(pool, &dst->extra_params, &src->extra_params);
 }
 
 void smtp_params_rcpt_add_extra(struct smtp_params_rcpt *params, pool_t pool,
 				const char *keyword, const char *value)
 {
-	struct smtp_param param;
+	smtp_params_add_one(&params->extra_params, pool, keyword, value);
+}
 
-	if (!array_is_created(&params->extra_params))
-		p_array_init(&params->extra_params, pool, 4);
-
-	i_zero(&param);
-	param.keyword = p_strdup(pool, keyword);
-	param.value = p_strdup(pool, value);
-	array_push_back(&params->extra_params, &param);
+void smtp_params_rcpt_encode_extra(struct smtp_params_rcpt *params, pool_t pool,
+				   const char *keyword,
+				   const unsigned char *value,
+				   size_t value_len)
+{
+	smtp_params_add_encoded(&params->extra_params, pool,
+				keyword, value, value_len);
 }
 
 bool smtp_params_rcpt_drop_extra(struct smtp_params_rcpt *params,
 				 const char *keyword, const char **value_r)
 {
-	const struct smtp_param *param;
-
-	if (!array_is_created(&params->extra_params))
-		return FALSE;
-
-	array_foreach(&params->extra_params, param) {
-		if (strcasecmp(param->keyword, keyword) == 0) {
-			if (value_r != NULL)
-				*value_r = param->value;
-			array_delete(&params->extra_params,
-				     array_foreach_idx(&params->extra_params,
-						       param), 1);
-			return TRUE;
-		}
-	}
-	return FALSE;
+	return smtp_params_drop_one(&params->extra_params, keyword, value_r);
 }
 
 void smtp_params_rcpt_set_orcpt(struct smtp_params_rcpt *params, pool_t pool,
@@ -1175,14 +1258,7 @@ void smtp_params_rcpt_write(string_t *buffer, enum smtp_capability caps,
 	smtp_params_rcpt_write_notify(buffer, caps, params);
 	smtp_params_rcpt_write_orcpt(buffer, caps, params);
 
-	if (array_is_created(&params->extra_params)) {
-		const struct smtp_param *param;
-
-		array_foreach(&params->extra_params, param) {
-			smtp_param_write(buffer, param);
-			str_append_c(buffer, ' ');
-		}
-	}
+	smtp_params_write(buffer, &params->extra_params);
 
 	if (str_len(buffer) > init_len)
 		str_truncate(buffer, str_len(buffer)-1);
@@ -1194,20 +1270,19 @@ const struct smtp_param *
 smtp_params_rcpt_get_extra(const struct smtp_params_rcpt *params,
 			   const char *keyword)
 {
-	const struct smtp_param *param;
-
-	if (!array_is_created(&params->extra_params))
-		return NULL;
-
-	array_foreach(&params->extra_params, param) {
-		if (strcasecmp(param->keyword, keyword) == 0)
-			return param;
-	}
-	return NULL;
+	return smtp_params_get_param(&params->extra_params, keyword);
 }
 
-bool smtp_params_rcpt_equals(const struct smtp_params_rcpt *params1,
-			     const struct smtp_params_rcpt *params2)
+int smtp_params_rcpt_decode_extra(const struct smtp_params_rcpt *params,
+				  const char *keyword, string_t **value_r,
+				  bool allow_nul, const char **error_r)
+{
+	return smtp_params_decode_param(&params->extra_params,
+					keyword, value_r, allow_nul, error_r);
+}
+
+bool smtp_params_rcpt_equal(const struct smtp_params_rcpt *params1,
+			    const struct smtp_params_rcpt *params2)
 {
 	if (params1 == NULL || params2 == NULL)
 		return (params1 == params2);
@@ -1231,25 +1306,8 @@ bool smtp_params_rcpt_equals(const struct smtp_params_rcpt *params1,
 	}
 
 	/* extra parameters */
-	if (array_is_created(&params1->extra_params) !=
-	    array_is_created(&params2->extra_params))
-		return FALSE;
-	if (array_is_created(&params1->extra_params)) {
-		const struct smtp_param *param1, *param2;
-	
-		if (array_count(&params1->extra_params) !=
-		    array_count(&params2->extra_params))
-			return FALSE;
-		array_foreach(&params1->extra_params, param1) {
-			param2 = smtp_params_rcpt_get_extra(
-				params2, param1->keyword);
-			if (param2 == NULL)
-				return FALSE;
-			if (null_strcmp(param1->value, param2->value) != 0)
-				return FALSE;
-		}
-	}
-	return TRUE;
+	return smtp_params_equal(&params1->extra_params,
+				 &params2->extra_params);
 }
 
 /* events */

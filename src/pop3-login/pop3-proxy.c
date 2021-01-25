@@ -17,15 +17,6 @@ static const char *pop3_proxy_state_names[POP3_PROXY_STATE_COUNT] = {
 	"banner", "starttls", "xclient", "login1", "login2"
 };
 
-static void proxy_free_password(struct client *client)
-{
-	if (client->proxy_password == NULL)
-		return;
-
-	safe_memset(client->proxy_password, 0, strlen(client->proxy_password));
-	i_free_and_null(client->proxy_password);
-}
-
 static int proxy_send_login(struct pop3_client *client, struct ostream *output)
 {
 	struct dsasl_client_settings sasl_set;
@@ -87,9 +78,12 @@ static int proxy_send_login(struct pop3_client *client, struct ostream *output)
 	str_printfa(str, "AUTH %s ", mech_name);
 	if (dsasl_client_output(client->common.proxy_sasl_client,
 				&sasl_output, &len, &error) < 0) {
-		e_error(login_proxy_get_event(client->common.login_proxy),
+		const char *reason = t_strdup_printf(
 			"SASL mechanism %s init failed: %s",
 			mech_name, error);
+		login_proxy_failed(client->common.login_proxy,
+			login_proxy_get_event(client->common.login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_INTERNAL, reason);
 		return -1;
 	}
 	if (len == 0)
@@ -99,7 +93,6 @@ static int proxy_send_login(struct pop3_client *client, struct ostream *output)
 	str_append(str, "\r\n");
 	o_stream_nsend(output, str_data(str), str_len(str));
 
-	proxy_free_password(&client->common);
 	if (client->proxy_state != POP3_PROXY_XCLIENT)
 		client->proxy_state = POP3_PROXY_LOGIN2;
 	return 0;
@@ -117,8 +110,11 @@ pop3_proxy_continue_sasl_auth(struct client *client, struct ostream *output,
 
 	str = t_str_new(128);
 	if (base64_decode(line, strlen(line), NULL, str) < 0) {
-		e_error(login_proxy_get_event(client->login_proxy),
-			"Server sent invalid base64 data in AUTH response");
+		const char *reason = t_strdup_printf(
+			"Invalid base64 data in AUTH response");
+		login_proxy_failed(client->login_proxy,
+			login_proxy_get_event(client->login_proxy),
+			LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 		return -1;
 	}
 	ret = dsasl_client_input(client->proxy_sasl_client,
@@ -128,8 +124,11 @@ pop3_proxy_continue_sasl_auth(struct client *client, struct ostream *output,
 					  &data, &data_len, &error);
 	}
 	if (ret < 0) {
-		e_error(login_proxy_get_event(client->login_proxy),
-			"Server sent invalid authentication data: %s", error);
+		const char *reason = t_strdup_printf(
+			"Invalid authentication data: %s", error);
+		login_proxy_failed(client->login_proxy,
+				   login_proxy_get_event(client->login_proxy),
+				   LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 		return -1;
 	}
 	i_assert(ret == 0);
@@ -155,10 +154,11 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 	case POP3_PROXY_BANNER:
 		/* this is a banner */
 		if (!str_begins(line, "+OK")) {
-			e_error(login_proxy_get_event(client->login_proxy),
-				"Remote returned invalid banner: %s",
-				str_sanitize(line, 160));
-			client_proxy_failed(client, TRUE);
+			const char *reason = t_strdup_printf(
+				"Invalid banner: %s", str_sanitize(line, 160));
+			login_proxy_failed(client->login_proxy,
+				login_proxy_get_event(client->login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_PROTOCOL, reason);
 			return -1;
 		}
 		pop3_client->proxy_xclient =
@@ -166,10 +166,8 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 
 		ssl_flags = login_proxy_get_ssl_flags(client->login_proxy);
 		if ((ssl_flags & PROXY_SSL_FLAG_STARTTLS) == 0) {
-			if (proxy_send_login(pop3_client, output) < 0) {
-				client_proxy_failed(client, TRUE);
+			if (proxy_send_login(pop3_client, output) < 0)
 				return -1;
-			}
 		} else {
 			o_stream_nsend_str(output, "STLS\r\n");
 			pop3_client->proxy_state = POP3_PROXY_STARTTLS;
@@ -177,29 +175,27 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 		return 0;
 	case POP3_PROXY_STARTTLS:
 		if (!str_begins(line, "+OK")) {
-			e_error(login_proxy_get_event(client->login_proxy),
-				"Remote STLS failed: %s",
-				str_sanitize(line, 160));
-			client_proxy_failed(client, TRUE);
+			const char *reason = t_strdup_printf(
+				"STLS failed: %s", str_sanitize(line, 160));
+			login_proxy_failed(client->login_proxy,
+				login_proxy_get_event(client->login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_REMOTE, reason);
 			return -1;
 		}
-		if (login_proxy_starttls(client->login_proxy) < 0) {
-			client_proxy_failed(client, TRUE);
+		if (login_proxy_starttls(client->login_proxy) < 0)
 			return -1;
-		}
 		/* i/ostreams changed. */
 		output = login_proxy_get_ostream(client->login_proxy);
-		if (proxy_send_login(pop3_client, output) < 0) {
-			client_proxy_failed(client, TRUE);
+		if (proxy_send_login(pop3_client, output) < 0)
 			return -1;
-		}
 		return 1;
 	case POP3_PROXY_XCLIENT:
 		if (!str_begins(line, "+OK")) {
-			e_error(login_proxy_get_event(client->login_proxy),
-				"Remote XCLIENT failed: %s",
-				str_sanitize(line, 160));
-			client_proxy_failed(client, TRUE);
+			const char *reason = t_strdup_printf(
+				"XCLIENT failed: %s", str_sanitize(line, 160));
+			login_proxy_failed(client->login_proxy,
+				login_proxy_get_event(client->login_proxy),
+				LOGIN_PROXY_FAILURE_TYPE_REMOTE, reason);
 			return -1;
 		}
 		pop3_client->proxy_state = client->proxy_sasl_client == NULL ?
@@ -213,7 +209,6 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 		/* USER successful, send PASS */
 		o_stream_nsend_str(output, t_strdup_printf(
 			"PASS %s\r\n", client->proxy_password));
-		proxy_free_password(client);
 		pop3_client->proxy_state = POP3_PROXY_LOGIN2;
 		return 0;
 	case POP3_PROXY_LOGIN2:
@@ -221,10 +216,8 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 		    client->proxy_sasl_client != NULL) {
 			/* continue SASL authentication */
 			if (pop3_proxy_continue_sasl_auth(client, output,
-							  line+2) < 0) {
-				client_proxy_failed(client, TRUE);
+							  line+2) < 0)
 				return -1;
-			}
 			return 0;
 		}
 		if (!str_begins(line, "+OK"))
@@ -255,20 +248,23 @@ int pop3_proxy_parse_line(struct client *client, const char *line)
 	   So for now we'll just forward the error message. This
 	   shouldn't be a real problem since of course everyone will
 	   be using only Dovecot as their backend :) */
+	enum login_proxy_failure_type failure_type =
+		LOGIN_PROXY_FAILURE_TYPE_AUTH;
 	if (!str_begins(line, "-ERR ")) {
 		client_send_reply(client, POP3_CMD_REPLY_ERROR,
 				  AUTH_FAILED_MSG);
+	} else if (str_begins(line, "-ERR [SYS/TEMP]")) {
+		/* delay sending the reply until we know if we reconnect */
+		failure_type = LOGIN_PROXY_FAILURE_TYPE_AUTH_TEMPFAIL;
+		line += 5;
 	} else {
 		client_send_raw(client, t_strconcat(line, "\r\n", NULL));
+		line += 5;
 	}
 
-	if (client->set->auth_verbose) {
-		if (str_begins(line, "-ERR "))
-			line += 5;
-		client_proxy_log_failure(client, line);
-	}
-	client->proxy_auth_failed = TRUE;
-	client_proxy_failed(client, FALSE);
+	login_proxy_failed(client->login_proxy,
+			   login_proxy_get_event(client->login_proxy),
+			   failure_type, line);
 	return -1;
 }
 
@@ -279,9 +275,41 @@ void pop3_proxy_reset(struct client *client)
 	pop3_client->proxy_state = POP3_PROXY_BANNER;
 }
 
-void pop3_proxy_error(struct client *client, const char *text)
+static void
+pop3_proxy_send_failure_reply(struct client *client,
+			      enum login_proxy_failure_type type,
+			      const char *reason)
 {
-	client_send_reply(client, POP3_CMD_REPLY_ERROR, text);
+	switch (type) {
+	case LOGIN_PROXY_FAILURE_TYPE_CONNECT:
+	case LOGIN_PROXY_FAILURE_TYPE_INTERNAL:
+	case LOGIN_PROXY_FAILURE_TYPE_REMOTE:
+	case LOGIN_PROXY_FAILURE_TYPE_PROTOCOL:
+		client_send_reply(client, POP3_CMD_REPLY_TEMPFAIL,
+				  LOGIN_PROXY_FAILURE_MSG);
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_INTERNAL_CONFIG:
+	case LOGIN_PROXY_FAILURE_TYPE_REMOTE_CONFIG:
+		client_send_reply(client, POP3_CMD_REPLY_ERROR,
+				  LOGIN_PROXY_FAILURE_MSG);
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_AUTH_TEMPFAIL:
+		/* [SYS/TEMP] prefix is already in the reason string */
+		client_send_reply(client, POP3_CMD_REPLY_ERROR, reason);
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_AUTH:
+		/* reply was already sent */
+		break;
+	}
+}
+
+void pop3_proxy_failed(struct client *client,
+		       enum login_proxy_failure_type type,
+		       const char *reason, bool reconnecting)
+{
+	if (!reconnecting)
+		pop3_proxy_send_failure_reply(client, type, reason);
+	client_common_proxy_failed(client, type, reason, reconnecting);
 }
 
 const char *pop3_proxy_get_state(struct client *client)

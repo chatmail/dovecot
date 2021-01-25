@@ -36,7 +36,7 @@ int client_default_cmd_mail(struct client *client,
 			    struct smtp_server_cmd_mail *data ATTR_UNUSED)
 {
 	if (client->lmtp_set->lmtp_user_concurrency_limit > 0) {
-		/* connect to anvil before dropping privileges */
+		/* Connect to anvil before dropping privileges */
 		lmtp_anvil_init();
 	}
 	return 1;
@@ -46,6 +46,42 @@ int client_default_cmd_mail(struct client *client,
  * RCPT command
  */
 
+static int
+cmd_rcpt_handle_forward_fields(struct smtp_server_cmd_ctx *cmd,
+			       struct lmtp_recipient *lrcpt)
+{
+	struct smtp_server_recipient *rcpt = lrcpt->rcpt;
+	string_t *xforward;
+	const char *error;
+	int ret;
+
+	ret = smtp_params_rcpt_decode_extra(&rcpt->params,
+					    LMTP_RCPT_FORWARD_PARAMETER,
+					    &xforward, FALSE, &error);
+	if (ret < 0) {
+		smtp_server_reply(cmd, 501, "5.5.4",
+				  "Invalid "LMTP_RCPT_FORWARD_PARAMETER"= "
+				  "parameter: %s", error);
+		return -1;
+	}
+	if (ret == 0)
+		return 0;
+
+	/* Check the real IP rather than the proxied client IP, since XCLIENT
+	   command will update that, thereby making it untrusted. Unlike the
+	   XCLIENT command, the RCPT forward parameter needs to be used after
+	   the XCLIENT is first issued. */
+	if (!smtp_server_connection_is_trusted(rcpt->conn)) {
+		smtp_server_reply(cmd, 550, "5.7.14",
+				  "Unacceptable "LMTP_RCPT_FORWARD_PARAMETER"= "
+				  "parameter: You are not from trusted IP");
+		return -1;
+	}
+
+	lrcpt->forward_fields = p_strdup(rcpt->pool, str_c(xforward));
+	return 0;
+}
+
 int cmd_rcpt(void *conn_ctx, struct smtp_server_cmd_ctx *cmd,
 	     struct smtp_server_recipient *rcpt)
 {
@@ -53,6 +89,9 @@ int cmd_rcpt(void *conn_ctx, struct smtp_server_cmd_ctx *cmd,
 	struct lmtp_recipient *lrcpt;
 
 	lrcpt = lmtp_recipient_create(client, rcpt);
+
+	if (cmd_rcpt_handle_forward_fields(cmd, lrcpt) < 0)
+		return -1;
 
 	return client->v.cmd_rcpt(client, cmd, lrcpt);
 }
@@ -117,11 +156,11 @@ cmd_data_create_added_headers(struct client *client,
 
 	str = t_str_new(512);
 
-	/* headers for local deliveries only */
+	/* Headers for local deliveries only */
 	if (client->local != NULL)
 		lmtp_local_add_headers(client->local, trans, str);
 
-	/* headers for local and proxied messages */
+	/* Headers for local and proxied messages */
 	proxy_offset = str_len(str);
 	if (client->lmtp_set->lmtp_add_received_header) {
 		const struct lmtp_settings *lmtp_set = client->lmtp_set;
@@ -211,14 +250,14 @@ int cmd_data_continue(void *conn_ctx, struct smtp_server_cmd_ctx *cmd,
 	if (ret == 0)
 		return 0;
 	if (ret < 0 && data_input->stream_errno != 0) {
-		/* client probably disconnected */
+		/* Client probably disconnected */
 		return -1;
 	}
 
 	/* Current data stream position is the data size */
 	client->state.data_size = data_input->v_offset;
 
-	/* the ending "." line was seen. finish delivery. */
+	/* The ending "." line was seen. finish delivery. */
 	return cmd_data_finish(client, cmd, trans);
 }
 
@@ -251,10 +290,10 @@ int client_default_cmd_data(struct client *client,
 	struct istream *input_local, *input_proxy;
 	struct istream *inputs[3];
 
-	/* formulate prepended headers for both local and proxy delivery */
+	/* Formulate prepended headers for both local and proxy delivery */
 	cmd_data_create_added_headers(client, cmd, trans);
 
-	/* construct message streams for local and proxy delivery */
+	/* Construct message streams for local and proxy delivery */
 	input_local = input_proxy = NULL;
 	if (client->local != NULL) {
 		inputs[0] = i_stream_create_from_data(

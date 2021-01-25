@@ -19,6 +19,9 @@ static int child_wait_refcount = 0;
 /* pid_t => wait */
 static HASH_TABLE(void *, struct child_wait *) child_pids;
 
+static void
+sigchld_handler(const siginfo_t *si ATTR_UNUSED, void *context ATTR_UNUSED);
+
 #undef child_wait_new_with_pid
 struct child_wait *
 child_wait_new_with_pid(pid_t pid, child_wait_callback_t *callback,
@@ -64,12 +67,17 @@ void child_wait_add_pid(struct child_wait *wait, pid_t pid)
 {
 	wait->pid_count++;
 	hash_table_insert(child_pids, POINTER_CAST(pid), wait);
+
+	lib_signals_set_expected(SIGCHLD, TRUE, sigchld_handler, NULL);
 }
 
 void child_wait_remove_pid(struct child_wait *wait, pid_t pid)
 {
 	wait->pid_count--;
 	hash_table_remove(child_pids, POINTER_CAST(pid));
+
+	if (hash_table_count(child_pids) == 0)
+		lib_signals_set_expected(SIGCHLD, FALSE, sigchld_handler, NULL);
 }
 
 static void
@@ -104,8 +112,7 @@ void child_wait_init(void)
 
 	hash_table_create_direct(&child_pids, default_pool, 0);
 
-	lib_signals_set_handler(SIGCHLD,
-		LIBSIG_FLAGS_SAFE | LIBSIG_FLAG_NO_IOLOOP_AUTOMOVE,
+	lib_signals_set_handler(SIGCHLD, LIBSIG_FLAGS_SAFE,
 		sigchld_handler, NULL);
 }
 

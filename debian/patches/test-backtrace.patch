@@ -5,11 +5,13 @@ Subject: Updates the symbol to check for in the backtrace unit tests
 Updates the symbol to check for in the backtrace unit tests to
 something that appears in all the traces on the platforms we support.
 ---
+ src/lib/test-backtrace.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
 
-Index: dovecot/src/lib/test-backtrace.c
-===================================================================
---- dovecot.orig/src/lib/test-backtrace.c
-+++ dovecot/src/lib/test-backtrace.c
+diff --git a/src/lib/test-backtrace.c b/src/lib/test-backtrace.c
+index fdebe0f..78bd096 100644
+--- a/src/lib/test-backtrace.c
++++ b/src/lib/test-backtrace.c
 @@ -17,8 +17,7 @@ static void test_backtrace_append(void)
  #elif (defined(HAVE_BACKTRACE_SYMBOLS) && defined(HAVE_EXECINFO_H)) || \
        (defined(HAVE_WALKCONTEXT) && defined(HAVE_UCONTEXT_H))
