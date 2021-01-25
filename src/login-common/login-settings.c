@@ -29,6 +29,8 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(SET_STR_VARS, login_proxy_notify_path),
 	DEF(SET_STR, login_plugin_dir),
 	DEF(SET_STR, login_plugins),
+	DEF(SET_TIME_MSECS, login_proxy_timeout),
+	DEF(SET_UINT, login_proxy_max_reconnects),
 	DEF(SET_TIME, login_proxy_max_disconnect_delay),
 	DEF(SET_STR, director_username_hash),
 
@@ -55,6 +57,8 @@ static const struct login_settings login_default_settings = {
 	.login_proxy_notify_path = "proxy-notify",
 	.login_plugin_dir = MODULEDIR"/login",
 	.login_plugins = "",
+	.login_proxy_timeout = 30*1000,
+	.login_proxy_max_reconnects = 3,
 	.login_proxy_max_disconnect_delay = 0,
 	.director_username_hash = "%u",
 
@@ -74,10 +78,10 @@ const struct setting_parser_info login_setting_parser_info = {
 	.defines = login_setting_defines,
 	.defaults = &login_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct login_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 
 	.check_func = login_settings_check
 };

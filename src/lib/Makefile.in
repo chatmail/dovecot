@@ -135,15 +135,13 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/want_mysql.m4 $(top_srcdir)/m4/want_pam.m4 \
 	$(top_srcdir)/m4/want_passwd.m4 $(top_srcdir)/m4/want_pgsql.m4 \
 	$(top_srcdir)/m4/want_prefetch.m4 \
-	$(top_srcdir)/m4/want_shadow.m4 $(top_srcdir)/m4/want_sia.m4 \
+	$(top_srcdir)/m4/want_shadow.m4 \
 	$(top_srcdir)/m4/want_sodium.m4 $(top_srcdir)/m4/want_solr.m4 \
 	$(top_srcdir)/m4/want_sqlite.m4 \
 	$(top_srcdir)/m4/want_stemmer.m4 \
 	$(top_srcdir)/m4/want_textcat.m4 \
-	$(top_srcdir)/m4/want_unwind.m4 \
-	$(top_srcdir)/m4/want_vpopmail.m4 \
-	$(top_srcdir)/m4/want_zlib.m4 $(top_srcdir)/m4/want_zstd.m4 \
-	$(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/want_unwind.m4 $(top_srcdir)/m4/want_zlib.m4 \
+	$(top_srcdir)/m4/want_zstd.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
@@ -157,11 +155,12 @@ am__DEPENDENCIES_1 =
 liblib_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am_liblib_la_OBJECTS = array.lo aqueue.lo askpass.lo \
 	backtrace-string.lo base32.lo base64.lo bits.lo \
-	bsearch-insert-pos.lo buffer.lo child-wait.lo compat.lo \
-	connection.lo crc32.lo data-stack.lo eacces-error.lo \
-	env-util.lo event-filter.lo event-log.lo execv-const.lo \
-	failures.lo fd-util.lo fdatasync-path.lo fdpass.lo \
-	file-cache.lo file-create-locked.lo file-copy.lo \
+	bsearch-insert-pos.lo buffer.lo buffer-istream.lo \
+	child-wait.lo compat.lo connection.lo crc32.lo data-stack.lo \
+	eacces-error.lo env-util.lo event-filter.lo \
+	event-filter-lexer.lo event-filter-parser.lo event-log.lo \
+	execv-const.lo failures.lo fd-util.lo fdatasync-path.lo \
+	fdpass.lo file-cache.lo file-create-locked.lo file-copy.lo \
 	file-dotlock.lo file-lock.lo file-set-size.lo guid.lo hash.lo \
 	hash-format.lo hash-method.lo hash2.lo hex-binary.lo \
 	hex-dec.lo hmac.lo hmac-cram-md5.lo home-expand.lo \
@@ -172,11 +171,10 @@ am_liblib_la_OBJECTS = array.lo aqueue.lo askpass.lo \
 	istream-callback.lo istream-chain.lo istream-concat.lo \
 	istream-crlf.lo istream-data.lo istream-failure-at.lo \
 	istream-file.lo istream-hash.lo istream-jsonstr.lo \
-	istream-limit.lo istream-mmap.lo istream-multiplex.lo \
-	istream-rawlog.lo istream-seekable.lo istream-sized.lo \
-	istream-tee.lo istream-try.lo istream-timeout.lo \
-	istream-unix.lo ioloop.lo ioloop-iolist.lo \
-	ioloop-notify-none.lo ioloop-notify-fd.lo \
+	istream-limit.lo istream-multiplex.lo istream-rawlog.lo \
+	istream-seekable.lo istream-sized.lo istream-tee.lo \
+	istream-try.lo istream-timeout.lo istream-unix.lo ioloop.lo \
+	ioloop-iolist.lo ioloop-notify-none.lo ioloop-notify-fd.lo \
 	ioloop-notify-inotify.lo ioloop-notify-kqueue.lo \
 	ioloop-poll.lo ioloop-select.lo ioloop-epoll.lo \
 	ioloop-kqueue.lo json-parser.lo json-tree.lo lib.lo \
@@ -213,16 +211,19 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-bits.$(OBJEXT) \
 	test_lib-test-bsearch-insert-pos.$(OBJEXT) \
 	test_lib-test-buffer.$(OBJEXT) \
+	test_lib-test-buffer-istream.$(OBJEXT) \
 	test_lib-test-byteorder.$(OBJEXT) \
 	test_lib-test-connection.$(OBJEXT) \
 	test_lib-test-crc32.$(OBJEXT) \
 	test_lib-test-data-stack.$(OBJEXT) \
 	test_lib-test-event-category-register.$(OBJEXT) \
 	test_lib-test-event-filter.$(OBJEXT) \
+	test_lib-test-event-filter-parser.$(OBJEXT) \
 	test_lib-test-event-flatten.$(OBJEXT) \
 	test_lib-test-event-log.$(OBJEXT) \
 	test_lib-test-failures.$(OBJEXT) \
 	test_lib-test-fd-util.$(OBJEXT) \
+	test_lib-test-file-cache.$(OBJEXT) \
 	test_lib-test-file-create-locked.$(OBJEXT) \
 	test_lib-test-guid.$(OBJEXT) test_lib-test-hash.$(OBJEXT) \
 	test_lib-test-hash-format.$(OBJEXT) \
@@ -318,6 +319,25 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
+@MAINTAINER_MODE_FALSE@am__skiplex = test -f $@ ||
+LEXCOMPILE = $(LEX) $(AM_LFLAGS) $(LFLAGS)
+LTLEXCOMPILE = $(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(LEX) $(AM_LFLAGS) $(LFLAGS)
+AM_V_LEX = $(am__v_LEX_@AM_V@)
+am__v_LEX_ = $(am__v_LEX_@AM_DEFAULT_V@)
+am__v_LEX_0 = @echo "  LEX     " $@;
+am__v_LEX_1 = 
+YLWRAP = $(top_srcdir)/ylwrap
+@MAINTAINER_MODE_FALSE@am__skipyacc = test -f $@ ||
+am__yacc_c2h = sed -e s/cc$$/hh/ -e s/cpp$$/hpp/ -e s/cxx$$/hxx/ \
+		   -e s/c++$$/h++/ -e s/c$$/h/
+YACCCOMPILE = $(YACC) $(AM_YFLAGS) $(YFLAGS)
+LTYACCCOMPILE = $(LIBTOOL) $(AM_V_lt) $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(YACC) $(AM_YFLAGS) $(YFLAGS)
+AM_V_YACC = $(am__v_YACC_@AM_V@)
+am__v_YACC_ = $(am__v_YACC_@AM_DEFAULT_V@)
+am__v_YACC_0 = @echo "  YACC    " $@;
+am__v_YACC_1 = 
 SOURCES = $(liblib_la_SOURCES) $(test_lib_SOURCES)
 DIST_SOURCES = $(liblib_la_SOURCES) $(test_lib_SOURCES)
 am__can_run_installinfo = \
@@ -373,7 +393,9 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp
+am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/depcomp \
+	$(top_srcdir)/ylwrap event-filter-lexer.c \
+	event-filter-parser.c
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 ACLOCAL_AMFLAGS = @ACLOCAL_AMFLAGS@
@@ -389,6 +411,7 @@ AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
 BINARY_CFLAGS = @BINARY_CFLAGS@
 BINARY_LDFLAGS = @BINARY_LDFLAGS@
+BISON = @BISON@
 CASSANDRA_CFLAGS = @CASSANDRA_CFLAGS@
 CASSANDRA_LIBS = @CASSANDRA_LIBS@
 CC = @CC@
@@ -419,6 +442,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
+FLEX = @FLEX@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -588,8 +612,17 @@ AM_CPPFLAGS = \
 	$(LIBUNWIND_CFLAGS)
 
 noinst_LTLIBRARIES = liblib.la
-BUILT_SOURCES = $(srcdir)/unicodemap.c
+BUILT_SOURCES = $(srcdir)/unicodemap.c \
+		event-filter-lexer.c \
+		event-filter-parser.c \
+		event-filter-parser.h
+
 EXTRA_DIST = unicodemap.c unicodemap.pl UnicodeData.txt
+
+# Squelch autoconf error about using .[ly] sources but not defining $(LEX)
+# and $(YACC).  Using false here avoids accidental use.
+LEX = /bin/false
+YACC = /bin/false
 liblib_la_LIBADD = $(LIBUNWIND_LIBS)
 liblib_la_SOURCES = \
 	array.c \
@@ -601,6 +634,7 @@ liblib_la_SOURCES = \
 	bits.c \
 	bsearch-insert-pos.c \
 	buffer.c \
+	buffer-istream.c \
 	child-wait.c \
 	compat.c \
 	connection.c \
@@ -609,6 +643,8 @@ liblib_la_SOURCES = \
 	eacces-error.c \
 	env-util.c \
 	event-filter.c \
+	event-filter-lexer.l \
+	event-filter-parser.y \
 	event-log.c \
 	execv-const.c \
 	failures.c \
@@ -654,7 +690,6 @@ liblib_la_SOURCES = \
 	istream-hash.c \
 	istream-jsonstr.c \
 	istream-limit.c \
-	istream-mmap.c \
 	istream-multiplex.c \
 	istream-rawlog.c \
 	istream-seekable.c \
@@ -768,6 +803,8 @@ headers = \
 	eacces-error.h \
 	env-util.h \
 	event-filter.h \
+	event-filter-parser.h \
+	event-filter-private.h \
 	event-log.h \
 	execv-const.h \
 	failures.h \
@@ -920,16 +957,19 @@ test_lib_SOURCES = \
 	test-bits.c \
 	test-bsearch-insert-pos.c \
 	test-buffer.c \
+	test-buffer-istream.c \
 	test-byteorder.c \
 	test-connection.c \
 	test-crc32.c \
 	test-data-stack.c \
 	test-event-category-register.c \
 	test-event-filter.c \
+	test-event-filter-parser.c \
 	test-event-flatten.c \
 	test-event-log.c \
 	test-failures.c \
 	test-fd-util.c \
+	test-file-cache.c \
 	test-file-create-locked.c \
 	test-guid.c \
 	test-hash.c \
@@ -1009,7 +1049,7 @@ all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .lo .o .obj
+.SUFFIXES: .c .l .lo .o .obj .y
 $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -1081,6 +1121,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/base64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bits.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bsearch-insert-pos.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/buffer-istream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/buffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/child-wait.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/compat.Plo@am__quote@
@@ -1089,6 +1130,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/data-stack.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eacces-error.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/env-util.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/event-filter-lexer.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/event-filter-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/event-filter.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/event-log.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/execv-const.Plo@am__quote@
@@ -1144,7 +1187,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-hash.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-jsonstr.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-limit.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-mmap.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-multiplex.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-rawlog.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-seekable.Plo@am__quote@
@@ -1223,17 +1265,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-base64.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-bits.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-bsearch-insert-pos.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-buffer-istream.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-buffer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-byteorder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-connection.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-crc32.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-data-stack.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-category-register.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-filter-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-filter.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-flatten.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-log.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-failures.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-fd-util.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-file-cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-file-create-locked.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-guid.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-hash-format.Po@am__quote@
@@ -1460,6 +1505,20 @@ test_lib-test-buffer.obj: test-buffer.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-buffer.obj `if test -f 'test-buffer.c'; then $(CYGPATH_W) 'test-buffer.c'; else $(CYGPATH_W) '$(srcdir)/test-buffer.c'; fi`
 
+test_lib-test-buffer-istream.o: test-buffer-istream.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-buffer-istream.o -MD -MP -MF $(DEPDIR)/test_lib-test-buffer-istream.Tpo -c -o test_lib-test-buffer-istream.o `test -f 'test-buffer-istream.c' || echo '$(srcdir)/'`test-buffer-istream.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-buffer-istream.Tpo $(DEPDIR)/test_lib-test-buffer-istream.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-buffer-istream.c' object='test_lib-test-buffer-istream.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-buffer-istream.o `test -f 'test-buffer-istream.c' || echo '$(srcdir)/'`test-buffer-istream.c
+
+test_lib-test-buffer-istream.obj: test-buffer-istream.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-buffer-istream.obj -MD -MP -MF $(DEPDIR)/test_lib-test-buffer-istream.Tpo -c -o test_lib-test-buffer-istream.obj `if test -f 'test-buffer-istream.c'; then $(CYGPATH_W) 'test-buffer-istream.c'; else $(CYGPATH_W) '$(srcdir)/test-buffer-istream.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-buffer-istream.Tpo $(DEPDIR)/test_lib-test-buffer-istream.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-buffer-istream.c' object='test_lib-test-buffer-istream.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-buffer-istream.obj `if test -f 'test-buffer-istream.c'; then $(CYGPATH_W) 'test-buffer-istream.c'; else $(CYGPATH_W) '$(srcdir)/test-buffer-istream.c'; fi`
+
 test_lib-test-byteorder.o: test-byteorder.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-byteorder.o -MD -MP -MF $(DEPDIR)/test_lib-test-byteorder.Tpo -c -o test_lib-test-byteorder.o `test -f 'test-byteorder.c' || echo '$(srcdir)/'`test-byteorder.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-byteorder.Tpo $(DEPDIR)/test_lib-test-byteorder.Po
@@ -1544,6 +1603,20 @@ test_lib-test-event-filter.obj: test-event-filter.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-filter.obj `if test -f 'test-event-filter.c'; then $(CYGPATH_W) 'test-event-filter.c'; else $(CYGPATH_W) '$(srcdir)/test-event-filter.c'; fi`
 
+test_lib-test-event-filter-parser.o: test-event-filter-parser.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-filter-parser.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-filter-parser.Tpo -c -o test_lib-test-event-filter-parser.o `test -f 'test-event-filter-parser.c' || echo '$(srcdir)/'`test-event-filter-parser.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-filter-parser.Tpo $(DEPDIR)/test_lib-test-event-filter-parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-filter-parser.c' object='test_lib-test-event-filter-parser.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-filter-parser.o `test -f 'test-event-filter-parser.c' || echo '$(srcdir)/'`test-event-filter-parser.c
+
+test_lib-test-event-filter-parser.obj: test-event-filter-parser.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-filter-parser.obj -MD -MP -MF $(DEPDIR)/test_lib-test-event-filter-parser.Tpo -c -o test_lib-test-event-filter-parser.obj `if test -f 'test-event-filter-parser.c'; then $(CYGPATH_W) 'test-event-filter-parser.c'; else $(CYGPATH_W) '$(srcdir)/test-event-filter-parser.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-filter-parser.Tpo $(DEPDIR)/test_lib-test-event-filter-parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-filter-parser.c' object='test_lib-test-event-filter-parser.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-filter-parser.obj `if test -f 'test-event-filter-parser.c'; then $(CYGPATH_W) 'test-event-filter-parser.c'; else $(CYGPATH_W) '$(srcdir)/test-event-filter-parser.c'; fi`
+
 test_lib-test-event-flatten.o: test-event-flatten.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-flatten.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-flatten.Tpo -c -o test_lib-test-event-flatten.o `test -f 'test-event-flatten.c' || echo '$(srcdir)/'`test-event-flatten.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-flatten.Tpo $(DEPDIR)/test_lib-test-event-flatten.Po
@@ -1599,6 +1672,20 @@ test_lib-test-fd-util.obj: test-fd-util.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-fd-util.c' object='test_lib-test-fd-util.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-fd-util.obj `if test -f 'test-fd-util.c'; then $(CYGPATH_W) 'test-fd-util.c'; else $(CYGPATH_W) '$(srcdir)/test-fd-util.c'; fi`
+
+test_lib-test-file-cache.o: test-file-cache.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-file-cache.o -MD -MP -MF $(DEPDIR)/test_lib-test-file-cache.Tpo -c -o test_lib-test-file-cache.o `test -f 'test-file-cache.c' || echo '$(srcdir)/'`test-file-cache.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-file-cache.Tpo $(DEPDIR)/test_lib-test-file-cache.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-file-cache.c' object='test_lib-test-file-cache.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-file-cache.o `test -f 'test-file-cache.c' || echo '$(srcdir)/'`test-file-cache.c
+
+test_lib-test-file-cache.obj: test-file-cache.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-file-cache.obj -MD -MP -MF $(DEPDIR)/test_lib-test-file-cache.Tpo -c -o test_lib-test-file-cache.obj `if test -f 'test-file-cache.c'; then $(CYGPATH_W) 'test-file-cache.c'; else $(CYGPATH_W) '$(srcdir)/test-file-cache.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-file-cache.Tpo $(DEPDIR)/test_lib-test-file-cache.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-file-cache.c' object='test_lib-test-file-cache.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-file-cache.obj `if test -f 'test-file-cache.c'; then $(CYGPATH_W) 'test-file-cache.c'; else $(CYGPATH_W) '$(srcdir)/test-file-cache.c'; fi`
 
 test_lib-test-file-create-locked.o: test-file-create-locked.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-file-create-locked.o -MD -MP -MF $(DEPDIR)/test_lib-test-file-create-locked.Tpo -c -o test_lib-test-file-create-locked.o `test -f 'test-file-create-locked.c' || echo '$(srcdir)/'`test-file-create-locked.c
@@ -2659,6 +2746,8 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-rm -f event-filter-lexer.c
+	-rm -f event-filter-parser.c
 	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
 clean: clean-am
 
@@ -2751,6 +2840,21 @@ uninstall-am: uninstall-pkginc_libHEADERS
 
 .PRECIOUS: Makefile
 
+
+# We use custom rules here because we want to use flex and bison instead
+# of lex and yacc (or bison in yacc-compatibility mode).  Both flex and
+# bison can handle properly naming the generated files, and it is simpler
+# and cleaner to make this rule ourselves instead of working around ylwrap
+# and yywrap's antiquated notion of what is hapenning.
+.l.c:
+	$(AM_V_GEN)$(FLEX) -o $@ $<
+
+.y.c:
+	$(AM_V_GEN)$(BISON) -o $@ $<
+
+# Bison generates both a header and a .c file.  Without the following
+# dependency, anything including the header will race the bison process.
+event-filter-parser.h: event-filter-parser.c
 
 $(srcdir)/UnicodeData.txt:
 	test -f $@ || wget -O $@ https://dovecot.org/res/UnicodeData.txt

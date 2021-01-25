@@ -35,6 +35,7 @@ typedef void timeout_callback_t(void *context);
 typedef void io_loop_time_moved_callback_t(const struct timeval *old_time,
 					   const struct timeval *new_time);
 typedef void io_switch_callback_t(struct ioloop *prev_ioloop);
+typedef void io_destroy_callback_t(struct ioloop *ioloop);
 
 /* Time when the I/O loop started calling handlers.
    Can be used instead of time(NULL). */
@@ -182,7 +183,7 @@ void io_loop_time_refresh(void);
 
 void io_loop_run(struct ioloop *ioloop);
 /* Stop the ioloop immediately. No further IO or timeout callbacks are called.
-   This is safe to run in a signal handler. */
+   Warning: This is not safe to be called in non-delayed signal handlers. */
 void io_loop_stop(struct ioloop *ioloop);
 /* Stop ioloop after finishing all the pending IOs and timeouts. */
 void io_loop_stop_delayed(struct ioloop *ioloop);
@@ -210,6 +211,9 @@ struct ioloop *io_loop_get_root(void);
 /* Call the callback whenever ioloop is changed. */
 void io_loop_add_switch_callback(io_switch_callback_t *callback);
 void io_loop_remove_switch_callback(io_switch_callback_t *callback);
+/* Call the callback whenever ioloop is destroyed. */
+void io_loop_add_destroy_callback(io_destroy_callback_t *callback);
+void io_loop_remove_destroy_callback(io_destroy_callback_t *callback);
 
 /* Create a new ioloop context. This context is automatically attached to all
    the following I/Os and timeouts that are added until the context is

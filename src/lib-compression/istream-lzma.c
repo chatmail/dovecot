@@ -19,6 +19,7 @@ struct lzma_istream {
 	uoff_t eof_offset;
 	struct stat last_parent_statbuf;
 
+	bool hdr_read:1;
 	bool log_errors:1;
 	bool marked:1;
 	bool strm_closed:1;
@@ -116,10 +117,17 @@ static ssize_t i_stream_lzma_read(struct istream_private *stream)
 				stream->parent->stream_errno;
 		} else {
 			i_assert(stream->parent->eof);
+			lzma_stream_end(zstream);
 			ret = lzma_code(&zstream->strm, LZMA_FINISH);
-			if (ret != LZMA_STREAM_END)
-				if (lzma_handle_error(zstream, ret) == 0)
-					stream->istream.stream_errno = EPIPE;
+			if (lzma_handle_error(zstream, ret) < 0)
+				;
+			else if (!zstream->hdr_read) {
+				lzma_read_error(zstream, "file too small (not xz file?)");
+				stream->istream.stream_errno = EINVAL;
+			} else if (ret != LZMA_STREAM_END) {
+				lzma_read_error(zstream, "unexpected EOF");
+				stream->istream.stream_errno = EPIPE;
+			}
 			stream->istream.eof = TRUE;
 		}
 		return -1;
@@ -135,6 +143,8 @@ static ssize_t i_stream_lzma_read(struct istream_private *stream)
 
 	zstream->strm.next_out = stream->w_buffer + stream->pos;
 	zstream->strm.avail_out = out_size;
+	if (!zstream->hdr_read && size > LZMA_STREAM_HEADER_SIZE)
+		zstream->hdr_read = TRUE;
 	ret = lzma_code(&zstream->strm, LZMA_RUN);
 
 	out_size -= zstream->strm.avail_out;
@@ -179,7 +189,7 @@ static void i_stream_lzma_reset(struct lzma_istream *zstream)
 	struct istream_private *stream = &zstream->istream;
 
 	i_stream_seek(stream->parent, stream->parent_start_offset);
-	zstream->eof_offset = (uoff_t)-1;
+	zstream->eof_offset = UOFF_T_MAX;
 	zstream->strm.next_in = NULL;
 	zstream->strm.avail_in = 0;
 
@@ -230,7 +240,7 @@ struct istream *i_stream_create_lzma(struct istream *input, bool log_errors)
 	struct lzma_istream *zstream;
 
 	zstream = i_new(struct lzma_istream, 1);
-	zstream->eof_offset = (uoff_t)-1;
+	zstream->eof_offset = UOFF_T_MAX;
 	zstream->log_errors = log_errors;
 
 	i_stream_lzma_init(zstream);

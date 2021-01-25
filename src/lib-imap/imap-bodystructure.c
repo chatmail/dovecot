@@ -142,6 +142,37 @@ static void part_write_body_multipart(const struct message_part *part,
 	part_write_bodystructure_common(data, str);
 }
 
+static bool part_is_truncated(const struct message_part *part)
+{
+	const struct message_part_data *data = part->data;
+
+	i_assert((part->flags & MESSAGE_PART_FLAG_MESSAGE_RFC822) == 0);
+	i_assert((part->flags & MESSAGE_PART_FLAG_MULTIPART) == 0);
+
+	if (data->content_type != NULL) {
+		if (strcasecmp(data->content_type, "message") == 0 &&
+		    strcasecmp(data->content_subtype, "rfc822") == 0) {
+			/* It's message/rfc822, but without
+			   MESSAGE_PART_FLAG_MESSAGE_RFC822. */
+			return TRUE;
+		}
+		if (strcasecmp(data->content_type, "multipart") == 0) {
+			/* It's multipart/, but without
+			   MESSAGE_PART_FLAG_MULTIPART. */
+			return TRUE;
+		}
+	} else {
+		/* No Content-Type */
+		if (part->parent != NULL &&
+		    (part->parent->flags & MESSAGE_PART_FLAG_MULTIPART_DIGEST) != 0) {
+			/* Parent is MESSAGE_PART_FLAG_MULTIPART_DIGEST
+			   (so this should have been message/rfc822). */
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 static void part_write_body(const struct message_part *part,
 			    string_t *str, bool extended)
 {
@@ -152,6 +183,14 @@ static void part_write_body(const struct message_part *part,
 
 	if ((part->flags & MESSAGE_PART_FLAG_MESSAGE_RFC822) != 0) {
 		str_append(str, "\"message\" \"rfc822\"");
+		text = FALSE;
+	} else if (part_is_truncated(part)) {
+		/* Maximum MIME part count was reached while parsing the mail.
+		   Write this part out as application/octet-stream instead.
+		   We're not using text/plain, because it would require
+		   message-parser to use MESSAGE_PART_FLAG_TEXT for this part
+		   to avoid losing line count in message_part serialization. */
+		str_append(str, "\"application\" \"octet-stream\"");
 		text = FALSE;
 	} else {
 		/* "content type" "subtype" */
@@ -164,6 +203,7 @@ static void part_write_body(const struct message_part *part,
 			str_append_c(str, ' ');
 			imap_append_string(str, data->content_subtype);
 		}
+		i_assert(text == ((part->flags & MESSAGE_PART_FLAG_TEXT) != 0));
 	}
 
 	/* ("content type param key" "value" ...) */
@@ -633,7 +673,7 @@ int imap_bodystructure_parse_full(const char *bodystructure,
 	input = i_stream_create_from_data(bodystructure, strlen(bodystructure));
 	(void)i_stream_read(input);
 
-	parser = imap_parser_create(input, NULL, (size_t)-1);
+	parser = imap_parser_create(input, NULL, SIZE_MAX);
 	ret = imap_parser_finish_line(parser, 0,
 				      IMAP_PARSE_FLAG_LITERAL_TYPE, &args);
 	if (ret < 0) {
@@ -880,7 +920,7 @@ int imap_body_parse_from_bodystructure(const char *bodystructure,
 	input = i_stream_create_from_data(bodystructure, strlen(bodystructure));
 	(void)i_stream_read(input);
 
-	parser = imap_parser_create(input, NULL, (size_t)-1);
+	parser = imap_parser_create(input, NULL, SIZE_MAX);
 	ret = imap_parser_finish_line(parser, 0, IMAP_PARSE_FLAG_NO_UNESCAPE |
 				      IMAP_PARSE_FLAG_LITERAL_TYPE, &args);
 	if (ret < 0) {

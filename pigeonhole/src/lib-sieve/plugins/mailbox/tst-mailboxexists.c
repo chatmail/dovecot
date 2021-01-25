@@ -41,7 +41,7 @@ const struct sieve_command_def mailboxexists_test = {
 	.block_allowed = FALSE,
 	.block_required = FALSE,
 	.validate = tst_mailboxexists_validate,
-	.generate = tst_mailboxexists_generate
+	.generate = tst_mailboxexists_generate,
 };
 
 /*
@@ -59,7 +59,7 @@ const struct sieve_operation_def mailboxexists_operation = {
 	.mnemonic = "MAILBOXEXISTS",
 	.ext_def = &mailbox_extension,
 	.dump = tst_mailboxexists_operation_dump,
-	.execute = tst_mailboxexists_operation_execute
+	.execute = tst_mailboxexists_operation_execute,
 };
 
 /*
@@ -151,6 +151,69 @@ tst_mailboxexists_operation_dump(const struct sieve_dumptime_env *denv,
  */
 
 static int
+tst_mailboxexists_test_mailbox(const struct sieve_runtime_env *renv,
+			       const char *mailbox, bool trace,
+			       bool *all_exist_r)
+{
+	const struct sieve_execute_env *eenv = renv->exec_env;
+	struct mailbox *box;
+	const char *error;
+
+	/* Check validity of mailbox name */
+	if (!sieve_mailbox_check_name(mailbox, &error)) {
+		sieve_runtime_warning(
+			renv, NULL, "mailboxexists test: "
+			"invalid mailbox name `%s' specified: %s",
+			str_sanitize(mailbox, 256), error);
+		*all_exist_r = FALSE;
+		return SIEVE_EXEC_OK;
+	}
+
+	/* Open the box */
+	box = mailbox_alloc_for_user(eenv->scriptenv->user,
+				     mailbox,
+				     MAILBOX_FLAG_POST_SESSION);
+
+	if (mailbox_open(box) < 0) {
+		if (trace) {
+			sieve_runtime_trace(
+				renv, 0,
+				"mailbox `%s' cannot be opened",
+				str_sanitize(mailbox, 80));
+		}
+		mailbox_free(&box);
+		*all_exist_r = FALSE;
+		return SIEVE_EXEC_OK;
+	}
+
+	/* Also fail when it is readonly */
+	if (mailbox_is_readonly(box)) {
+		if (trace) {
+			sieve_runtime_trace(
+				renv, 0,
+				"mailbox `%s' is read-only",
+				str_sanitize(mailbox, 80));
+		}
+		mailbox_free(&box);
+		*all_exist_r = FALSE;
+		return SIEVE_EXEC_OK;
+	}
+
+	/* FIXME: check acl for 'p' or 'i' ACL permissions as
+	   required by RFC */
+
+	if (trace) {
+		sieve_runtime_trace(
+			renv, 0, "mailbox `%s' exists",
+			str_sanitize(mailbox, 80));
+	}
+
+	/* Close mailbox */
+	mailbox_free(&box);
+	return SIEVE_EXEC_OK;
+}
+
+static int
 tst_mailboxexists_operation_execute(const struct sieve_runtime_env *renv,
 				    sieve_size_t *address)
 {
@@ -166,8 +229,9 @@ tst_mailboxexists_operation_execute(const struct sieve_runtime_env *renv,
 	 */
 
 	/* Read notify uris */
-	if ((ret = sieve_opr_stringlist_read(renv, address, "mailbox-names",
-					     &mailbox_names)) <= 0)
+	ret = sieve_opr_stringlist_read(renv, address, "mailbox-names",
+					&mailbox_names);
+	if (ret <= 0)
 		return ret;
 
 	/*
@@ -181,62 +245,28 @@ tst_mailboxexists_operation_execute(const struct sieve_runtime_env *renv,
 		trace = sieve_runtime_trace_active(renv, SIEVE_TRLVL_MATCHING);
 	}
 
-	if (eenv->scriptenv->user != NULL) {
-		int ret;
+	if (eenv->scriptenv->user == NULL) {
+		sieve_runtime_trace(renv, 0, "no mail user; yield true");
+		sieve_interpreter_set_test_result(renv->interp, TRUE);
+		return SIEVE_EXEC_OK;
+	}
 
-		mailbox_item = NULL;
-		while ((ret = sieve_stringlist_next_item(mailbox_names,
-							 &mailbox_item)) > 0) {
-			const char *mailbox = str_c(mailbox_item);
-			struct mailbox *box;
+	mailbox_item = NULL;
+	while (all_exist &&
+	       (ret = sieve_stringlist_next_item(mailbox_names,
+						 &mailbox_item)) > 0) {
+		const char *mailbox = str_c(mailbox_item);
 
-			/* Open the box */
-			box = mailbox_alloc_for_user(eenv->scriptenv->user,
-						     mailbox,
-						     MAILBOX_FLAG_POST_SESSION);
-			if (mailbox_open(box) < 0) {
-				if (trace) {
-					sieve_runtime_trace(
-						renv, 0,
-						"mailbox `%s' cannot be opened",
-						str_sanitize(mailbox, 80));
-				}
-				all_exist = FALSE;
-				mailbox_free(&box);
-				break;
-			}
+		ret = tst_mailboxexists_test_mailbox(renv, mailbox,
+						     trace, &all_exist);
+		if (ret <= 0)
+			return ret;
+	}
 
-			/* Also fail when it is readonly */
-			if (mailbox_is_readonly(box)) {
-				if (trace) {
-					sieve_runtime_trace(
-						renv, 0,
-						"mailbox `%s' is read-only",
-						str_sanitize(mailbox, 80));
-				}
-				all_exist = FALSE;
-				mailbox_free(&box);
-				break;
-			}
-
-			/* FIXME: check acl for 'p' or 'i' ACL permissions as
-			   required by RFC */
-
-			if (trace) {
-				sieve_runtime_trace(
-					renv, 0, "mailbox `%s' exists",
-					str_sanitize(mailbox, 80));
-			}
-
-			/* Close mailbox */
-			mailbox_free(&box);
-		}
-
-		if (ret < 0) {
-			sieve_runtime_trace_error(
-				renv, "invalid mailbox name item");
-			return SIEVE_EXEC_BIN_CORRUPT;
-		}
+	if (ret < 0) {
+		sieve_runtime_trace_error(
+			renv, "invalid mailbox name item");
+		return SIEVE_EXEC_BIN_CORRUPT;
 	}
 
 	if (trace) {

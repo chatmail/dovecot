@@ -96,6 +96,9 @@
 /* Cassandra supports speculative execution policy */
 #undef HAVE_CASSANDRA_SPECULATIVE_POLICY
 
+/* Build with cass_cluster_set_use_hostname_resolution() support */
+#undef HAVE_CASS_CLUSTER_SET_USE_HOSTNAME_RESOLUTION
+
 /* Define to 1 if you have the `clearenv' function. */
 #undef HAVE_CLEARENV
 
@@ -105,9 +108,17 @@
 /* Define to 1 if you have the <crypt.h> header file. */
 #undef HAVE_CRYPT_H
 
+/* Define to 1 if you have the declaration of
+   `CASS_SSL_VERIFY_PEER_IDENTITY_DNS', and to 0 if you don't. */
+#undef HAVE_DECL_CASS_SSL_VERIFY_PEER_IDENTITY_DNS
+
 /* Define to 1 if you have the declaration of `getrandom', and to 0 if you
    don't. */
 #undef HAVE_DECL_GETRANDOM
+
+/* Define to 1 if you have the declaration of
+   `ZSTD_error_parameter_unsupported', and to 0 if you don't. */
+#undef HAVE_DECL_ZSTD_ERROR_PARAMETER_UNSUPPORTED
 
 /* Define if you have struct dirent->d_type */
 #undef HAVE_DIRENT_D_TYPE
@@ -151,8 +162,26 @@
 /* Define to 1 if you have the `flock' function. */
 #undef HAVE_FLOCK
 
+/* Define if your compiler has -fno-sanitize=nonnull-attribute */
+#undef HAVE_FNO_SANITIZE_NONNULL_ATTRIBUTE
+
 /* Define if you have FreeBSD-compatible sendfile() */
 #undef HAVE_FREEBSD_SENDFILE
+
+/* Define if your compiler has -fsanitize=implicit-integer-truncation */
+#undef HAVE_FSANITIZE_IMPLICIT_INTEGER_TRUNCATION
+
+/* Define if your compiler has -fsanitize=integer */
+#undef HAVE_FSANITIZE_INTEGER
+
+/* Define if your compiler has -fsanitize=local-bounds */
+#undef HAVE_FSANITIZE_LOCAL_BOUNDS
+
+/* Define if your compiler has -fsanitize=nullability */
+#undef HAVE_FSANITIZE_NULLABILITY
+
+/* Define if your compiler has -fsanitize=undefined */
+#undef HAVE_FSANITIZE_UNDEFINED
 
 /* Define if you want exttextcat support for FTS */
 #undef HAVE_FTS_EXTTEXTCAT
@@ -622,6 +651,9 @@
 /* Define to 1 if you have the `uname' function. */
 #undef HAVE_UNAME
 
+/* Define if your compiler supports undefined sanitizers */
+#undef HAVE_UNDEFINED_SANITIZER
+
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
@@ -648,6 +680,9 @@
 
 /* Define if you have ZSTD library */
 #undef HAVE_ZSTD
+
+/* Whether zstd has ZSTD_getErrorCode */
+#undef HAVE_ZSTD_GETERRORCODE
 
 /* Define to 1 if the system has the type `_Bool'. */
 #undef HAVE__BOOL
@@ -745,14 +780,8 @@
 /* Build with shadow support */
 #undef PASSDB_SHADOW
 
-/* Build with Tru64 SIA support */
-#undef PASSDB_SIA
-
 /* Build with SQL support */
 #undef PASSDB_SQL
-
-/* Build with vpopmail support */
-#undef PASSDB_VPOPMAIL
 
 /* Define if pread/pwrite implementation is broken */
 #undef PREAD_BROKEN
@@ -843,9 +872,6 @@
 
 /* Build with SQL support */
 #undef USERDB_SQL
-
-/* Build with vpopmail support */
-#undef USERDB_VPOPMAIL
 
 /* A 'va_copy' style function */
 #undef VA_COPY

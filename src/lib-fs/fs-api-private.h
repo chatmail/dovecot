@@ -30,6 +30,7 @@ struct fs_vfuncs {
 	int (*init)(struct fs *fs, const char *args,
 		    const struct fs_settings *set, const char **error_r);
 	void (*deinit)(struct fs *fs);
+	void (*free)(struct fs *fs);
 
 	enum fs_properties (*get_properties)(struct fs *fs);
 
@@ -154,6 +155,7 @@ struct fs_iter {
 
 	struct fs *fs;
 	struct event *event;
+	char *path;
 	enum fs_iter_flags flags;
 	struct timeval start_time;
 	char *last_error;

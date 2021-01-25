@@ -8,6 +8,7 @@
 #include "array.h"
 
 /* <settings checks> */
+#include "event-filter.h"
 #include <math.h>
 /* </settings checks> */
 
@@ -47,7 +48,7 @@ struct service_settings stats_service_settings = {
 	.client_limit = 0,
 	.service_count = 0,
 	.idle_kill = UINT_MAX,
-	.vsz_limit = (uoff_t)-1,
+	.vsz_limit = UOFF_T_MAX,
 
 	.unix_listeners = { { &stats_unix_listeners_buf,
 			      sizeof(stats_unix_listeners[0]) } },
@@ -88,7 +89,7 @@ const struct setting_parser_info stats_exporter_setting_parser_info = {
 	.type_offset = offsetof(struct stats_exporter_settings, name),
 	.struct_size = sizeof(struct stats_exporter_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.check_func = stats_exporter_settings_check,
 };
 
@@ -102,12 +103,9 @@ const struct setting_parser_info stats_exporter_setting_parser_info = {
 
 static const struct setting_define stats_metric_setting_defines[] = {
 	DEF(SET_STR, metric_name),
-	DEF(SET_STR, event_name),
-	DEF(SET_STR, source_location),
-	DEF(SET_STR, categories),
 	DEF(SET_STR, fields),
 	DEF(SET_STR, group_by),
-	{ SET_STRLIST, "filter", offsetof(struct stats_metric_settings, filter), NULL },
+	DEF(SET_STR, filter),
 	DEF(SET_STR, exporter),
 	DEF(SET_STR, exporter_include),
 	DEF(SET_STR, description),
@@ -116,10 +114,8 @@ static const struct setting_define stats_metric_setting_defines[] = {
 
 static const struct stats_metric_settings stats_metric_default_settings = {
 	.metric_name = "",
-	.event_name = "",
-	.source_location = "",
-	.categories = "",
 	.fields = "",
+	.filter = "",
 	.exporter = "",
 	.group_by = "",
 	.exporter_include = "name hostname timestamps categories fields",
@@ -133,7 +129,7 @@ const struct setting_parser_info stats_metric_setting_parser_info = {
 	.type_offset = offsetof(struct stats_metric_settings, metric_name),
 	.struct_size = sizeof(struct stats_metric_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.check_func = stats_metric_settings_check,
 };
 
@@ -169,10 +165,10 @@ const struct setting_parser_info stats_setting_parser_info = {
 	.defines = stats_setting_defines,
 	.defaults = &stats_default_settings,
 
-	.type_offset = (size_t)-1,
+	.type_offset = SIZE_MAX,
 	.struct_size = sizeof(struct stats_settings),
 
-	.parent_offset = (size_t)-1,
+	.parent_offset = SIZE_MAX,
 	.check_func = stats_settings_check,
 };
 
@@ -479,23 +475,21 @@ static bool parse_metric_group_by(struct stats_metric_settings *set,
 static bool stats_metric_settings_check(void *_set, pool_t pool, const char **error_r)
 {
 	struct stats_metric_settings *set = _set;
-	const char *p;
 
 	if (set->metric_name[0] == '\0') {
 		*error_r = "Metric name can't be empty";
 		return FALSE;
 	}
-	if (set->source_location[0] != '\0') {
-		if ((p = strchr(set->source_location, ':')) == NULL) {
-			*error_r = "source_location is missing ':'";
-			return FALSE;
-		}
-		if (str_to_uint(p+1, &set->parsed_source_linenum) < 0 ||
-		    set->parsed_source_linenum == 0) {
-			*error_r = "source_location has invalid line number after ':'";
-			return FALSE;
-		}
+
+	if (set->filter[0] == '\0') {
+		*error_r = t_strdup_printf("metric %s { filter } is empty - "
+					   "will not match anything", set->metric_name);
+		return FALSE;
 	}
+
+	set->parsed_filter = event_filter_create_fragment(pool);
+	if (event_filter_parse(set->filter, set->parsed_filter, error_r) < 0)
+		return FALSE;
 
 	if (!parse_metric_group_by(set, pool, error_r))
 		return FALSE;

@@ -9,14 +9,12 @@
 #include "str.h"
 #include "safe-memset.h"
 #include "time-util.h"
+#include "settings-parser.h"
 #include "login-proxy.h"
 #include "auth-client.h"
 #include "dsasl-client.h"
 #include "master-service-ssl-settings.h"
 #include "client-common.h"
-
-#define PROXY_FAILURE_MSG "Account is temporarily unavailable."
-#define PROXY_DEFAULT_TIMEOUT_MSECS (1000*30)
 
 /* If we've been waiting auth server to respond for over this many milliseconds,
    send a "waiting" message. */
@@ -135,11 +133,13 @@ static void client_auth_parse_args(struct client *client, bool success,
 				   const char *const *args,
 				   struct client_auth_reply *reply_r)
 {
-	const char *key, *value, *p;
+	const char *key, *value, *p, *error;
 	ARRAY_TYPE(const_string) alt_usernames;
 
 	t_array_init(&alt_usernames, 4);
 	i_zero(reply_r);
+	reply_r->proxy_host_immediate_failure_after_secs =
+		LOGIN_PROXY_DEFAULT_HOST_IMMEDIATE_FAILURE_AFTER_SECS;
 
 	for (; *args != NULL; args++) {
 		p = strchr(*args, '=');
@@ -174,12 +174,25 @@ static void client_auth_parse_args(struct client *client, bool success,
 		else if (strcmp(key, "pass") == 0)
 			reply_r->password = value;
 		else if (strcmp(key, "proxy_timeout") == 0) {
-			if (str_to_uint(value, &reply_r->proxy_timeout_msecs) < 0) {
+			/* backwards compatibility: plain number is seconds */
+			if (str_to_uint(value, &reply_r->proxy_timeout_msecs) == 0)
+				reply_r->proxy_timeout_msecs *= 1000;
+			else if (settings_get_time_msecs(value,
+				&reply_r->proxy_timeout_msecs, &error) < 0) {
 				e_error(client->event,
 					"BUG: Auth service returned invalid "
-					"proxy_timeout value: %s", value);
+					"proxy_timeout value '%s': %s",
+					value, error);
 			}
-			reply_r->proxy_timeout_msecs *= 1000;
+		} else if (strcmp(key, "proxy_host_immediate_failure_after") == 0) {
+			if (settings_get_time(value,
+				&reply_r->proxy_host_immediate_failure_after_secs,
+				&error) < 0) {
+				e_error(client->event,
+					"BUG: Auth service returned invalid "
+					"proxy_host_immediate_failure_after value '%s': %s",
+					value, error);
+			}
 		} else if (strcmp(key, "proxy_refresh") == 0) {
 			if (str_to_uint(value, &reply_r->proxy_refresh_secs) < 0) {
 				e_error(client->event,
@@ -249,6 +262,21 @@ static void proxy_free_password(struct client *client)
 	i_free_and_null(client->proxy_password);
 }
 
+static void client_proxy_append_conn_info(string_t *str, struct client *client)
+{
+	const char *source_host;
+
+	source_host = login_proxy_get_source_host(client->login_proxy);
+	if (source_host[0] != '\0')
+		str_printfa(str, " from %s", source_host);
+	if (strcmp(client->virtual_user, client->proxy_user) != 0) {
+		/* remote username is different, log it */
+		str_printfa(str, " as user %s", client->proxy_user);
+	}
+	if (client->proxy_master_user != NULL)
+		str_printfa(str, " (master %s)", client->proxy_master_user);
+}
+
 void client_proxy_finish_destroy_client(struct client *client)
 {
 	string_t *str = t_str_new(128);
@@ -266,21 +294,12 @@ void client_proxy_finish_destroy_client(struct client *client)
 	   IP address in the prefix. */
 	str_printfa(str, "Started proxying to %s",
 		    login_proxy_get_host(client->login_proxy));
-	if (strcmp(client->virtual_user, client->proxy_user) != 0) {
-		/* remote username is different, log it */
-		str_printfa(str, " as user %s", client->proxy_user);
-	}
-	if (client->proxy_master_user != NULL)
-		str_printfa(str, " (master %s)", client->proxy_master_user);
+	client_proxy_append_conn_info(str, client);
 
+	login_proxy_append_success_log_info(client->login_proxy, str);
 	e_info(login_proxy_get_event(client->login_proxy), "%s", str_c(str));
 	login_proxy_detach(client->login_proxy);
 	client_destroy_success(client, NULL);
-}
-
-static void client_proxy_error(struct client *client, const char *text)
-{
-	client->v.proxy_error(client, text);
 }
 
 const char *client_proxy_get_state(struct client *client)
@@ -293,31 +312,19 @@ void client_proxy_log_failure(struct client *client, const char *line)
 	string_t *str = t_str_new(128);
 
 	str_printfa(str, "Login failed");
-	if (strcmp(client->virtual_user, client->proxy_user) != 0) {
-		/* remote username is different, log it */
-		str_printfa(str, " as user %s", client->proxy_user);
-	}
-	if (client->proxy_master_user != NULL)
-		str_printfa(str, " (master %s)", client->proxy_master_user);
+	client_proxy_append_conn_info(str, client);
 	str_append(str, ": ");
 	str_append(str, line);
 	e_info(login_proxy_get_event(client->login_proxy), "%s", str_c(str));
 }
 
-void client_proxy_failed(struct client *client, bool send_line)
+static void client_proxy_failed(struct client *client)
 {
-	if (send_line) {
-		client_proxy_error(client, PROXY_FAILURE_MSG);
-	}
-
-	if (client->proxy_sasl_client != NULL)
-		dsasl_client_free(&client->proxy_sasl_client);
 	login_proxy_free(&client->login_proxy);
 	proxy_free_password(client);
 	i_free_and_null(client->proxy_user);
 	i_free_and_null(client->proxy_master_user);
 
-	/* call this last - it may destroy the client */
 	client_auth_failed(client);
 }
 
@@ -328,43 +335,27 @@ static void proxy_input(struct client *client)
 	const char *line;
 	unsigned int duration;
 
-	if (client->login_proxy == NULL) {
-		/* we're just freeing the proxy */
-		return;
-	}
-
 	input = login_proxy_get_istream(client->login_proxy);
-	if (input == NULL) {
-		if (client->destroyed) {
-			/* we came here from client_destroy() */
-			return;
-		}
-
-		/* failed for some reason, probably server disconnected */
-		client_proxy_failed(client, TRUE);
-		return;
-	}
-
-	i_assert(!client->destroyed);
-
 	switch (i_stream_read(input)) {
 	case -2:
-		e_error(login_proxy_get_event(client->login_proxy),
-			"Disconnected by proxy: "
-			"Received too long line from remote server");
-		client_proxy_failed(client, TRUE);
+		login_proxy_failed(client->login_proxy,
+				   login_proxy_get_event(client->login_proxy),
+				   LOGIN_PROXY_FAILURE_TYPE_PROTOCOL,
+				   "Too long input line");
 		return;
 	case -1:
 		line = i_stream_next_line(input);
 		duration = ioloop_time - client->created;
-		e_error(login_proxy_get_event(client->login_proxy),
+		const char *reason = t_strdup_printf(
 			"Disconnected by server: %s "
 			"(state=%s, duration=%us)%s",
 			io_stream_get_disconnect_reason(input, NULL),
 			client_proxy_get_state(client), duration,
 			line == NULL ? "" : t_strdup_printf(
 				" - BUG: line not read: %s", line));
-		client_proxy_failed(client, TRUE);
+		login_proxy_failed(client->login_proxy,
+				   login_proxy_get_event(client->login_proxy),
+				   LOGIN_PROXY_FAILURE_TYPE_CONNECT, reason);
 		return;
 	}
 
@@ -377,6 +368,34 @@ static void proxy_input(struct client *client)
 	}
 	o_stream_uncork(output);
 	o_stream_unref(&output);
+}
+
+void client_common_proxy_failed(struct client *client,
+				enum login_proxy_failure_type type,
+				const char *reason ATTR_UNUSED,
+				bool reconnecting)
+{
+	if (client->proxy_sasl_client != NULL)
+		dsasl_client_free(&client->proxy_sasl_client);
+	if (reconnecting) {
+		client->v.proxy_reset(client);
+		return;
+	}
+
+	switch (type) {
+	case LOGIN_PROXY_FAILURE_TYPE_CONNECT:
+	case LOGIN_PROXY_FAILURE_TYPE_INTERNAL:
+	case LOGIN_PROXY_FAILURE_TYPE_INTERNAL_CONFIG:
+	case LOGIN_PROXY_FAILURE_TYPE_REMOTE:
+	case LOGIN_PROXY_FAILURE_TYPE_REMOTE_CONFIG:
+	case LOGIN_PROXY_FAILURE_TYPE_PROTOCOL:
+		break;
+	case LOGIN_PROXY_FAILURE_TYPE_AUTH:
+	case LOGIN_PROXY_FAILURE_TYPE_AUTH_TEMPFAIL:
+		client->proxy_auth_failed = TRUE;
+		break;
+	}
+	client_proxy_failed(client);
 }
 
 static bool
@@ -446,7 +465,9 @@ static int proxy_start(struct client *client,
 		"proxy(%s): ", client->virtual_user));
 
 	if (!proxy_check_start(client, event, reply, &sasl_mech, &ip)) {
-		client_proxy_error(client, PROXY_FAILURE_MSG);
+		client->v.proxy_failed(client,
+			LOGIN_PROXY_FAILURE_TYPE_INTERNAL,
+			LOGIN_PROXY_FAILURE_MSG, FALSE);
 		event_unref(&event);
 		return -1;
 	}
@@ -466,18 +487,20 @@ static int proxy_start(struct client *client,
 	proxy_set.port = reply->port;
 	proxy_set.connect_timeout_msecs = reply->proxy_timeout_msecs;
 	if (proxy_set.connect_timeout_msecs == 0)
-		proxy_set.connect_timeout_msecs = PROXY_DEFAULT_TIMEOUT_MSECS;
+		proxy_set.connect_timeout_msecs = client->set->login_proxy_timeout;
 	proxy_set.notify_refresh_secs = reply->proxy_refresh_secs;
 	proxy_set.ssl_flags = reply->ssl_flags;
+	proxy_set.host_immediate_failure_after_secs =
+		reply->proxy_host_immediate_failure_after_secs;
 
 	/* Include destination ip:port also in the log prefix */
 	event_set_append_log_prefix(event, t_strdup_printf(
 		"proxy(%s,%s:%u): ", client->virtual_user,
 		net_ip2addr(&proxy_set.ip), proxy_set.port));
 
-	if (login_proxy_new(client, event, &proxy_set, proxy_input) < 0) {
+	if (login_proxy_new(client, event, &proxy_set, proxy_input,
+			    client->v.proxy_failed) < 0) {
 		event_unref(&event);
-		client_proxy_error(client, PROXY_FAILURE_MSG);
 		return -1;
 	}
 	event_unref(&event);
