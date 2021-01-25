@@ -1,4 +1,4 @@
-dovecot (1:2.3.13+dfsg1-1) UNRELEASED; urgency=medium
+dovecot (1:2.3.13+dfsg1-1) unstable; urgency=medium
 
   [ Christian Göttsche ]
   * [6829237] New upstream version 2.3.13 (Closes: #979363)
@@ -20,7 +20,7 @@ dovecot (1:2.3.13+dfsg1-1) UNRELEASED; urgency=medium
   [ Helmut Grohne ]
   * [e5f9fcb] d/patches: improve cross-compile support (Closes: #979370)
 
- -- Christian Göttsche <cgzones@googlemail.com>  Tue, 12 Jan 2021 17:43:59 +0100
+ -- Noah Meyerhans <noahm@debian.org>  Mon, 25 Jan 2021 15:38:17 -0800
 
 dovecot (1:2.3.11.3+dfsg1-2) unstable; urgency=medium
 
