@@ -56,3 +56,4 @@ CVE-2020-24386/0001-imap-Escape-tag-when-sending-it-to-imap-hibernate-pr.patch
 CVE-2020-24386/0002-imap-Add-unit-test-for-imap-client-hibernate.patch
 CVE-2020-25275/0001-lib-mail-message-parser-Fix-assert-crash-when-enforc.patch
 CVE-2020-25275/0002-lib-imap-Don-t-generate-invalid-BODYSTRUCTURE-when-r.patch
+bug970386.patch
