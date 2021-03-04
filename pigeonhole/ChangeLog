@@ -1,16 +1,66 @@
-2020-12-12 19:47:56 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (cdd19fe3)
+2021-03-02 10:56:54 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (1b5c82b2)
+
+    NEWS: Update news for 0.5.14
+
+
+M	NEWS
+
+2021-02-17 13:30:46 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (151fd340)
+
+    NEWS: Add news for 0.5.14.rc1
+
+
+M	NEWS
+
+2021-02-04 11:26:59 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (d9903714)
+
+    configure: Update version to 0.5.14
+
+
+M	configure.ac
+
+2021-01-13 18:05:15 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (821a9516)
+
+    plugins: imap-filter-sieve: cmd-filter-sieve - Avoid using
+    imap_arg_as_nstring() in cmd_filter_sieve_script_parse_value_arg()
+
+    The argument can only be a quoted string here, so imap_arg_as_string() will
+    suffice.
+
+M	src/plugins/imap-filter-sieve/cmd-filter-sieve.c
+
+2021-01-13 17:58:16 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (bba3a530)
+
+    plugins: imap-filter-sieve: cmd-filter-sieve - Do not allow NIL as script
+    name argument
+
+    This was not supposed to be accepted and led to unexpected behavior:
+
+    - FILTER SIEVE PERSONAL NIL was handled as FILTER SIEVE DELIVERY,
+    - FILTER SIEVE GLOBAL NIL caused an internal error.
+
+M	src/plugins/imap-filter-sieve/cmd-filter-sieve.c
+
+2021-01-13 18:12:38 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (58d792cd)
+
+    plugins: imap-fitler-sieve: Reformat cmd-filter-sieve.c
+
+
+M	src/plugins/imap-filter-sieve/cmd-filter-sieve.c
+
+2020-12-12 19:47:56 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (7a9a3219)
 
     NEWS: Add news for 0.5.13
 
 
 M	NEWS
 
-2020-11-05 16:03:26 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (f148e171)
+2020-11-10 11:46:47 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (8e405770)
 
-    configure: Update version to 0.5.13
+    m4: dovecot.m4 - Sync with core
 
 
-M	configure.ac
+M	m4/dovecot.m4
 
 2020-06-18 00:28:02 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (a1c1ca78)
 

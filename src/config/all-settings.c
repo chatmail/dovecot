@@ -297,7 +297,11 @@ enum service_type {
 	SERVICE_TYPE_ANVIL,
 	SERVICE_TYPE_CONFIG,
 	SERVICE_TYPE_LOGIN,
-	SERVICE_TYPE_STARTUP
+	SERVICE_TYPE_STARTUP,
+	/* Worker processes are intentionally limited to their process_limit,
+	   and they can regularly reach it. There shouldn't be unnecessary
+	   warnings about temporarily reaching the limit. */
+	SERVICE_TYPE_WORKER,
 };
 /* </settings checks> */
 struct file_listener_settings {
@@ -389,6 +393,8 @@ struct master_service_ssl_settings {
 /* ../../src/lib-master/master-service-settings.h */
 extern const struct setting_parser_info master_service_setting_parser_info;
 struct master_service_settings {
+	/* NOTE: log process won't see any new settings unless they're
+	   explicitly sent via environment variables by master process. */
 	const char *base_dir;
 	const char *state_dir;
 	const char *instance_name;
@@ -1465,7 +1471,6 @@ static const struct setting_parser_info mdbox_setting_parser_info = {
 	.parent_offset = SIZE_MAX,
 	.parent = &mail_user_setting_parser_info
 };
-/* ../../src/lib-settings/settings.c */
 /* ../../src/lib-lda/lda-settings.c */
 #undef DEF
 #undef DEFLIST
@@ -3534,6 +3539,8 @@ static bool master_settings_parse_type(struct service_settings *set,
 		set->parsed_type = SERVICE_TYPE_LOGIN;
 	else if (strcmp(set->type, "startup") == 0)
 		set->parsed_type = SERVICE_TYPE_STARTUP;
+	else if (strcmp(set->type, "worker") == 0)
+		set->parsed_type = SERVICE_TYPE_WORKER;
 	else {
 		*error_r = t_strconcat("Unknown service type: ",
 				       set->type, NULL);
@@ -4371,7 +4378,7 @@ static buffer_t indexer_worker_unix_listeners_buf = {
 struct service_settings indexer_worker_service_settings = {
 	.name = "indexer-worker",
 	.protocol = "",
-	.type = "",
+	.type = "worker",
 	.executable = "indexer-worker",
 	.user = "",
 	.group = "",
@@ -5619,7 +5626,7 @@ struct service_settings auth_service_settings = {
 struct service_settings auth_worker_service_settings = {
 	.name = "auth-worker",
 	.protocol = "",
-	.type = "",
+	.type = "worker",
 	.executable = "auth -w",
 	.user = "",
 	.group = "",

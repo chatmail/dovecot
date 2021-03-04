@@ -90,7 +90,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-noinst_PROGRAMS = $(am__EXEEXT_1)
+@USE_FUZZER_TRUE@am__append_1 = fuzz-message-parser
+noinst_PROGRAMS = $(am__EXEEXT_2) $(am__EXEEXT_3)
 subdir = src/lib-mail
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -170,24 +171,36 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__EXEEXT_1 = test-istream-dot$(EXEEXT) \
+@USE_FUZZER_TRUE@am__EXEEXT_1 = fuzz-message-parser$(EXEEXT)
+am__EXEEXT_2 = $(am__EXEEXT_1)
+am__EXEEXT_3 = test-istream-dot$(EXEEXT) \
 	test-istream-attachment$(EXEEXT) \
 	test-istream-binary-converter$(EXEEXT) \
 	test-istream-header-filter$(EXEEXT) \
 	test-istream-qp-decoder$(EXEEXT) \
 	test-istream-qp-encoder$(EXEEXT) test-mail-html2text$(EXEEXT) \
-	test-mbox-from$(EXEEXT) test-message-address$(EXEEXT) \
-	test-message-date$(EXEEXT) test-message-decoder$(EXEEXT) \
+	test-mail-user-hash$(EXEEXT) test-mbox-from$(EXEEXT) \
+	test-message-address$(EXEEXT) test-message-date$(EXEEXT) \
+	test-message-decoder$(EXEEXT) \
 	test-message-header-decode$(EXEEXT) \
 	test-message-header-encode$(EXEEXT) \
 	test-message-header-hash$(EXEEXT) \
 	test-message-header-parser$(EXEEXT) test-message-id$(EXEEXT) \
 	test-message-parser$(EXEEXT) test-message-part$(EXEEXT) \
-	test-message-search$(EXEEXT) test-message-snippet$(EXEEXT) \
-	test-ostream-dot$(EXEEXT) test-qp-decoder$(EXEEXT) \
-	test-qp-encoder$(EXEEXT) test-quoted-printable$(EXEEXT) \
-	test-rfc2231-parser$(EXEEXT) test-rfc822-parser$(EXEEXT)
+	test-message-part-serialize$(EXEEXT) \
+	test-message-search$(EXEEXT) test-message-size$(EXEEXT) \
+	test-message-snippet$(EXEEXT) test-ostream-dot$(EXEEXT) \
+	test-qp-decoder$(EXEEXT) test-qp-encoder$(EXEEXT) \
+	test-quoted-printable$(EXEEXT) test-rfc2231-parser$(EXEEXT) \
+	test-rfc822-parser$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
+am__fuzz_message_parser_SOURCES_DIST = fuzz-message-parser.c
+@USE_FUZZER_TRUE@am_fuzz_message_parser_OBJECTS = fuzz_message_parser-fuzz-message-parser.$(OBJEXT)
+fuzz_message_parser_OBJECTS = $(am_fuzz_message_parser_OBJECTS)
+fuzz_message_parser_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
+	$(AM_CXXFLAGS) $(CXXFLAGS) $(fuzz_message_parser_LDFLAGS) \
+	$(LDFLAGS) -o $@
 am_test_istream_attachment_OBJECTS =  \
 	test-istream-attachment.$(OBJEXT)
 test_istream_attachment_OBJECTS =  \
@@ -212,6 +225,8 @@ test_istream_qp_encoder_OBJECTS =  \
 	$(am_test_istream_qp_encoder_OBJECTS)
 am_test_mail_html2text_OBJECTS = test-mail-html2text.$(OBJEXT)
 test_mail_html2text_OBJECTS = $(am_test_mail_html2text_OBJECTS)
+am_test_mail_user_hash_OBJECTS = test-mail-user-hash.$(OBJEXT)
+test_mail_user_hash_OBJECTS = $(am_test_mail_user_hash_OBJECTS)
 am_test_mbox_from_OBJECTS = test-mbox-from.$(OBJEXT)
 test_mbox_from_OBJECTS = $(am_test_mbox_from_OBJECTS)
 am_test_message_address_OBJECTS = test-message-address.$(OBJEXT)
@@ -242,8 +257,14 @@ am_test_message_parser_OBJECTS = test-message-parser.$(OBJEXT)
 test_message_parser_OBJECTS = $(am_test_message_parser_OBJECTS)
 am_test_message_part_OBJECTS = test-message-part.$(OBJEXT)
 test_message_part_OBJECTS = $(am_test_message_part_OBJECTS)
+am_test_message_part_serialize_OBJECTS =  \
+	test-message-part-serialize.$(OBJEXT)
+test_message_part_serialize_OBJECTS =  \
+	$(am_test_message_part_serialize_OBJECTS)
 am_test_message_search_OBJECTS = test-message-search.$(OBJEXT)
 test_message_search_OBJECTS = $(am_test_message_search_OBJECTS)
+am_test_message_size_OBJECTS = test-message-size.$(OBJEXT)
+test_message_size_OBJECTS = $(am_test_message_size_OBJECTS)
 am_test_message_snippet_OBJECTS = test-message-snippet.$(OBJEXT)
 test_message_snippet_OBJECTS = $(am_test_message_snippet_OBJECTS)
 am_test_ostream_dot_OBJECTS = test-ostream-dot.$(OBJEXT)
@@ -292,41 +313,66 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libmail_la_SOURCES) $(test_istream_attachment_SOURCES) \
-	$(test_istream_binary_converter_SOURCES) \
-	$(test_istream_dot_SOURCES) \
-	$(test_istream_header_filter_SOURCES) \
-	$(test_istream_qp_decoder_SOURCES) \
-	$(test_istream_qp_encoder_SOURCES) \
-	$(test_mail_html2text_SOURCES) $(test_mbox_from_SOURCES) \
-	$(test_message_address_SOURCES) $(test_message_date_SOURCES) \
-	$(test_message_decoder_SOURCES) \
-	$(test_message_header_decode_SOURCES) \
-	$(test_message_header_encode_SOURCES) \
-	$(test_message_header_hash_SOURCES) \
-	$(test_message_header_parser_SOURCES) \
-	$(test_message_id_SOURCES) $(test_message_parser_SOURCES) \
-	$(test_message_part_SOURCES) $(test_message_search_SOURCES) \
-	$(test_message_snippet_SOURCES) $(test_ostream_dot_SOURCES) \
-	$(test_qp_decoder_SOURCES) $(test_qp_encoder_SOURCES) \
-	$(test_quoted_printable_SOURCES) \
-	$(test_rfc2231_parser_SOURCES) $(test_rfc822_parser_SOURCES)
-DIST_SOURCES = $(libmail_la_SOURCES) \
+CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CXXFLAGS) $(CXXFLAGS)
+AM_V_CXX = $(am__v_CXX_@AM_V@)
+am__v_CXX_ = $(am__v_CXX_@AM_DEFAULT_V@)
+am__v_CXX_0 = @echo "  CXX     " $@;
+am__v_CXX_1 = 
+CXXLD = $(CXX)
+CXXLINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
+am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
+am__v_CXXLD_0 = @echo "  CXXLD   " $@;
+am__v_CXXLD_1 = 
+SOURCES = $(libmail_la_SOURCES) $(fuzz_message_parser_SOURCES) \
+	$(nodist_EXTRA_fuzz_message_parser_SOURCES) \
 	$(test_istream_attachment_SOURCES) \
 	$(test_istream_binary_converter_SOURCES) \
 	$(test_istream_dot_SOURCES) \
 	$(test_istream_header_filter_SOURCES) \
 	$(test_istream_qp_decoder_SOURCES) \
 	$(test_istream_qp_encoder_SOURCES) \
-	$(test_mail_html2text_SOURCES) $(test_mbox_from_SOURCES) \
-	$(test_message_address_SOURCES) $(test_message_date_SOURCES) \
-	$(test_message_decoder_SOURCES) \
+	$(test_mail_html2text_SOURCES) $(test_mail_user_hash_SOURCES) \
+	$(test_mbox_from_SOURCES) $(test_message_address_SOURCES) \
+	$(test_message_date_SOURCES) $(test_message_decoder_SOURCES) \
 	$(test_message_header_decode_SOURCES) \
 	$(test_message_header_encode_SOURCES) \
 	$(test_message_header_hash_SOURCES) \
 	$(test_message_header_parser_SOURCES) \
 	$(test_message_id_SOURCES) $(test_message_parser_SOURCES) \
-	$(test_message_part_SOURCES) $(test_message_search_SOURCES) \
+	$(test_message_part_SOURCES) \
+	$(test_message_part_serialize_SOURCES) \
+	$(test_message_search_SOURCES) $(test_message_size_SOURCES) \
+	$(test_message_snippet_SOURCES) $(test_ostream_dot_SOURCES) \
+	$(test_qp_decoder_SOURCES) $(test_qp_encoder_SOURCES) \
+	$(test_quoted_printable_SOURCES) \
+	$(test_rfc2231_parser_SOURCES) $(test_rfc822_parser_SOURCES)
+DIST_SOURCES = $(libmail_la_SOURCES) \
+	$(am__fuzz_message_parser_SOURCES_DIST) \
+	$(test_istream_attachment_SOURCES) \
+	$(test_istream_binary_converter_SOURCES) \
+	$(test_istream_dot_SOURCES) \
+	$(test_istream_header_filter_SOURCES) \
+	$(test_istream_qp_decoder_SOURCES) \
+	$(test_istream_qp_encoder_SOURCES) \
+	$(test_mail_html2text_SOURCES) $(test_mail_user_hash_SOURCES) \
+	$(test_mbox_from_SOURCES) $(test_message_address_SOURCES) \
+	$(test_message_date_SOURCES) $(test_message_decoder_SOURCES) \
+	$(test_message_header_decode_SOURCES) \
+	$(test_message_header_encode_SOURCES) \
+	$(test_message_header_hash_SOURCES) \
+	$(test_message_header_parser_SOURCES) \
+	$(test_message_id_SOURCES) $(test_message_parser_SOURCES) \
+	$(test_message_part_SOURCES) \
+	$(test_message_part_serialize_SOURCES) \
+	$(test_message_search_SOURCES) $(test_message_size_SOURCES) \
 	$(test_message_snippet_SOURCES) $(test_ostream_dot_SOURCES) \
 	$(test_qp_decoder_SOURCES) $(test_qp_encoder_SOURCES) \
 	$(test_quoted_printable_SOURCES) \
@@ -432,6 +478,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -689,6 +737,7 @@ test_programs = \
 	test-istream-qp-decoder \
 	test-istream-qp-encoder \
 	test-mail-html2text \
+	test-mail-user-hash \
 	test-mbox-from \
 	test-message-address \
 	test-message-date \
@@ -700,7 +749,9 @@ test_programs = \
 	test-message-id \
 	test-message-parser \
 	test-message-part \
+	test-message-part-serialize \
 	test-message-search \
+	test-message-size \
 	test-message-snippet \
 	test-ostream-dot \
 	test-qp-decoder \
@@ -709,8 +760,16 @@ test_programs = \
 	test-rfc2231-parser \
 	test-rfc822-parser
 
+fuzz_programs = $(am__append_1)
+@USE_FUZZER_TRUE@nodist_EXTRA_fuzz_message_parser_SOURCES = force-cxx-linking.cxx
+@USE_FUZZER_TRUE@fuzz_message_parser_CPPFLAGS = $(FUZZER_CPPFLAGS)
+@USE_FUZZER_TRUE@fuzz_message_parser_LDFLAGS = $(FUZZER_LDFLAGS)
+@USE_FUZZER_TRUE@fuzz_message_parser_SOURCES = fuzz-message-parser.c
+@USE_FUZZER_TRUE@fuzz_message_parser_LDADD = $(test_libs)
+@USE_FUZZER_TRUE@fuzz_message_parser_DEPENDENCIES = $(test_deps)
 test_libs = \
 	$(noinst_LTLIBRARIES) \
+	../lib-charset/libcharset.la \
 	../lib-test/libtest.la \
 	../lib/liblib.la
 
@@ -769,6 +828,9 @@ test_message_part_DEPENDENCIES = $(test_deps)
 test_message_search_SOURCES = test-message-search.c
 test_message_search_LDADD = $(test_libs) ../lib-charset/libcharset.la
 test_message_search_DEPENDENCIES = $(test_deps) ../lib-charset/libcharset.la
+test_message_size_SOURCES = test-message-size.c
+test_message_size_LDADD = $(test_libs)
+test_message_size_DEPENDENCIES = $(test_deps)
 test_message_snippet_SOURCES = test-message-snippet.c
 test_message_snippet_LDADD = $(test_message_decoder_LDADD)
 test_message_snippet_DEPENDENCIES = $(test_deps)
@@ -793,10 +855,16 @@ test_rfc2231_parser_DEPENDENCIES = $(test_deps)
 test_rfc822_parser_SOURCES = test-rfc822-parser.c
 test_rfc822_parser_LDADD = $(test_libs)
 test_rfc822_parser_DEPENDENCIES = $(test_deps)
+test_mail_user_hash_SOURCES = test-mail-user-hash.c
+test_mail_user_hash_LDADD = $(test_libs)
+test_mail_user_hash_DEPENDENCIES = $(test_deps)
+test_message_part_serialize_SOURCES = test-message-part-serialize.c
+test_message_part_serialize_LDADD = $(test_libs)
+test_message_part_serialize_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .lo .o .obj
+.SUFFIXES: .c .cxx .lo .o .obj
 $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -850,6 +918,10 @@ clean-noinstPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+fuzz-message-parser$(EXEEXT): $(fuzz_message_parser_OBJECTS) $(fuzz_message_parser_DEPENDENCIES) $(EXTRA_fuzz_message_parser_DEPENDENCIES) 
+	@rm -f fuzz-message-parser$(EXEEXT)
+	$(AM_V_CXXLD)$(fuzz_message_parser_LINK) $(fuzz_message_parser_OBJECTS) $(fuzz_message_parser_LDADD) $(LIBS)
+
 test-istream-attachment$(EXEEXT): $(test_istream_attachment_OBJECTS) $(test_istream_attachment_DEPENDENCIES) $(EXTRA_test_istream_attachment_DEPENDENCIES) 
 	@rm -f test-istream-attachment$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_istream_attachment_OBJECTS) $(test_istream_attachment_LDADD) $(LIBS)
@@ -877,6 +949,10 @@ test-istream-qp-encoder$(EXEEXT): $(test_istream_qp_encoder_OBJECTS) $(test_istr
 test-mail-html2text$(EXEEXT): $(test_mail_html2text_OBJECTS) $(test_mail_html2text_DEPENDENCIES) $(EXTRA_test_mail_html2text_DEPENDENCIES) 
 	@rm -f test-mail-html2text$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_mail_html2text_OBJECTS) $(test_mail_html2text_LDADD) $(LIBS)
+
+test-mail-user-hash$(EXEEXT): $(test_mail_user_hash_OBJECTS) $(test_mail_user_hash_DEPENDENCIES) $(EXTRA_test_mail_user_hash_DEPENDENCIES) 
+	@rm -f test-mail-user-hash$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_mail_user_hash_OBJECTS) $(test_mail_user_hash_LDADD) $(LIBS)
 
 test-mbox-from$(EXEEXT): $(test_mbox_from_OBJECTS) $(test_mbox_from_DEPENDENCIES) $(EXTRA_test_mbox_from_DEPENDENCIES) 
 	@rm -f test-mbox-from$(EXEEXT)
@@ -922,9 +998,17 @@ test-message-part$(EXEEXT): $(test_message_part_OBJECTS) $(test_message_part_DEP
 	@rm -f test-message-part$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_message_part_OBJECTS) $(test_message_part_LDADD) $(LIBS)
 
+test-message-part-serialize$(EXEEXT): $(test_message_part_serialize_OBJECTS) $(test_message_part_serialize_DEPENDENCIES) $(EXTRA_test_message_part_serialize_DEPENDENCIES) 
+	@rm -f test-message-part-serialize$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_message_part_serialize_OBJECTS) $(test_message_part_serialize_LDADD) $(LIBS)
+
 test-message-search$(EXEEXT): $(test_message_search_OBJECTS) $(test_message_search_DEPENDENCIES) $(EXTRA_test_message_search_DEPENDENCIES) 
 	@rm -f test-message-search$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_message_search_OBJECTS) $(test_message_search_LDADD) $(LIBS)
+
+test-message-size$(EXEEXT): $(test_message_size_OBJECTS) $(test_message_size_DEPENDENCIES) $(EXTRA_test_message_size_DEPENDENCIES) 
+	@rm -f test-message-size$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_message_size_OBJECTS) $(test_message_size_LDADD) $(LIBS)
 
 test-message-snippet$(EXEEXT): $(test_message_snippet_OBJECTS) $(test_message_snippet_DEPENDENCIES) $(EXTRA_test_message_snippet_DEPENDENCIES) 
 	@rm -f test-message-snippet$(EXEEXT)
@@ -960,6 +1044,8 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fuzz_message_parser-force-cxx-linking.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fuzz_message_parser-fuzz-message-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-attachment-connector.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-attachment-extractor.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-binary-converter.Plo@am__quote@
@@ -1001,6 +1087,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-istream-qp-decoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-istream-qp-encoder.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-html2text.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-user-hash.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mbox-from.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-address.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-date.Po@am__quote@
@@ -1011,8 +1098,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-header-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-id.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-parser.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-part-serialize.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-part.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-search.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-size.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-message-snippet.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-ostream-dot.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-qp-decoder.Po@am__quote@
@@ -1041,6 +1130,55 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+fuzz_message_parser-fuzz-message-parser.o: fuzz-message-parser.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_message_parser_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT fuzz_message_parser-fuzz-message-parser.o -MD -MP -MF $(DEPDIR)/fuzz_message_parser-fuzz-message-parser.Tpo -c -o fuzz_message_parser-fuzz-message-parser.o `test -f 'fuzz-message-parser.c' || echo '$(srcdir)/'`fuzz-message-parser.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/fuzz_message_parser-fuzz-message-parser.Tpo $(DEPDIR)/fuzz_message_parser-fuzz-message-parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='fuzz-message-parser.c' object='fuzz_message_parser-fuzz-message-parser.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_message_parser_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o fuzz_message_parser-fuzz-message-parser.o `test -f 'fuzz-message-parser.c' || echo '$(srcdir)/'`fuzz-message-parser.c
+
+fuzz_message_parser-fuzz-message-parser.obj: fuzz-message-parser.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_message_parser_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT fuzz_message_parser-fuzz-message-parser.obj -MD -MP -MF $(DEPDIR)/fuzz_message_parser-fuzz-message-parser.Tpo -c -o fuzz_message_parser-fuzz-message-parser.obj `if test -f 'fuzz-message-parser.c'; then $(CYGPATH_W) 'fuzz-message-parser.c'; else $(CYGPATH_W) '$(srcdir)/fuzz-message-parser.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/fuzz_message_parser-fuzz-message-parser.Tpo $(DEPDIR)/fuzz_message_parser-fuzz-message-parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='fuzz-message-parser.c' object='fuzz_message_parser-fuzz-message-parser.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_message_parser_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o fuzz_message_parser-fuzz-message-parser.obj `if test -f 'fuzz-message-parser.c'; then $(CYGPATH_W) 'fuzz-message-parser.c'; else $(CYGPATH_W) '$(srcdir)/fuzz-message-parser.c'; fi`
+
+.cxx.o:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
+
+.cxx.obj:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.cxx.lo:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
+
+fuzz_message_parser-force-cxx-linking.o: force-cxx-linking.cxx
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_message_parser_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT fuzz_message_parser-force-cxx-linking.o -MD -MP -MF $(DEPDIR)/fuzz_message_parser-force-cxx-linking.Tpo -c -o fuzz_message_parser-force-cxx-linking.o `test -f 'force-cxx-linking.cxx' || echo '$(srcdir)/'`force-cxx-linking.cxx
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/fuzz_message_parser-force-cxx-linking.Tpo $(DEPDIR)/fuzz_message_parser-force-cxx-linking.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='force-cxx-linking.cxx' object='fuzz_message_parser-force-cxx-linking.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_message_parser_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o fuzz_message_parser-force-cxx-linking.o `test -f 'force-cxx-linking.cxx' || echo '$(srcdir)/'`force-cxx-linking.cxx
+
+fuzz_message_parser-force-cxx-linking.obj: force-cxx-linking.cxx
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_message_parser_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT fuzz_message_parser-force-cxx-linking.obj -MD -MP -MF $(DEPDIR)/fuzz_message_parser-force-cxx-linking.Tpo -c -o fuzz_message_parser-force-cxx-linking.obj `if test -f 'force-cxx-linking.cxx'; then $(CYGPATH_W) 'force-cxx-linking.cxx'; else $(CYGPATH_W) '$(srcdir)/force-cxx-linking.cxx'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/fuzz_message_parser-force-cxx-linking.Tpo $(DEPDIR)/fuzz_message_parser-force-cxx-linking.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='force-cxx-linking.cxx' object='fuzz_message_parser-force-cxx-linking.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_message_parser_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o fuzz_message_parser-force-cxx-linking.obj `if test -f 'force-cxx-linking.cxx'; then $(CYGPATH_W) 'force-cxx-linking.cxx'; else $(CYGPATH_W) '$(srcdir)/force-cxx-linking.cxx'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo

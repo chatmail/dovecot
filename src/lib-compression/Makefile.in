@@ -182,10 +182,10 @@ am__installdirs = "$(DESTDIR)$(pkglibdir)" \
 LTLIBRARIES = $(noinst_LTLIBRARIES) $(pkglib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libcompression_la_DEPENDENCIES = $(am__DEPENDENCIES_1)
-am_libcompression_la_OBJECTS = compression.lo istream-lzma.lo \
-	istream-lz4.lo istream-zlib.lo istream-bzlib.lo \
-	istream-zstd.lo ostream-lzma.lo ostream-lz4.lo ostream-zlib.lo \
-	ostream-bzlib.lo ostream-zstd.lo
+am_libcompression_la_OBJECTS = compression.lo istream-decompress.lo \
+	istream-lzma.lo istream-lz4.lo istream-zlib.lo \
+	istream-bzlib.lo istream-zstd.lo ostream-lz4.lo \
+	ostream-zlib.lo ostream-bzlib.lo ostream-zstd.lo
 libcompression_la_OBJECTS = $(am_libcompression_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -317,6 +317,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -490,12 +492,12 @@ AM_CPPFLAGS = \
 
 libcompression_la_SOURCES = \
 	compression.c \
+	istream-decompress.c \
 	istream-lzma.c \
 	istream-lz4.c \
 	istream-zlib.c \
 	istream-bzlib.c \
 	istream-zstd.c \
-	ostream-lzma.c \
 	ostream-lz4.c \
 	ostream-zlib.c \
 	ostream-bzlib.c \
@@ -646,13 +648,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bench-compression.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/compression.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-bzlib.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-decompress.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-lz4.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-lzma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-zlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/istream-zstd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-bzlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-lz4.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-lzma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-zlib.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ostream-zstd.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-compression.Po@am__quote@

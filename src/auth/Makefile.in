@@ -237,8 +237,7 @@ libauthdb_ldap_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 @LDAP_PLUGIN_TRUE@am_libauthdb_ldap_la_rpath = -rpath \
 @LDAP_PLUGIN_TRUE@	$(auth_moduledir)
 @AUTH_LUA_PLUGIN_TRUE@libauthdb_lua_la_DEPENDENCIES =  \
-@AUTH_LUA_PLUGIN_TRUE@	../lib-lua/libdovecot-lua.la \
-@AUTH_LUA_PLUGIN_TRUE@	$(am__DEPENDENCIES_1)
+@AUTH_LUA_PLUGIN_TRUE@	$(LIBDOVECOT_LUA)
 am__libauthdb_lua_la_SOURCES_DIST = db-lua.c passdb-lua.c userdb-lua.c
 am__objects_4 = libauthdb_lua_la-db-lua.lo \
 	libauthdb_lua_la-passdb-lua.lo libauthdb_lua_la-userdb-lua.lo
@@ -287,8 +286,13 @@ am__EXEEXT_1 = test-libpassword$(EXEEXT) test-auth-cache$(EXEEXT) \
 PROGRAMS = $(noinst_PROGRAMS) $(pkglibexec_PROGRAMS)
 am_auth_OBJECTS = auth-main.$(OBJEXT)
 auth_OBJECTS = $(am_auth_OBJECTS)
-am__DEPENDENCIES_2 = libauth.la libstats_auth.la libpassword.la \
-	../lib-otp/libotp.la $(LIBDOVECOT_LUA) $(am__DEPENDENCIES_1)
+@AUTH_LUA_PLUGIN_FALSE@@HAVE_LUA_TRUE@am__DEPENDENCIES_2 =  \
+@AUTH_LUA_PLUGIN_FALSE@@HAVE_LUA_TRUE@	$(LIBDOVECOT_LUA)
+am__DEPENDENCIES_3 = libauth.la libstats_auth.la libpassword.la \
+	../lib-otp/libotp.la $(am__DEPENDENCIES_2) \
+	$(am__DEPENDENCIES_1)
+@AUTH_LUA_PLUGIN_FALSE@@HAVE_LUA_TRUE@am__DEPENDENCIES_4 =  \
+@AUTH_LUA_PLUGIN_FALSE@@HAVE_LUA_TRUE@	$(am__DEPENDENCIES_1)
 auth_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(auth_LDFLAGS) $(LDFLAGS) -o $@
@@ -431,6 +435,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -602,6 +608,12 @@ noinst_LTLIBRARIES = libpassword.la libauth.la
 auth_moduledir = $(moduledir)/auth
 @GSSAPI_PLUGIN_TRUE@GSSAPI_LIB = libmech_gssapi.la
 @LDAP_PLUGIN_TRUE@LDAP_LIB = libauthdb_ldap.la
+@HAVE_LUA_TRUE@LIBDOVECOT_LUA = ../lib-lua/libdovecot-lua.la
+@AUTH_LUA_PLUGIN_FALSE@@HAVE_LUA_TRUE@LUA_LIB = # nothing, not building a plugin
+@AUTH_LUA_PLUGIN_TRUE@@HAVE_LUA_TRUE@LUA_LIB = libauthdb_lua.la
+@AUTH_LUA_PLUGIN_FALSE@@HAVE_LUA_TRUE@AUTH_LUA_LIBS = $(LIBDOVECOT_LUA)
+@AUTH_LUA_PLUGIN_TRUE@@HAVE_LUA_TRUE@AUTH_LUA_LIBS = # nothing, lua db is a plugin
+@AUTH_LUA_PLUGIN_FALSE@@HAVE_LUA_TRUE@AUTH_LUA_LDADD = $(LUA_LIBS)
 auth_module_LTLIBRARIES = \
 	$(GSSAPI_LIB) \
 	$(LDAP_LIB) \
@@ -644,18 +656,16 @@ libpassword_la_SOURCES = \
 	password-scheme-sodium.c
 
 libpassword_la_CFLAGS = $(AM_CPPFLAGS) $(LIBSODIUM_CFLAGS)
-@AUTH_LUA_PLUGIN_TRUE@@HAVE_LUA_TRUE@LUA_LIB = libauthdb_lua.la
-@AUTH_LUA_PLUGIN_FALSE@@HAVE_LUA_TRUE@LIBDOVECOT_LUA = ../lib-lua/libdovecot-lua.la
 auth_libs = \
 	libauth.la \
 	libstats_auth.la \
 	libpassword.la \
 	../lib-otp/libotp.la \
-	$(LIBDOVECOT_LUA) \
+	$(AUTH_LUA_LIBS) \
 	$(LIBDOVECOT_SQL)
 
 auth_CPPFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
-auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS) $(BINARY_LDFLAGS)
+auth_LDADD = $(auth_libs) $(LIBDOVECOT) $(AUTH_LIBS) $(BINARY_LDFLAGS) $(AUTH_LUA_LDADD)
 auth_DEPENDENCIES = $(auth_libs) $(LIBDOVECOT_DEPS)
 auth_SOURCES = main.c
 ldap_sources = db-ldap.c passdb-ldap.c userdb-ldap.c
@@ -776,7 +786,7 @@ headers = \
 @LDAP_PLUGIN_TRUE@libauthdb_ldap_la_CPPFLAGS = $(AM_CPPFLAGS) -DPLUGIN_BUILD
 @LDAP_PLUGIN_TRUE@libauthdb_ldap_la_SOURCES = $(ldap_sources)
 @AUTH_LUA_PLUGIN_TRUE@libauthdb_lua_la_LDFLAGS = -module -avoid-version
-@AUTH_LUA_PLUGIN_TRUE@libauthdb_lua_la_LIBADD = ../lib-lua/libdovecot-lua.la $(LUA_LIBS)
+@AUTH_LUA_PLUGIN_TRUE@libauthdb_lua_la_LIBADD = $(LIBDOVECOT_LUA)
 @AUTH_LUA_PLUGIN_TRUE@libauthdb_lua_la_CPPFLAGS = $(AM_CPPFLAGS) -DPLUGIN_BUILD
 @AUTH_LUA_PLUGIN_TRUE@libauthdb_lua_la_SOURCES = $(lua_sources)
 libauthdb_imap_la_LDFLAGS = -module -avoid-version
@@ -840,13 +850,13 @@ test_auth_SOURCES = \
 	test-mock.c \
 	test-main.c
 
-test_auth_LDADD = $(test_libs) $(auth_libs) $(AUTH_LIBS)
+test_auth_LDADD = $(test_libs) $(auth_libs) $(AUTH_LIBS) $(LUA_LIBS)
 test_auth_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 test_mech_SOURCES = \
 	test-mock.c \
 	test-mech.c
 
-test_mech_LDADD = $(test_libs) $(auth_libs) $(AUTH_LIBS)
+test_mech_LDADD = $(test_libs) $(auth_libs) $(AUTH_LIBS) $(LUA_LIBS)
 test_mech_DEPENDENCIES = $(pkglibexec_PROGRAMS) $(test_libs)
 all: all-am
 

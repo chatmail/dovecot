@@ -15,6 +15,7 @@
 @SET_MAKE@
 
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -90,6 +91,7 @@ build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = doveconf$(EXEEXT)
 pkglibexec_PROGRAMS = config$(EXEEXT)
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/config
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -149,22 +151,33 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" \
-	"$(DESTDIR)$(pkgincludedir)"
-PROGRAMS = $(bin_PROGRAMS) $(pkglibexec_PROGRAMS)
-am__objects_1 = all-settings.$(OBJEXT) config-connection.$(OBJEXT) \
-	config-filter.$(OBJEXT) config-parser.$(OBJEXT) \
-	config-request.$(OBJEXT) old-set-parser.$(OBJEXT) \
-	sysinfo-get.$(OBJEXT)
-am_config_OBJECTS = main.$(OBJEXT) $(am__objects_1)
-config_OBJECTS = $(am_config_OBJECTS)
-am__DEPENDENCIES_1 =
+LTLIBRARIES = $(noinst_LTLIBRARIES)
+libconfig_la_LIBADD =
+am__objects_1 = config-connection.lo config-filter.lo config-parser.lo \
+	config-request.lo old-set-parser.lo sysinfo-get.lo
+am_libconfig_la_OBJECTS = $(am__objects_1)
+libconfig_la_OBJECTS = $(am_libconfig_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am_doveconf_OBJECTS = doveconf.$(OBJEXT) $(am__objects_1)
+am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" \
+	"$(DESTDIR)$(pkgincludedir)"
+am__EXEEXT_1 = test-config-parser$(EXEEXT)
+PROGRAMS = $(bin_PROGRAMS) $(noinst_PROGRAMS) $(pkglibexec_PROGRAMS)
+am_config_OBJECTS = all-settings.$(OBJEXT) main.$(OBJEXT)
+config_OBJECTS = $(am_config_OBJECTS)
+am__DEPENDENCIES_1 =
+am_doveconf_OBJECTS = all-settings.$(OBJEXT) doveconf.$(OBJEXT)
 doveconf_OBJECTS = $(am_doveconf_OBJECTS)
+am_test_config_parser_OBJECTS =  \
+	test_config_parser-test-config-parser.$(OBJEXT)
+test_config_parser_OBJECTS = $(am_test_config_parser_OBJECTS)
+am__DEPENDENCIES_2 = $(noinst_LTLIBRARIES) $(am__DEPENDENCIES_1)
+test_config_parser_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(test_config_parser_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -199,8 +212,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(config_SOURCES) $(doveconf_SOURCES)
-DIST_SOURCES = $(config_SOURCES) $(doveconf_SOURCES)
+SOURCES = $(libconfig_la_SOURCES) $(config_SOURCES) \
+	$(doveconf_SOURCES) $(test_config_parser_SOURCES)
+DIST_SOURCES = $(libconfig_la_SOURCES) $(config_SOURCES) \
+	$(doveconf_SOURCES) $(test_config_parser_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -302,6 +317,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -471,6 +488,7 @@ pkgsysconfdir = $(sysconfdir)/dovecot
 exampledir = $(docdir)/example-config
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-dns \
 	-I$(top_srcdir)/src/lib-mail \
 	-I$(top_srcdir)/src/lib-settings \
@@ -484,22 +502,24 @@ AM_CPPFLAGS = \
 	-DSYSCONFDIR=\""$(pkgsysconfdir)"\" \
 	$(BINARY_CFLAGS)
 
+noinst_LTLIBRARIES = libconfig.la
 config_LDADD = \
+	$(noinst_LTLIBRARIES) \
 	$(LIBDOVECOT) \
 	$(RAND_LIBS) \
 	$(BINARY_LDFLAGS) \
 	-lm
 
-config_DEPENDENCIES = $(LIBDOVECOT_DEPS)
+config_DEPENDENCIES = $(LIBDOVECOT_DEPS) $(noinst_LTLIBRARIES)
 doveconf_LDADD = \
+	$(noinst_LTLIBRARIES) \
 	$(LIBDOVECOT) \
 	$(RAND_LIBS) \
 	$(BINARY_LDFLAGS) \
 	-lm
 
-doveconf_DEPENDENCIES = $(LIBDOVECOT_DEPS)
+doveconf_DEPENDENCIES = $(LIBDOVECOT_DEPS) $(noinst_LTLIBRARIES)
 common = \
-	all-settings.c \
 	config-connection.c \
 	config-filter.c \
 	config-parser.c \
@@ -507,13 +527,14 @@ common = \
 	old-set-parser.c \
 	sysinfo-get.c
 
+libconfig_la_SOURCES = $(common)
 config_SOURCES = \
-	main.c \
-	$(common)
+	all-settings.c \
+	main.c
 
 doveconf_SOURCES = \
-	doveconf.c \
-	$(common)
+	all-settings.c \
+	doveconf.c
 
 noinst_HEADERS = \
 	all-settings.h \
@@ -531,6 +552,17 @@ EXTRA_DIST = \
 	config-settings.c \
 	settings-get.pl
 
+test_programs = \
+	test-config-parser
+
+test_libs = \
+	$(noinst_LTLIBRARIES) \
+	$(LIBDOVECOT)
+
+test_config_parser_CFLAGS = $(AM_CPPFLAGS)
+test_config_parser_SOURCES = test-config-parser.c
+test_config_parser_LDADD = $(test_libs)
+test_config_parser_DEPENDENCIES = $(LIBDOVECOT_DEPS) $(noinst_LTLIBRARIES)
 all: all-am
 
 .SUFFIXES:
@@ -564,6 +596,20 @@ $(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
+
+clean-noinstLTLIBRARIES:
+	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
+	@list='$(noinst_LTLIBRARIES)'; \
+	locs=`for p in $$list; do echo $$p; done | \
+	      sed 's|^[^/]*$$|.|; s|/[^/]*$$||; s|$$|/so_locations|' | \
+	      sort -u`; \
+	test -z "$$locs" || { \
+	  echo rm -f $${locs}; \
+	  rm -f $${locs}; \
+	}
+
+libconfig.la: $(libconfig_la_OBJECTS) $(libconfig_la_DEPENDENCIES) $(EXTRA_libconfig_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(LINK)  $(libconfig_la_OBJECTS) $(libconfig_la_LIBADD) $(LIBS)
 install-binPROGRAMS: $(bin_PROGRAMS)
 	@$(NORMAL_INSTALL)
 	@list='$(bin_PROGRAMS)'; test -n "$(bindir)" || list=; \
@@ -607,6 +653,15 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	@list='$(bin_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
 	echo " rm -f" $$list; \
 	rm -f $$list || exit $$?; \
 	test -n "$(EXEEXT)" || exit 0; \
@@ -671,6 +726,10 @@ doveconf$(EXEEXT): $(doveconf_OBJECTS) $(doveconf_DEPENDENCIES) $(EXTRA_doveconf
 	@rm -f doveconf$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(doveconf_OBJECTS) $(doveconf_LDADD) $(LIBS)
 
+test-config-parser$(EXEEXT): $(test_config_parser_OBJECTS) $(test_config_parser_DEPENDENCIES) $(EXTRA_test_config_parser_DEPENDENCIES) 
+	@rm -f test-config-parser$(EXEEXT)
+	$(AM_V_CCLD)$(test_config_parser_LINK) $(test_config_parser_OBJECTS) $(test_config_parser_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -678,14 +737,15 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/all-settings.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/config-connection.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/config-filter.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/config-parser.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/config-request.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/config-connection.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/config-filter.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/config-parser.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/config-request.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/doveconf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/old-set-parser.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sysinfo-get.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/old-set-parser.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sysinfo-get.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_config_parser-test-config-parser.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -707,6 +767,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+test_config_parser-test-config-parser.o: test-config-parser.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_config_parser_CFLAGS) $(CFLAGS) -MT test_config_parser-test-config-parser.o -MD -MP -MF $(DEPDIR)/test_config_parser-test-config-parser.Tpo -c -o test_config_parser-test-config-parser.o `test -f 'test-config-parser.c' || echo '$(srcdir)/'`test-config-parser.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_config_parser-test-config-parser.Tpo $(DEPDIR)/test_config_parser-test-config-parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-config-parser.c' object='test_config_parser-test-config-parser.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_config_parser_CFLAGS) $(CFLAGS) -c -o test_config_parser-test-config-parser.o `test -f 'test-config-parser.c' || echo '$(srcdir)/'`test-config-parser.c
+
+test_config_parser-test-config-parser.obj: test-config-parser.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_config_parser_CFLAGS) $(CFLAGS) -MT test_config_parser-test-config-parser.obj -MD -MP -MF $(DEPDIR)/test_config_parser-test-config-parser.Tpo -c -o test_config_parser-test-config-parser.obj `if test -f 'test-config-parser.c'; then $(CYGPATH_W) 'test-config-parser.c'; else $(CYGPATH_W) '$(srcdir)/test-config-parser.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_config_parser-test-config-parser.Tpo $(DEPDIR)/test_config_parser-test-config-parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-config-parser.c' object='test_config_parser-test-config-parser.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_config_parser_CFLAGS) $(CFLAGS) -c -o test_config_parser-test-config-parser.obj `if test -f 'test-config-parser.c'; then $(CYGPATH_W) 'test-config-parser.c'; else $(CYGPATH_W) '$(srcdir)/test-config-parser.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -818,8 +892,9 @@ distdir: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-am
-all-am: Makefile $(PROGRAMS) $(HEADERS)
+all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(pkgincludedir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -857,6 +932,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-binPROGRAMS clean-generic clean-libtool \
+	clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
 	clean-pkglibexecPROGRAMS mostlyclean-am
 
 distclean: distclean-am
@@ -926,10 +1002,11 @@ ps-am:
 uninstall-am: uninstall-binPROGRAMS uninstall-pkgincludeHEADERS \
 	uninstall-pkglibexecPROGRAMS
 
-.MAKE: install-am install-strip
+.MAKE: check-am install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am check check-am clean \
+.PHONY: CTAGS GTAGS TAGS all all-am check check-am check-local clean \
 	clean-binPROGRAMS clean-generic clean-libtool \
+	clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
 	clean-pkglibexecPROGRAMS cscopelist-am ctags ctags-am \
 	distclean distclean-compile distclean-generic \
 	distclean-libtool distclean-tags distdir dvi dvi-am html \
@@ -951,6 +1028,11 @@ uninstall-am: uninstall-binPROGRAMS uninstall-pkgincludeHEADERS \
 
 all-settings.c: $(SETTING_FILES) $(top_srcdir)/src/config/settings-get.pl
 	$(top_srcdir)/src/config/settings-get.pl $(SETTING_FILES) > all-settings.c || rm -f all-settings.c
+
+check-local:
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

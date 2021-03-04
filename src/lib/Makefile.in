@@ -218,6 +218,8 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-data-stack.$(OBJEXT) \
 	test_lib-test-event-category-register.$(OBJEXT) \
 	test_lib-test-event-filter.$(OBJEXT) \
+	test_lib-test-event-filter-expr.$(OBJEXT) \
+	test_lib-test-event-filter-merge.$(OBJEXT) \
 	test_lib-test-event-filter-parser.$(OBJEXT) \
 	test_lib-test-event-flatten.$(OBJEXT) \
 	test_lib-test-event-log.$(OBJEXT) \
@@ -443,6 +445,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -964,6 +968,8 @@ test_lib_SOURCES = \
 	test-data-stack.c \
 	test-event-category-register.c \
 	test-event-filter.c \
+	test-event-filter-expr.c \
+	test-event-filter-merge.c \
 	test-event-filter-parser.c \
 	test-event-flatten.c \
 	test-event-log.c \
@@ -1272,6 +1278,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-crc32.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-data-stack.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-category-register.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-filter-expr.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-filter-merge.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-filter-parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-filter.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-flatten.Po@am__quote@
@@ -1602,6 +1610,34 @@ test_lib-test-event-filter.obj: test-event-filter.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-filter.c' object='test_lib-test-event-filter.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-filter.obj `if test -f 'test-event-filter.c'; then $(CYGPATH_W) 'test-event-filter.c'; else $(CYGPATH_W) '$(srcdir)/test-event-filter.c'; fi`
+
+test_lib-test-event-filter-expr.o: test-event-filter-expr.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-filter-expr.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-filter-expr.Tpo -c -o test_lib-test-event-filter-expr.o `test -f 'test-event-filter-expr.c' || echo '$(srcdir)/'`test-event-filter-expr.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-filter-expr.Tpo $(DEPDIR)/test_lib-test-event-filter-expr.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-filter-expr.c' object='test_lib-test-event-filter-expr.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-filter-expr.o `test -f 'test-event-filter-expr.c' || echo '$(srcdir)/'`test-event-filter-expr.c
+
+test_lib-test-event-filter-expr.obj: test-event-filter-expr.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-filter-expr.obj -MD -MP -MF $(DEPDIR)/test_lib-test-event-filter-expr.Tpo -c -o test_lib-test-event-filter-expr.obj `if test -f 'test-event-filter-expr.c'; then $(CYGPATH_W) 'test-event-filter-expr.c'; else $(CYGPATH_W) '$(srcdir)/test-event-filter-expr.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-filter-expr.Tpo $(DEPDIR)/test_lib-test-event-filter-expr.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-filter-expr.c' object='test_lib-test-event-filter-expr.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-filter-expr.obj `if test -f 'test-event-filter-expr.c'; then $(CYGPATH_W) 'test-event-filter-expr.c'; else $(CYGPATH_W) '$(srcdir)/test-event-filter-expr.c'; fi`
+
+test_lib-test-event-filter-merge.o: test-event-filter-merge.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-filter-merge.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-filter-merge.Tpo -c -o test_lib-test-event-filter-merge.o `test -f 'test-event-filter-merge.c' || echo '$(srcdir)/'`test-event-filter-merge.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-filter-merge.Tpo $(DEPDIR)/test_lib-test-event-filter-merge.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-filter-merge.c' object='test_lib-test-event-filter-merge.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-filter-merge.o `test -f 'test-event-filter-merge.c' || echo '$(srcdir)/'`test-event-filter-merge.c
+
+test_lib-test-event-filter-merge.obj: test-event-filter-merge.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-filter-merge.obj -MD -MP -MF $(DEPDIR)/test_lib-test-event-filter-merge.Tpo -c -o test_lib-test-event-filter-merge.obj `if test -f 'test-event-filter-merge.c'; then $(CYGPATH_W) 'test-event-filter-merge.c'; else $(CYGPATH_W) '$(srcdir)/test-event-filter-merge.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-event-filter-merge.Tpo $(DEPDIR)/test_lib-test-event-filter-merge.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-event-filter-merge.c' object='test_lib-test-event-filter-merge.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-event-filter-merge.obj `if test -f 'test-event-filter-merge.c'; then $(CYGPATH_W) 'test-event-filter-merge.c'; else $(CYGPATH_W) '$(srcdir)/test-event-filter-merge.c'; fi`
 
 test_lib-test-event-filter-parser.o: test-event-filter-parser.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-filter-parser.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-filter-parser.Tpo -c -o test_lib-test-event-filter-parser.o `test -f 'test-event-filter-parser.c' || echo '$(srcdir)/'`test-event-filter-parser.c

@@ -181,6 +181,7 @@ am__EXEEXT_1 = test-mail-cache$(EXEEXT) test-mail-cache-purge$(EXEEXT) \
 	test-mail-index-sync-ext$(EXEEXT) \
 	test-mail-index-transaction-finish$(EXEEXT) \
 	test-mail-index-transaction-update$(EXEEXT) \
+	test-mail-index-write$(EXEEXT) \
 	test-mail-transaction-log-append$(EXEEXT) \
 	test-mail-transaction-log-file$(EXEEXT) \
 	test-mail-transaction-log-view$(EXEEXT)
@@ -209,6 +210,8 @@ am_test_mail_index_transaction_update_OBJECTS =  \
 	test-mail-index-transaction-update.$(OBJEXT)
 test_mail_index_transaction_update_OBJECTS =  \
 	$(am_test_mail_index_transaction_update_OBJECTS)
+am_test_mail_index_write_OBJECTS = test-mail-index-write.$(OBJEXT)
+test_mail_index_write_OBJECTS = $(am_test_mail_index_write_OBJECTS)
 am_test_mail_transaction_log_append_OBJECTS =  \
 	test-mail-transaction-log-append.$(OBJEXT)
 test_mail_transaction_log_append_OBJECTS =  \
@@ -262,6 +265,7 @@ SOURCES = $(libindex_la_SOURCES) $(test_mail_cache_SOURCES) \
 	$(test_mail_index_sync_ext_SOURCES) \
 	$(test_mail_index_transaction_finish_SOURCES) \
 	$(test_mail_index_transaction_update_SOURCES) \
+	$(test_mail_index_write_SOURCES) \
 	$(test_mail_transaction_log_append_SOURCES) \
 	$(test_mail_transaction_log_file_SOURCES) \
 	$(test_mail_transaction_log_view_SOURCES)
@@ -272,6 +276,7 @@ DIST_SOURCES = $(libindex_la_SOURCES) $(test_mail_cache_SOURCES) \
 	$(test_mail_index_sync_ext_SOURCES) \
 	$(test_mail_index_transaction_finish_SOURCES) \
 	$(test_mail_index_transaction_update_SOURCES) \
+	$(test_mail_index_write_SOURCES) \
 	$(test_mail_transaction_log_append_SOURCES) \
 	$(test_mail_transaction_log_file_SOURCES) \
 	$(test_mail_transaction_log_view_SOURCES)
@@ -376,6 +381,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -611,6 +618,7 @@ test_programs = \
 	test-mail-index-sync-ext \
 	test-mail-index-transaction-finish \
 	test-mail-index-transaction-update \
+	test-mail-index-write \
 	test-mail-transaction-log-append \
 	test-mail-transaction-log-file \
 	test-mail-transaction-log-view
@@ -645,6 +653,9 @@ test_mail_index_transaction_finish_DEPENDENCIES = $(test_deps)
 test_mail_index_transaction_update_SOURCES = test-mail-index-transaction-update.c
 test_mail_index_transaction_update_LDADD = mail-index-transaction-update.lo $(test_libs)
 test_mail_index_transaction_update_DEPENDENCIES = $(test_deps)
+test_mail_index_write_SOURCES = test-mail-index-write.c
+test_mail_index_write_LDADD = mail-index-write.lo $(test_libs)
+test_mail_index_write_DEPENDENCIES = $(test_deps)
 test_mail_transaction_log_append_SOURCES = test-mail-transaction-log-append.c
 test_mail_transaction_log_append_LDADD = mail-transaction-log-append.lo $(test_libs)
 test_mail_transaction_log_append_DEPENDENCIES = $(test_deps)
@@ -749,6 +760,10 @@ test-mail-index-transaction-update$(EXEEXT): $(test_mail_index_transaction_updat
 	@rm -f test-mail-index-transaction-update$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_mail_index_transaction_update_OBJECTS) $(test_mail_index_transaction_update_LDADD) $(LIBS)
 
+test-mail-index-write$(EXEEXT): $(test_mail_index_write_OBJECTS) $(test_mail_index_write_DEPENDENCIES) $(EXTRA_test_mail_index_write_DEPENDENCIES) 
+	@rm -f test-mail-index-write$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_mail_index_write_OBJECTS) $(test_mail_index_write_LDADD) $(LIBS)
+
 test-mail-transaction-log-append$(EXEEXT): $(test_mail_transaction_log_append_OBJECTS) $(test_mail_transaction_log_append_DEPENDENCIES) $(EXTRA_test_mail_transaction_log_append_DEPENDENCIES) 
 	@rm -f test-mail-transaction-log-append$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_mail_transaction_log_append_OBJECTS) $(test_mail_transaction_log_append_LDADD) $(LIBS)
@@ -811,6 +826,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-sync-ext.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-transaction-finish.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-transaction-update.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-write.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-transaction-log-append.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-transaction-log-file.Po@am__quote@

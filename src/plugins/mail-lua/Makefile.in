@@ -182,9 +182,9 @@ am__installdirs = "$(DESTDIR)$(moduledir)" \
 LTLIBRARIES = $(module_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 lib01_mail_lua_plugin_la_DEPENDENCIES =  \
-	../../lib-lua/libdovecot-lua.la $(am__DEPENDENCIES_1)
-am_lib01_mail_lua_plugin_la_OBJECTS = mail-lua-plugin.lo \
-	mail-storage-lua.lo
+	../../lib-storage/libdovecot-storage-lua.la \
+	$(am__DEPENDENCIES_1)
+am_lib01_mail_lua_plugin_la_OBJECTS = mail-lua-plugin.lo
 lib01_mail_lua_plugin_la_OBJECTS =  \
 	$(am_lib01_mail_lua_plugin_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -306,6 +306,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -484,17 +486,15 @@ module_LTLIBRARIES = \
 
 lib01_mail_lua_plugin_la_LDFLAGS = -module -avoid-version $(LUA_LIBS)
 lib01_mail_lua_plugin_la_LIBADD = \
-	../../lib-lua/libdovecot-lua.la \
+	../../lib-storage/libdovecot-storage-lua.la \
 	$(LIBDOVECOT)
 
 lib01_mail_lua_plugin_la_SOURCES = \
-	mail-lua-plugin.c \
-	mail-storage-lua.c
+	mail-lua-plugin.c
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = \
-	mail-lua-plugin.h \
-	mail-storage-lua.h
+	mail-lua-plugin.h
 
 test_programs = 
 all: all-am
@@ -585,7 +585,6 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-lua-plugin.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-storage-lua.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

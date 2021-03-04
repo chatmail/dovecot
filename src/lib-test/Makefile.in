@@ -150,8 +150,8 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libtest_la_LIBADD =
-am_libtest_la_OBJECTS = test-common.lo test-istream.lo test-ostream.lo \
-	test-subprocess.lo
+am_libtest_la_OBJECTS = fuzzer.lo test-common.lo test-istream.lo \
+	test-ostream.lo test-subprocess.lo
 libtest_la_OBJECTS = $(am_libtest_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -294,6 +294,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -465,12 +467,14 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib-charset
 
 libtest_la_SOURCES = \
+	fuzzer.c \
 	test-common.c \
 	test-istream.c \
 	test-ostream.c \
 	test-subprocess.c
 
 headers = \
+	fuzzer.h \
 	test-common.h \
 	test-subprocess.h
 
@@ -530,6 +534,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fuzzer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-common.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-istream.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-ostream.Plo@am__quote@

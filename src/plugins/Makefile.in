@@ -199,13 +199,12 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = acl imap-acl autocreate expire fts fts-squat last-login \
-	lazy-expunge listescape notify notify-status push-notification \
-	mail-filter mail-log mail-lua mailbox-alias quota quota-clone \
-	imap-quota pop3-migration replication snarf old-stats \
-	imap-old-stats mail-crypt trash virtual welcome zlib imap-zlib \
-	fts-lucene fts-solr apparmor fs-compress var-expand-crypt \
-	charset-alias
+DIST_SUBDIRS = acl imap-acl fts fts-squat last-login lazy-expunge \
+	listescape notify notify-status push-notification mail-log \
+	mail-lua mailbox-alias quota quota-clone imap-quota \
+	pop3-migration replication old-stats imap-old-stats mail-crypt \
+	trash virtual welcome zlib imap-zlib fts-lucene fts-solr \
+	apparmor fs-compress var-expand-crypt charset-alias
 am__DIST_COMMON = $(srcdir)/Makefile.in
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -279,6 +278,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -452,8 +453,6 @@ top_srcdir = @top_srcdir@
 SUBDIRS = \
 	acl \
 	imap-acl \
-	autocreate \
-	expire \
 	fts \
 	fts-squat \
 	last-login \
@@ -462,7 +461,6 @@ SUBDIRS = \
 	notify \
 	notify-status \
 	push-notification \
-	mail-filter \
 	mail-log \
 	$(MAIL_LUA) \
 	mailbox-alias \
@@ -471,7 +469,6 @@ SUBDIRS = \
 	imap-quota \
 	pop3-migration \
 	replication \
-	snarf \
 	old-stats \
 	imap-old-stats \
 	mail-crypt \

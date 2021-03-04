@@ -343,6 +343,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -508,7 +510,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = maildir mbox dbox-common dbox-multi dbox-single cydir imapc pop3c raw shared
+SUBDIRS = maildir mbox dbox-common dbox-multi dbox-single imapc pop3c raw shared
 noinst_LTLIBRARIES = libstorage_index.la
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \

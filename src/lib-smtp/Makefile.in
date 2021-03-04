@@ -90,8 +90,11 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-noinst_PROGRAMS = $(am__EXEEXT_1) $(am__EXEEXT_2)
-@BUILD_OPENSSL_TRUE@am__append_1 = ../lib-ssl-iostream/libssl_iostream_openssl.la
+@USE_FUZZER_TRUE@am__append_1 = \
+@USE_FUZZER_TRUE@	fuzz-smtp-server
+
+noinst_PROGRAMS = $(am__EXEEXT_2) $(am__EXEEXT_3) $(am__EXEEXT_4)
+@BUILD_OPENSSL_TRUE@am__append_2 = ../lib-ssl-iostream/libssl_iostream_openssl.la
 subdir = src/lib-smtp
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -173,15 +176,18 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__EXEEXT_1 = test-smtp-syntax$(EXEEXT) test-smtp-address$(EXEEXT) \
+@USE_FUZZER_TRUE@am__EXEEXT_1 = fuzz-smtp-server$(EXEEXT)
+am__EXEEXT_2 = $(am__EXEEXT_1)
+am__EXEEXT_3 = test-smtp-syntax$(EXEEXT) test-smtp-address$(EXEEXT) \
 	test-smtp-params$(EXEEXT) test-smtp-reply$(EXEEXT) \
 	test-smtp-command-parser$(EXEEXT) test-smtp-payload$(EXEEXT) \
 	test-smtp-submit$(EXEEXT) test-smtp-client-errors$(EXEEXT) \
 	test-smtp-server-errors$(EXEEXT)
-am__EXEEXT_2 =
+am__EXEEXT_4 =
 PROGRAMS = $(noinst_PROGRAMS)
-am_test_smtp_address_OBJECTS = test-smtp-address.$(OBJEXT)
-test_smtp_address_OBJECTS = $(am_test_smtp_address_OBJECTS)
+am_fuzz_smtp_server_OBJECTS =  \
+	fuzz_smtp_server-fuzz-smtp-server.$(OBJEXT)
+fuzz_smtp_server_OBJECTS = $(am_fuzz_smtp_server_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(noinst_LTLIBRARIES) \
 	../lib-program-client/libprogram_client.la \
@@ -190,6 +196,12 @@ am__DEPENDENCIES_2 = $(noinst_LTLIBRARIES) \
 	../lib-auth/libauth.la ../lib-ssl-iostream/libssl_iostream.la \
 	../lib-settings/libsettings.la ../lib-sasl/libsasl.la \
 	../lib-test/libtest.la ../lib/liblib.la $(am__DEPENDENCIES_1)
+fuzz_smtp_server_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
+	$(AM_CXXFLAGS) $(CXXFLAGS) $(fuzz_smtp_server_LDFLAGS) \
+	$(LDFLAGS) -o $@
+am_test_smtp_address_OBJECTS = test-smtp-address.$(OBJEXT)
+test_smtp_address_OBJECTS = $(am_test_smtp_address_OBJECTS)
 test_smtp_address_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(test_smtp_address_LDFLAGS) $(LDFLAGS) \
@@ -278,13 +290,34 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libsmtp_la_SOURCES) $(test_smtp_address_SOURCES) \
+CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) \
+	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
+	$(AM_CXXFLAGS) $(CXXFLAGS)
+AM_V_CXX = $(am__v_CXX_@AM_V@)
+am__v_CXX_ = $(am__v_CXX_@AM_DEFAULT_V@)
+am__v_CXX_0 = @echo "  CXX     " $@;
+am__v_CXX_1 = 
+CXXLD = $(CXX)
+CXXLINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
+am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
+am__v_CXXLD_0 = @echo "  CXXLD   " $@;
+am__v_CXXLD_1 = 
+SOURCES = $(libsmtp_la_SOURCES) $(fuzz_smtp_server_SOURCES) \
+	$(nodist_EXTRA_fuzz_smtp_server_SOURCES) \
+	$(test_smtp_address_SOURCES) \
 	$(test_smtp_client_errors_SOURCES) \
 	$(test_smtp_command_parser_SOURCES) \
 	$(test_smtp_params_SOURCES) $(test_smtp_payload_SOURCES) \
 	$(test_smtp_reply_SOURCES) $(test_smtp_server_errors_SOURCES) \
 	$(test_smtp_submit_SOURCES) $(test_smtp_syntax_SOURCES)
-DIST_SOURCES = $(libsmtp_la_SOURCES) $(test_smtp_address_SOURCES) \
+DIST_SOURCES = $(libsmtp_la_SOURCES) $(fuzz_smtp_server_SOURCES) \
+	$(test_smtp_address_SOURCES) \
 	$(test_smtp_client_errors_SOURCES) \
 	$(test_smtp_command_parser_SOURCES) \
 	$(test_smtp_params_SOURCES) $(test_smtp_payload_SOURCES) \
@@ -391,6 +424,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -639,6 +674,7 @@ test_programs = \
 	test-smtp-server-errors
 
 test_nocheck_programs = 
+fuzz_programs = $(am__append_1)
 EXTRA_DIST = \
 	test-bin/sendmail-exit-1.sh \
 	test-bin/sendmail-success.sh
@@ -672,7 +708,7 @@ test_deps = \
 	../lib-test/libtest.la \
 	../lib/liblib.la
 
-test_libs_ssl = $(am__append_1)
+test_libs_ssl = $(am__append_2)
 test_smtp_syntax_SOURCES = test-smtp-syntax.c
 test_smtp_syntax_LDADD = $(test_libs)
 test_smtp_syntax_DEPENDENCIES = $(test_deps)
@@ -708,10 +744,16 @@ test_smtp_server_errors_SOURCES = test-smtp-server-errors.c
 test_smtp_server_errors_LDFLAGS = -export-dynamic
 test_smtp_server_errors_LDADD = $(test_libs)
 test_smtp_server_errors_DEPENDENCIES = $(test_deps)
+nodist_EXTRA_fuzz_smtp_server_SOURCES = force-cxx-linking.cxx
+fuzz_smtp_server_CPPFLAGS = $(FUZZER_CPPFLAGS)
+fuzz_smtp_server_LDFLAGS = $(FUZZER_LDFLAGS)
+fuzz_smtp_server_SOURCES = fuzz-smtp-server.c
+fuzz_smtp_server_LDADD = $(test_libs)
+fuzz_smtp_server_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .lo .o .obj
+.SUFFIXES: .c .cxx .lo .o .obj
 $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -765,6 +807,10 @@ clean-noinstPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+fuzz-smtp-server$(EXEEXT): $(fuzz_smtp_server_OBJECTS) $(fuzz_smtp_server_DEPENDENCIES) $(EXTRA_fuzz_smtp_server_DEPENDENCIES) 
+	@rm -f fuzz-smtp-server$(EXEEXT)
+	$(AM_V_CXXLD)$(fuzz_smtp_server_LINK) $(fuzz_smtp_server_OBJECTS) $(fuzz_smtp_server_LDADD) $(LIBS)
+
 test-smtp-address$(EXEEXT): $(test_smtp_address_OBJECTS) $(test_smtp_address_DEPENDENCIES) $(EXTRA_test_smtp_address_DEPENDENCIES) 
 	@rm -f test-smtp-address$(EXEEXT)
 	$(AM_V_CCLD)$(test_smtp_address_LINK) $(test_smtp_address_OBJECTS) $(test_smtp_address_LDADD) $(LIBS)
@@ -807,6 +853,8 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fuzz_smtp_server-force-cxx-linking.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fuzz_smtp_server-fuzz-smtp-server.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/smtp-address.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/smtp-client-command.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/smtp-client-connection.Plo@am__quote@
@@ -868,6 +916,55 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
+
+fuzz_smtp_server-fuzz-smtp-server.o: fuzz-smtp-server.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_smtp_server_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT fuzz_smtp_server-fuzz-smtp-server.o -MD -MP -MF $(DEPDIR)/fuzz_smtp_server-fuzz-smtp-server.Tpo -c -o fuzz_smtp_server-fuzz-smtp-server.o `test -f 'fuzz-smtp-server.c' || echo '$(srcdir)/'`fuzz-smtp-server.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/fuzz_smtp_server-fuzz-smtp-server.Tpo $(DEPDIR)/fuzz_smtp_server-fuzz-smtp-server.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='fuzz-smtp-server.c' object='fuzz_smtp_server-fuzz-smtp-server.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_smtp_server_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o fuzz_smtp_server-fuzz-smtp-server.o `test -f 'fuzz-smtp-server.c' || echo '$(srcdir)/'`fuzz-smtp-server.c
+
+fuzz_smtp_server-fuzz-smtp-server.obj: fuzz-smtp-server.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_smtp_server_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT fuzz_smtp_server-fuzz-smtp-server.obj -MD -MP -MF $(DEPDIR)/fuzz_smtp_server-fuzz-smtp-server.Tpo -c -o fuzz_smtp_server-fuzz-smtp-server.obj `if test -f 'fuzz-smtp-server.c'; then $(CYGPATH_W) 'fuzz-smtp-server.c'; else $(CYGPATH_W) '$(srcdir)/fuzz-smtp-server.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/fuzz_smtp_server-fuzz-smtp-server.Tpo $(DEPDIR)/fuzz_smtp_server-fuzz-smtp-server.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='fuzz-smtp-server.c' object='fuzz_smtp_server-fuzz-smtp-server.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_smtp_server_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o fuzz_smtp_server-fuzz-smtp-server.obj `if test -f 'fuzz-smtp-server.c'; then $(CYGPATH_W) 'fuzz-smtp-server.c'; else $(CYGPATH_W) '$(srcdir)/fuzz-smtp-server.c'; fi`
+
+.cxx.o:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ $<
+
+.cxx.obj:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
+
+.cxx.lo:
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LTCXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='$<' object='$@' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LTCXXCOMPILE) -c -o $@ $<
+
+fuzz_smtp_server-force-cxx-linking.o: force-cxx-linking.cxx
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_smtp_server_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT fuzz_smtp_server-force-cxx-linking.o -MD -MP -MF $(DEPDIR)/fuzz_smtp_server-force-cxx-linking.Tpo -c -o fuzz_smtp_server-force-cxx-linking.o `test -f 'force-cxx-linking.cxx' || echo '$(srcdir)/'`force-cxx-linking.cxx
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/fuzz_smtp_server-force-cxx-linking.Tpo $(DEPDIR)/fuzz_smtp_server-force-cxx-linking.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='force-cxx-linking.cxx' object='fuzz_smtp_server-force-cxx-linking.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_smtp_server_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o fuzz_smtp_server-force-cxx-linking.o `test -f 'force-cxx-linking.cxx' || echo '$(srcdir)/'`force-cxx-linking.cxx
+
+fuzz_smtp_server-force-cxx-linking.obj: force-cxx-linking.cxx
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_smtp_server_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT fuzz_smtp_server-force-cxx-linking.obj -MD -MP -MF $(DEPDIR)/fuzz_smtp_server-force-cxx-linking.Tpo -c -o fuzz_smtp_server-force-cxx-linking.obj `if test -f 'force-cxx-linking.cxx'; then $(CYGPATH_W) 'force-cxx-linking.cxx'; else $(CYGPATH_W) '$(srcdir)/force-cxx-linking.cxx'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/fuzz_smtp_server-force-cxx-linking.Tpo $(DEPDIR)/fuzz_smtp_server-force-cxx-linking.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='force-cxx-linking.cxx' object='fuzz_smtp_server-force-cxx-linking.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(fuzz_smtp_server_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o fuzz_smtp_server-force-cxx-linking.obj `if test -f 'force-cxx-linking.cxx'; then $(CYGPATH_W) 'force-cxx-linking.cxx'; else $(CYGPATH_W) '$(srcdir)/force-cxx-linking.cxx'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo

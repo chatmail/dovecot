@@ -158,8 +158,10 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__EXEEXT_1 = test-settings-parser$(EXEEXT)
+am__EXEEXT_1 = test-settings-parser$(EXEEXT) test-settings$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
+am_test_settings_OBJECTS = test-settings.$(OBJEXT)
+test_settings_OBJECTS = $(am_test_settings_OBJECTS)
 am_test_settings_parser_OBJECTS = test-settings-parser.$(OBJEXT)
 test_settings_parser_OBJECTS = $(am_test_settings_parser_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -196,8 +198,9 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libsettings_la_SOURCES) $(test_settings_parser_SOURCES)
-DIST_SOURCES = $(libsettings_la_SOURCES) \
+SOURCES = $(libsettings_la_SOURCES) $(test_settings_SOURCES) \
+	$(test_settings_parser_SOURCES)
+DIST_SOURCES = $(libsettings_la_SOURCES) $(test_settings_SOURCES) \
 	$(test_settings_parser_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
@@ -300,6 +303,8 @@ EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FLEX = @FLEX@
+FUZZER_CPPFLAGS = @FUZZER_CPPFLAGS@
+FUZZER_LDFLAGS = @FUZZER_LDFLAGS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -481,7 +486,8 @@ headers = \
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
 test_programs = \
-	test-settings-parser
+	test-settings-parser \
+	test-settings
 
 test_libs = \
 	libsettings.la \
@@ -491,6 +497,9 @@ test_libs = \
 test_settings_parser_SOURCES = test-settings-parser.c
 test_settings_parser_LDADD = $(test_libs)
 test_settings_parser_DEPENDENCIES = $(test_libs)
+test_settings_SOURCES = test-settings.c
+test_settings_LDADD = $(test_libs)
+test_settings_DEPENDENCIES = $(test_libs)
 all: all-am
 
 .SUFFIXES:
@@ -548,6 +557,10 @@ clean-noinstPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
+test-settings$(EXEEXT): $(test_settings_OBJECTS) $(test_settings_DEPENDENCIES) $(EXTRA_test_settings_DEPENDENCIES) 
+	@rm -f test-settings$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_settings_OBJECTS) $(test_settings_LDADD) $(LIBS)
+
 test-settings-parser$(EXEEXT): $(test_settings_parser_OBJECTS) $(test_settings_parser_DEPENDENCIES) $(EXTRA_test_settings_parser_DEPENDENCIES) 
 	@rm -f test-settings-parser$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_settings_parser_OBJECTS) $(test_settings_parser_LDADD) $(LIBS)
@@ -561,6 +574,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/settings-parser.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/settings.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-settings-parser.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-settings.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

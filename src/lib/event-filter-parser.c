@@ -136,7 +136,7 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 				file = p_strdup_until(state->pool, b, colon);
 			}
 		} else {
-			file = p_strdup_empty(state->pool, b);
+			file = p_strdup(state->pool, b);
 			line = 0;
 		}
 
@@ -607,7 +607,7 @@ static const yytype_uint16 yytoknum[] =
      STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-      -1,    -6,    -6,    -1,    -1,     4,    13,    -6,    12,    13,
+      -1,    -6,    -6,    -1,    -1,     4,    13,    -6,    12,    -6,
       11,    -6,    -1,    -1,    -6,    -5,    -2,     8,    -6,    -6,
       -6,    -6,    -6,    -6,    -6,    -6,    -6,    -6,    -6
 };

@@ -379,6 +379,8 @@ test_lib_SOURCES = \
 	test-data-stack.c \
 	test-event-category-register.c \
 	test-event-filter.c \
+	test-event-filter-expr.c \
+	test-event-filter-merge.c \
 	test-event-filter-parser.c \
 	test-event-flatten.c \
 	test-event-log.c \

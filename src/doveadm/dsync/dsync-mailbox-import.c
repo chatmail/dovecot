@@ -734,7 +734,7 @@ static void newmail_link(struct dsync_mailbox_importer *importer,
 		}
 	} else {
 		if (remote_uid == 0) {
-			/* mail exists only locally. we don't want to request
+			/* mail exists locally. we don't want to request
 			   it, and we'll assume it has no duplicate
 			   instances. */
 			return;
@@ -877,8 +877,12 @@ static bool dsync_mailbox_try_save_cur(struct dsync_mailbox_importer *importer,
 	newmail->change = save_change;
 
 	array_push_back(&importer->newmails, &newmail);
-	newmail_link(importer, newmail,
-		     save_change == NULL ? 0 : save_change->uid);
+	if (newmail->uid_in_local)
+		newmail_link(importer, newmail, 0);
+	else {
+		i_assert(save_change != NULL);
+		newmail_link(importer, newmail, save_change->uid);
+	}
 	return remote_saved;
 }
 
@@ -2227,7 +2231,7 @@ dsync_mailbox_import_handle_local_mails(struct dsync_mailbox_importer *importer)
 	struct hash_iterate_context *iter;
 	const char *key;
 	void *key2;
-	struct importer_new_mail *mail;
+	struct importer_new_mail *mail, *const *mailp;
 
 	if (importer->virtual_all_box != NULL &&
 	    hash_table_count(importer->import_guids) > 0) {
@@ -2252,6 +2256,13 @@ dsync_mailbox_import_handle_local_mails(struct dsync_mailbox_importer *importer)
 		} T_END;
 	}
 	hash_table_iterate_deinit(&iter);
+	if (!importer->mails_have_guids) {
+		array_foreach(&importer->newmails, mailp) {
+			mail = *mailp;
+			if (mail->uid_in_local)
+				(void)dsync_mailbox_import_handle_mail(importer, mail);
+		}
+	}
 }
 
 int dsync_mailbox_import_changes_finish(struct dsync_mailbox_importer *importer)
