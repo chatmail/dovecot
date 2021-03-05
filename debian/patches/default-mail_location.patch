@@ -7,7 +7,6 @@ Last-Update: 2017-09-20
 
 Set a default for the case where a user has no mail so auto-
 detection of mailboxes doesn't work.
-See also: chgrp-error.patch
 ---
  doc/example-config/conf.d/10-mail.conf | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)

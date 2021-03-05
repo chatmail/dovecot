@@ -6,7 +6,7 @@ Last-Update: Sun, 30 Nov 2014 23:59:07 -0500
 Bug: #608719
 
 Move dovecots generated X.509 certificate out of /etc/ssl where
-it doesn't belong.  Turn off ssl by default.
+it doesn't belong.
 ---
  doc/example-config/conf.d/10-ssl.conf |  7 ++++---
  doc/mkcert.sh                         | 10 +++++-----

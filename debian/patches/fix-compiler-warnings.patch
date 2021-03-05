@@ -2,6 +2,8 @@ From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
 Date: Sun, 31 May 2020 01:34:20 +0200
 Subject: fix compiler warnings:
 
+Forwarded: https://github.com/dovecot/core/pull/130
+
 * passing null to format argument
 * -Wstringop-truncation
 ---
