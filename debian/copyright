@@ -93,10 +93,6 @@ Files: src/lib-fts/stopwords/stopwords_ro.txt
 Copyright: (c) 2005, Jacques Savoy.
 License: BSD-2-Clause
 
-Files: src/master/sd-daemon.*
-Copyright: Copyright 2010 Lennart Poettering
-License: MIT
-
 Files: src/plugins/fts-lucene/Snowball*
 Copyright: (C) 2003-2006 Ben van Klinken and the CLucene Team
 License: Apache-2.0 or LGPL-2.1
