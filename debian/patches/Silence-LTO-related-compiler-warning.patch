@@ -1,0 +1,28 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Mon, 21 Jun 2021 15:59:02 +0200
+Subject: Silence LTO related compiler warning
+
+master-service-settings-cache.c: In function 'master_service_settings_cache_init_filter':
+master-service-settings-cache.c:94:3: warning: 'error' may be used uninitialized in this function [-Wmaybe-uninitialized]
+   94 |   i_error("master-service: cannot get filters: %s", error);
+      |   ^
+master-service-settings-cache.c:89:14: note: 'error' was declared here
+   89 |  const char *error;
+      |              ^
+---
+ src/lib-master/master-service-settings-cache.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lib-master/master-service-settings-cache.c b/src/lib-master/master-service-settings-cache.c
+index 11dd66b..d60f392 100644
+--- a/src/lib-master/master-service-settings-cache.c
++++ b/src/lib-master/master-service-settings-cache.c
+@@ -86,7 +86,7 @@ master_service_settings_cache_init(struct master_service *service,
+ int master_service_settings_cache_init_filter(struct master_service_settings_cache *cache)
+ {
+ 	const char *const *filters;
+-	const char *error;
++	const char *error = NULL;
+ 
+ 	if (cache->filters != NULL)
+ 		return 0;

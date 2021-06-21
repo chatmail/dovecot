@@ -12,3 +12,4 @@ test-backtrace.patch
 doveadm-director.1-drop-acute-accent.patch
 Fix-32bit-sign-comparisons.patch
 Improve-cross-compile-support.patch
+Silence-LTO-related-compiler-warning.patch
