@@ -34,6 +34,8 @@ struct imap_filter_sieve_script {
 
 	/* Binary corrupt after recompile; don't recompile again */
 	bool binary_corrupt:1;
+	/* Resource usage exceeded */
+	bool rusage_exceeded:1;
 };
 
 struct imap_filter_sieve_user {
@@ -389,6 +391,13 @@ imap_sieve_filter_open_script(struct imap_filter_sieve_context *sctx,
 				"Failed to %s script `%s'",
 				compile_name, sieve_script_location(script));
 			break;
+		/* Cumulative resource limit exceeded */
+		case SIEVE_ERROR_RESOURCE_LIMIT:
+			e_error(sieve_get_event(svinst),
+				"Failed to open script `%s' for %s "
+				"(cumulative resource limit exceeded)",
+				sieve_script_location(script), compile_name);
+			break;
 		/* Something else */
 		default:
 			e_error(sieve_get_event(svinst),
@@ -433,7 +442,6 @@ int imap_filter_sieve_compile(struct imap_filter_sieve_context *sctx,
 				const char *errormsg =
 					sieve_script_get_last_error(
 						script, &error);
-
 				if (error != SIEVE_ERROR_NONE) {
 					str_truncate(sctx->errors, 0);
 					str_append(sctx->errors, errormsg);
@@ -442,6 +450,12 @@ int imap_filter_sieve_compile(struct imap_filter_sieve_context *sctx,
 			ret = -1;
 			break;
 		}
+	}
+
+	if (ret < 0 && str_len(sctx->errors) == 0) {
+		/* Failed, but no user error was logged: log a generic internal
+		   error instead. */
+		sieve_internal_error(ehandler, NULL, NULL);
 	}
 
 	*have_warnings_r = (sieve_get_warnings(ehandler) > 0);
@@ -675,7 +689,8 @@ imap_filter_sieve_result_amend_log_message(const struct sieve_script_env *senv,
 static int
 imap_sieve_filter_handle_exec_status(struct imap_filter_sieve_context *sctx,
 				     struct sieve_script *script, int status,
-				     struct sieve_exec_status *estatus)
+				     struct sieve_exec_status *estatus,
+				     bool *fatal_r)
 {
 	struct imap_filter_sieve_user *ifsuser =
 		IMAP_FILTER_SIEVE_USER_CONTEXT_REQUIRE(sctx->user);
@@ -683,6 +698,8 @@ imap_sieve_filter_handle_exec_status(struct imap_filter_sieve_context *sctx,
 	enum log_type log_level, user_log_level;
 	enum mail_error mail_error = MAIL_ERROR_NONE;
 	int ret = -1;
+
+	*fatal_r = FALSE;
 
 	log_level = user_log_level = LOG_TYPE_ERROR;
 
@@ -709,6 +726,7 @@ imap_sieve_filter_handle_exec_status(struct imap_filter_sieve_context *sctx,
 		      "Execution of script %s was aborted "
 		      "due to temporary failure",
 		      sieve_script_location(script));
+		*fatal_r = TRUE;
 		ret = -1;
 		break;
 	case SIEVE_EXEC_BIN_CORRUPT:
@@ -716,6 +734,15 @@ imap_sieve_filter_handle_exec_status(struct imap_filter_sieve_context *sctx,
 			"!!BUG!!: Binary compiled from %s is still corrupt; "
 			"bailing out and reverting to default action",
 			sieve_script_location(script));
+		*fatal_r = TRUE;
+		ret = -1;
+		break;
+	case SIEVE_EXEC_RESOURCE_LIMIT:
+		e_error(sieve_get_event(svinst),
+			"Execution of script %s was aborted "
+			"due to excessive resource usage",
+			sieve_script_location(script));
+		*fatal_r = TRUE;
 		ret = -1;
 		break;
 	case SIEVE_EXEC_KEEP_FAILED:
@@ -737,7 +764,8 @@ static int
 imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 			      struct sieve_error_handler *user_ehandler,
 			      const struct sieve_message_data *msgdata,
-			      const struct sieve_script_env *scriptenv)
+			      const struct sieve_script_env *scriptenv,
+			      bool *fatal_r)
 {
 	struct mail_user *user = sctx->user;
 	struct imap_filter_sieve_user *ifsuser =
@@ -745,15 +773,19 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 	struct sieve_instance *svinst = ifsuser->svinst;
 	struct imap_filter_sieve_script *scripts = sctx->scripts;
 	unsigned int count = sctx->scripts_count;
+	struct sieve_resource_usage *rusage =
+		&scriptenv->exec_status->resource_usage;
 	struct sieve_multiscript *mscript;
 	struct sieve_error_handler *ehandler;
 	struct sieve_script *last_script = NULL;
-	bool user_script = FALSE, more = TRUE;
+	bool user_script = FALSE, more = TRUE, rusage_exceeded = FALSE;
 	enum sieve_compile_flags cpflags;
 	enum sieve_execute_flags exflags;
 	enum sieve_error compile_error = SIEVE_ERROR_NONE;
 	unsigned int i;
 	int ret;
+
+	*fatal_r = FALSE;
 
 	/* Start execution */
 	mscript = sieve_multiscript_start_execute(svinst, msgdata, scriptenv);
@@ -762,6 +794,7 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 	for (i = 0; i < count && more; i++) {
 		struct sieve_script *script = scripts[i].script;
 		struct sieve_binary *sbin = scripts[i].binary;
+		int mstatus;
 
 		if (sbin == NULL) {
 			e_debug(sieve_get_event(svinst),
@@ -776,6 +809,12 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 		user_script = (script == sctx->user_script);
 		last_script = script;
 
+		if (scripts[i].rusage_exceeded) {
+			rusage_exceeded = TRUE;
+			break;
+		}
+
+		sieve_resource_usage_init(rusage);
 		if (user_script) {
 			cpflags |= SIEVE_COMPILE_FLAG_NOGLOBAL;
 			exflags |= SIEVE_EXECUTE_FLAG_NOGLOBAL;
@@ -791,38 +830,40 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 		more = sieve_multiscript_run(mscript,
 			sbin, ehandler, ehandler, exflags);
 
-		if (!more) {
-			if (!scripts[i].binary_corrupt &&
-			    sieve_multiscript_status(mscript)
-				== SIEVE_EXEC_BIN_CORRUPT &&
-			    sieve_is_loaded(sbin)) {
+		mstatus = sieve_multiscript_status(mscript);
+		if (!more && mstatus == SIEVE_EXEC_BIN_CORRUPT &&
+		    !scripts[i].binary_corrupt && sieve_is_loaded(sbin)) {
+			/* Close corrupt script */
+			sieve_close(&sbin);
 
-				/* Close corrupt script */
-				sieve_close(&sbin);
-
-				/* Recompile */
-				scripts[i].binary = sbin =
-					imap_sieve_filter_open_script(sctx,
-						script, cpflags, user_ehandler,
-						FALSE, &compile_error);
-				if (sbin == NULL) {
-					scripts[i].compile_error =
-						compile_error;
-					break;
-				}
-
-				/* Execute again */
-				more = sieve_multiscript_run(mscript, sbin,
-					ehandler, ehandler, exflags);
-
-				/* Save new version */
-
-				if (sieve_multiscript_status(mscript)
-					== SIEVE_EXEC_BIN_CORRUPT)
-					scripts[i].binary_corrupt = TRUE;
-				else if (more)
-					(void)sieve_save(sbin, FALSE, NULL);
+			/* Recompile */
+			scripts[i].binary = sbin =
+				imap_sieve_filter_open_script(
+					sctx, script, cpflags, user_ehandler,
+					FALSE, &compile_error);
+			if (sbin == NULL) {
+				scripts[i].compile_error = compile_error;
+				break;
 			}
+
+			/* Execute again */
+			more = sieve_multiscript_run(mscript, sbin,
+						     ehandler, ehandler,
+						     exflags);
+
+			/* Save new version */
+
+			mstatus = sieve_multiscript_status(mscript);
+			if (mstatus == SIEVE_EXEC_BIN_CORRUPT)
+				scripts[i].binary_corrupt = TRUE;
+			else if (more)
+				(void)sieve_save(sbin, FALSE, NULL);
+		}
+
+		if (user_script && !sieve_record_resource_usage(sbin, rusage)) {
+			rusage_exceeded = ((i + 1) < count && more);
+			scripts[i].rusage_exceeded = TRUE;
+			break;
 		}
 	}
 
@@ -832,6 +873,12 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 		user_ehandler : ifsuser->master_ehandler);
 	if (compile_error == SIEVE_ERROR_TEMP_FAILURE) {
 		ret = sieve_multiscript_tempfail(&mscript, ehandler, exflags);
+	} else if (rusage_exceeded) {
+		i_assert(last_script != NULL);
+		(void)sieve_multiscript_tempfail(&mscript, ehandler, exflags);
+		sieve_error(ehandler, sieve_script_name(last_script),
+			    "cumulative resource usage limit exceeded");
+		ret = SIEVE_EXEC_RESOURCE_LIMIT;
 	} else {
 		ret = sieve_multiscript_finish(&mscript, ehandler, exflags,
 					       NULL);
@@ -846,9 +893,12 @@ imap_sieve_filter_run_scripts(struct imap_filter_sieve_context *sctx,
 		return 0;
 	}
 
+	if (last_script == NULL && ret == SIEVE_EXEC_OK)
+		return 0;
 	i_assert(last_script != NULL); /* at least one script is executed */
-	return imap_sieve_filter_handle_exec_status(sctx,
-		last_script, ret, scriptenv->exec_status);
+	return imap_sieve_filter_handle_exec_status(sctx, last_script, ret,
+						    scriptenv->exec_status,
+						    fatal_r);
 }
 
 static int
@@ -959,7 +1009,8 @@ imap_sieve_filter_get_msgdata(struct imap_filter_sieve_context *sctx,
 
 int imap_sieve_filter_run_mail(struct imap_filter_sieve_context *sctx,
 			       struct mail *mail, string_t **errors_r,
-			       bool *have_warnings_r, bool *have_changes_r)
+			       bool *have_warnings_r, bool *have_changes_r,
+			       bool *fatal_r)
 {
 	struct sieve_error_handler *user_ehandler;
 	struct sieve_message_data msgdata;
@@ -1009,10 +1060,11 @@ int imap_sieve_filter_run_mail(struct imap_filter_sieve_context *sctx,
 		/* Execute script(s) */
 
 		ret = imap_sieve_filter_run_scripts(sctx, user_ehandler,
-						    &msgdata, scriptenv);
+						    &msgdata, scriptenv,
+						    fatal_r);
 	} T_END;
 
-	if (ret < 0 || str_len(sctx->errors) == 0) {
+	if (ret < 0 && str_len(sctx->errors) == 0) {
 		/* Failed, but no user error was logged: log a generic internal
 		   error instead. */
 		sieve_internal_error(user_ehandler, NULL, NULL);

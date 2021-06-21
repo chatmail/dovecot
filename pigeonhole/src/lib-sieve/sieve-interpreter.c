@@ -6,6 +6,7 @@
 #include "mempool.h"
 #include "array.h"
 #include "hash.h"
+#include "cpu-limit.h"
 #include "mail-storage.h"
 
 #include "sieve-common.h"
@@ -82,6 +83,7 @@ struct sieve_interpreter {
 	/* Runtime environment */
 	struct sieve_runtime_env runenv;
 	struct sieve_runtime_trace trace;
+	struct sieve_resource_usage rusage;
 
 	/* Current operation */
 	struct sieve_operation oprtn;
@@ -919,7 +921,12 @@ int sieve_interpreter_continue(struct sieve_interpreter *interp,
 			       bool *interrupted)
 {
 	const struct sieve_runtime_env *renv = &interp->runenv;
+	const struct sieve_execute_env *eenv = renv->exec_env;
+	struct cpu_limit *climit = NULL;
 	sieve_size_t *address = &(interp->runenv.pc);
+	struct sieve_instance *svinst = eenv->svinst;
+	struct sieve_exec_status *exec_status = eenv->exec_status;
+	struct sieve_resource_usage rusage;
 	int ret = SIEVE_EXEC_OK;
 
 	sieve_result_ref(renv->result);
@@ -928,8 +935,20 @@ int sieve_interpreter_continue(struct sieve_interpreter *interp,
 	if (interrupted != NULL)
 		*interrupted = FALSE;
 
+	if (svinst->max_cpu_time_secs > 0) {
+		climit = cpu_limit_init(svinst->max_cpu_time_secs,
+					CPU_LIMIT_TYPE_USER);
+	}
+
 	while (ret == SIEVE_EXEC_OK && !interp->interrupted &&
 	       *address < sieve_binary_block_get_size(renv->sblock)) {
+		if (climit != NULL && cpu_limit_exceeded(climit)) {
+			sieve_runtime_error(
+				renv, NULL,
+				"execution exceeded CPU time limit");
+			ret = SIEVE_EXEC_RESOURCE_LIMIT;
+			break;
+		}
 		if (interp->loop_limit != 0 && *address > interp->loop_limit) {
 			sieve_runtime_trace_error(
 				renv, "program crossed loop boundary");
@@ -938,6 +957,15 @@ int sieve_interpreter_continue(struct sieve_interpreter *interp,
 		}
 
 		ret = sieve_interpreter_operation_execute(interp);
+	}
+
+	if (climit != NULL) {
+		sieve_resource_usage_init(&rusage);
+		rusage.cpu_time_msecs =
+			cpu_limit_get_usage_msecs(climit, CPU_LIMIT_TYPE_USER);
+		sieve_resource_usage_add(&interp->rusage, &rusage);
+
+		cpu_limit_deinit(&climit);
 	}
 
 	if (ret != SIEVE_EXEC_OK) {
@@ -949,6 +977,8 @@ int sieve_interpreter_continue(struct sieve_interpreter *interp,
 		*interrupted = interp->interrupted;
 
 	if (!interp->interrupted) {
+		exec_status->resource_usage = interp->rusage;
+
 		struct event_passthrough *e =
 			event_create_passthrough(interp->runenv.event)->
 			set_name("sieve_runtime_script_finished");
@@ -964,13 +994,17 @@ int sieve_interpreter_continue(struct sieve_interpreter *interp,
 		case SIEVE_EXEC_BIN_CORRUPT:
 			e->add_str("error", "Binary corrupt");
 			break;
+		case SIEVE_EXEC_RESOURCE_LIMIT:
+			e->add_str("error", "Resource limit exceeded");
+			break;
 		case SIEVE_EXEC_KEEP_FAILED:
 			/* Not supposed to occur at runtime */
 			i_unreached();
 		}
-		e_debug(e->event(), "Finished running script `%s'",
-			sieve_binary_source(interp->runenv.sbin));
-
+		e_debug(e->event(), "Finished running script `%s' "
+			"(resource usage: %s)",
+			sieve_binary_source(interp->runenv.sbin),
+			sieve_resource_usage_get_summary(&interp->rusage));
 		interp->running = FALSE;
 	}
 
@@ -994,6 +1028,8 @@ int sieve_interpreter_start(struct sieve_interpreter *interp,
 	interp->running = TRUE;
 	interp->runenv.result = result;
 	interp->runenv.msgctx = sieve_result_get_message_context(result);
+
+	sieve_resource_usage_init(&interp->rusage);
 
 	/* Signal registered extensions that the interpreter is being run */
 	eregs = array_get_modifiable(&interp->extensions, &ext_count);
@@ -1146,7 +1182,7 @@ int sieve_runtime_mail_error(const struct sieve_runtime_env *renv,
 	const char *error_msg, *user_prefix;
 	va_list args;
 
-	error_msg = mailbox_get_last_error(mail->box, NULL);
+	error_msg = mailbox_get_last_internal_error(mail->box, NULL);
 
 	va_start(args, fmt);
 	user_prefix = t_strdup_vprintf(fmt, args);

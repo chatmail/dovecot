@@ -237,6 +237,9 @@ static int filter_message(struct sieve_filter_context *sfctx, struct mail *mail)
 	switch (ret) {
 	case SIEVE_EXEC_OK:
 		break;
+	case SIEVE_EXEC_RESOURCE_LIMIT:
+		sieve_error(ehandler, NULL, "sieve resource limit exceeded");
+		return -1;
 	case SIEVE_EXEC_BIN_CORRUPT:
 		sieve_error(ehandler, NULL, "sieve script binary is corrupt");
 		return -1;
@@ -546,7 +549,7 @@ int main(int argc, char **argv)
 	src_box = mailbox_alloc(ns->list, src_mailbox, open_flags);
 	if (mailbox_open(src_box) < 0) {
 		i_fatal("Couldn't open source mailbox '%s': %s",
-			src_mailbox, mailbox_get_last_error(src_box, &error));
+			src_mailbox, mailbox_get_last_internal_error(src_box, &error));
 	}
 
 	/* Open move box if necessary */
@@ -562,7 +565,7 @@ int main(int argc, char **argv)
 		if (mailbox_open(move_box) < 0) {
 			i_fatal("Couldn't open mailbox '%s': %s",
 				move_mailbox,
-				mailbox_get_last_error(move_box, &error));
+				mailbox_get_last_internal_error(move_box, &error));
 		}
 
 		if (mailbox_backends_equal(src_box, move_box))

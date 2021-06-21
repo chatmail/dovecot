@@ -79,6 +79,7 @@ void managesieve_refresh_proctitle(void)
 
 static void client_kill_idle(struct client *client)
 {
+	mail_storage_service_io_activate_user(client->service_user);
 	client_send_bye(client, "Server shutting down.");
 	client_destroy(client, "Server shutting down.");
 }
@@ -146,7 +147,7 @@ client_create_from_input(const struct mail_storage_service_input *input,
 	});
 
 	service_input = *input;
-	service_input.parent_event = event;
+	service_input.event_parent = event;
 	if (mail_storage_service_lookup_next(storage_service, &service_input,
 					     &user, &mail_user, error_r) <= 0) {
 		event_unref(&event);

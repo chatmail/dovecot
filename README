@@ -32,8 +32,8 @@ Auth
 
 -   RFC2245 - Anonymous SASL Mechanism.
 -   RFC2595 - Using TLS with IMAP, POP3 and ACAP
--   RFC2831 - Using Digest Authentication as a SASL
-    Mechanism (DIGEST-MD5)
+-   RFC2831 - Using Digest Authentication as a SASL Mechanism
+    (DIGEST-MD5)
 -   RFC5802 - Salted Challenge Response Authentication Mechanism (SCRAM)
 -   SASL and GSS-API Mechanisms
 -   RFC7628 - A Set of Simple Authentication and Security Layer (SASL)
@@ -97,17 +97,18 @@ IMAP extensions
 -   RFC5819 - IMAP4 Extension for Returning STATUS Information in
     Extended LIST
 -   RFC5957 - Display-Based Address Sorting for the IMAP4 SORT Extension
--   RFC6154 - IMAP LIST Extension for Special-Use Mailboxes
-    (SPECIAL-USE only)
+-   RFC6154 - IMAP LIST Extension for Special-Use Mailboxes (SPECIAL-USE
+    only)
 -   RFC6203 - IMAP4 Extension for Fuzzy Search
 -   RFC6785 - Support for IMAP Events in Sieve (via Pigeonhole plugin)
 -   RFC6851 - Internet Message Access Protocol (IMAP) - MOVE Extension
--   RFC7162 - IMAP Extensions: Quick Flag Changes
-    Resynchronization (CONDSTORE) and Quick Mailbox
-    Resynchronization (QRESYNC) (updated RFC4551 and RFC5162)
+-   RFC7162 - IMAP Extensions: Quick Flag Changes Resynchronization
+    (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC) (updated
+    RFC4551 and RFC5162)
 -   RFC7888 - IMAP4 Non-synchronizing Literals (updated RFC2088)
 -   RFC8457 - IMAP "$Important" Keyword and "\Important" Special-Use
     Attribute
+-   RFC8970 - IMAP4 Extension: Message Preview Generation
 
 
 SMTP/LMTP base

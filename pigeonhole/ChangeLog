@@ -1,23 +1,556 @@
-2021-03-02 10:56:54 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (1b5c82b2)
+2021-06-11 11:58:05 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (e6a84e31)
+
+    NEWS: Update release date
+
+
+M	NEWS
+
+2021-04-22 15:21:30 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (f6bf3e33)
+
+    configure: Bump version
+
+
+M	configure.ac
+
+2021-04-22 15:20:32 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (703184bc)
+
+    NEWS: Add news for 0.5.15
+
+
+M	NEWS
+
+2021-03-02 10:56:54 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (e9eab612)
 
     NEWS: Update news for 0.5.14
 
 
 M	NEWS
 
-2021-02-17 13:30:46 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (151fd340)
+2021-02-17 13:30:46 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (cd9c67aa)
 
     NEWS: Add news for 0.5.14.rc1
 
 
 M	NEWS
 
-2021-02-04 11:26:59 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (d9903714)
+2021-04-13 17:24:01 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (26537156)
 
-    configure: Update version to 0.5.14
+    global: Adjust to buffer_t API change
 
 
-M	configure.ac
+M	src/managesieve-login/managesieve-login-settings.c
+M	src/managesieve/managesieve-settings.c
+
+2021-03-23 10:51:00 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (ad0d57b2)
+
+    managesieve: parent_event was renamed to event_parent
+
+
+M	src/managesieve/main.c
+
+2020-04-16 11:09:17 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (1c7173a8)
+
+    global: Adjust to settings-parser API changes
+
+
+M	src/managesieve-login/managesieve-login-settings.c
+M	src/managesieve/managesieve-capabilities.c
+M	src/managesieve/managesieve-settings.c
+
+2021-03-15 18:27:02 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (0605bd02)
+
+    lib-sieve: sieve-interpreter - Adjust to cpu-limit API change
+
+
+M	src/lib-sieve/sieve-interpreter.c
+
+2021-03-15 18:26:32 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (bd6e75f9)
+
+    lib-sieve: sieve-interpreter - Fix crash if max_cpu_time_secs==0
+
+
+M	src/lib-sieve/sieve-interpreter.c
+
+2021-02-03 22:45:11 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (a7439203)
+
+    global: Use mailbox_get_last_internal_error()
+
+    mailbox_get_last_error() should be used only for client-visible errors. The
+    internal errors should be used for logging.
+
+M	src/lib-sieve/plugins/enotify/mailto/ntfy-mailto.c
+M	src/lib-sieve/plugins/special-use/tst-specialuse-exists.c
+M	src/lib-sieve/sieve-actions.c
+M	src/lib-sieve/sieve-interpreter.c
+M	src/lib-sieve/sieve-message.c
+M	src/lib-sieve/sieve-result.c
+M	src/lib-sieve/sieve-storage-sync.c
+M	src/lib-sieve/util/edit-mail.c
+M	src/lib-sieve/util/mail-raw.c
+M	src/lib-sieve/util/test-edit-mail.c
+M	src/plugins/imapsieve/imap-sieve-storage.c
+M	src/sieve-tools/sieve-filter.c
+
+2021-02-03 22:25:38 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (093fd3e5)
+
+    managesieve: Standardize disconnection log message
+
+
+M	src/managesieve/cmd-getscript.c
+M	src/managesieve/cmd-putscript.c
+M	src/managesieve/managesieve-client.c
+
+2021-02-03 22:16:30 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (8b58503f)
+
+    managesieve-login: Use client_destroy_iostream_error()
+
+
+M	src/managesieve-login/client-authenticate.c
+
+2021-02-03 22:04:50 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (79a6118d)
+
+    managesieve-login: Replace "Aborted login" with "Disconnected: Aborted login
+    by logging out"
+
+
+M	src/managesieve-login/client.c
+
+2021-02-03 22:02:00 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (2cd21f54)
+
+    managesieve-login: Remove duplicate "Disconnected: " log prefixes
+
+    client_destroy() already adds it.
+
+M	src/managesieve-login/client-authenticate.c
+M	src/managesieve-login/client.c
+
+2021-03-02 17:06:42 +0200 Timo Sirainen <timo.sirainen@open-xchange.com> (505b765c)
+
+    managesieve: Fix using mail_log_prefix when client is disconnected due to
+    server shutdown
+
+
+M	src/managesieve/main.c
+M	src/managesieve/managesieve-client.c
+
+2020-12-07 23:42:04 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (d99c69b8)
+
+    plugins: lda-sieve: Implement cumulative resource limits on script
+    execution.
+
+
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+
+2020-12-07 23:41:41 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (63fe1864)
+
+    plugins: imap-sieve: Implement cumulative resource limits on script
+    execution.
+
+
+M	src/plugins/imapsieve/imap-sieve.c
+
+2020-12-07 23:41:00 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (f9ebcd45)
+
+    plugins: imap-filter-sieve: Implement cumulative resource limits on script
+    execution.
+
+
+M	src/plugins/imap-filter-sieve/imap-filter-sieve.c
+
+2020-12-04 12:19:28 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (8d6d9e9f)
+
+    lib-sieve: sieve-types - Add SIEVE_EXEC_RESOURCE_LIMIT exit code.
+
+    It indicates that script execution exceeded a resource limit (currently only
+    CPU time limit).
+
+M	src/lib-sieve/sieve-interpreter.c
+M	src/lib-sieve/sieve-types.h
+M	src/plugins/imap-filter-sieve/imap-filter-sieve.c
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+M	src/sieve-tools/sieve-filter.c
+M	src/sieve-tools/sieve-test.c
+M	src/testsuite/testsuite.c
+
+2020-12-04 03:47:04 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (c3807e32)
+
+    plugins: lda-sieve: Restructure lda_sieve_execute_script().
+
+
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+
+2020-12-04 03:30:33 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (50fe61c8)
+
+    plugins: lda-sieve: Change return type of lda_sieve_execute_script*() to
+    int.
+
+
+M	src/plugins/lda-sieve/lda-sieve-plugin.c
+
+2020-12-04 03:17:17 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (4b5ced2c)
+
+    plugins: imap-filter-sieve: Restructure imap_sieve_filter_run_scripts().
+
+
+M	src/plugins/imap-filter-sieve/imap-filter-sieve.c
+
+2020-12-04 03:12:01 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (0f5113e1)
+
+    plugins: imap-filter-sieve: Make temporary failure and corrupt binary errors
+    fatal.
+
+
+M	src/plugins/imap-filter-sieve/imap-filter-sieve.c
+
+2020-12-04 03:08:12 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (9d2fa4de)
+
+    plugins: imap-filter-sieve: Add support for fatal script execute errors.
+
+
+M	src/plugins/imap-filter-sieve/imap-filter-sieve.c
+M	src/plugins/imap-filter-sieve/imap-filter-sieve.h
+M	src/plugins/imap-filter-sieve/imap-filter.c
+
+2021-01-04 16:09:00 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (3f007c7d)
+
+    plugins: imap-filter-sieve: Make sure an (internal) error message is
+    available for failed compile.
+
+
+M	src/plugins/imap-filter-sieve/imap-filter-sieve.c
+
+2021-01-04 05:22:40 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (552611e2)
+
+    plugins: imap-filter-sieve: Fix useless addition of internal error message
+    to FILTER SIEVE errors.
+
+
+M	src/plugins/imap-filter-sieve/imap-filter-sieve.c
+
+2020-12-04 02:54:58 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (f043569d)
+
+    plugins: imapsieve: Restructure imap_sieve_run_scripts().
+
+
+M	src/plugins/imapsieve/imap-sieve.c
+
+2020-12-04 02:45:50 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (d083bdab)
+
+    plugins: imapsieve: Make temporary failure and corrupt binary errors fatal.
+
+
+M	src/plugins/imapsieve/imap-sieve.c
+
+2020-12-04 02:36:36 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (dd1e4248)
+
+    plugins: imapsieve: Add support for fatal script execute errors.
+
+
+M	src/plugins/imapsieve/imap-sieve-storage.c
+M	src/plugins/imapsieve/imap-sieve.c
+M	src/plugins/imapsieve/imap-sieve.h
+
+2020-12-03 03:23:55 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (7f50cd8e)
+
+    lib-sieve: sieve-interpreter - Record last resource usage in struct
+    sieve_exec_status.
+
+
+M	src/lib-sieve/sieve-interpreter.c
+M	src/lib-sieve/sieve-types.h
+
+2020-11-27 04:25:39 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (19fb7699)
+
+    lib-sieve: sieve-binary-dumper - Dump information from file header.
+
+
+M	src/lib-sieve/sieve-binary-dumper.c
+
+2021-01-04 19:07:11 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (5a794cc8)
+
+    lib-sieve: sieve - Add sieve_check_executable().
+
+
+M	src/lib-sieve/sieve.c
+M	src/lib-sieve/sieve.h
+
+2020-12-06 03:20:20 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (0c84d613)
+
+    lib-sieve: sieve - Add sieve_record_resource_usage().
+
+
+M	src/lib-sieve/sieve.c
+M	src/lib-sieve/sieve.h
+
+2020-12-06 03:19:36 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (bcff0f7e)
+
+    lib-sieve: sieve - Check binary for resource limits before opening in
+    sieve_script_open().
+
+
+M	src/lib-sieve/sieve.c
+
+2020-12-06 03:16:23 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (62f4b4fc)
+
+    lib-sieve: sieve-binary - Add sieve_binary_check_executable().
+
+    Checks whether binary is suitable for execution.
+
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-binary.h
+
+2020-12-08 01:27:54 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (54b120d4)
+
+    lib-sieve: sieve - Retain resource usage statistics across script recompile
+    in sieve_open*().
+
+
+M	src/lib-sieve/sieve.c
+
+2020-12-10 00:54:37 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (015b1fda)
+
+    lib-sieve: sieve - Restructure sieve_open_script().
+
+    Move part within data stack frame to separate function.
+
+M	src/lib-sieve/sieve.c
+
+2020-11-27 04:15:42 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (a01173c6)
+
+    lib-sieve: sieve-binary - Add support for recording cumulative resource
+    usage.
+
+    Currently, only CPU time is supported.
+
+M	INSTALL
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-binary-private.h
+M	src/lib-sieve/sieve-binary.c
+M	src/lib-sieve/sieve-binary.h
+M	src/lib-sieve/sieve-common.h
+M	src/lib-sieve/sieve-limits.h
+M	src/lib-sieve/sieve-settings.c
+M	src/lib-sieve/sieve-types.h
+
+2020-12-03 03:36:06 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (77d56fd5)
+
+    lib-sieve: sieve - Add API for resource usage manipulation and evaluation.
+
+
+M	src/lib-sieve/sieve-common.h
+M	src/lib-sieve/sieve-limits.h
+M	src/lib-sieve/sieve-settings.c
+M	src/lib-sieve/sieve-types.h
+M	src/lib-sieve/sieve.c
+M	src/lib-sieve/sieve.h
+
+2020-12-23 03:05:12 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (0b9acda1)
+
+    lib-sieve: sieve-binary-file - Associate saved binary with save path if no
+    path is set.
+
+
+M	src/lib-sieve/sieve-binary-file.c
+
+2020-11-27 02:50:06 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (0aaf8a2f)
+
+    lib-sieve: sieve-binary-file - Record file header in binary struct.
+
+
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-binary-private.h
+M	src/lib-sieve/sieve-binary.c
+
+2020-11-27 02:18:21 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (5e6e44c4)
+
+    lib-sieve: sieve-binary-file - Split off sieve_binary_fd_open().
+
+
+M	src/lib-sieve/sieve-binary-file.c
+
+2020-11-27 00:10:14 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (489a8469)
+
+    lib-sieve: sieve-binary-file - Change binary file header format to include
+    header size and flags.
+
+
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-binary-private.h
+M	src/lib-sieve/sieve-binary.h
+
+2020-12-08 00:29:06 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (8b489404)
+
+    lib-sieve: sieve-binary-file - Move struct sieve_binary_header to
+    sieve-binary-private.h.
+
+
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-binary-private.h
+
+2020-11-27 00:10:14 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (3ce88199)
+
+    lib-sieve: sieve-binary-file - Split off sieve_binary_file_read_header().
+
+
+M	src/lib-sieve/sieve-binary-file.c
+
+2020-11-27 01:23:34 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (16f2ef6e)
+
+    lib-sieve: sieve-binary-file - Add error_r return parameter to
+    _sieve_binary_open().
+
+
+M	src/lib-sieve/sieve-binary-file.c
+
+2020-11-27 02:56:27 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (c89a110d)
+
+    lib-sieve: sieve-binary-file - Change return type of
+    sieve_binary_file_read().
+
+
+M	src/lib-sieve/sieve-binary-file.c
+
+2020-11-27 02:01:12 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (3c438a32)
+
+    lib-sieve: sieve-binary-file - Remove unnecessary file load function
+    pointers.
+
+    There is only one implementation now.
+
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-binary-private.h
+
+2020-11-27 02:06:38 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (5c58aa91)
+
+    lib-sieve: sieve-binary-file - Change return type of
+    sieve_binary_file_open().
+
+
+M	src/lib-sieve/sieve-binary-file.c
+
+2020-11-27 04:10:20 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (b729f228)
+
+    lib-sieve: sieve-binary-file - Make sieve_binary_file_close(NULL) a no-op.
+
+
+M	src/lib-sieve/sieve-binary-file.c
+M	src/lib-sieve/sieve-binary.c
+
+2020-12-08 01:31:48 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (81b90f89)
+
+    lib-sieve: sieve - Change sieve_script_open() to use sieve_binary_close()
+    internally.
+
+
+M	src/lib-sieve/sieve.c
+
+2020-11-27 03:46:02 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (99b4888a)
+
+    lib-sieve: sieve - Change sieve_close() to use sieve_binary_close()
+    internally.
+
+
+M	src/lib-sieve/sieve.c
+M	src/lib-sieve/sieve.h
+
+2020-11-27 03:43:21 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (d9a02e46)
+
+    lib-sieve: sieve-binary - Add sieve_binary_close().
+
+
+M	src/lib-sieve/sieve-binary.c
+M	src/lib-sieve/sieve-binary.h
+
+2020-11-27 03:33:23 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (710d01e5)
+
+    lib-sieve: sieve-binary - Make sieve_binary_unref(NULL) a no-op.
+
+
+M	src/lib-sieve/sieve-binary.c
+M	src/lib-sieve/sieve-binary.h
+M	src/lib-sieve/sieve-generator.c
+M	src/lib-sieve/sieve.c
+M	src/testsuite/testsuite-common.c
+M	src/testsuite/testsuite-script.c
+
+2020-10-28 20:16:17 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (68505e44)
+
+    lib-sieve: Enforce CPU time limit on Sieve script execution.
+
+
+M	INSTALL
+M	Makefile.am
+M	src/lib-sieve/sieve-common.h
+M	src/lib-sieve/sieve-interpreter.c
+M	src/lib-sieve/sieve-limits.h
+M	src/lib-sieve/sieve-settings.c
+A	tests/execute/errors-cpu-limit.svtest
+A	tests/execute/errors/cpu-limit.sieve
+
+2020-03-09 23:58:01 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (40b13e53)
+
+    lib-sieve: Reformat sieve-binary-dumper.h.
+
+
+M	src/lib-sieve/sieve-binary-dumper.h
+
+2020-03-09 23:56:33 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (190727bb)
+
+    lib-sieve: Reformat sieve-binary-dumper.c.
+
+
+M	src/lib-sieve/sieve-binary-dumper.c
+
+2020-11-27 03:58:45 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (dc3edc2b)
+
+    lib-sieve: Reformat sieve-binary-file.c.
+
+
+M	src/lib-sieve/sieve-binary-file.c
+
+2020-03-12 03:39:36 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (715b95ce)
+
+    lib-sieve: Reformat sieve-settings.h.
+
+
+M	src/lib-sieve/sieve-settings.h
+
+2020-03-12 03:37:15 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (3ee39f42)
+
+    lib-sieve: Reformat sieve-settings.c.
+
+
+M	src/lib-sieve/sieve-settings.c
+
+2020-10-29 01:32:04 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (8463029f)
+
+    lib-sieve: Reformat sieve-limits.h.
+
+
+M	src/lib-sieve/sieve-limits.h
+
+2020-03-24 17:25:52 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (7047a6d8)
+
+    lib-sieve: Reformat sieve.h.
+
+
+M	src/lib-sieve/sieve.h
+
+2020-11-27 00:35:58 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (501c5700)
+
+    lib-sieve: Reformat sieve.c.
+
+
+M	src/lib-sieve/sieve.c
+
+2020-04-08 16:19:18 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (457e2a4f)
+
+    lib-sieve: sieve-script - Fix leak of script object in
+    sieve_script_binary_dump_metadata().
+
+
+M	src/lib-sieve/sieve-script.c
 
 2021-01-13 18:05:15 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (821a9516)
 

@@ -1,8 +1,9 @@
-/* A Bison parser, made by GNU Bison 3.0.4.  */
+/* A Bison parser, made by GNU Bison 3.3.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
+   Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -29,6 +30,9 @@
 
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
+
+/* Undocumented macros, especially those whose name start with YY_,
+   are private implementation details.  Do not rely on them.  */
 
 #ifndef YY_EVENT_FILTER_PARSER_EVENT_FILTER_PARSER_H_INCLUDED
 # define YY_EVENT_FILTER_PARSER_EVENT_FILTER_PARSER_H_INCLUDED
@@ -66,13 +70,13 @@ extern int event_filter_parser_debug;
 
 union EVENT_FILTER_PARSER_STYPE
 {
-#line 132 "event-filter-parser.y" /* yacc.c:1909  */
+#line 132 "event-filter-parser.y" /* yacc.c:1921  */
 
 	const char *str;
 	enum event_filter_node_op op;
 	struct event_filter_node *node;
 
-#line 76 "event-filter-parser.h" /* yacc.c:1909  */
+#line 80 "event-filter-parser.h" /* yacc.c:1921  */
 };
 
 typedef union EVENT_FILTER_PARSER_STYPE EVENT_FILTER_PARSER_STYPE;

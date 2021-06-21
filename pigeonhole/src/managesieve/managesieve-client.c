@@ -236,14 +236,7 @@ void client_destroy(struct client *client, const char *reason)
 	i_assert(!client->destroyed);
 	client->destroyed = TRUE;
 
-	if (!client->disconnected) {
-		client->disconnected = TRUE;
-		if (reason == NULL) {
-			reason = io_stream_get_disconnect_reason(client->input,
-								 client->output);
-		}
-		i_info("%s %s", reason, client_stats(client));
-	}
+	client_disconnect(client, reason);
 
 	if (client->command_pending) {
 		/* try to deinitialize the command */
@@ -308,12 +301,16 @@ static void client_destroy_timeout(struct client *client)
 
 void client_disconnect(struct client *client, const char *reason)
 {
-	i_assert(reason != NULL);
-
 	if (client->disconnected)
 		return;
 
-	i_info("Disconnected: %s %s", reason, client_stats(client));
+	if (reason == NULL) {
+		reason = io_stream_get_disconnect_reason(client->input,
+							 client->output);
+		i_info("%s %s", reason, client_stats(client));
+	} else {
+		i_info("Disconnected: %s %s", reason, client_stats(client));
+	}
 	client->disconnected = TRUE;
 	o_stream_flush(client->output);
 	o_stream_uncork(client->output);
@@ -322,7 +319,8 @@ void client_disconnect(struct client *client, const char *reason)
 	o_stream_close(client->output);
 
 	timeout_remove(&client->to_idle);
-	client->to_idle = timeout_add(0, client_destroy_timeout, client);
+	if (!client->destroyed)
+		client->to_idle = timeout_add(0, client_destroy_timeout, client);
 }
 
 void client_disconnect_with_error(struct client *client, const char *msg)
@@ -785,6 +783,7 @@ int client_output(struct client *client)
 void clients_destroy_all(void)
 {
 	while (managesieve_clients != NULL) {
+		mail_storage_service_io_activate_user(managesieve_clients->service_user);
 		client_send_bye(managesieve_clients, "Server shutting down.");
 		client_destroy(managesieve_clients, "Server shutting down.");
 	}

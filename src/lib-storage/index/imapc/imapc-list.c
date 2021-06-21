@@ -136,7 +136,7 @@ imapc_list_copy_error_from_reply(struct imapc_mailbox_list *list,
 {
 	enum mail_error error;
 
-	if (imap_resp_text_code_parse(reply->resp_text_key, &error)) {
+	if (imapc_resp_text_code_parse(reply->resp_text_key, &error)) {
 		mailbox_list_set_error(&list->list, error,
 				       reply->text_without_resp);
 	} else {
@@ -430,6 +430,7 @@ static struct mailbox_list *imapc_list_get_fs(struct imapc_mailbox_list *list)
 		mailbox_list_settings_init_defaults(&list_set);
 		list_set.layout = MAILBOX_LIST_NAME_MAILDIRPLUSPLUS;
 		list_set.root_dir = dir;
+		list_set.index_pvt_dir = p_strdup_empty(list->list.pool, list->list.set.index_pvt_dir);
 		/* Filesystem needs to be able to store any kind of a mailbox
 		   name. */
 		list_set.storage_name_escape_char =

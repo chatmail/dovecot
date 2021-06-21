@@ -125,6 +125,7 @@ struct index_mail_data {
 	bool header_parsed:1;
 	bool no_caching:1;
 	bool forced_no_caching:1;
+	bool istream_error_logged:1;
 	bool destroying_stream:1;
 	bool initialized_wrapper_stream:1;
 	bool destroy_callback_set:1;
@@ -168,7 +169,9 @@ index_mail_alloc(struct mailbox_transaction_context *t,
 void index_mail_init(struct index_mail *mail,
 		     struct mailbox_transaction_context *_t,
 		     enum mail_fetch_field wanted_fields,
-		     struct mailbox_header_lookup_ctx *_wanted_headers);
+		     struct mailbox_header_lookup_ctx *_wanted_headers,
+		     struct pool *mail_pool,
+		     struct pool *data_pool);
 
 void index_mail_set_seq(struct mail *mail, uint32_t seq, bool saving);
 bool index_mail_set_uid(struct mail *mail, uint32_t uid);
@@ -243,7 +246,7 @@ void index_mail_update_keywords(struct mail *mail, enum modify_type modify_type,
 void index_mail_update_modseq(struct mail *mail, uint64_t min_modseq);
 void index_mail_update_pvt_modseq(struct mail *mail, uint64_t min_pvt_modseq);
 void index_mail_expunge(struct mail *mail);
-void index_mail_precache(struct mail *mail);
+int index_mail_precache(struct mail *mail);
 void index_mail_set_cache_corrupted(struct mail *mail,
 				    enum mail_fetch_field field,
 				    const char *reason);
