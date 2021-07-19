@@ -1,3 +1,15 @@
+dovecot (1:2.3.13+dfsg1-2) unstable; urgency=high
+
+  * Import upstream fixes for security issues (Closes: #990566):
+    - CVE-2021-29157: Path traversal issue allowing an attacker with
+      access to the local filesystem can trick OAuth2 authentication into
+      using an HS256 validation key from an attacker-controlled location
+    - CVE-2021-33515: Sensitive information could be redirected to an
+      attacker-controlled address because of a STARTTLS command injection
+      bug in the submission service
+
+ -- Noah Meyerhans <noahm@debian.org>  Tue, 20 Jul 2021 08:05:19 -0700
+
 dovecot (1:2.3.13+dfsg1-1) unstable; urgency=medium
 
   [ Christian Göttsche ]
