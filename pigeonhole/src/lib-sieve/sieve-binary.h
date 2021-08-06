@@ -9,8 +9,10 @@
  * Config
  */
 
-#define SIEVE_BINARY_VERSION_MAJOR     1
-#define SIEVE_BINARY_VERSION_MINOR     4
+#define SIEVE_BINARY_VERSION_MAJOR     2
+#define SIEVE_BINARY_VERSION_MINOR     0
+
+#define SIEVE_BINARY_BASE_HEADER_SIZE  20
 
 /*
  * Binary object
@@ -20,8 +22,21 @@ struct sieve_binary;
 
 struct sieve_binary *sieve_binary_create_new(struct sieve_script *script);
 void sieve_binary_ref(struct sieve_binary *sbin);
-void sieve_binary_unref(struct sieve_binary **sbin);
+void sieve_binary_unref(struct sieve_binary **_sbin);
 
+void sieve_binary_close(struct sieve_binary **_sbin);
+
+/*
+ * Resource usage
+ */
+
+void sieve_binary_get_resource_usage(struct sieve_binary *sbin,
+				     struct sieve_resource_usage *rusage_r);
+bool sieve_binary_record_resource_usage(
+	struct sieve_binary *sbin, const struct sieve_resource_usage *rusage)
+	ATTR_NULL(1);
+void sieve_binary_set_resource_usage(struct sieve_binary *sbin,
+				     const struct sieve_resource_usage *rusage);
 /*
  * Accessors
  */
@@ -69,6 +84,10 @@ sieve_binary_open(struct sieve_instance *svinst, const char *path,
 		  struct sieve_script *script, enum sieve_error *error_r);
 bool sieve_binary_up_to_date(struct sieve_binary *sbin,
 			     enum sieve_compile_flags cpflags);
+
+int sieve_binary_check_executable(struct sieve_binary *sbin,
+				  enum sieve_error *error_r,
+				  const char **client_error_r);
 
 /*
  * Block management

@@ -293,7 +293,7 @@ static void auth_connect_notify(struct auth_client *client ATTR_UNUSED,
 		/* auth disconnected without having ever succeeded, so the
 		   auth process is probably misconfigured. no point in
 		   keeping the client connections hanging. */
-		clients_destroy_all_reason("Disconnected: Auth process broken");
+		clients_destroy_all_reason("Auth process broken");
 	}
 }
 
@@ -489,9 +489,9 @@ static void main_deinit(void)
 	auth_client_deinit(&auth_client);
 	master_auth_deinit(&master_auth);
 
-	char **strp;
-	array_foreach_modifiable(&global_alt_usernames, strp)
-		i_free(*strp);
+	char *str;
+	array_foreach_elem(&global_alt_usernames, str)
+		i_free(str);
 	array_free(&global_alt_usernames);
 
 	if (anvil != NULL)

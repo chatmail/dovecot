@@ -130,7 +130,7 @@ static int managesieve_client_auth_read_response
 
 	if ( i_stream_read(client->input) == -1 ) {
 		/* disconnected */
-		client_destroy(client, "Disconnected");
+		client_destroy_iostream_error(client);
 		return -1;
 	}
 
@@ -149,8 +149,8 @@ static int managesieve_client_auth_read_response
 			error = managesieve_parser_get_error(msieve_client->parser, &fatal);
 			if (fatal) {
 				client_send_bye(client, error);
-				client_destroy(client, t_strconcat
-					("Disconnected: parse error during auth: ", error, NULL));
+				client_destroy(client, t_strconcat(
+					"parse error during auth: ", error, NULL));
 			} else {
 				*error_r = error;
 			}
@@ -218,7 +218,7 @@ static int managesieve_client_auth_read_response
 			return -1;
 		}
 
-		client_destroy(client, "Disconnected");
+		client_destroy_iostream_error(client);
 		return -1;
 	}
 

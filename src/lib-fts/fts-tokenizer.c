@@ -52,11 +52,11 @@ void fts_tokenizer_unregister(const struct fts_tokenizer *tok_class)
 
 const struct fts_tokenizer *fts_tokenizer_find(const char *name)
 {
-	const struct fts_tokenizer *const *tp;
+	const struct fts_tokenizer *tok;
 
-	array_foreach(&fts_tokenizer_classes, tp) {
-		if (strcmp((*tp)->name, name) == 0)
-			return *tp;
+	array_foreach_elem(&fts_tokenizer_classes, tok) {
+		if (strcmp(tok->name, name) == 0)
+			return tok;
 	}
 	return NULL;
 }
@@ -144,7 +144,15 @@ fts_tokenizer_next_self(struct fts_tokenizer *tok,
 	} else {
 		/* continuing previous data */
 		i_assert(tok->prev_skip <= size);
-		ret = tok->v->next(tok, data + tok->prev_skip,
+
+		const unsigned char *data_next;
+		if (data != NULL)
+			data_next = data + tok->prev_skip;
+		else {
+			i_assert(tok->prev_skip == 0 && size == 0);
+			data_next = NULL;
+		}
+		ret = tok->v->next(tok, data_next,
 				   size - tok->prev_skip, &skip,
 				   token_r, error_r);
 	}

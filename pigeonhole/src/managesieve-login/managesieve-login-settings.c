@@ -28,7 +28,8 @@ static struct inet_listener_settings *managesieve_login_inet_listeners[] = {
 	&managesieve_login_inet_listeners_array[0]
 };
 static buffer_t managesieve_login_inet_listeners_buf = {
-	managesieve_login_inet_listeners, sizeof(managesieve_login_inet_listeners), { 0, }
+	{ { managesieve_login_inet_listeners,
+	    sizeof(managesieve_login_inet_listeners) } }
 };
 /* </settings checks> */
 
@@ -60,12 +61,12 @@ struct service_settings managesieve_login_settings_service_settings = {
 
 #undef DEF
 #define DEF(type, name) \
-	{ type, #name, offsetof(struct managesieve_login_settings, name), NULL }
+	SETTING_DEFINE_STRUCT_##type(#name, name, struct managesieve_login_settings)
 
 static const struct setting_define managesieve_login_setting_defines[] = {
-	DEF(SET_STR, managesieve_implementation_string),
-	DEF(SET_STR, managesieve_sieve_capability),
-	DEF(SET_STR, managesieve_notify_capability),
+	DEF(STR, managesieve_implementation_string),
+	DEF(STR, managesieve_sieve_capability),
+	DEF(STR, managesieve_notify_capability),
 
 	SETTING_DEFINE_LIST_END
 };

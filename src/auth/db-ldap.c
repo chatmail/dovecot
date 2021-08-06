@@ -226,7 +226,7 @@ static int ldap_get_errno(struct ldap_connection *conn)
 
 	ret = ldap_get_option(conn->ld, LDAP_OPT_ERROR_NUMBER, (void *) &err);
 	if (ret != LDAP_SUCCESS) {
-		i_error("LDAP: Can't get error number: %s",
+		e_error(conn->event, "Can't get error number: %s",
 			ldap_err2string(ret));
 		return LDAP_UNAVAILABLE;
 	}
@@ -354,7 +354,7 @@ static int db_ldap_request_search(struct ldap_connection *conn,
 
 static bool db_ldap_request_queue_next(struct ldap_connection *conn)
 {
-	struct ldap_request *const *requestp, *request;
+	struct ldap_request *request;
 	int ret = -1;
 
 	/* connecting may call db_ldap_connect_finish(), which gets us back
@@ -371,10 +371,9 @@ static bool db_ldap_request_queue_next(struct ldap_connection *conn)
 		return FALSE;
 	}
 
-	requestp = array_idx(&conn->request_array,
-			     aqueue_idx(conn->request_queue,
-					conn->pending_count));
-	request = *requestp;
+	request = array_idx_elem(&conn->request_array,
+				 aqueue_idx(conn->request_queue,
+					    conn->pending_count));
 
 	if (conn->pending_count > 0 &&
 	    request->type == LDAP_REQUEST_TYPE_BIND) {
@@ -428,7 +427,7 @@ static bool db_ldap_request_queue_next(struct ldap_connection *conn)
 static void
 db_ldap_check_hanging(struct ldap_connection *conn, struct ldap_request *request)
 {
-	struct ldap_request *const *first_requestp;
+	struct ldap_request *first_request;
 	unsigned int count;
 	time_t secs_diff;
 
@@ -436,9 +435,9 @@ db_ldap_check_hanging(struct ldap_connection *conn, struct ldap_request *request
 	if (count == 0)
 		return;
 
-	first_requestp = array_idx(&conn->request_array,
-				   aqueue_idx(conn->request_queue, 0));
-	secs_diff = ioloop_time - (*first_requestp)->create_time;
+	first_request = array_idx_elem(&conn->request_array,
+				       aqueue_idx(conn->request_queue, 0));
+	secs_diff = ioloop_time - first_request->create_time;
 	if (secs_diff > DB_LDAP_REQUEST_LOST_TIMEOUT_SECS) {
 		e_error(authdb_event(request->auth_request),
 			"Connection appears to be hanging, reconnecting");
@@ -463,13 +462,13 @@ void db_ldap_request(struct ldap_connection *conn,
 static int db_ldap_connect_finish(struct ldap_connection *conn, int ret)
 {
 	if (ret == LDAP_SERVER_DOWN) {
-		i_error("LDAP: Can't connect to server: %s",
+		e_error(conn->event, "Can't connect to server: %s",
 			conn->set.uris != NULL ?
 			conn->set.uris : conn->set.hosts);
 		return -1;
 	}
 	if (ret != LDAP_SUCCESS) {
-		i_error("LDAP: binding failed (dn %s): %s",
+		e_error(conn->event, "binding failed (dn %s): %s",
 			conn->set.dn == NULL ? "(none)" : conn->set.dn,
 			ldap_get_error(conn));
 		return -1;
@@ -502,13 +501,12 @@ static void db_ldap_abort_requests(struct ldap_connection *conn,
 				   unsigned int timeout_secs,
 				   bool error, const char *reason)
 {
-	struct ldap_request *const *requestp, *request;
+	struct ldap_request *request;
 	time_t diff;
 
 	while (aqueue_count(conn->request_queue) > 0 && max_count > 0) {
-		requestp = array_idx(&conn->request_array,
-				     aqueue_idx(conn->request_queue, 0));
-		request = *requestp;
+		request = array_idx_elem(&conn->request_array,
+					 aqueue_idx(conn->request_queue, 0));
 
 		diff = ioloop_time - request->create_time;
 		if (diff < (time_t)timeout_secs)
@@ -768,7 +766,7 @@ db_ldap_handle_request_result(struct ldap_connection *conn,
 			/* we're going to ignore this */
 			return FALSE;
 		default:
-			i_error("LDAP: Reply with unexpected type %d",
+			e_error(conn->event, "Reply with unexpected type %d",
 				ldap_msgtype(res->msg));
 			return TRUE;
 		}
@@ -899,7 +897,7 @@ db_ldap_handle_result(struct ldap_connection *conn, struct db_ldap_result *res)
 
 	request = db_ldap_find_request(conn, msgid, &idx);
 	if (request == NULL) {
-		i_error("LDAP: Reply with unknown msgid %d", msgid);
+		e_error(conn->event, "Reply with unknown msgid %d", msgid);
 		return;
 	}
 	/* request is allocated from auth_request's pool */
@@ -952,11 +950,11 @@ static void ldap_input(struct ldap_connection *conn)
 		while (db_ldap_request_queue_next(conn))
 			;
 	} else if (ldap_get_errno(conn) != LDAP_SERVER_DOWN) {
-		i_error("LDAP: ldap_result() failed: %s", ldap_get_error(conn));
+		e_error(conn->event, "ldap_result() failed: %s", ldap_get_error(conn));
 		ldap_conn_reconnect(conn);
 	} else if (aqueue_count(conn->request_queue) > 0 ||
 		   prev_reply_diff < DB_LDAP_IDLE_RECONNECT_SECS) {
-		i_error("LDAP: Connection lost to LDAP server, reconnecting");
+		e_error(conn->event, "Connection lost to LDAP server, reconnecting");
 		ldap_conn_reconnect(conn);
 	} else {
 		/* server probably disconnected an idle connection. don't
@@ -1006,8 +1004,7 @@ static void ldap_connection_timeout(struct ldap_connection *conn)
 {
 	i_assert(conn->conn_state == LDAP_CONN_STATE_BINDING);
 
-	i_error("LDAP %s: Initial binding to LDAP server timed out",
-		conn->config_path);
+	e_error(conn->event, "Initial binding to LDAP server timed out");
 	db_ldap_conn_close(conn);
 }
 
@@ -1178,6 +1175,7 @@ static void db_ldap_set_options(struct ldap_connection *conn)
 	if (str_to_int(conn->set.debug_level, &value) >= 0 && value != 0) {
 		db_ldap_set_opt(conn, NULL, LDAP_OPT_DEBUG_LEVEL, &value,
 				"debug_level", conn->set.debug_level);
+		event_set_forced_debug(conn->event, TRUE);
 	}
 #endif
 
@@ -1214,20 +1212,13 @@ static void db_ldap_init_ld(struct ldap_connection *conn)
 
 int db_ldap_connect(struct ldap_connection *conn)
 {
-	int debug_level;
-	bool debug;
 	struct timeval start, end;
 	int ret;
-
-	debug = FALSE;
-	if (str_to_int(conn->set.debug_level, &debug_level) >= 0)
-		debug = debug_level > 0;
 
 	if (conn->conn_state != LDAP_CONN_STATE_DISCONNECTED)
 		return 0;
 
-	if (debug)
-		i_gettimeofday(&start);
+	i_gettimeofday(&start);
 	i_assert(conn->pending_count == 0);
 
 	if (conn->delayed_connect) {
@@ -1247,8 +1238,8 @@ int db_ldap_connect(struct ldap_connection *conn)
 				i_fatal("LDAP %s: Don't use both tls=yes "
 					"and ldaps URI", conn->config_path);
 			}
-			i_error("LDAP %s: ldap_start_tls_s() failed: %s",
-				conn->config_path, ldap_err2string(ret));
+			e_error(conn->event, "ldap_start_tls_s() failed: %s",
+				ldap_err2string(ret));
 			return -1;
 		}
 #else
@@ -1259,11 +1250,9 @@ int db_ldap_connect(struct ldap_connection *conn)
 	if (db_ldap_bind(conn) < 0)
 		return -1;
 
-	if (debug) {
-		i_gettimeofday(&end);
-		int msecs = timeval_diff_msecs(&end, &start);
-		i_debug("LDAP initialization took %d msecs", msecs);
-	}
+	i_gettimeofday(&end);
+	int msecs = timeval_diff_msecs(&end, &start);
+	e_debug(conn->event, "LDAP initialization took %d msecs", msecs);
 
 	db_ldap_get_fd(conn);
 	conn->io = io_add(conn->fd, IO_READ, ldap_input, conn);
@@ -1438,7 +1427,7 @@ void db_ldap_set_attrs(struct ldap_connection *conn, const char *attrlist,
 		}
 
 		if (*name == '\0')
-			i_error("LDAP %s: Invalid attrs entry: %s", conn->config_path, attr_data);
+			e_error(conn->event, "Invalid attrs entry: %s", attr_data);
 		else if (skip_attr == NULL || strcmp(skip_attr, name) != 0) {
 			field = array_append_space(attr_map);
 			if (name[0] == '@') {
@@ -1948,13 +1937,17 @@ struct ldap_connection *db_ldap_init(const char *config_path, bool userdb)
 				"settings not allowed (%s and %s)",
 				config_path, str, conn->set.ldaprc_path);
 		}
-		env_put(t_strconcat("LDAPRC=", conn->set.ldaprc_path, NULL));
+		env_put("LDAPRC", conn->set.ldaprc_path);
 	}
 
         if (deref2str(conn->set.deref, &conn->set.ldap_deref) < 0)
 		i_fatal("LDAP %s: Unknown deref option '%s'", config_path, conn->set.deref);
 	if (scope2str(conn->set.scope, &conn->set.ldap_scope) < 0)
 		i_fatal("LDAP %s: Unknown scope option '%s'", config_path, conn->set.scope);
+
+	conn->event = event_create(auth_event);
+	event_set_append_log_prefix(conn->event, t_strdup_printf(
+		"ldap(%s): ", conn->config_path));
 
 	i_array_init(&conn->request_array, 512);
 	conn->request_queue = aqueue_init(&conn->request_array.arr);
@@ -1991,6 +1984,7 @@ void db_ldap_unref(struct ldap_connection **_conn)
 	array_free(&conn->request_array);
 	aqueue_deinit(&conn->request_queue);
 
+	event_unref(&conn->event);
 	pool_unref(&conn->pool);
 }
 

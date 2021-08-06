@@ -45,19 +45,19 @@ const struct sieve_command_def sieve_cmd_pipe = {
 	.block_required = FALSE,
 	.registered = cmd_pipe_registered,
 	.validate = sieve_extprogram_command_validate,
-	.generate = cmd_pipe_generate
+	.generate = cmd_pipe_generate,
 };
 
 /*
  * Tagged arguments
  */
 
-static const struct sieve_argument_def pipe_try_tag = { 
-	.identifier = "try"
+static const struct sieve_argument_def pipe_try_tag = {
+	.identifier = "try",
 };
 
-/* 
- * Pipe operation 
+/*
+ * Pipe operation
  */
 
 static bool
@@ -70,19 +70,19 @@ cmd_pipe_operation_execute(const struct sieve_runtime_env *renv,
 const struct sieve_operation_def sieve_opr_pipe = {
 	.mnemonic = "PIPE",
 	.ext_def = &sieve_ext_vnd_pipe,
-	.dump = cmd_pipe_operation_dump, 
-	.execute = cmd_pipe_operation_execute
+	.dump = cmd_pipe_operation_dump,
+	.execute = cmd_pipe_operation_execute,
 };
 
 /* Codes for optional operands */
 
 enum cmd_pipe_optional {
-  OPT_END,
-  OPT_TRY
+	OPT_END,
+	OPT_TRY,
 };
 
-/* 
- * Pipe action 
+/*
+ * Pipe action
  */
 
 /* Forward declarations */
@@ -94,23 +94,34 @@ act_pipe_check_duplicate(const struct sieve_runtime_env *renv,
 static void
 act_pipe_print(const struct sieve_action *action,
 	       const struct sieve_result_print_env *rpenv,
-	       bool *keep);	
+	       bool *keep);
+static int
+act_pipe_start(const struct sieve_action_exec_env *aenv, void **tr_context);
+static int
+act_pipe_execute(const struct sieve_action_exec_env *aenv,
+		void *tr_context, bool *keep);
 static int
 act_pipe_commit(const struct sieve_action_exec_env *aenv,
-		void *tr_context, bool *keep);
+		void *tr_context);
+static void
+act_pipe_rollback(const struct sieve_action_exec_env *aenv,
+		  void *tr_context, bool success);
 
 /* Action object */
 
 const struct sieve_action_def act_pipe = {
 	.name = "pipe",
 	.flags = SIEVE_ACTFLAG_TRIES_DELIVER,
-	.check_duplicate = act_pipe_check_duplicate, 
+	.check_duplicate = act_pipe_check_duplicate,
 	.print = act_pipe_print,
-	.commit = act_pipe_commit
+	.start = act_pipe_start,
+	.execute = act_pipe_execute,
+	.commit = act_pipe_commit,
+	.rollback = act_pipe_rollback,
 };
 
 /* Action context information */
-		
+
 struct ext_pipe_action {
 	const char *program_name;
 	const char * const *args;
@@ -151,18 +162,18 @@ cmd_pipe_generate(const struct sieve_codegen_env *cgenv,
 	return TRUE;
 }
 
-/* 
+/*
  * Code dump
  */
- 
+
 static bool
 cmd_pipe_operation_dump(const struct sieve_dumptime_env *denv,
 			sieve_size_t *address)
-{	
+{
 	int opt_code = 0;
-	
+
 	sieve_code_dumpf(denv, "PIPE");
-	sieve_code_descend(denv);	
+	sieve_code_descend(denv);
 
 	/* Dump optional operands */
 	for (;;) {
@@ -177,27 +188,27 @@ cmd_pipe_operation_dump(const struct sieve_dumptime_env *denv,
 
 		switch (opt_code) {
 		case OPT_TRY:
-			sieve_code_dumpf(denv, "try");	
+			sieve_code_dumpf(denv, "try");
 			break;
 		default:
 			return FALSE;
 		}
 	}
-	
+
 	if (!sieve_opr_string_dump(denv, address, "program-name"))
 		return FALSE;
 
 	return sieve_opr_stringlist_dump_ex(denv, address, "arguments", "");
 }
 
-/* 
+/*
  * Code execution
  */
 
 static int
 cmd_pipe_operation_execute(const struct sieve_runtime_env *renv,
 			   sieve_size_t *address)
-{	
+{
 	const struct sieve_extension *this_ext = renv->oprtn->ext;
 	struct sieve_side_effects_list *slist = NULL;
 	struct ext_pipe_action *act;
@@ -212,7 +223,7 @@ cmd_pipe_operation_execute(const struct sieve_runtime_env *renv,
 	 * Read operands
 	 */
 
-	/* Optional operands */	
+	/* Optional operands */
 
 	for (;;) {
 		int opt;
@@ -248,7 +259,7 @@ cmd_pipe_operation_execute(const struct sieve_runtime_env *renv,
 
 	/* Trace */
 
-	sieve_runtime_trace(renv, SIEVE_TRLVL_ACTIONS, "pipe action");	
+	sieve_runtime_trace(renv, SIEVE_TRLVL_ACTIONS, "pipe action");
 
 	/* Compose action */
 
@@ -260,7 +271,7 @@ cmd_pipe_operation_execute(const struct sieve_runtime_env *renv,
 		sieve_runtime_trace_error(renv, "failed to read args operand");
 		return args_list->exec_status;
 	}
-	
+
 	act->program_name = p_strdup(pool, str_c(pname));
 	act->try = try;
 
@@ -282,7 +293,7 @@ act_pipe_check_duplicate(const struct sieve_runtime_env *renv ATTR_UNUSED,
 			 const struct sieve_action *act_other)
 {
 	struct ext_pipe_action *new_act, *old_act;
-		
+
 	if (act->context == NULL || act_other->context == NULL)
 		return 0;
 
@@ -301,19 +312,19 @@ act_pipe_check_duplicate(const struct sieve_runtime_env *renv ATTR_UNUSED,
 }
 
 /* Result printing */
- 
+
 static void
 act_pipe_print(const struct sieve_action *action,
 	       const struct sieve_result_print_env *rpenv,
-	       bool *keep ATTR_UNUSED)	
+	       bool *keep ATTR_UNUSED)
 {
-	const struct ext_pipe_action *act = 
+	const struct ext_pipe_action *act =
 		(const struct ext_pipe_action *)action->context;
 
 	sieve_result_action_printf(
 		rpenv, "pipe message to external program '%s':",
 		act->program_name);
-	
+
 	/* Print main method parameters */
 
 	sieve_result_printf(
@@ -328,36 +339,71 @@ act_pipe_print(const struct sieve_action *action,
 
 /* Result execution */
 
+struct act_pipe_transaction {
+	struct sieve_extprogram *sprog;
+};
+
 static int
-act_pipe_commit(const struct sieve_action_exec_env *aenv,
-		void *tr_context ATTR_UNUSED, bool *keep)
+act_pipe_start(const struct sieve_action_exec_env *aenv, void **tr_context)
+{
+	struct act_pipe_transaction *trans;
+	pool_t pool = sieve_result_pool(aenv->result);
+
+	/* Create transaction context */
+	trans = p_new(pool, struct act_pipe_transaction, 1);
+	*tr_context = (void *)trans;
+
+	return SIEVE_EXEC_OK;
+}
+
+static int
+act_pipe_execute(const struct sieve_action_exec_env *aenv,
+		 void *tr_context, bool *keep)
 {
 	const struct sieve_action *action = aenv->action;
 	const struct sieve_execute_env *eenv = aenv->exec_env;
 	const struct ext_pipe_action *act =
 		(const struct ext_pipe_action *)action->context;
-	enum sieve_error error = SIEVE_ERROR_NONE;
+	struct act_pipe_transaction *trans = tr_context;
 	struct mail *mail = (action->mail != NULL ?
-			     action->mail :
-			     sieve_message_get_mail(aenv->msgctx));
-	struct sieve_extprogram *sprog;
-	int ret;
+		     action->mail :
+		     sieve_message_get_mail(aenv->msgctx));
+	enum sieve_error error = SIEVE_ERROR_NONE;
 
-	sprog = sieve_extprogram_create(action->ext, eenv->scriptenv,
-					eenv->msgdata, "pipe",
-					act->program_name, act->args, &error);
-	if (sprog != NULL) {
-		if (sieve_extprogram_set_input_mail(sprog, mail) < 0) {
-			sieve_extprogram_destroy(&sprog);
+	trans->sprog = sieve_extprogram_create(action->ext, eenv->scriptenv,
+					       eenv->msgdata, "pipe",
+					       act->program_name, act->args,
+					       &error);
+	if (trans->sprog != NULL) {
+		if (sieve_extprogram_set_input_mail(trans->sprog, mail) < 0) {
+			sieve_extprogram_destroy(&trans->sprog);
 			return sieve_result_mail_error(
 				aenv, mail, "failed to read input message");
 		}
-		ret = sieve_extprogram_run(sprog);
+	}
+
+	*keep = FALSE;
+	return SIEVE_EXEC_OK;
+}
+
+static int
+act_pipe_commit(const struct sieve_action_exec_env *aenv,
+		void *tr_context ATTR_UNUSED)
+{
+	const struct sieve_action *action = aenv->action;
+	const struct sieve_execute_env *eenv = aenv->exec_env;
+	const struct ext_pipe_action *act =
+		(const struct ext_pipe_action *)action->context;
+	struct act_pipe_transaction *trans = tr_context;
+	enum sieve_error error = SIEVE_ERROR_NONE;
+	int ret;
+
+	if (trans->sprog != NULL) {
+		ret = sieve_extprogram_run(trans->sprog);
+		sieve_extprogram_destroy(&trans->sprog);
 	} else {
 		ret = -1;
 	}
-	if (sprog != NULL)
-		sieve_extprogram_destroy(&sprog);
 
 	if (ret > 0) {
 		struct event_passthrough *e =
@@ -378,7 +424,7 @@ act_pipe_commit(const struct sieve_action_exec_env *aenv,
 					aenv,
 					"failed to pipe message to program: "
 					"program `%s' not found",
-					str_sanitize(act->program_name, 80));						
+					str_sanitize(act->program_name, 80));
 			} else {
 				sieve_extprogram_exec_error(
 					aenv->ehandler, NULL,
@@ -397,6 +443,15 @@ act_pipe_commit(const struct sieve_action_exec_env *aenv,
 		return SIEVE_EXEC_FAILURE;
 	}
 
-	*keep = FALSE;
 	return SIEVE_EXEC_OK;
+}
+
+static void
+act_pipe_rollback(const struct sieve_action_exec_env *aenv ATTR_UNUSED,
+		  void *tr_context, bool success ATTR_UNUSED)
+{
+	struct act_pipe_transaction *trans = tr_context;
+
+	if (trans->sprog != NULL)
+		sieve_extprogram_destroy(&trans->sprog);
 }

@@ -70,6 +70,7 @@ test_cases = \
 	tests/compile/warnings.svtest \
 	tests/compile/recover.svtest \
 	tests/execute/errors.svtest \
+	tests/execute/errors-cpu-limit.svtest \
 	tests/execute/actions.svtest \
 	tests/execute/smtp.svtest \
 	tests/execute/mailstore.svtest \
@@ -194,12 +195,14 @@ $(test_cases):
 
 failure_test_cases = \
 	tests/failures/fuzz1.svtest \
-	tests/failures/fuzz2.svtest
+	tests/failures/fuzz2.svtest \
+	tests/failures/fuzz3.svtest \
+	tests/failures/mailbox-bad-utf8.svtest
 
 $(failure_test_cases):
 	@$(TEST_BIN) -F $(top_srcdir)/$@
 
-TEST_EXTPROGRAMS_BIN = $(TEST_BIN) \
+TEST_EXTPROGRAMS_BIN = NOCHILDREN=yes $(TEST_BIN) \
 	-P src/plugins/sieve-extprograms/.libs/sieve_extprograms
 
 extprograms_test_cases = \

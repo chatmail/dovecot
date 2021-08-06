@@ -81,6 +81,7 @@ static int parse_jwt_token(struct oauth2_request *req, const char *token,
 			   bool *is_jwt_r, const char **error_r)
 {
 	struct oauth2_settings set;
+
 	i_zero(&set);
 	set.scope = "mail";
 	set.key_dict = keys_dict;
@@ -89,7 +90,8 @@ static int parse_jwt_token(struct oauth2_request *req, const char *token,
 	req->pool = pool_datastack_create();
 	req->set = &set;
 	t_array_init(&req->fields, 8);
-	return oauth2_try_parse_jwt(&set, token, &req->fields, is_jwt_r, error_r);
+	return oauth2_try_parse_jwt(&set, token, &req->fields, is_jwt_r,
+				    error_r);
 }
 
 static void test_jwt_token(const char *token)
@@ -97,6 +99,7 @@ static void test_jwt_token(const char *token)
 	/* then see what the parser likes it */
 	struct oauth2_request req;
 	const char *error = NULL;
+
 	bool is_jwt;
 	test_assert(parse_jwt_token(&req, token, &is_jwt, &error) == 0);
 	test_assert(is_jwt == TRUE);
@@ -126,17 +129,20 @@ static buffer_t *create_jwt_token_kid(const char *algo, const char *kid)
 	buffer_t *tokenbuf = t_buffer_create(64);
 
 	/* header */
-	base64url_encode_str(t_strdup_printf(
-				"{\"alg\":\"%s\",\"typ\":\"JWT\",\"kid\":\"%s\"}",
-				 algo, kid), tokenbuf);
+	base64url_encode_str(
+		t_strdup_printf(
+			"{\"alg\":\"%s\",\"typ\":\"JWT\",\"kid\":\"%s\"}",
+			algo, kid),
+		tokenbuf);
 	buffer_append(tokenbuf, ".", 1);
 
 	/* body */
-	base64url_encode_str(t_strdup_printf("{\"sub\":\"testuser\","\
+	base64url_encode_str(
+		t_strdup_printf("{\"sub\":\"testuser\","\
 				"\"iat\":%"PRIdTIME_T","
 				"\"exp\":%"PRIdTIME_T"}",
-					time(NULL),
-					time(NULL)+600), tokenbuf);
+				time(NULL), time(NULL)+600),
+		tokenbuf);
 	return tokenbuf;
 }
 
@@ -146,20 +152,23 @@ static buffer_t *create_jwt_token(const char *algo)
 	buffer_t *tokenbuf = t_buffer_create(64);
 
 	/* header */
-	base64url_encode_str(t_strdup_printf(
-				"{\"alg\":\"%s\",\"typ\":\"JWT\"}", algo), tokenbuf);
+	base64url_encode_str(
+		t_strdup_printf("{\"alg\":\"%s\",\"typ\":\"JWT\"}", algo),
+		tokenbuf);
 	buffer_append(tokenbuf, ".", 1);
 
 	/* body */
-	base64url_encode_str(t_strdup_printf("{\"sub\":\"testuser\","\
+	base64url_encode_str(
+		t_strdup_printf("{\"sub\":\"testuser\","\
 				"\"iat\":%"PRIdTIME_T","
 				"\"exp\":%"PRIdTIME_T"}",
-					time(NULL),
-					time(NULL)+600), tokenbuf);
+				time(NULL), time(NULL)+600),
+		tokenbuf);
 	return tokenbuf;
 }
 
-static void append_key_value(string_t *dest, const char *key, const char *value, bool str)
+static void
+append_key_value(string_t *dest, const char *key, const char *value, bool str)
 {
 	str_append_c(dest, '"');
 	json_append_escaped(dest, key);
@@ -172,14 +181,25 @@ static void append_key_value(string_t *dest, const char *key, const char *value,
 
 }
 
-static buffer_t *create_jwt_token_fields(const char *algo, time_t exp, time_t iat,
-					 time_t nbf, ARRAY_TYPE(oauth2_field) *fields)
+#define create_jwt_token_fields(algo, exp, iat, nbf, fields) \
+	create_jwt_token_fields_kid(algo, "default", exp, iat, nbf, fields)
+static buffer_t *
+create_jwt_token_fields_kid(const char *algo, const char *kid, time_t exp, time_t iat,
+			    time_t nbf, ARRAY_TYPE(oauth2_field) *fields)
 {
 	const struct oauth2_field *field;
 	buffer_t *tokenbuf = t_buffer_create(64);
-	base64url_encode_str(t_strdup_printf(
-				"{\"alg\":\"%s\",\"typ\":\"JWT\"}", algo), tokenbuf);
+	string_t *hdr = t_str_new(32);
+	str_printfa(hdr, "{\"alg\":\"%s\",\"typ\":\"JWT\"", algo);
+	if (kid != NULL && *kid != '\0') {
+		str_append(hdr, ",\"kid\":\"");
+		json_append_escaped(hdr, kid);
+		str_append_c(hdr, '"');
+	}
+	str_append(hdr, "}");
+	base64url_encode_str(str_c(hdr), tokenbuf);
 	buffer_append(tokenbuf, ".", 1);
+
 	string_t *bodybuf = t_str_new(64);
 	str_append_c(bodybuf, '{');
 	if (exp > 0) {
@@ -207,11 +227,17 @@ static buffer_t *create_jwt_token_fields(const char *algo, time_t exp, time_t ia
 }
 
 #define save_key(algo, key) save_key_to(algo, "default", (key))
-static void save_key_to(const char *algo, const char *name, const char *keydata)
+#define save_key_to(algo, name, key) save_key_azp_to(algo, "default", name, (key))
+static void save_key_azp_to(const char *algo, const char *azp,
+			    const char *name, const char *keydata)
 {
 	const char *error;
-	struct dict_transaction_context *ctx = dict_transaction_begin(keys_dict);
-	dict_set(ctx, t_strconcat(DICT_PATH_SHARED, "default/", algo, "/", name, NULL), keydata);
+	struct dict_transaction_context *ctx =
+		dict_transaction_begin(keys_dict);
+	algo = t_str_ucase(algo);
+	dict_set(ctx, t_strconcat(DICT_PATH_SHARED, azp, "/", algo, "/",
+				  name, NULL),
+		 keydata);
 	if (dict_transaction_commit(&ctx, &error) < 0)
 		i_error("dict_set(%s) failed: %s", name, error);
 }
@@ -226,15 +252,116 @@ static void sign_jwt_token_hs256(buffer_t *tokenbuf, buffer_t *key)
 			 sig->data, sig->used, tokenbuf);
 }
 
+static void sign_jwt_token_hs384(buffer_t *tokenbuf, buffer_t *key)
+{
+	i_assert(key != NULL);
+	buffer_t *sig = t_hmac_buffer(&hash_method_sha384, key->data, key->used,
+				      tokenbuf);
+	buffer_append(tokenbuf, ".", 1);
+	base64url_encode(BASE64_ENCODE_FLAG_NO_PADDING, SIZE_MAX,
+			 sig->data, sig->used, tokenbuf);
+}
+
+static void sign_jwt_token_hs512(buffer_t *tokenbuf, buffer_t *key)
+{
+	i_assert(key != NULL);
+	buffer_t *sig = t_hmac_buffer(&hash_method_sha512, key->data, key->used,
+				      tokenbuf);
+	buffer_append(tokenbuf, ".", 1);
+	base64url_encode(BASE64_ENCODE_FLAG_NO_PADDING, SIZE_MAX,
+			 sig->data, sig->used, tokenbuf);
+}
+
 static void test_jwt_hs_token(void)
 {
 	test_begin("JWT HMAC token");
 
+	buffer_t *sign_key_384 = t_buffer_create(384/8);
+	void *ptr = buffer_append_space_unsafe(sign_key_384, 384/8);
+	random_fill(ptr, 384/8);
+	buffer_t *b64_key = t_base64_encode(0, SIZE_MAX,
+					    sign_key_384->data,
+					    sign_key_384->used);
+	save_key_to("HS384", "default", str_c(b64_key));
+	buffer_t *sign_key_512 = t_buffer_create(512/8);
+	ptr = buffer_append_space_unsafe(sign_key_512, 512/8);
+	random_fill(ptr, 512/8);
+	b64_key = t_base64_encode(0, SIZE_MAX,
+				  sign_key_512->data,
+				  sign_key_512->used);
+	save_key_to("HS512", "default", str_c(b64_key));
 	/* make a token */
 	buffer_t *tokenbuf = create_jwt_token("HS256");
 	/* sign it */
 	sign_jwt_token_hs256(tokenbuf, hs_sign_key);
 	test_jwt_token(str_c(tokenbuf));
+
+	tokenbuf = create_jwt_token("HS384");
+	sign_jwt_token_hs384(tokenbuf, sign_key_384);
+	test_jwt_token(str_c(tokenbuf));
+
+	tokenbuf = create_jwt_token("HS512");
+	sign_jwt_token_hs512(tokenbuf, sign_key_512);
+	test_jwt_token(str_c(tokenbuf));
+
+	test_end();
+}
+
+static void test_jwt_token_escape(void)
+{
+	struct test_case {
+		const char *azp;
+		const char *alg;
+		const char *kid;
+		const char *esc_azp;
+		const char *esc_kid;
+	} test_cases[] = {
+		{ "", "hs256", "", "default", "default" },
+		{ "", "hs256", "test", "default", "test" },
+		{ "test", "hs256", "test", "test", "test" },
+		{
+			"http://test.unit/local%key",
+			"hs256",
+			"http://test.unit/local%key",
+			"http:%2f%2ftest.unit%2flocal%25key",
+			"http:%2f%2ftest.unit%2flocal%25key"
+		},
+		{ "../", "hs256", "../", "..%2f", "..%2f" },
+	};
+
+	test_begin("JWT token escaping");
+
+	buffer_t *b64_key =
+		t_base64_encode(0, SIZE_MAX, hs_sign_key->data, hs_sign_key->used);
+	ARRAY_TYPE(oauth2_field) fields;
+	t_array_init(&fields, 8);
+
+	for (size_t i = 0; i < N_ELEMENTS(test_cases); i++) {
+		const struct test_case *test_case = &test_cases[i];
+		array_clear(&fields);
+		struct oauth2_field *field = array_append_space(&fields);
+		field->name = "sub";
+		field->value = "testuser";
+		if (*test_case->azp != '\0') {
+			field = array_append_space(&fields);
+			field->name = "azp";
+			field->value = test_case->azp;
+		}
+		if (*test_case->kid != '\0') {
+			field = array_append_space(&fields);
+			field->name = "kid";
+			field->value = test_case->kid;
+		}
+		save_key_azp_to(test_case->alg, test_case->esc_azp, test_case->esc_kid,
+				str_c(b64_key));
+		buffer_t *token = create_jwt_token_fields_kid(test_case->alg,
+							      test_case->kid,
+							      time(NULL)+500,
+							      time(NULL)-500,
+							      0, &fields);
+		sign_jwt_token_hs256(token, hs_sign_key);
+		test_jwt_token(str_c(token));
+	}
 
 	test_end();
 }
@@ -309,7 +436,8 @@ static void test_jwt_broken_token(void)
 		struct oauth2_request req;
 		const char *error = NULL;
 		bool is_jwt;
-		test_assert_idx(parse_jwt_token(&req, test_case->token, &is_jwt, &error) != 0, i);
+		test_assert_idx(parse_jwt_token(&req, test_case->token,
+						&is_jwt, &error) != 0, i);
 		test_assert_idx(test_case->is_jwt == is_jwt, i);
 		test_assert_idx(error != NULL, i);
 	} T_END;
@@ -348,7 +476,8 @@ static void test_jwt_bad_valid_token(void)
 			.exp = now+500,
 			.iat = 0,
 			.nbf = 0,
-			.key_values = { "sub", "testuser", "iat", "1.1.2019 16:00", NULL },
+			.key_values = { "sub", "testuser", "iat",
+					"1.1.2019 16:00", NULL },
 			.error = "Malformed 'iat' field"
 		},
 		{ /* expired token */
@@ -378,8 +507,10 @@ static void test_jwt_bad_valid_token(void)
 		const struct test_cases *test_case = &test_cases[i];
 		const char *key = NULL;
 		ARRAY_TYPE(oauth2_field) fields;
+
 		t_array_init(&fields, 8);
-		for (const char *const *value = test_case->key_values; *value != NULL; value++) {
+		for (const char *const *value = test_case->key_values;
+		     *value != NULL; value++) {
 			if (key == NULL) {
 				key = *value;
 			} else {
@@ -392,13 +523,17 @@ static void test_jwt_bad_valid_token(void)
 		}
 
 		buffer_t *tokenbuf =
-			create_jwt_token_fields("HS256", test_case->exp, test_case->iat,
-						test_case->nbf, &fields);
+			create_jwt_token_fields("HS256", test_case->exp,
+						test_case->iat, test_case->nbf,
+						&fields);
 		sign_jwt_token_hs256(tokenbuf, hs_sign_key);
+
 		struct oauth2_request req;
 		const char *error = NULL;
 		bool is_jwt;
-		test_assert_idx(parse_jwt_token(&req, str_c(tokenbuf), &is_jwt, &error) != 0, i);
+
+		test_assert_idx(parse_jwt_token(&req, str_c(tokenbuf),
+						&is_jwt, &error) != 0, i);
 		test_assert_idx(is_jwt == TRUE, i);
 		if (test_case->error != NULL) {
 			test_assert_strcmp(test_case->error, error);
@@ -444,11 +579,11 @@ static void test_jwt_dates(void)
 	test_jwt_token(str_c(tokenbuf));
 
 	str_truncate(tokenbuf, 0);
-        base64url_encode_str("{\"alg\":\"HS256\",\"typ\":\"JWT\"}", tokenbuf);
+	base64url_encode_str("{\"alg\":\"HS256\",\"typ\":\"JWT\"}", tokenbuf);
 	str_append_c(tokenbuf, '.');
 	base64url_encode_str(t_strdup_printf("{\"sub\":\"testuser\","
 					     "\"exp\":%"PRIdTIME_T","
-				             "\"nbf\":0,\"iat\":%"PRIdTIME_T"}",
+					     "\"nbf\":0,\"iat\":%"PRIdTIME_T"}",
 					     exp, iat),
 			     tokenbuf);
 	sign_jwt_token_hs256(tokenbuf, hs_sign_key);
@@ -468,7 +603,8 @@ static void test_jwt_key_files(void)
 	buffer_t *secret = t_buffer_create(32);
 	void *ptr = buffer_append_space_unsafe(secret, 32);
 	random_fill(ptr, 32);
-	buffer_t *b64_key = t_base64_encode(0, SIZE_MAX, secret->data, secret->used);
+	buffer_t *b64_key = t_base64_encode(0, SIZE_MAX,
+					    secret->data, secret->used);
 	save_key_to("HS256", "first", str_c(b64_key));
 	buffer_t *secret2 = t_buffer_create(32);
 	ptr = buffer_append_space_unsafe(secret2, 32);
@@ -507,8 +643,9 @@ static void test_jwt_kid_escape(void)
 	 buffer_t *secret = t_buffer_create(32);
 	 void *ptr = buffer_append_space_unsafe(secret, 32);
 	 random_fill(ptr, 32);
-	 buffer_t *b64_key = t_base64_encode(0, SIZE_MAX, secret->data, secret->used);
-	 save_key_to("HS256", "hello%2eworld%2f%25", str_c(b64_key));
+	 buffer_t *b64_key = t_base64_encode(0, SIZE_MAX,
+					     secret->data, secret->used);
+	 save_key_to("HS256", "hello.world%2f%25", str_c(b64_key));
 	/* make a token */
 	buffer_t *tokenbuf = create_jwt_token_kid("HS256", "hello.world/%");
 	/* sign it */
@@ -520,6 +657,7 @@ static void test_jwt_kid_escape(void)
 static void test_jwt_rs_token(void)
 {
 	const char *error;
+
 	if (skip_dcrypt)
 		return;
 
@@ -529,17 +667,20 @@ static void test_jwt_rs_token(void)
 	save_key("RS256", rsa_public_key);
 
 	buffer_t *tokenbuf = create_jwt_token("RS256");
+
 	/* sign token */
 	buffer_t *sig = t_buffer_create(64);
 	struct dcrypt_private_key *key;
-	if (!dcrypt_key_load_private(&key, rsa_private_key, NULL, NULL, &error) ||
+	if (!dcrypt_key_load_private(&key, rsa_private_key, NULL, NULL,
+				     &error) ||
 	    !dcrypt_sign(key, "sha256", DCRYPT_SIGNATURE_FORMAT_DSS,
 			 tokenbuf->data, tokenbuf->used, sig,
 			 DCRYPT_PADDING_RSA_PKCS1, &error)) {
 		i_error("dcrypt signing failed: %s", error);
-		exit(1);
+		lib_exit(1);
 	}
 	dcrypt_key_unref_private(&key);
+
 	/* convert to base64 */
 	buffer_append(tokenbuf, ".", 1);
 	base64url_encode(BASE64_ENCODE_FLAG_NO_PADDING, SIZE_MAX,
@@ -553,6 +694,7 @@ static void test_jwt_rs_token(void)
 static void test_jwt_ps_token(void)
 {
 	const char *error;
+
 	if (skip_dcrypt)
 		return;
 
@@ -562,17 +704,20 @@ static void test_jwt_ps_token(void)
 	save_key("PS256", rsa_public_key);
 
 	buffer_t *tokenbuf = create_jwt_token("PS256");
+
 	/* sign token */
 	buffer_t *sig = t_buffer_create(64);
 	struct dcrypt_private_key *key;
-	if (!dcrypt_key_load_private(&key, rsa_private_key, NULL, NULL, &error) ||
+	if (!dcrypt_key_load_private(&key, rsa_private_key, NULL, NULL,
+				     &error) ||
 	    !dcrypt_sign(key, "sha256", DCRYPT_SIGNATURE_FORMAT_DSS,
 			 tokenbuf->data, tokenbuf->used, sig,
 			 DCRYPT_PADDING_RSA_PKCS1_PSS, &error)) {
 		i_error("dcrypt signing failed: %s", error);
-		exit(1);
+		lib_exit(1);
 	}
 	dcrypt_key_unref_private(&key);
+
 	/* convert to base64 */
 	buffer_append(tokenbuf, ".", 1);
 	base64url_encode(BASE64_ENCODE_FLAG_NO_PADDING, SIZE_MAX,
@@ -586,6 +731,7 @@ static void test_jwt_ps_token(void)
 static void test_jwt_ec_token(void)
 {
 	const char *error;
+
 	if (skip_dcrypt)
 		return;
 
@@ -595,27 +741,30 @@ static void test_jwt_ec_token(void)
 	if (!dcrypt_keypair_generate(&pair, DCRYPT_KEY_EC, 0,
 				     "prime256v1", &error)) {
 		i_error("dcrypt keypair generate failed: %s", error);
-		exit(1);
+		lib_exit(1);
 	}
 	/* export public key */
 	buffer_t *keybuf = t_buffer_create(256);
-	if (!dcrypt_key_store_public(pair.pub, DCRYPT_FORMAT_PEM, keybuf, &error)) {
+	if (!dcrypt_key_store_public(pair.pub, DCRYPT_FORMAT_PEM, keybuf,
+				     &error)) {
 		i_error("dcrypt key store failed: %s", error);
-		exit(1);
+		lib_exit(1);
 	}
 	oauth2_validation_key_cache_evict(key_cache, "default");
 	save_key("ES256", str_c(keybuf));
 
 	buffer_t *tokenbuf = create_jwt_token("ES256");
+
 	/* sign token */
 	buffer_t *sig = t_buffer_create(64);
 	if (!dcrypt_sign(pair.priv, "sha256", DCRYPT_SIGNATURE_FORMAT_X962,
 			 tokenbuf->data, tokenbuf->used, sig,
 			 DCRYPT_PADDING_DEFAULT, &error)) {
 		i_error("dcrypt signing failed: %s", error);
-		exit(1);
+		lib_exit(1);
 	}
 	dcrypt_keypair_unref(&pair);
+
 	/* convert to base64 */
 	buffer_append(tokenbuf, ".", 1);
 	base64url_encode(BASE64_ENCODE_FLAG_NO_PADDING, SIZE_MAX,
@@ -636,6 +785,7 @@ static void test_do_init(void)
 		.value_type = DICT_DATA_TYPE_STRING,
 		.base_dir = ".",
 	};
+
 	i_unlink_if_exists(".keys");
 	dict_driver_register(&dict_driver_file);
 	if (dict_init("file:.keys", &dict_set, &keys_dict, &error) < 0)
@@ -646,12 +796,14 @@ static void test_do_init(void)
 		skip_dcrypt = TRUE;
 	}
 	key_cache = oauth2_validation_key_cache_init();
+
 	/* write HMAC secret */
 	hs_sign_key =buffer_create_dynamic(default_pool, 32);
 	void *ptr = buffer_append_space_unsafe(hs_sign_key, 32);
 	random_fill(ptr, 32);
 	buffer_t *b64_key = t_base64_encode(0, SIZE_MAX,
-					    hs_sign_key->data, hs_sign_key->used);
+					    hs_sign_key->data,
+					    hs_sign_key->used);
 	save_key("HS256", str_c(b64_key));
 }
 
@@ -670,6 +822,7 @@ int main(void)
 	static void (*test_functions[])(void) = {
 		test_do_init,
 		test_jwt_hs_token,
+		test_jwt_token_escape,
 		test_jwt_bad_valid_token,
 		test_jwt_broken_token,
 		test_jwt_dates,
@@ -685,4 +838,3 @@ int main(void)
 	ret = test_run(test_functions);
 	return ret;
 }
-

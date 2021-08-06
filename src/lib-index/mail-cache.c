@@ -405,6 +405,7 @@ mail_cache_map_full(struct mail_cache *cache, size_t offset, size_t size,
 	struct stat st;
 	const void *data;
 	ssize_t ret;
+	size_t orig_size = size;
 
 	*corrupted_r = FALSE;
 
@@ -426,7 +427,7 @@ mail_cache_map_full(struct mail_cache *cache, size_t offset, size_t size,
 			*data_r = NULL;
 			return 0;
 		}
-		if (offset + size > (uoff_t)st.st_size)
+		if (size > (uoff_t)st.st_size - offset)
 			size = st.st_size - offset;
 	}
 
@@ -465,6 +466,10 @@ mail_cache_map_full(struct mail_cache *cache, size_t offset, size_t size,
 		/* already mapped */
 		i_assert(cache->mmap_base != NULL);
 		*data_r = CONST_PTR_OFFSET(cache->mmap_base, offset);
+		if (orig_size > cache->mmap_length - offset) {
+			/* requested offset/size points outside file */
+			return 0;
+		}
 		return 1;
 	}
 
@@ -500,7 +505,7 @@ mail_cache_map_full(struct mail_cache *cache, size_t offset, size_t size,
 	}
 	*data_r = offset > cache->mmap_length ? NULL :
 		CONST_PTR_OFFSET(cache->mmap_base, offset);
-	return mail_cache_map_finish(cache, offset, size,
+	return mail_cache_map_finish(cache, offset, orig_size,
 				     cache->mmap_base, FALSE, corrupted_r);
 }
 
@@ -578,7 +583,7 @@ mail_cache_open_or_create_path(struct mail_index *index, const char *path)
 	cache->dotlock_settings.nfs_flush =
 		(index->flags & MAIL_INDEX_OPEN_FLAG_NFS_FLUSH) != 0;
 	cache->dotlock_settings.timeout =
-		I_MIN(MAIL_CACHE_LOCK_TIMEOUT, index->max_lock_timeout_secs);
+		I_MIN(MAIL_CACHE_LOCK_TIMEOUT, index->set.max_lock_timeout_secs);
 	cache->dotlock_settings.stale_timeout = MAIL_CACHE_LOCK_CHANGE_TIMEOUT;
 
 	if (!MAIL_INDEX_IS_IN_MEMORY(index) &&
@@ -590,8 +595,8 @@ mail_cache_open_or_create_path(struct mail_index *index, const char *path)
 	cache->ext_id =
 		mail_index_ext_register(index, "cache", 0,
 					sizeof(uint32_t), sizeof(uint32_t));
-	mail_index_register_expunge_handler(index, cache->ext_id, FALSE,
-					    mail_cache_expunge_handler, cache);
+	mail_index_register_expunge_handler(index, cache->ext_id,
+					    mail_cache_expunge_handler);
 	return cache;
 }
 
@@ -641,9 +646,9 @@ static int mail_cache_lock_file(struct mail_cache *cache)
 	}
 
 	i_assert(cache->file_lock == NULL);
-	if (cache->index->lock_method != FILE_LOCK_METHOD_DOTLOCK) {
+	if (cache->index->set.lock_method != FILE_LOCK_METHOD_DOTLOCK) {
 		timeout_secs = I_MIN(MAIL_CACHE_LOCK_TIMEOUT,
-				     cache->index->max_lock_timeout_secs);
+				     cache->index->set.max_lock_timeout_secs);
 
 		ret = mail_index_lock_fd(cache->index, cache->filepath,
 					 cache->fd, F_WRLCK,
@@ -885,7 +890,7 @@ void mail_cache_unlock(struct mail_cache *cache)
 	if (MAIL_CACHE_IS_UNUSABLE(cache)) {
 		/* we found it to be broken during the lock. just clean up. */
 		cache->hdr_modified = FALSE;
-	} else if (cache->index->fsync_mode == FSYNC_MODE_ALWAYS) {
+	} else if (cache->index->set.fsync_mode == FSYNC_MODE_ALWAYS) {
 		if (fdatasync(cache->fd) < 0)
 			mail_cache_set_syscall_error(cache, "fdatasync()");
 	}

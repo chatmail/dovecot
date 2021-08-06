@@ -115,13 +115,13 @@ fs_metawrap_file_init(struct fs_file *_file, const char *path,
 	/* avoid unnecessarily creating two seekable streams */
 	flags &= ENUM_NEGATE(FS_OPEN_FLAG_SEEKABLE);
 
-	file->file.parent = fs_file_init_parent(_file, path, mode | flags);
+	file->file.parent = fs_file_init_parent(_file, path, mode, flags);
 	if (file->fs->wrap_metadata && mode == FS_OPEN_MODE_READONLY &&
 	    (flags & FS_OPEN_FLAG_ASYNC) == 0) {
 		/* use async stream for parent, so fs_read_stream() won't create
 		   another seekable stream needlessly */
 		file->super_read = fs_file_init_parent(_file, path,
-			mode | flags | FS_OPEN_FLAG_ASYNC |
+			mode, flags | FS_OPEN_FLAG_ASYNC |
 			FS_OPEN_FLAG_ASYNC_NOQUEUE);
 	} else {
 		file->super_read = file->file.parent;
@@ -396,15 +396,11 @@ static int fs_metawrap_write_stream_finish(struct fs_file *_file, bool success)
 	/* finish writing the temporary file */
 	if (file->temp_output->offset == 0) {
 		/* empty file - temp_output is already finished,
-		   so we can't write to it. */
-		string_t *str = t_str_new(128);
-
-		o_stream_destroy(&file->temp_output);
-		fs_metawrap_append_metadata(file, str);
-		input = i_stream_create_copy_from_data(str_data(str), str_len(str));
-	} else {
-		input = iostream_temp_finish(&file->temp_output, IO_BLOCK_SIZE);
+		   so we can't write to it. To make sure metadata is still
+		   appended/written to file use metadata_changed_since_write */
+		file->metadata_changed_since_write = TRUE;
 	}
+	input = iostream_temp_finish(&file->temp_output, IO_BLOCK_SIZE);
 	if (file->metadata_changed_since_write) {
 		/* we'll need to recreate the metadata. do this by creating a
 		   new istream combining the new metadata header and the

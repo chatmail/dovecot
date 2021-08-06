@@ -2463,8 +2463,12 @@ static void test_event_log_message(void)
 		}
 		event = parent;
 
-		if (test->result_str_out != NULL)
-			params.base_str_out = t_str_new(256);
+		if (test->result_str_out != NULL) {
+			/* Use small value so buffer size grows. This way the
+			   unit test fails if anyone attempts to add data-stack
+			   frame to event_log(). */
+			params.base_str_out = t_str_new(1);
+		}
 		event_log(event, &params, "TEXT");
 
 		test_assert_strcmp(test->result, test_output);
@@ -2482,7 +2486,7 @@ static void test_event_log_message(void)
 
 static void test_event_duration()
 {
-	intmax_t duration;
+	uintmax_t duration;
 	test_begin("event duration");
 	struct event *e = event_create(NULL);
 	usleep(10);
@@ -2503,6 +2507,7 @@ static void test_event_log_level(void)
 
 	struct event *event = event_create(NULL);
 	event_set_min_log_level(event, LOG_TYPE_WARNING);
+	errno = EACCES;
 	e_info(event, "Info event");
 	test_assert(test_output == NULL);
 	e_warning(event, "Warning event");
@@ -2511,6 +2516,7 @@ static void test_event_log_level(void)
 	i_set_info_handler(orig_info);
 	i_set_error_handler(orig_error);
 	i_free(test_output);
+	test_assert(errno == EACCES);
 	test_end();
 }
 

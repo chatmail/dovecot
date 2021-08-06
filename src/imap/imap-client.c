@@ -9,6 +9,7 @@
 #include "iostream.h"
 #include "iostream-rawlog.h"
 #include "istream.h"
+#include "istream-concat.h"
 #include "ostream.h"
 #include "time-util.h"
 #include "var-expand.h"
@@ -56,7 +57,9 @@ static void client_idle_timeout(struct client *client)
 {
 	if (client->output_cmd_lock == NULL)
 		client_send_line(client, "* BYE Disconnected for inactivity.");
-	client_destroy(client, "Disconnected for inactivity");
+	client_destroy(client, t_strdup_printf(
+		"Inactivity - no input for %"PRIdTIME_T" secs",
+		ioloop_time - client->last_input));
 }
 
 static void client_init_urlauth(struct client *client)
@@ -78,7 +81,7 @@ static void client_init_urlauth(struct client *client)
 
 static bool user_has_special_use_mailboxes(struct mail_user *user)
 {
-	struct mail_namespace_settings *const *ns_set;
+	struct mail_namespace_settings *ns_set;
 
 	/*
 	 * We have to iterate over namespace and mailbox *settings* since
@@ -91,15 +94,15 @@ static bool user_has_special_use_mailboxes(struct mail_user *user)
 	if (!array_is_created(&user->set->namespaces))
 		return FALSE;
 
-	array_foreach(&user->set->namespaces, ns_set) {
-		struct mailbox_settings *const *box_set;
+	array_foreach_elem(&user->set->namespaces, ns_set) {
+		struct mailbox_settings *box_set;
 
 		/* no mailboxes => no special use flags */
-		if (!array_is_created(&(*ns_set)->mailboxes))
+		if (!array_is_created(&ns_set->mailboxes))
 			continue;
 
-		array_foreach(&(*ns_set)->mailboxes, box_set) {
-			if ((*box_set)->special_use != NULL)
+		array_foreach_elem(&ns_set->mailboxes, box_set) {
+			if (box_set->special_use != NULL)
 				return TRUE;
 		}
 	}
@@ -153,11 +156,6 @@ struct client *client_create(int fd_in, int fd_out,
 	client->notify_count_changes = TRUE;
 	client->notify_flag_changes = TRUE;
 	p_array_init(&client->enabled_features, client->pool, 8);
-
-	if (set->rawlog_dir[0] != '\0') {
-		(void)iostream_rawlog_create(set->rawlog_dir, &client->input,
-					     &client->output);
-	}
 
 	client->capability_string =
 		str_new(client->pool, sizeof(CAPABILITY_STRING)+64);
@@ -221,16 +219,41 @@ struct client *client_create(int fd_in, int fd_out,
 	return client;
 }
 
+void client_create_finish_io(struct client *client)
+{
+	if (client->set->rawlog_dir[0] != '\0') {
+		(void)iostream_rawlog_create(client->set->rawlog_dir,
+					     &client->input, &client->output);
+	}
+	client->io = io_add_istream(client->input, client_input, client);
+}
+
 int client_create_finish(struct client *client, const char **error_r)
 {
 	if (mail_namespaces_init(client->user, error_r) < 0)
 		return -1;
 	mail_namespaces_set_storage_callbacks(client->user->namespaces,
 					      &mail_storage_callbacks, client);
-	client->io = io_add_istream(client->input, client_input, client);
-
 	client->v.init(client);
 	return 0;
+}
+
+void client_add_istream_prefix(struct client *client,
+			       const unsigned char *data, size_t size)
+{
+	i_assert(client->io == NULL);
+
+	struct istream *inputs[] = {
+		i_stream_create_copy_from_data(data, size),
+		client->input,
+		NULL
+	};
+	client->input = i_stream_create_concat(inputs);
+	i_stream_copy_fd(client->input, inputs[1]);
+	i_stream_unref(&inputs[0]);
+	i_stream_unref(&inputs[1]);
+
+	i_stream_set_input_pending(client->input, TRUE);
 }
 
 static void client_default_init(struct client *client ATTR_UNUSED)
@@ -425,7 +448,7 @@ static const char *client_get_commands_status(struct client *client)
 
 static void client_log_disconnect(struct client *client, const char *reason)
 {
-	e_info(client->event, "%s %s", reason, client_stats(client));
+	e_info(client->event, "Disconnected: %s %s", reason, client_stats(client));
 }
 
 static void client_default_destroy(struct client *client, const char *reason)
@@ -461,12 +484,14 @@ static void client_default_destroy(struct client *client, const char *reason)
 	if (client->input_lock != NULL)
 		client_command_cancel(&client->input_lock);
 
-	if (client->mailbox != NULL)
-		imap_client_close_mailbox(client);
 	if (client->notify_ctx != NULL)
 		imap_notify_deinit(&client->notify_ctx);
 	if (client->urlauth_ctx != NULL)
 		imap_urlauth_deinit(&client->urlauth_ctx);
+	/* Keep mailbox closing close to last, so anything that could
+	   potentially have transactions open will close them first. */
+	if (client->mailbox != NULL)
+		imap_client_close_mailbox(client);
 	if (client->anvil_sent) {
 		master_service_anvil_send(master_service, t_strconcat(
 			"DISCONNECT\t", my_pid, "\timap/",
@@ -1146,8 +1171,9 @@ static bool client_skip_line(struct client *client)
 
 static void client_idle_output_timeout(struct client *client)
 {
-	client_destroy(client,
-		       "Disconnected for inactivity in reading our output");
+	client_destroy(client, t_strdup_printf(
+		"Client has not read server output for for %"PRIdTIME_T" secs",
+		ioloop_time - client->last_output));
 }
 
 bool client_handle_unfinished_cmd(struct client_command_context *cmd)
@@ -1453,7 +1479,7 @@ int client_output(struct client *client)
 	client_output_commands(client);
 	(void)cmd_sync_delayed(client);
 
-	imap_refresh_proctitle();
+	imap_refresh_proctitle_delayed();
 	if (client->output->closed)
 		client_destroy(client, NULL);
 	else {
@@ -1627,8 +1653,8 @@ void clients_init(void)
 void clients_destroy_all(void)
 {
 	while (imap_clients != NULL) {
-		client_send_line(imap_clients, "* BYE Server shutting down.");
 		mail_storage_service_io_activate_user(imap_clients->service_user);
+		client_send_line(imap_clients, "* BYE Server shutting down.");
 		client_destroy(imap_clients, "Server shutting down.");
 	}
 }

@@ -10,7 +10,6 @@
 #include "dict.h"
 #include "master-service-private.h"
 #include "master-service-settings.h"
-#include "master-service-ssl-settings.h"
 #include "settings-parser.h"
 #include "doveadm-print-private.h"
 #include "doveadm-dump.h"
@@ -31,10 +30,7 @@ const struct doveadm_print_vfuncs *doveadm_print_vfuncs_all[] = {
 	NULL
 };
 
-bool doveadm_verbose_proctitle;
 int doveadm_exit_code = 0;
-
-static pool_t doveadm_settings_pool = NULL;
 
 static void failure_exit_callback(int *status)
 {
@@ -134,7 +130,7 @@ usage_to(FILE *out, const char *prefix)
 	doveadm_mail_usage(str);
 	doveadm_usage_compress_lines(out, str_c(str), prefix);
 
-	exit(EX_USAGE);
+	lib_exit(EX_USAGE);
 }
 
 void usage(void)
@@ -146,7 +142,7 @@ static void ATTR_NORETURN
 help_to(const struct doveadm_cmd *cmd, FILE *out)
 {
 	fprintf(out, "doveadm %s %s\n", cmd->name, cmd->short_usage);
-	exit(EX_USAGE);
+	lib_exit(EX_USAGE);
 }
 
 void help(const struct doveadm_cmd *cmd)
@@ -158,7 +154,7 @@ static void ATTR_NORETURN
 help_to_ver2(const struct doveadm_cmd_ver2 *cmd, FILE *out)
 {
 	fprintf(out, "doveadm %s %s\n", cmd->name, cmd->usage);
-	exit(EX_USAGE);
+	lib_exit(EX_USAGE);
 }
 
 void help_ver2(const struct doveadm_cmd_ver2 *cmd)
@@ -173,7 +169,7 @@ static void cmd_help(int argc ATTR_UNUSED, char *argv[])
 	if (argv[1] == NULL)
 		usage_to(stdout, "");
 
-	env_put("MANPATH="MANDIR);
+	env_put("MANPATH", MANDIR);
 	man_argv[0] = "man";
 	man_argv[1] = t_strconcat("doveadm-", argv[1], NULL);
 	man_argv[2] = NULL;
@@ -186,8 +182,8 @@ static struct doveadm_cmd doveadm_cmd_help = {
 
 static void cmd_config(int argc ATTR_UNUSED, char *argv[])
 {
-	env_put(t_strconcat(MASTER_CONFIG_FILE_ENV"=",
-		master_service_get_config_path(master_service), NULL));
+	env_put(MASTER_CONFIG_FILE_ENV,
+		master_service_get_config_path(master_service));
 	argv[0] = BINDIR"/doveconf";
 	(void)execv(argv[0], argv);
 	i_fatal("execv(%s) failed: %m", argv[0]);
@@ -245,44 +241,6 @@ static bool doveadm_has_subcommands(const char *cmd_name)
 			return TRUE;
 	}
 	return doveadm_mail_has_subcommands(cmd_name);
-}
-
-static void doveadm_read_settings(void)
-{
-	static const struct setting_parser_info *set_roots[] = {
-		&master_service_ssl_setting_parser_info,
-		&doveadm_setting_parser_info,
-		NULL
-	};
-	struct master_service_settings_input input;
-	struct master_service_settings_output output;
-	const struct doveadm_settings *set;
-	const char *error;
-
-	i_zero(&input);
-	input.roots = set_roots;
-	input.module = "doveadm";
-	input.service = "doveadm";
-	input.preserve_user = TRUE;
-	input.preserve_home = TRUE;
-	if (master_service_settings_read(master_service, &input,
-					 &output, &error) < 0)
-		i_fatal("Error reading configuration: %s", error);
-
-	doveadm_settings_pool = pool_alloconly_create("doveadm settings", 1024);
-	service_set = master_service_settings_get(master_service);
-	service_set = settings_dup(&master_service_setting_parser_info,
-				   service_set, doveadm_settings_pool);
-	doveadm_verbose_proctitle = service_set->verbose_proctitle;
-
-	set = master_service_settings_get_others(master_service)[1];
-	doveadm_settings = settings_dup(&doveadm_setting_parser_info, set,
-					doveadm_settings_pool);
-	doveadm_ssl_set = settings_dup(&master_service_ssl_setting_parser_info,
-				       master_service_ssl_settings_get(master_service),
-				       doveadm_settings_pool);
-	doveadm_settings_expand(doveadm_settings, doveadm_settings_pool);
-	doveadm_settings->parsed_features = set->parsed_features; /* copy this value by hand */
 }
 
 static struct doveadm_cmd *doveadm_cmdline_commands[] = {
@@ -343,11 +301,10 @@ int main(int argc, char *argv[])
 	    argv[optind+1] != NULL) {
 		/* "help cmd" doesn't need any configuration */
 		quick_init = TRUE;
-	} else {
-		doveadm_read_settings();
 	}
 	master_service_init_log(master_service);
 
+	doveadm_settings_init();
 	doveadm_cmds_init();
 	for (i = 0; i < N_ELEMENTS(doveadm_cmdline_commands); i++)
 		doveadm_register_cmd(doveadm_cmdline_commands[i]);
@@ -361,16 +318,29 @@ int main(int argc, char *argv[])
 		/* special case commands: even if there is something wrong
 		   with the config (e.g. mail_plugins), don't fail these
 		   commands */
+		if (strcmp(cmd_name, "help") != 0)
+			doveadm_read_settings();
 		quick_init = TRUE;
 	} else {
 		quick_init = FALSE;
-		master_service_init_stats_client(master_service, TRUE);
 		doveadm_print_ostream = o_stream_create_fd(STDOUT_FILENO, 0);
 		o_stream_set_no_error_handling(doveadm_print_ostream, TRUE);
 		o_stream_cork(doveadm_print_ostream);
 		doveadm_dump_init();
 		doveadm_mail_init();
 		dict_drivers_register_builtin();
+		doveadm_load_modules();
+
+		/* read settings only after loading doveadm plugins, which
+		   may modify what settings are read */
+		doveadm_read_settings();
+		if (doveadm_debug && getenv("LOG_STDERR_TIMESTAMP") == NULL)
+			i_set_failure_timestamp_format(master_service->set->log_timestamp);
+		master_service_init_stats_client(master_service, TRUE);
+		/* Load mail_plugins */
+		doveadm_mail_init_finish();
+		/* kludgy: Load the rest of the doveadm plugins after
+		   mail_plugins have been loaded. */
 		doveadm_load_modules();
 
 		if (cmd_name == NULL) {
@@ -415,7 +385,7 @@ int main(int argc, char *argv[])
 		o_stream_unref(&doveadm_print_ostream);
 	}
 	doveadm_cmds_deinit();
-	pool_unref(&doveadm_settings_pool);
+	doveadm_settings_deinit();
 	master_service_deinit(&master_service);
 	return doveadm_exit_code;
 }

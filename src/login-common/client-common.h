@@ -37,6 +37,10 @@ struct module;
 #define AUTH_MASTER_WAITING_MSG \
 	"Waiting for authentication master process to respond.."
 
+/* Client logged out without having successfully authenticated. */
+#define CLIENT_UNAUTHENTICATED_LOGOUT_MSG \
+	"Aborted login by logging out"
+
 struct master_service_connection;
 
 enum client_disconnect_reason {
@@ -75,6 +79,18 @@ enum client_auth_result {
 	CLIENT_AUTH_RESULT_MECH_INVALID,
 	CLIENT_AUTH_RESULT_MECH_SSL_REQUIRED,
 	CLIENT_AUTH_RESULT_ANONYMOUS_DENIED
+};
+
+enum client_list_type {
+	CLIENT_LIST_TYPE_NONE = 0,
+	/* clients (disconnected=FALSE, fd_proxying=FALSE, destroyed=FALSE) */
+	CLIENT_LIST_TYPE_ACTIVE,
+	/* destroyed_clients (destroyed=TRUE, fd_proxying=FALSE). Either the
+	   client will soon be freed or it's only referenced via
+	   "login_proxies". */
+	CLIENT_LIST_TYPE_DESTROYED,
+	/* client_fd_proxies (fd_proxying=TRUE) */
+	CLIENT_LIST_TYPE_FD_PROXY,
 };
 
 struct client_auth_reply {
@@ -135,11 +151,9 @@ struct client_vfuncs {
 };
 
 struct client {
-	/* If disconnected=FALSE, the client is in "clients" list.
-	   If fd_proxying=TRUE, the client is in "client_fd_proxies" list.
-	   Otherwise, either the client will soon be freed or it's only
-	   referenced via "login_proxies" which doesn't use these pointers. */
 	struct client *prev, *next;
+	/* Specifies which linked list the client is in */
+	enum client_list_type list_type;
 
 	pool_t pool;
 	/* this pool gets free'd once proxying starts */
@@ -147,7 +161,7 @@ struct client {
 	struct client_vfuncs v;
 	struct client_vfuncs *vlast;
 
-	time_t created;
+	struct timeval created;
 	int refcount;
 	struct event *event;
 
@@ -189,6 +203,8 @@ struct client {
 	time_t auth_first_started, auth_finished;
 	const char *sasl_final_resp;
 	const char *const *auth_passdb_args;
+	struct anvil_query *anvil_query;
+	struct anvil_request *anvil_request;
 
 	unsigned int master_auth_id;
 	unsigned int master_tag;
@@ -263,8 +279,10 @@ client_alloc(int fd, pool_t pool,
 	     const struct login_settings *set,
 	     const struct master_service_ssl_settings *ssl_set);
 void client_init(struct client *client, void **other_sets);
-void client_disconnect(struct client *client, const char *reason);
+void client_disconnect(struct client *client, const char *reason,
+		       bool add_disconnected_prefix);
 void client_destroy(struct client *client, const char *reason);
+void client_destroy_iostream_error(struct client *client);
 /* Destroy the client after a successful login. Either the client fd was
    sent to the post-login process, or the connection will be proxied. */
 void client_destroy_success(struct client *client, const char *reason);
@@ -332,7 +350,7 @@ void client_proxy_log_failure(struct client *client, const char *line);
 const char *client_proxy_get_state(struct client *client);
 
 void clients_notify_auth_connected(void);
-void client_destroy_oldest(void);
+bool client_destroy_oldest(bool kill, struct timeval *created_r);
 void clients_destroy_all(void);
 void clients_destroy_all_reason(const char *reason);
 

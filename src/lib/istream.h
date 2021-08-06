@@ -97,12 +97,18 @@ void i_stream_remove_destroy_callback(struct istream *stream,
 
 /* Return file descriptor for stream, or -1 if none is available. */
 int i_stream_get_fd(struct istream *stream);
+/* Copy the file descriptor from source istream to destination istream.
+   The readable_fd is preserved. Assert-crashes if source doesn't have a
+   file descriptor. */
+void i_stream_copy_fd(struct istream *dest, struct istream *source);
 /* Returns error string for the last error. It also returns "EOF" in case there
    is no error, but eof is set. Otherwise it returns "<no error>". */
 const char *i_stream_get_error(struct istream *stream);
-/* Returns human-readable reason for why istream was disconnected. This can be
-   called to log the error when i_stream_read() returns -1. If there's an error
-   the output is identical to i_stream_get_error(). */
+/* Returns human-readable reason for why istream was disconnected.
+   The output is either "Connection closed" for clean disconnections or
+   "Connection closed: <error>" for unclean disconnections. This is an
+   alternative to i_stream_get_error(), which is preferred to be used when
+   logging errors about client connections. */
 const char *i_stream_get_disconnect_reason(struct istream *stream);
 
 /* Mark the stream and all of its parent streams closed. Any reads after this

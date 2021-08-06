@@ -50,7 +50,7 @@ i_stream_chain_append_internal(struct istream_chain *chain,
 		i_stream_ref(stream);	
 
 	if (chain->head == NULL && stream != NULL) {
-		struct chain_istream *cstream = (struct chain_istream *)chain->stream;
+		struct chain_istream *cstream = chain->stream;
 
 		if (cstream->have_explicit_max_buffer_size) {
 			i_stream_set_max_buffer_size(stream,
@@ -83,7 +83,8 @@ static void
 i_stream_chain_set_max_buffer_size(struct iostream_private *stream,
 				    size_t max_size)
 {
-	struct chain_istream *cstream = (struct chain_istream *)stream;
+	struct chain_istream *cstream =
+		container_of(stream, struct chain_istream, istream.iostream);
 	struct istream_chain_link *link = cstream->chain.head;
 
 	cstream->have_explicit_max_buffer_size = TRUE;
@@ -97,7 +98,8 @@ i_stream_chain_set_max_buffer_size(struct iostream_private *stream,
 
 static void i_stream_chain_destroy(struct iostream_private *stream)
 {
-	struct chain_istream *cstream = (struct chain_istream *)stream;
+	struct chain_istream *cstream =
+		container_of(stream, struct chain_istream, istream.iostream);
 	struct istream_chain_link *link = cstream->chain.head;
 
 	while (link != NULL) {
@@ -181,9 +183,12 @@ static bool i_stream_chain_skip(struct chain_istream *cstream)
 		bytes_skipped -= cstream->prev_stream_left;
 		cstream->prev_stream_left = 0;
 	}
-	stream->pos -= bytes_skipped;
-	stream->skip -= bytes_skipped;
-	stream->buffer += bytes_skipped;
+	if (bytes_skipped > 0) {
+		i_assert(stream->buffer != NULL);
+		stream->pos -= bytes_skipped;
+		stream->skip -= bytes_skipped;
+		stream->buffer += bytes_skipped;
+	}
 	cstream->prev_skip = stream->skip;
 	if (link == NULL || link->eof) {
 		i_assert(bytes_skipped == 0);
@@ -195,7 +200,8 @@ static bool i_stream_chain_skip(struct chain_istream *cstream)
 
 static ssize_t i_stream_chain_read(struct istream_private *stream)
 {
-	struct chain_istream *cstream = (struct chain_istream *)stream;
+	struct chain_istream *cstream =
+		container_of(stream, struct chain_istream, istream);
 	struct istream_chain_link *link = cstream->chain.head;
 	const unsigned char *data;
 	size_t data_size, cur_data_pos, new_pos;
@@ -278,7 +284,8 @@ static ssize_t i_stream_chain_read(struct istream_private *stream)
 static void i_stream_chain_close(struct iostream_private *stream,
 				 bool close_parent)
 {
-	struct chain_istream *cstream = (struct chain_istream *)stream;
+	struct chain_istream *cstream =
+		container_of(stream, struct chain_istream, istream.iostream);
 
 	/* seek to the correct position in parent stream in case it didn't
 	   end with EOF */

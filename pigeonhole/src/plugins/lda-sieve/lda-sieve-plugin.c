@@ -385,6 +385,13 @@ sieve_binary *lda_sieve_open(struct lda_sieve_run_context *srctx,
 				"Failed to %s script `%s'",
 				compile_name, sieve_script_location(script));
 			break;
+		/* Cumulative resource limit exceeded */
+		case SIEVE_ERROR_RESOURCE_LIMIT:
+			e_error(sieve_get_event(svinst),
+				"Failed to open script `%s' for %s "
+				"(cumulative resource limit exceeded)",
+				sieve_script_location(script), compile_name);
+			break;
 		/* Something else */
 		default:
 			e_error(sieve_get_event(svinst),
@@ -459,6 +466,13 @@ lda_sieve_handle_exec_status(struct lda_sieve_run_context *srctx,
 			sieve_script_location(script));
 		ret = -1;
 		break;
+	case SIEVE_EXEC_RESOURCE_LIMIT:
+		e_error(sieve_get_event(svinst),
+			"Execution of script %s was aborted "
+			"due to excessive resource usage",
+			sieve_script_location(script));
+		ret = -1;
+		break;
 	case SIEVE_EXEC_KEEP_FAILED:
 		e_log(sieve_get_event(svinst), log_level,
 		      "Execution of script %s failed with unsuccessful implicit keep%s",
@@ -473,7 +487,7 @@ lda_sieve_handle_exec_status(struct lda_sieve_run_context *srctx,
 	return ret;
 }
 
-static bool
+static int
 lda_sieve_execute_script(struct lda_sieve_run_context *srctx,
 			 struct sieve_multiscript *mscript,
 			 struct sieve_script *script,
@@ -485,12 +499,16 @@ lda_sieve_execute_script(struct lda_sieve_run_context *srctx,
 	struct sieve_binary *sbin = NULL;
 	enum sieve_compile_flags cpflags = 0;
 	enum sieve_execute_flags exflags = SIEVE_EXECUTE_FLAG_LOG_RESULT;
-	bool user_script, more;
+	struct sieve_resource_usage *rusage =
+		&srctx->scriptenv->exec_status->resource_usage;
+	bool user_script;
+	int mstatus, ret;
 
 	*error_r = SIEVE_ERROR_NONE;
 
 	user_script = (script == srctx->user_script);
 
+	sieve_resource_usage_init(rusage);
 	if (user_script) {
 		cpflags |= SIEVE_COMPILE_FLAG_NOGLOBAL;
 		exflags |= SIEVE_EXECUTE_FLAG_NOGLOBAL;
@@ -514,7 +532,7 @@ lda_sieve_execute_script(struct lda_sieve_run_context *srctx,
 
 	sbin = lda_sieve_open(srctx, script, cpflags, FALSE, error_r);
 	if (sbin == NULL)
-		return FALSE;
+		return 0;
 
 	/* Execute */
 
@@ -523,52 +541,55 @@ lda_sieve_execute_script(struct lda_sieve_run_context *srctx,
 		sieve_get_source(sbin));
 
 	if (!discard_script) {
-		more = sieve_multiscript_run(mscript, sbin, exec_ehandler,
-					     exec_ehandler, exflags);
+		ret = (sieve_multiscript_run(mscript, sbin, exec_ehandler,
+					     exec_ehandler, exflags) ? 1 : 0);
 	} else {
 		sieve_multiscript_run_discard(mscript, sbin, exec_ehandler,
 					      exec_ehandler, exflags);
-		more = FALSE;
+		ret = 0;
 	}
 
-	if (!more) {
-		if (sieve_multiscript_status(mscript) ==
-			SIEVE_EXEC_BIN_CORRUPT &&
-		    sieve_is_loaded(sbin)) {
-			/* Close corrupt script */
+	mstatus = sieve_multiscript_status(mscript);
+	if (ret == 0 && mstatus == SIEVE_EXEC_BIN_CORRUPT &&
+	    sieve_is_loaded(sbin)) {
+		/* Close corrupt script */
 
-			sieve_close(&sbin);
+		sieve_close(&sbin);
 
-			/* Recompile */
+		/* Recompile */
 
-			sbin = lda_sieve_open(srctx, script, cpflags, TRUE,
-					      error_r);
-			if (sbin == NULL)
-				return FALSE;
+		sbin = lda_sieve_open(srctx, script, cpflags, TRUE,
+				      error_r);
+		if (sbin == NULL)
+			return 0;
 
-			/* Execute again */
+		/* Execute again */
 
-			if (!discard_script) {
-				more = sieve_multiscript_run(
-					mscript, sbin, exec_ehandler,
-					exec_ehandler, exflags);
-			} else {
-				sieve_multiscript_run_discard(
-					mscript, sbin, exec_ehandler,
-					exec_ehandler, exflags);
-			}
-
-			/* Save new version */
-
-			if (sieve_multiscript_status(mscript) !=
-				SIEVE_EXEC_BIN_CORRUPT)
-				lda_sieve_binary_save(srctx, sbin, script);
+		if (!discard_script) {
+			ret = (sieve_multiscript_run(
+				mscript, sbin, exec_ehandler,
+				exec_ehandler, exflags) ? 1 : 0);
+		} else {
+			sieve_multiscript_run_discard(
+				mscript, sbin, exec_ehandler,
+				exec_ehandler, exflags);
 		}
+
+		/* Save new version */
+
+		mstatus = sieve_multiscript_status(mscript);
+		if (mstatus != SIEVE_EXEC_BIN_CORRUPT)
+			lda_sieve_binary_save(srctx, sbin, script);
 	}
+	if (ret == 0 && mstatus == SIEVE_EXEC_RESOURCE_LIMIT)
+		ret = -1;
+
+	if (user_script)
+		(void)sieve_record_resource_usage(sbin, rusage);
 
 	sieve_close(&sbin);
 
-	return more;
+	return ret;
 }
 
 static int lda_sieve_execute_scripts(struct lda_sieve_run_context *srctx)
@@ -596,8 +617,6 @@ static int lda_sieve_execute_scripts(struct lda_sieve_run_context *srctx)
 	discard_script = FALSE;
 	error = SIEVE_ERROR_NONE;
 	for (;;) {
-		bool more;
-
 		if (!discard_script) {
 			/* normal script sequence */
 			i_assert(i < srctx->script_count);
@@ -611,17 +630,19 @@ static int lda_sieve_execute_scripts(struct lda_sieve_run_context *srctx)
 		i_assert(script != NULL);
 		last_script = script;
 
-		more = lda_sieve_execute_script(srctx, mscript, script, i,
-						discard_script, &error);
+		ret = lda_sieve_execute_script(srctx, mscript, script, i,
+					       discard_script, &error);
+		if (ret < 0)
+			break;
 		if (error == SIEVE_ERROR_NOT_FOUND) {
 			/* skip scripts which finally turn out not to exist */
-			more = TRUE;
+			ret = 1;
 		}
 
 		if (discard_script) {
 			/* Executed discard script, which is always final */
 			break;
-		} else if (more) {
+		} else if (ret > 0) {
 			/* The "keep" action is applied; execute next script */
 			i_assert(i <= srctx->script_count);
 			if (i == srctx->script_count) {
@@ -642,13 +663,10 @@ static int lda_sieve_execute_scripts(struct lda_sieve_run_context *srctx)
 	/* Finish execution */
 	exec_ehandler = (srctx->user_ehandler != NULL ?
 			 srctx->user_ehandler : srctx->master_ehandler);
-	if (error == SIEVE_ERROR_TEMP_FAILURE) {
-		ret = sieve_multiscript_tempfail(&mscript, exec_ehandler,
-						 exflags);
-	} else {
-		ret = sieve_multiscript_finish(&mscript, exec_ehandler, exflags,
-					       NULL);
-	}
+	ret = sieve_multiscript_finish(&mscript, exec_ehandler, exflags,
+				       (error == SIEVE_ERROR_TEMP_FAILURE ?
+					SIEVE_EXEC_TEMP_FAILURE :
+					SIEVE_EXEC_OK));
 
 	/* Don't log additional messages about compile failure */
 	if (error != SIEVE_ERROR_NONE && ret == SIEVE_EXEC_FAILURE) {

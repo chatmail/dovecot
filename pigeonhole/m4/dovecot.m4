@@ -1,12 +1,12 @@
 dnl dovecot.m4 - Check presence of dovecot -*-Autoconf-*-
 dnl
-dnl   Copyright (C) 2010 Dennis Schridded
+dnl   Copyright (C) 2010 Dennis Schridde
 dnl
 dnl This file is free software; the authors give
 dnl unlimited permission to copy and/or distribute it, with or without
 dnl modifications, as long as this notice is preserved.
 
-# serial 30
+# serial 32
 
 dnl
 dnl Check for support for D_FORTIFY_SOURCE=2
@@ -68,14 +68,6 @@ AC_DEFUN([DC_DOVECOT_CFLAGS],[
           CFLAGS="$old_cflags"
         ])
 
-  ])
-  AS_IF([test "$have_clang" = "yes"], [
-    dnl clang specific options
-    AS_IF([test "$want_devel_checks" = "yes"], [
-      dnl FIXME: enable once md[45], sha[12] can be compiled without
-      dnl CFLAGS="$CFLAGS -fsanitize=integer,undefined -ftrapv"
-      :
-    ])
   ])
 ])
 
@@ -197,7 +189,7 @@ dnl
 
 AC_DEFUN([AC_CC_RETPOLINE],[
     AC_ARG_WITH(retpoline,
-       AS_HELP_STRING([--with-retpoline=<choice>], [Retpoline migitation choice (default: keep)]),
+       AS_HELP_STRING([--with-retpoline=<choice>], [Retpoline mitigation choice (default: keep)]),
             with_retpoline=$withval,
             with_retpoline=keep)
 
@@ -267,8 +259,9 @@ AC_DEFUN([DC_PLUGIN_DEPS],[
 ])
 
 AC_DEFUN([DC_DOVECOT_TEST_WRAPPER],[
-  AC_CHECK_PROG(VALGRIND, valgrind, yes, no)
-  AS_IF([test "$VALGRIND" = yes], [
+  AC_ARG_VAR([VALGRIND], [Path to valgrind])
+  AC_PATH_PROG(VALGRIND, valgrind, reject)
+  AS_IF([test "$VALGRIND" != reject], [
     cat > run-test.sh <<_DC_EOF
 #!/bin/sh
 top_srcdir=\$[1]
@@ -299,9 +292,9 @@ else
   trap "rm -f \$test_out" 0 1 2 3 15
   supp_path="\$top_srcdir/run-test-valgrind.supp"
   if test -r "\$supp_path"; then
-    valgrind -q \$trace_children --leak-check=full --gen-suppressions=all --suppressions="\$supp_path" --log-file=\$test_out \$noundef \$[*]
+    $VALGRIND -q \$trace_children --error-exitcode=213 --leak-check=full --gen-suppressions=all --suppressions="\$supp_path" --log-file=\$test_out \$noundef \$[*]
   else
-    valgrind -q \$trace_children --leak-check=full --gen-suppressions=all --log-file=\$test_out \$noundef \$[*]
+    $VALGRIND -q \$trace_children --error-exitcode=213 --leak-check=full --gen-suppressions=all --log-file=\$test_out \$noundef \$[*]
   fi
   ret=\$?
   if test -s \$test_out; then
@@ -314,7 +307,7 @@ if test \$ret != 0; then
 fi
 exit \$ret
 _DC_EOF
-    RUN_TEST='$(SHELL) $(top_builddir)/run-test.sh $(top_srcdir)'
+    RUN_TEST='$(LIBTOOL) execute $(SHELL) $(top_builddir)/run-test.sh $(top_srcdir)'
   ], [
     RUN_TEST=''
   ])
@@ -340,6 +333,28 @@ AC_DEFUN([DC_DOVECOT_HARDENING],[
 	AC_CC_D_FORTIFY_SOURCE
 	AC_CC_RETPOLINE
 	AC_LD_RELRO
+	DOVECOT_WANT_UBSAN
+])
+
+AC_DEFUN([DC_DOVECOT_FUZZER],[
+        AC_ARG_WITH(fuzzer,
+        AS_HELP_STRING([--with-fuzzer=clang], [Build with clang fuzzer (default: no)]),
+                with_fuzzer=$withval,
+                with_fuzzer=no)
+	AS_IF([test x$with_fuzzer = xclang], [
+		CFLAGS="$CFLAGS -fsanitize=fuzzer-no-link"
+		# use $LIB_FUZZING_ENGINE for linking if it exists
+		FUZZER_LDFLAGS=${LIB_FUZZING_ENGINE--fsanitize=fuzzer}
+		# May need to use CXXLINK for linking, which wants sources to
+		# be compiled with -fPIE
+		FUZZER_CPPFLAGS='$(AM_CPPFLAGS) -fPIE -DPIE'
+	], [test x$with_fuzzer != xno], [
+		AC_MSG_ERROR([Unknown fuzzer $with_fuzzer])
+	])
+	AC_SUBST([FUZZER_CPPFLAGS])
+	AC_SUBST([FUZZER_LDFLAGS])
+	AM_CONDITIONAL([USE_FUZZER], [test "x$with_fuzzer" != "xno"])
+
 ])
 
 AC_DEFUN([DC_DOVECOT],[
@@ -548,4 +563,46 @@ AC_DEFUN([CC_CLANG],[
       AS_VAR_SET([have_clang], [no])
   ])
   AC_MSG_RESULT([$have_clang])
+])
+
+AC_DEFUN([DOVECOT_WANT_UBSAN], [
+  AC_ARG_ENABLE(ubsan,
+    AS_HELP_STRING([--enable-ubsan], [Enable undefined behaviour sanitizes (default=no)]),
+                   [want_ubsan=yes], [want_ubsan=no])
+  AC_MSG_CHECKING([whether we want undefined behaviour sanitizer])
+  AC_MSG_RESULT([$want_ubsan])
+  AS_IF([test x$want_ubsan = xyes], [
+     san_flags=""
+     gl_COMPILER_OPTION_IF([-fsanitize=undefined], [
+             san_flags="$san_flags -fsanitize=undefined"
+             AC_DEFINE([HAVE_FSANITIZE_UNDEFINED], [1], [Define if your compiler has -fsanitize=undefined])
+     ])
+     gl_COMPILER_OPTION_IF([-fno-sanitize=nonnull-attribute], [
+             san_flags="$san_flags -fno-sanitize=nonnull-attribute"
+             AC_DEFINE([HAVE_FNO_SANITIZE_NONNULL_ATTRIBUTE], [1], [Define if your compiler has -fno-sanitize=nonnull-attribute])
+     ])
+     gl_COMPILER_OPTION_IF([-fsanitize=implicit-integer-truncation], [
+             san_flags="$san_flags -fsanitize=implicit-integer-truncation"
+             AC_DEFINE([HAVE_FSANITIZE_IMPLICIT_INTEGER_TRUNCATION], [1], [Define if your compiler has -fsanitize=implicit-integer-truncation])
+     ])
+     gl_COMPILER_OPTION_IF([-fsanitize=local-bounds], [
+             san_flags="$san_flags -fsanitize=local-bounds"
+             AC_DEFINE([HAVE_FSANITIZE_LOCAL_BOUNDS], [1], [Define if your compiler has -fsanitize=local-bounds])
+     ])
+     gl_COMPILER_OPTION_IF([-fsanitize=integer], [
+             san_flags="$san_flags -fsanitize=integer"
+             AC_DEFINE([HAVE_FSANITIZE_INTEGER], [1], [Define if your compiler has -fsanitize=integer])
+     ])
+     gl_COMPILER_OPTION_IF([-fsanitize=nullability], [
+             san_flags="$san_flags -fsanitize=nullability"
+             AC_DEFINE([HAVE_FSANITIZE_NULLABILITY], [1], [Define if your compiler has -fsanitize=nullability])
+     ])
+     AS_IF([test "$san_flags" != "" ], [
+       EXTRA_CFLAGS="$EXTRA_CFLAGS $san_flags -U_FORTIFY_SOURCE -g -ggdb3 -O0 -fno-omit-frame-pointer"
+       AC_DEFINE([HAVE_UNDEFINED_SANITIZER], [1], [Define if your compiler supports undefined sanitizers])
+     ], [
+       AC_MSG_ERROR([No undefined sanitizer support in your compiler])
+     ])
+     san_flags=""
+  ])
 ])

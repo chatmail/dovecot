@@ -35,6 +35,7 @@
 static bool verbose_proctitle = FALSE;
 static struct mail_storage_service_ctx *storage_service;
 static struct master_login *master_login = NULL;
+static struct timeout *to_proctitle;
 
 imap_client_created_func_t *hook_client_created = NULL;
 bool imap_debug = FALSE;
@@ -50,6 +51,19 @@ imap_client_created_hook_set(imap_client_created_func_t *new_hook)
 
 	hook_client_created = new_hook;
 	return old_hook;
+}
+
+static void imap_refresh_proctitle_callback(void *context ATTR_UNUSED)
+{
+	timeout_remove(&to_proctitle);
+	imap_refresh_proctitle();
+}
+
+void imap_refresh_proctitle_delayed(void)
+{
+	if (to_proctitle == NULL)
+		to_proctitle = timeout_add_short(0,
+			imap_refresh_proctitle_callback, NULL);
 }
 
 void imap_refresh_proctitle(void)
@@ -110,8 +124,8 @@ static void client_kill_idle(struct client *client)
 	if (client->output_cmd_lock != NULL)
 		return;
 
-	client_send_line(client, "* BYE Server shutting down.");
 	mail_storage_service_io_activate_user(client->service_user);
+	client_send_line(client, "* BYE Server shutting down.");
 	client_destroy(client, "Server shutting down.");
 }
 
@@ -137,7 +151,7 @@ static void imap_die(void)
 	}
 }
 
-struct client_input {
+struct imap_login_request {
 	const char *tag;
 
 	const unsigned char *input;
@@ -146,8 +160,8 @@ struct client_input {
 };
 
 static void
-client_parse_input(const unsigned char *data, size_t len,
-		   struct client_input *input_r)
+client_parse_imap_login_request(const unsigned char *data, size_t len,
+				struct imap_login_request *input_r)
 {
 	size_t taglen;
 
@@ -169,47 +183,55 @@ client_parse_input(const unsigned char *data, size_t len,
 }
 
 static void
-client_add_input_capability(struct client *client, const unsigned char *client_input,
-			    size_t client_input_size)
+client_add_input(struct client *client, const unsigned char *client_input,
+		 size_t client_input_size, struct imap_login_request *request_r)
 {
-	struct ostream *output;
-	struct client_input input;
-
 	if (client_input_size > 0) {
-		client_parse_input(client_input, client_input_size, &input);
-		if (input.input_size > 0 &&
-		    !i_stream_add_data(client->input, input.input,
-				       input.input_size))
-			i_panic("Couldn't add client input to stream");
+		client_parse_imap_login_request(client_input, client_input_size,
+						request_r);
+		if (request_r->input_size > 0) {
+			client_add_istream_prefix(client, request_r->input,
+						  request_r->input_size);
+		}
 	} else {
 		/* IMAPLOGINTAG environment is compatible with mailfront */
-		i_zero(&input);
-		input.tag = getenv("IMAPLOGINTAG");
+		i_zero(request_r);
+		request_r->tag = getenv("IMAPLOGINTAG");
 	}
+}
+
+static void
+client_send_login_reply(struct ostream *output, const char *capability_string,
+			const char *preauth_username,
+			const struct imap_login_request *request)
+{
+	string_t *reply = t_str_new(256);
 
 	/* cork/uncork around the OK reply to minimize latency */
-	output = client->output;
-	o_stream_ref(output);
 	o_stream_cork(output);
-	if (input.tag == NULL) {
-		client_send_line(client, t_strconcat(
-			"* PREAUTH [CAPABILITY ",
-			str_c(client->capability_string), "] "
-			"Logged in as ", client->user->username, NULL));
-	} else if (input.send_untagged_capability) {
+	if (request->tag == NULL) {
+		str_printfa(reply, "* PREAUTH [CAPABILITY %s] Logged in as %s\r\n",
+			    capability_string, preauth_username);
+	} else if (capability_string == NULL) {
+		/* Client initialization failed. There's no need to send
+		   capabilities. Just send the tagged OK so the client knows
+		   the login itself succeeded, followed by a BYE. */
+		str_printfa(reply, "%s OK Logged in, but initialization failed.\r\n",
+			    request->tag);
+		str_append(reply, "* BYE "MAIL_ERRSTR_CRITICAL_MSG"\r\n");
+	} else if (request->send_untagged_capability) {
 		/* client doesn't seem to understand tagged capabilities. send
 		   untagged instead and hope that it works. */
-		client_send_line(client, t_strconcat("* CAPABILITY ",
-			str_c(client->capability_string), NULL));
-		client_send_line(client,
-				 t_strconcat(input.tag, " OK Logged in", NULL));
+		str_printfa(reply, "* CAPABILITY %s\r\n", capability_string);
+		str_printfa(reply, "%s OK Logged in\r\n", request->tag);
 	} else {
-		client_send_line(client, t_strconcat(
-			input.tag, " OK [CAPABILITY ",
-			str_c(client->capability_string), "] Logged in", NULL));
+		str_printfa(reply, "%s OK [CAPABILITY %s] Logged in\r\n",
+			    request->tag, capability_string);
 	}
-	o_stream_uncork(output);
-	o_stream_unref(&output);
+	o_stream_nsend(output, str_data(reply), str_len(reply));
+	if (o_stream_uncork_flush(output) < 0 &&
+	    output->stream_errno != EPIPE)
+		i_error("write(client) failed: %s", o_stream_get_error(output));
 }
 
 static void
@@ -259,7 +281,7 @@ int client_create_from_input(const struct mail_storage_service_input *input,
 		event_add_int(event, "remote_port", input->remote_port);
 
 	service_input = *input;
-	service_input.parent_event = event;
+	service_input.event_parent = event;
 	if (mail_storage_service_lookup_next(storage_service, &service_input,
 					     &user, &mail_user, error_r) <= 0) {
 		event_unref(&event);
@@ -302,6 +324,7 @@ static void main_stdio_run(const char *username)
 {
 	struct client *client;
 	struct mail_storage_service_input input;
+	struct imap_login_request request;
 	const char *value, *error, *input_base64;
 
 	i_zero(&input);
@@ -322,12 +345,17 @@ static void main_stdio_run(const char *username)
 
 	input_base64 = getenv("CLIENT_INPUT");
 	if (input_base64 == NULL)
-		client_add_input_capability(client, NULL, 0);
+		client_add_input(client, NULL, 0, &request);
 	else {
 		const buffer_t *input_buf = t_base64_decode_str(input_base64);
-		client_add_input_capability(client, input_buf->data, input_buf->used);
+		client_add_input(client, input_buf->data, input_buf->used,
+				 &request);
 	}
 
+	client_create_finish_io(client);
+	client_send_login_reply(client->output,
+				str_c(client->capability_string),
+				client->user->username, &request);
 	if (client_create_finish(client, &error) < 0)
 		i_fatal("%s", error);
 	client_add_input_finalize(client);
@@ -341,6 +369,7 @@ login_client_connected(const struct master_login_client *login_client,
 #define MSG_BYE_INTERNAL_ERROR "* BYE "MAIL_ERRSTR_CRITICAL_MSG"\r\n"
 	struct mail_storage_service_input input;
 	struct client *client;
+	struct imap_login_request request;
 	enum mail_auth_request_flags flags = login_client->auth_req.flags;
 	const char *error;
 
@@ -361,23 +390,31 @@ login_client_connected(const struct master_login_client *login_client,
 	if (client_create_from_input(&input, login_client->fd, login_client->fd,
 				     &client, &error) < 0) {
 		int fd = login_client->fd;
+		struct ostream *output =
+			o_stream_create_fd_autoclose(&fd, IO_BLOCK_SIZE);
+		i_zero(&request);
+		client_send_login_reply(output, NULL, NULL, &request);
+		o_stream_destroy(&output);
 
-		if (write(fd, MSG_BYE_INTERNAL_ERROR,
-			  strlen(MSG_BYE_INTERNAL_ERROR)) < 0) {
-			if (errno != EAGAIN && errno != EPIPE)
-				i_error("write(client) failed: %m");
-		}
 		i_error("%s", error);
-		i_close_fd(&fd);
 		master_service_client_connection_destroyed(master_service);
 		return;
 	}
 	if ((flags & MAIL_AUTH_REQUEST_FLAG_TLS_COMPRESSION) != 0)
 		client->tls_compression = TRUE;
-	client_add_input_capability(client, login_client->data,
-			 login_client->auth_req.data_size);
+	client_add_input(client, login_client->data,
+			 login_client->auth_req.data_size, &request);
 
-	/* finish initializing the user (see comment in main()) */
+	/* The order here is important:
+	   1. Finish setting up rawlog, so all input/output is written there.
+	   2. Send tagged reply to login before any potentially long-running
+	      work (during which client could disconnect due to timeout).
+	   3. Finish initializing user, which can potentially take a long time.
+	*/
+	client_create_finish_io(client);
+	client_send_login_reply(client->output,
+				str_c(client->capability_string),
+				NULL, &request);
 	if (client_create_finish(client, &error) < 0) {
 		if (write_full(login_client->fd, MSG_BYE_INTERNAL_ERROR,
 			       strlen(MSG_BYE_INTERNAL_ERROR)) < 0)
@@ -397,12 +434,13 @@ login_client_connected(const struct master_login_client *login_client,
 static void login_client_failed(const struct master_login_client *client,
 				const char *errormsg)
 {
-	struct client_input input;
+	struct imap_login_request request;
 	const char *msg;
 
-	client_parse_input(client->data, client->auth_req.data_size, &input);
+	client_parse_imap_login_request(client->data,
+					client->auth_req.data_size, &request);
 	msg = t_strdup_printf("%s NO ["IMAP_RESP_CODE_UNAVAILABLE"] %s\r\n",
-			      input.tag, errormsg);
+			      request.tag, errormsg);
 	if (write(client->fd, msg, strlen(msg)) < 0) {
 		/* ignored */
 	}
@@ -542,6 +580,7 @@ int main(int argc, char *argv[])
 	commands_deinit();
 	imap_master_clients_deinit();
 
+	timeout_remove(&to_proctitle);
 	master_service_deinit(&master_service);
 	return 0;
 }

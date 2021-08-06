@@ -41,8 +41,7 @@ fs_alloc(const struct fs *fs_class, const char *args,
 	 const struct fs_settings *set, struct fs **fs_r, const char **error_r)
 {
 	struct fs *fs;
-	const char *temp_error;
-	char *error = NULL;
+	const char *error;
 	int ret;
 
 	fs = fs_class->v.alloc();
@@ -50,19 +49,17 @@ fs_alloc(const struct fs *fs_class, const char *args,
 	fs->set.debug = set->debug;
 	fs->set.enable_timing = set->enable_timing;
 	i_array_init(&fs->module_contexts, 5);
-	fs->event = fs_create_event(fs, set->event);
+	fs->event = fs_create_event(fs, set->event_parent);
 	event_set_forced_debug(fs->event, fs->set.debug);
 
 	T_BEGIN {
-		if ((ret = fs_class->v.init(fs, args, set, &temp_error)) < 0)
-			error = i_strdup(temp_error);
-	} T_END;
+		ret = fs_class->v.init(fs, args, set, &error);
+	} T_END_PASS_STR_IF(ret < 0, &error);
 	if (ret < 0) {
 		/* a bit kludgy way to allow data stack frame usage in normal
 		   conditions but still be able to return error message from
 		   data stack. */
 		*error_r = t_strdup_printf("%s: %s", fs_class->name, error);
-		i_free(error);
 		fs_unref(&fs);
 		return -1;
 	}
@@ -99,14 +96,14 @@ static void fs_classes_init(void)
 
 static const struct fs *fs_class_find(const char *driver)
 {
-	const struct fs *const *classp;
+	const struct fs *class;
 
 	if (!array_is_created(&fs_classes))
 		fs_classes_init();
 
-	array_foreach(&fs_classes, classp) {
-		if (strcmp((*classp)->name, driver) == 0)
-			return *classp;
+	array_foreach_elem(&fs_classes, class) {
+		if (strcmp(class->name, driver) == 0)
+			return class;
 	}
 	return NULL;
 }
@@ -961,6 +958,7 @@ void fs_write_set_hash(struct fs_file *file, const struct hash_method *method,
 	memcpy(file->write_digest, digest, method->digest_size);
 }
 
+#undef fs_file_set_async_callback
 void fs_file_set_async_callback(struct fs_file *file,
 				fs_file_async_callback_t *callback,
 				void *context)
@@ -1309,6 +1307,7 @@ const char *fs_iter_next(struct fs_iter *iter)
 	return ret;
 }
 
+#undef fs_iter_set_async_callback
 void fs_iter_set_async_callback(struct fs_iter *iter,
 				fs_file_async_callback_t *callback,
 				void *context)
@@ -1386,10 +1385,11 @@ uint64_t fs_stats_get_write_usecs(const struct fs_stats *stats)
 }
 
 struct fs_file *
-fs_file_init_parent(struct fs_file *parent, const char *path, int mode_flags)
+fs_file_init_parent(struct fs_file *parent, const char *path,
+		    enum fs_open_mode mode, enum fs_open_flags flags)
 {
 	return fs_file_init_with_event(parent->fs->parent, parent->event,
-				       path, mode_flags);
+				       path, (int)mode | (int)flags);
 }
 
 struct fs_iter *

@@ -3,8 +3,7 @@
 
 #include "lib.h"
 
-#include "sieve-config.h"
-#include "sieve-types.h"
+#include "sieve.h"
 
 #include <sys/types.h>
 
@@ -204,6 +203,8 @@ struct sieve_instance {
 	size_t max_script_size;
 	unsigned int max_actions;
 	unsigned int max_redirects;
+	unsigned int max_cpu_time_secs;
+	unsigned int resource_usage_timeout_secs;
 	const struct smtp_address *user_email, *user_email_implicit;
 	struct sieve_address_source redirect_from;
 	unsigned int redirect_duplicate_period;

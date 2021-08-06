@@ -15,11 +15,9 @@ static const struct userdb_module_interface userdb_iface_deinit = {
 
 static struct userdb_module_interface *userdb_interface_find(const char *name)
 {
-	struct userdb_module_interface *const *ifaces;
+	struct userdb_module_interface *iface;
 
-	array_foreach(&userdb_interfaces, ifaces) {
-		struct userdb_module_interface *iface = *ifaces;
-
+	array_foreach_elem(&userdb_interfaces, iface) {
 		if (strcmp(iface->name, name) == 0)
 			return iface;
 	}
@@ -69,13 +67,12 @@ uid_t userdb_parse_uid(struct auth_request *request, const char *str)
 
 	switch (i_getpwnam(str, &pw)) {
 	case -1:
-		i_error("getpwnam() failed: %m");
+		e_error(request == NULL ? auth_event : authdb_event(request),
+			"getpwnam() failed: %m");
 		return (uid_t)-1;
 	case 0:
-		if (request != NULL) {
-			e_error(authdb_event(request),
-				"Invalid UID value '%s'", str);
-		}
+		e_error(request == NULL ? auth_event : authdb_event(request),
+			"Invalid UID value '%s'", str);
 		return (uid_t)-1;
 	default:
 		return pw.pw_uid;
@@ -95,13 +92,12 @@ gid_t userdb_parse_gid(struct auth_request *request, const char *str)
 
 	switch (i_getgrnam(str, &gr)) {
 	case -1:
-		i_error("getgrnam() failed: %m");
+		e_error(request == NULL ? auth_event : authdb_event(request),
+			"getgrnam() failed: %m");
 		return (gid_t)-1;
 	case 0:
-		if (request != NULL) {
-			e_error(authdb_event(request),
-				"Invalid GID value '%s'", str);
-		}
+		e_error(request == NULL ? auth_event : authdb_event(request),
+			"Invalid GID value '%s'", str);
 		return (gid_t)-1;
 	default:
 		return gr.gr_gid;

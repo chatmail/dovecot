@@ -19,6 +19,8 @@ EXTRA_DIST = \
 	INSTALL.md \
 	update-version.sh \
 	run-test-valgrind.supp \
+	dovecot.service.in \
+	dovecot.socket \
 	$(conf_DATA)
 
 noinst_DATA = dovecot-config
@@ -57,15 +59,17 @@ dovecot-config: dovecot-config.in Makefile
 	-e "s|^\(dovecot_statedir\)=|\1=$(statedir)|" \
 	) > dovecot-config
 
-if HAVE_SYSTEMD
 %.service: %.service.in
-	$(AM_V_GEN)sed -e 's,@sbindir\@,$(sbindir),g' -e 's,@bindir\@,$(bindir),g' -e 's,@rundir\@,$(rundir),g' $< > $@
+	$(AM_V_GEN)sed -e 's,@sbindir\@,$(sbindir),g' \
+	-e 's,@bindir\@,$(bindir),g' \
+	-e 's,@rundir\@,$(rundir),g' \
+	-e 's,@systemdservicetype\@,$(systemdservicetype),g' \
+	$< > $@
 
+if WANT_SYSTEMD
 systemdsystemunit_DATA = \
         dovecot.socket \
         dovecot.service
-else
-EXTRA_DIST += dovecot.socket dovecot.service.in
 endif
 
 install-exec-hook:
@@ -80,6 +84,7 @@ install-exec-hook:
 	-e "s|^\(LIBDOVECOT_DSYNC\)=.*$$|\1=-ldovecot-dsync|" \
 	-e "s|^\(LIBDOVECOT_LDA\)=.*$$|\1=-ldovecot-lda|" \
 	-e "s|^\(LIBDOVECOT_LIBFTS\)=.*$$|\1=-ldovecot-fts|" \
+	-e "s|^\(LIBDOVECOT_LUA\)=.*$$|\1=-ldovecot-lua|" \
 	-e "s|^\(LIBDOVECOT_STORAGE\)=.*$$|\1='-ldovecot-storage $(LINKED_STORAGE_LDADD)'|" \
 	-e "s|^\(LIBDOVECOT_INCLUDE\)=.*$$|\1=-I$(pkgincludedir)|" \
 	> $(DESTDIR)$(pkglibdir)/dovecot-config
@@ -87,8 +92,8 @@ install-exec-hook:
 uninstall-hook:
 	rm $(DESTDIR)$(pkglibdir)/dovecot-config
 
-if HAVE_SYSTEMD
-CLEANFILES = $systedmsystemunit_DATA
+if WANT_SYSTEMD
+CLEANFILES = dovecot.service
 endif
 
 DISTCLEANFILES = \
@@ -99,7 +104,7 @@ DISTCLEANFILES = \
 distcheck-hook:
 	if which scan-build > /dev/null; then \
 	  cd $(distdir)/_build; \
-	  scan-build -o scan-reports ../configure --with-ldap=auto --with-pgsql=auto --with-mysql=auto --with-sqlite=auto --with-solr=auto --with-gssapi=auto --with-libwrap=auto; \
+	  scan-build -o scan-reports ../configure --with-ldap=auto --with-pgsql=auto --with-mysql=auto --with-sqlite=auto --with-solr=auto --with-cassandra=auto --with-lua=auto --with-gssapi=auto --with-libwrap=auto --enable-static-checker; \
 	  rm -rf scan-reports; \
 	  scan-build -o scan-reports make 2>&1 || exit 1; \
 	  if ! rmdir scan-reports 2>/dev/null; then \

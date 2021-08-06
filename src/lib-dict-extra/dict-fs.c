@@ -21,6 +21,7 @@ struct fs_dict_iterate_context {
 	enum dict_iterate_flags flags;
 	pool_t value_pool;
 	struct fs_iter *fs_iter;
+	const char *values[2];
 	char *error;
 };
 
@@ -67,8 +68,37 @@ static void fs_dict_deinit(struct dict *_dict)
 	i_free(dict);
 }
 
+/* Remove unsafe paths */
+static const char *fs_dict_escape_key(const char *key)
+{
+	const char *ptr;
+	string_t *new_key = NULL;
+	/* we take the slow path always if we see potential
+	   need for escaping */
+	while ((ptr = strstr(key, "/.")) != NULL) {
+		/* move to the first dot */
+		const char *ptr2 = ptr + 1;
+		/* find position of non-dot */
+		while (*ptr2 == '.') ptr2++;
+		if (new_key == NULL)
+			new_key = t_str_new(strlen(key));
+		str_append_data(new_key, key, ptr - key);
+		/* if ptr2 is / or end of string, escape */
+		if (*ptr2 == '/' || *ptr2 == '\0')
+			str_append(new_key, "/...");
+		else
+			str_append(new_key, "/.");
+		key = ptr + 2;
+	}
+	if (new_key == NULL)
+		return key;
+	str_append(new_key, key);
+	return str_c(new_key);
+}
+
 static const char *fs_dict_get_full_key(struct fs_dict *dict, const char *key)
 {
+	key = fs_dict_escape_key(key);
 	if (str_begins(key, DICT_PATH_SHARED))
 		return key + strlen(DICT_PATH_SHARED);
 	else if (str_begins(key, DICT_PATH_PRIVATE)) {
@@ -145,7 +175,7 @@ fs_dict_iterate_init(struct dict *_dict, const char *const *paths,
 }
 
 static bool fs_dict_iterate(struct dict_iterate_context *ctx,
-			    const char **key_r, const char **value_r)
+			    const char **key_r, const char *const **values_r)
 {
 	struct fs_dict_iterate_context *iter =
 		(struct fs_dict_iterate_context *)ctx;
@@ -166,24 +196,27 @@ static bool fs_dict_iterate(struct dict_iterate_context *ctx,
 			return FALSE;
 		path = fs_dict_get_full_key(dict, iter->paths[iter->path_idx]);
 		iter->fs_iter = fs_iter_init(dict->fs, path, 0);
-		return fs_dict_iterate(ctx, key_r, value_r);
+		return fs_dict_iterate(ctx, key_r, values_r);
 	}
 	path = t_strconcat(iter->paths[iter->path_idx], *key_r, NULL);
 	if ((iter->flags & DICT_ITERATE_FLAG_NO_VALUE) != 0) {
+		iter->values[0] = NULL;
 		*key_r = path;
-		*value_r = NULL;
 		return TRUE;
 	}
 	p_clear(iter->value_pool);
-	if ((ret = fs_dict_lookup(ctx->dict, iter->value_pool, path, value_r, &error)) < 0) {
+	ret = fs_dict_lookup(ctx->dict, iter->value_pool, path,
+			     &iter->values[0], &error);
+	if (ret < 0) {
 		/* I/O error */
 		iter->error = i_strdup(error);
 		return FALSE;
 	} else if (ret == 0) {
 		/* file was just deleted, just skip to next one */
-		return fs_dict_iterate(ctx, key_r, value_r);
+		return fs_dict_iterate(ctx, key_r, values_r);
 	}
 	*key_r = path;
+	*values_r = iter->values;
 	return TRUE;
 }
 

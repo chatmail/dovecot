@@ -13,7 +13,7 @@
 struct compress_fs {
 	struct fs fs;
 	const struct compression_handler *compress_handler;
-	unsigned int compress_level;
+	int compress_level;
 	bool try_plain;
 };
 
@@ -73,12 +73,6 @@ fs_compress_init(struct fs *_fs, const char *args,
 	}
 
 	level_str = t_strdup_until(args, p++);
-	if (str_to_uint(level_str, &fs->compress_level) < 0 ||
-	    fs->compress_level > 9) {
-		*error_r = t_strdup_printf(
-			"Invalid compression level parameter '%s'", level_str);
-		return -1;
-	}
 	args = p;
 	ret = compression_lookup_handler(compression_name, &fs->compress_handler);
 	if (ret <= 0) {
@@ -87,7 +81,16 @@ fs_compress_init(struct fs *_fs, const char *args,
 					   "not supported" : "unknown");
 		return -1;
 	}
-
+	if (str_to_int(level_str, &fs->compress_level) < 0 ||
+	    fs->compress_level < fs->compress_handler->get_min_level() ||
+	    fs->compress_level > fs->compress_handler->get_max_level()) {
+		 *error_r = t_strdup_printf(
+			"Invalid compression level parameter '%s': "
+			"Level must be between %d..%d", level_str,
+			fs->compress_handler->get_min_level(),
+			fs->compress_handler->get_max_level());
+		return -1;
+	}
 	parent_args = strchr(args, ':');
 	if (parent_args == NULL) {
 		parent_name = args;
@@ -126,13 +129,13 @@ fs_compress_file_init(struct fs_file *_file, const char *path,
 	/* avoid unnecessarily creating two seekable streams */
 	flags &= ENUM_NEGATE(FS_OPEN_FLAG_SEEKABLE);
 
-	file->file.parent = fs_file_init_parent(_file, path, mode | flags);
+	file->file.parent = fs_file_init_parent(_file, path, mode, flags);
 	if (mode == FS_OPEN_MODE_READONLY &&
 	    (flags & FS_OPEN_FLAG_ASYNC) == 0) {
 		/* use async stream for parent, so fs_read_stream() won't create
 		   another seekable stream needlessly */
 		file->super_read = fs_file_init_parent(_file, path,
-			mode | flags | FS_OPEN_FLAG_ASYNC |
+			mode, flags | FS_OPEN_FLAG_ASYNC |
 			FS_OPEN_FLAG_ASYNC_NOQUEUE);
 	} else {
 		file->super_read = file->file.parent;
@@ -160,45 +163,11 @@ static void fs_compress_file_close(struct fs_file *_file)
 }
 
 static struct istream *
-fs_compress_try_create_stream(struct compress_fs_file *file,
-			      struct istream *plain_input)
-{
-	struct tee_istream *tee_input;
-	struct istream *child_input, *ret_input, *input, **try_inputs;
-	ARRAY(struct istream *) try_inputs_arr;
-	unsigned int i, count;
-
-	tee_input = tee_i_stream_create(plain_input);
-
-	t_array_init(&try_inputs_arr, 10);
-	for (i = 0; compression_handlers[i].name != NULL; i++) {
-		if (compression_handlers[i].create_istream != NULL) {
-			child_input = tee_i_stream_create_child(tee_input);
-			input = compression_handlers[i].
-				create_istream(child_input, FALSE);
-			i_stream_unref(&child_input);
-			array_push_back(&try_inputs_arr, &input);
-		}
-	}
-	if (file->fs->try_plain) {
-		input = tee_i_stream_create_child(tee_input);
-		array_push_back(&try_inputs_arr, &input);
-	}
-	count = array_count(&try_inputs_arr);
-	array_append_zero(&try_inputs_arr);
-
-	try_inputs = array_idx_modifiable(&try_inputs_arr, 0);
-	ret_input = istream_try_create(try_inputs, COMPRESSION_HDR_MAX_SIZE);
-	for (i = 0; i < count; i++)
-		i_stream_unref(&try_inputs[i]);
-	return ret_input;
-}
-
-static struct istream *
 fs_compress_read_stream(struct fs_file *_file, size_t max_buffer_size)
 {
 	struct compress_fs_file *file = COMPRESS_FILE(_file);
 	struct istream *input;
+	enum istream_decompress_flags flags = 0;
 
 	if (file->input != NULL) {
 		i_stream_ref(file->input);
@@ -207,8 +176,9 @@ fs_compress_read_stream(struct fs_file *_file, size_t max_buffer_size)
 	}
 
 	input = fs_read_stream(file->super_read, max_buffer_size);
-	file->input = fs_compress_try_create_stream(file, input);
-
+	if (file->fs->try_plain)
+		flags |= ISTREAM_DECOMPRESS_FLAG_TRY;
+	file->input = i_stream_create_decompress(input, flags);
 	i_stream_unref(&input);
 	i_stream_ref(file->input);
 	return file->input;

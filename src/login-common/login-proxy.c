@@ -238,7 +238,7 @@ static bool proxy_try_reconnect(struct login_proxy *proxy)
 		timeval_diff_msecs(&ioloop_timeval, &proxy->created);
 	if (since_started_msecs < 0)
 		return FALSE; /* time moved backwards */
-	left_msecs = proxy->connect_timeout_msecs - since_started_msecs;
+	left_msecs = (int)proxy->connect_timeout_msecs - since_started_msecs;
 	if (left_msecs <= PROXY_CONNECT_RETRY_MIN_MSECS)
 		return FALSE;
 
@@ -316,7 +316,7 @@ static int login_proxy_connect(struct login_proxy *proxy)
 	}
 	if (proxy->host_immediate_failure_after_secs != 0 &&
 	    timeval_cmp(&rec->last_failure, &rec->last_success) > 0 &&
-	    rec->last_failure.tv_sec - rec->last_success.tv_sec >
+	    (unsigned int)(rec->last_failure.tv_sec - rec->last_success.tv_sec) >
 	    	proxy->host_immediate_failure_after_secs &&
 	    rec->num_waiting_connections > 1) {
 		/* the server is down. fail immediately */
@@ -707,8 +707,6 @@ void login_proxy_detach(struct login_proxy *proxy)
 	proxy->client_input = client->input;
 	proxy->client_output = client->output;
 
-	i_stream_set_persistent_buffers(proxy->server_input, FALSE);
-	i_stream_set_persistent_buffers(client->input, FALSE);
 	o_stream_set_max_buffer_size(client->output, PROXY_MAX_OUTBUF_SIZE);
 	client->input = NULL;
 	client->output = NULL;
@@ -885,7 +883,8 @@ login_proxy_cmd_kick_full(struct ipc_cmd *cmd, const char *const *args,
 		next = proxy->next;
 
 		if (want_kick(proxy, args, key_idx)) {
-			client_destroy(proxy->client, KILLED_BY_ADMIN_REASON);
+			client_disconnect(proxy->client, KILLED_BY_ADMIN_REASON, FALSE);
+			client_destroy(proxy->client, NULL);
 			count++;
 		}
 	} T_END;
@@ -985,7 +984,8 @@ login_proxy_cmd_kick_director_hash(struct ipc_cmd *cmd, const char *const *args)
 		if (director_username_hash(proxy->client, &proxy_hash) &&
 		    proxy_hash == hash &&
 		    !net_ip_compare(&proxy->ip, &except_ip)) {
-			client_destroy(proxy->client, KILLED_BY_DIRECTOR_REASON);
+			client_disconnect(proxy->client, KILLED_BY_DIRECTOR_REASON, FALSE);
+			client_destroy(proxy->client, NULL);
 			count++;
 		}
 	}
@@ -1022,12 +1022,12 @@ static void
 login_proxy_cmd_list(struct ipc_cmd *cmd, const char *const *args ATTR_UNUSED)
 {
 	struct login_proxy *proxy;
-	char *const *fieldp;
+	char *field;
 	string_t *str = t_str_new(64);
 
 	str_append(str, "username\t");
-	array_foreach(&global_alt_usernames, fieldp) {
-		str_append_tabescaped(str, *fieldp);
+	array_foreach_elem(&global_alt_usernames, field) {
+		str_append_tabescaped(str, field);
 		str_append_c(str, '\t');
 	}
 	str_append(str, "service\tsrc-ip\tdest-ip\tdest-port");

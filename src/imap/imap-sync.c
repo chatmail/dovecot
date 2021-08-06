@@ -42,12 +42,12 @@ static int search_update_fetch_more(const struct imap_search_update *update)
 {
 	int ret;
 
-	if ((ret = imap_fetch_more_no_lock_update(update->fetch_ctx)) <= 0)
-		return ret;
+	if ((ret = imap_fetch_more_no_lock_update(update->fetch_ctx)) == 0)
+		return 0;
 	/* finished the FETCH */
 	if (imap_fetch_end(update->fetch_ctx) < 0)
 		return -1;
-	return 1;
+	return ret;
 }
 
 static int
@@ -430,7 +430,7 @@ static void imap_sync_vanished(struct imap_sync_context *ctx)
 		start_uid = 0; prev_uid = 0;
 		for (seq = seqs[i].seq1; seq <= seqs[i].seq2; seq++) {
 			mail_set_seq(ctx->mail, seq);
-			if (prev_uid != ctx->mail->uid - 1) {
+			if (prev_uid == 0 || prev_uid + 1 != ctx->mail->uid) {
 				if (start_uid != 0) {
 					if (!comma)
 						comma = TRUE;

@@ -3,6 +3,24 @@
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
+/* Define if your compiler has -fno-sanitize=nonnull-attribute */
+#undef HAVE_FNO_SANITIZE_NONNULL_ATTRIBUTE
+
+/* Define if your compiler has -fsanitize=implicit-integer-truncation */
+#undef HAVE_FSANITIZE_IMPLICIT_INTEGER_TRUNCATION
+
+/* Define if your compiler has -fsanitize=integer */
+#undef HAVE_FSANITIZE_INTEGER
+
+/* Define if your compiler has -fsanitize=local-bounds */
+#undef HAVE_FSANITIZE_LOCAL_BOUNDS
+
+/* Define if your compiler has -fsanitize=nullability */
+#undef HAVE_FSANITIZE_NULLABILITY
+
+/* Define if your compiler has -fsanitize=undefined */
+#undef HAVE_FSANITIZE_UNDEFINED
+
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
@@ -35,6 +53,9 @@
 
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
+
+/* Define if your compiler supports undefined sanitizers */
+#undef HAVE_UNDEFINED_SANITIZER
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H

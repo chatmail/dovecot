@@ -67,8 +67,7 @@ bool testsuite_script_compile(const struct sieve_runtime_env *renv,
 	if ((sbin = _testsuite_script_compile(renv, script)) == NULL)
 		return FALSE;
 
-	if (ictx->compiled_script != NULL)
-		sieve_binary_unref(&ictx->compiled_script);
+	sieve_binary_unref(&ictx->compiled_script);
 
 	ictx->compiled_script = sbin;
 	return TRUE;
@@ -175,8 +174,7 @@ void testsuite_script_set_binary(const struct sieve_runtime_env *renv,
 
 	i_assert(ictx != NULL);
 
-	if (ictx->compiled_script != NULL)
-		sieve_binary_unref(&ictx->compiled_script);
+	sieve_binary_unref(&ictx->compiled_script);
 
 	ictx->compiled_script = sbin;
 	sieve_binary_ref(sbin);
@@ -253,5 +251,5 @@ bool testsuite_script_multiscript(const struct sieve_runtime_env *renv,
 	}
 
 	return (sieve_multiscript_finish(&mscript, testsuite_log_ehandler,
-					 0, NULL) > 0 && result);
+					 0, SIEVE_EXEC_OK) > 0 && result);
 }

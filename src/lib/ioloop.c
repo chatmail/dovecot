@@ -10,11 +10,6 @@
 
 #include <unistd.h>
 
-#define timer_is_larger(tvp, uvp) \
-	((tvp)->tv_sec > (uvp)->tv_sec || \
-	 ((tvp)->tv_sec == (uvp)->tv_sec && \
-	  (tvp)->tv_usec > (uvp)->tv_usec))
-
 time_t ioloop_time = 0;
 struct timeval ioloop_timeval;
 struct ioloop *current_ioloop = NULL;
@@ -23,6 +18,8 @@ uint64_t ioloop_global_wait_usecs = 0;
 static ARRAY(io_switch_callback_t *) io_switch_callbacks = ARRAY_INIT;
 static ARRAY(io_destroy_callback_t *) io_destroy_callbacks = ARRAY_INIT;
 static bool panic_on_leak = FALSE, panic_on_leak_set = FALSE;
+
+static time_t data_stack_last_free_unused = 0;
 
 static void io_loop_initialize_handler(struct ioloop *ioloop)
 {
@@ -288,7 +285,9 @@ struct timeout *timeout_add_to(struct ioloop *ioloop, unsigned int msecs,
 		/* start this timeout in the next run cycle */
 		array_push_back(&timeout->ioloop->timeouts_new, &timeout);
 	} else {
-		/* trigger zero timeouts as soon as possible */
+		/* Trigger zero timeouts as soon as possible. When ioloop is
+		   running, refresh the timestamp to prevent infinite loops
+		   in case a timeout callback keeps recreating the 0-timeout. */
 		timeout_update_next(timeout, timeout->ioloop->running ?
 			    NULL : &ioloop_timeval);
 		priorityq_add(timeout->ioloop->timeouts, &timeout->item);
@@ -419,21 +418,19 @@ timeout_reset_timeval(struct timeout *timeout, struct timeval *tv_now)
 		return;
 
 	timeout_update_next(timeout, tv_now);
-	if (timeout->msecs <= 1) {
-		/* if we came here from io_loop_handle_timeouts(),
-		   next_run must be larger than tv_now or we could go to
-		   infinite loop. +1000 to get 1 ms further, another +1000 to
-		   account for timeout_update_next()'s truncation. */
-		timeout->next_run.tv_usec += 2000;
-		if (timeout->next_run.tv_usec >= 1000000) {
-			timeout->next_run.tv_sec++;
-			timeout->next_run.tv_usec -= 1000000;
-		}
+	/* If we came here from io_loop_handle_timeouts_real(), next_run must
+	   be larger than tv_now or it can go to infinite loop. This would
+	   mainly happen with 0 ms timeouts. Avoid this by making sure
+	   next_run is at least 1 us higher than tv_now.
+
+	   Note that some callers (like master process's process_min_avail
+	   preforking timeout) really do want the 0 ms timeout to trigger
+	   multiple times as rapidly as it can (but in separate ioloop runs).
+	   So don't increase it more than by 1 us. */
+	if (tv_now != NULL && timeval_cmp(&timeout->next_run, tv_now) <= 0) {
+		timeout->next_run = *tv_now;
+		timeval_add_usecs(&timeout->next_run, 1);
 	}
-	i_assert(tv_now == NULL ||
-		 timeout->next_run.tv_sec > tv_now->tv_sec ||
-		 (timeout->next_run.tv_sec == tv_now->tv_sec &&
-		  timeout->next_run.tv_usec > tv_now->tv_usec));
 	priorityq_remove(timeout->ioloop->timeouts, &timeout->item);
 	priorityq_add(timeout->ioloop->timeouts, &timeout->item);
 }
@@ -445,7 +442,7 @@ void timeout_reset(struct timeout *timeout)
 }
 
 static int timeout_get_wait_time(struct timeout *timeout, struct timeval *tv_r,
-				 struct timeval *tv_now)
+				 struct timeval *tv_now, bool in_timeout_loop)
 {
 	int ret;
 
@@ -468,6 +465,11 @@ static int timeout_get_wait_time(struct timeout *timeout, struct timeval *tv_r,
 		/* The timeout should have been called already */
 		tv_r->tv_sec = 0;
 		tv_r->tv_usec = 0;
+		return 0;
+	}
+	if (tv_r->tv_sec == 0 && tv_r->tv_usec == 1 && !in_timeout_loop) {
+		/* Possibly 0 ms timeout. Don't wait for a full millisecond
+		   for it to trigger. */
 		return 0;
 	}
 	if (tv_r->tv_sec > INT_MAX/1000-1)
@@ -509,7 +511,7 @@ static int io_loop_get_wait_time(struct ioloop *ioloop, struct timeval *tv_r)
 		tv_r->tv_usec = 0;
 	} else {
 		tv_now.tv_sec = 0;
-		msecs = timeout_get_wait_time(timeout, tv_r, &tv_now);
+		msecs = timeout_get_wait_time(timeout, tv_r, &tv_now, FALSE);
 	}
 	ioloop->next_max_time = tv_now;
 	timeval_add_msecs(&ioloop->next_max_time, msecs);
@@ -519,6 +521,7 @@ static int io_loop_get_wait_time(struct ioloop *ioloop, struct timeval *tv_r)
 	   ioloop and after that we update ioloop_timeval immediately again. */
 	ioloop_timeval = tv_now;
 	ioloop_time = tv_now.tv_sec;
+	i_assert(msecs == 0 || timeout->msecs > 0 || timeout->one_shot);
 	return msecs;
 }
 
@@ -561,15 +564,14 @@ io_loop_default_time_moved(const struct timeval *old_time,
 
 static void io_loop_timeouts_start_new(struct ioloop *ioloop)
 {
-	struct timeout *const *to_idx;
+	struct timeout *timeout;
 
 	if (array_count(&ioloop->timeouts_new) == 0)
 		return;
 	
 	io_loop_time_refresh();
 
-	array_foreach(&ioloop->timeouts_new, to_idx) {
-		struct timeout *timeout= *to_idx;
+	array_foreach_elem(&ioloop->timeouts_new, timeout) {
 		i_assert(timeout->next_run.tv_sec == 0 &&
 			timeout->next_run.tv_usec == 0);
 		i_assert(!timeout->one_shot);
@@ -663,7 +665,7 @@ static void io_loop_handle_timeouts_real(struct ioloop *ioloop)
 
 		/* use tv_call to make sure we don't get to infinite loop in
 		   case callbacks update ioloop_timeval. */
-		if (timeout_get_wait_time(timeout, &tv, &tv_call) > 0)
+		if (timeout_get_wait_time(timeout, &tv, &tv_call, TRUE) > 0)
 			break;
 
 		if (timeout->one_shot) {
@@ -694,6 +696,17 @@ void io_loop_handle_timeouts(struct ioloop *ioloop)
 	T_BEGIN {
 		io_loop_handle_timeouts_real(ioloop);
 	} T_END;
+
+	/* Free the unused memory in data stack once per second. This way if
+	   the data stack has grown excessively large temporarily, it won't
+	   permanently waste memory. And if the data stack grows back to the
+	   same large size, re-allocating it once per second doesn't cause
+	   performance problems. */
+	if (data_stack_last_free_unused != ioloop_time) {
+		if (data_stack_last_free_unused != 0)
+			data_stack_free_unused();
+		data_stack_last_free_unused = ioloop_time;
+	}
 }
 
 void io_loop_call_io(struct io *io)
@@ -727,7 +740,7 @@ void io_loop_run(struct ioloop *ioloop)
 		io_loop_initialize_handler(ioloop);
 
 	if (ioloop->cur_ctx != NULL)
-		io_loop_context_unref(&ioloop->cur_ctx);
+		io_loop_context_deactivate(ioloop->cur_ctx);
 
 	/* recursive io_loop_run() isn't allowed for the same ioloop.
 	   it can break backends. */
@@ -832,7 +845,7 @@ struct ioloop *io_loop_create(void)
 void io_loop_destroy(struct ioloop **_ioloop)
 {
 	struct ioloop *ioloop = *_ioloop;
-	struct timeout *const *to_idx;
+	struct timeout *to;
 	struct priorityq_item *item;
 	bool leaks = FALSE;
 
@@ -841,9 +854,9 @@ void io_loop_destroy(struct ioloop **_ioloop)
 	/* ->prev won't work unless loops are destroyed in create order */
         i_assert(ioloop == current_ioloop);
 	if (array_is_created(&io_destroy_callbacks)) {
-		io_destroy_callback_t *const *callbackp;
-		array_foreach(&io_destroy_callbacks, callbackp)
-			(*callbackp)(current_ioloop);
+		io_destroy_callback_t *callback;
+		array_foreach_elem(&io_destroy_callbacks, callback)
+			callback(current_ioloop);
 	}
 
 	io_loop_set_current(current_ioloop->prev);
@@ -869,8 +882,7 @@ void io_loop_destroy(struct ioloop **_ioloop)
 	}
 	i_assert(ioloop->io_pending_count == 0);
 
-	array_foreach(&ioloop->timeouts_new, to_idx) {
-		struct timeout *to = *to_idx;
+	array_foreach_elem(&ioloop->timeouts_new, to) {
 		const char *error = t_strdup_printf(
 			"Timeout leak: %p (%s:%u)", (void *)to->callback,
 			to->source_filename,
@@ -924,8 +936,8 @@ void io_loop_destroy(struct ioloop **_ioloop)
 
 	if (ioloop->handler_context != NULL)
 		io_loop_handler_deinit(ioloop);
-
-	i_assert(ioloop->cur_ctx == NULL);
+	if (ioloop->cur_ctx != NULL)
+		io_loop_context_unref(&ioloop->cur_ctx);
 	i_free(ioloop);
 }
 
@@ -947,7 +959,7 @@ static void io_destroy_callbacks_free(void)
 
 void io_loop_set_current(struct ioloop *ioloop)
 {
-	io_switch_callback_t *const *callbackp;
+	io_switch_callback_t *callback;
 	struct ioloop *prev_ioloop = current_ioloop;
 
 	if (ioloop == current_ioloop)
@@ -955,8 +967,8 @@ void io_loop_set_current(struct ioloop *ioloop)
 
 	current_ioloop = ioloop;
 	if (array_is_created(&io_switch_callbacks)) {
-		array_foreach(&io_switch_callbacks, callbackp)
-			(*callbackp)(prev_ioloop);
+		array_foreach_elem(&io_switch_callbacks, callback)
+			callback(prev_ioloop);
 	}
 }
 
@@ -1022,17 +1034,9 @@ struct ioloop_context *io_loop_context_new(struct ioloop *ioloop)
 	struct ioloop_context *ctx;
 
 	ctx = i_new(struct ioloop_context, 1);
-	ctx->refcount = 2;
+	ctx->refcount = 1;
 	ctx->ioloop = ioloop;
 	i_array_init(&ctx->callbacks, 4);
-
-	if (ioloop->cur_ctx != NULL) {
-		io_loop_context_deactivate(ioloop->cur_ctx);
-		/* deactivation may remove the cur_ctx */
-		if (ioloop->cur_ctx != NULL)
-			io_loop_context_unref(&ioloop->cur_ctx);
-	}
-	ioloop->cur_ctx = ctx;
 	return ctx;
 }
 
@@ -1150,6 +1154,19 @@ void io_loop_context_deactivate(struct ioloop_context *ctx)
 	io_loop_context_unref(&ctx);
 }
 
+void io_loop_context_switch(struct ioloop_context *ctx)
+{
+	if (ctx->ioloop->cur_ctx != NULL) {
+		if (ctx->ioloop->cur_ctx == ctx)
+			return;
+		io_loop_context_deactivate(ctx->ioloop->cur_ctx);
+		/* deactivation may remove the cur_ctx */
+		if (ctx->ioloop->cur_ctx != NULL)
+			io_loop_context_unref(&ctx->ioloop->cur_ctx);
+	}
+	io_loop_context_activate(ctx);
+}
+
 struct ioloop_context *io_loop_get_current_context(struct ioloop *ioloop)
 {
 	return ioloop->cur_ctx;
@@ -1221,6 +1238,13 @@ bool io_loop_have_immediate_timeouts(struct ioloop *ioloop)
 	struct timeval tv;
 
 	return io_loop_get_wait_time(ioloop, &tv) == 0;
+}
+
+bool io_loop_is_empty(struct ioloop *ioloop)
+{
+	return ioloop->io_files == NULL &&
+		priorityq_count(ioloop->timeouts) == 0 &&
+		array_count(&ioloop->timeouts_new) == 0;
 }
 
 uint64_t io_loop_get_wait_usecs(struct ioloop *ioloop)

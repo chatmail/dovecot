@@ -16,6 +16,7 @@
 
 struct sieve_action_exec_env {
 	const struct sieve_execute_env *exec_env;
+	struct sieve_result_execution *rexec;
 	const struct sieve_action *action;
 	struct event *event;
 
@@ -66,12 +67,12 @@ struct sieve_action_def {
 	int (*start)(const struct sieve_action_exec_env *aenv,
 		     void **tr_context);
 	int (*execute)(const struct sieve_action_exec_env *aenv,
-		       void *tr_context);
+		       void *tr_context, bool *keep);
 	int (*commit)(const struct sieve_action_exec_env *aenv,
-		      void *tr_context, bool *keep);
+		      void *tr_context);
 	void (*rollback)(const struct sieve_action_exec_env *aenv,
 			 void *tr_context, bool success);
-	void (*finish)(const struct sieve_action_exec_env *aenv, bool last,
+	void (*finish)(const struct sieve_action_exec_env *aenv,
 		       void *tr_context, int status);
 };
 
@@ -86,13 +87,18 @@ struct sieve_action {
 
 	const char *name;
 	const char *location;
+	unsigned int exec_seq;
 	void *context;
 	struct mail *mail;
-	bool executed;
+
+	bool keep:1;
 };
 
 #define sieve_action_is(act, definition) ((act)->def == &(definition))
 #define sieve_action_name(act) ((act)->name)
+
+bool sieve_action_is_executed(const struct sieve_action *act,
+			      struct sieve_result *result);
 
 /*
  * Action side effects
@@ -134,16 +140,17 @@ struct sieve_side_effect_def {
 
 	int (*pre_execute)(const struct sieve_side_effect *seffect,
 			   const struct sieve_action_exec_env *aenv,
-			   void **context, void *tr_context);
+			   void *tr_context, void **se_tr_context);
 	int (*post_execute)(const struct sieve_side_effect *seffect,
 			    const struct sieve_action_exec_env *aenv,
-			    void *tr_context);
+			    void *tr_context, void *se_tr_context, bool *keep);
 	void (*post_commit)(const struct sieve_side_effect *seffect,
 			    const struct sieve_action_exec_env *aenv,
-			    void *tr_context, bool *keep);
+			    void *tr_context, void *se_tr_context,
+			    int commit_status);
 	void (*rollback)(const struct sieve_side_effect *seffect,
 			 const struct sieve_action_exec_env *aenv,
-			 void *tr_context, bool success);
+			 void *tr_context, void *se_tr_context, bool success);
 };
 
 struct sieve_side_effect {

@@ -104,7 +104,9 @@ enum sieve_error {
 	/* Referenced item (e.g. script or binary) is not valid or currupt */
 	SIEVE_ERROR_NOT_VALID,
 	/* Not allowed to perform the operation because the item is in active use */
-	SIEVE_ERROR_ACTIVE
+	SIEVE_ERROR_ACTIVE,
+	/* Operation exceeds resource limit */
+	SIEVE_ERROR_RESOURCE_LIMIT,
 };
 
 /*
@@ -257,11 +259,23 @@ struct sieve_script_env {
 	(senv->default_mailbox == NULL ? "INBOX" : senv->default_mailbox )
 
 /*
+ * Resource usage
+ */
+
+struct sieve_resource_usage {
+	/* The total amount of system + user CPU time consumed while executing
+	   the Sieve script. */
+	unsigned int cpu_time_msecs;
+};
+
+/*
  * Script execution status
  */
 
 struct sieve_exec_status {
 	struct mail_storage *last_storage;
+
+	struct sieve_resource_usage resource_usage;
 
 	bool message_saved:1;
 	bool message_forwarded:1;
@@ -276,11 +290,12 @@ struct sieve_exec_status {
  */
 
 enum sieve_execution_exitcode {
-	SIEVE_EXEC_OK           = 1,
-	SIEVE_EXEC_FAILURE      = 0,
-	SIEVE_EXEC_TEMP_FAILURE = -1,
-	SIEVE_EXEC_BIN_CORRUPT  = -2,
-	SIEVE_EXEC_KEEP_FAILED  = -3
+	SIEVE_EXEC_OK         	        = 1,
+	SIEVE_EXEC_FAILURE              = 0,
+	SIEVE_EXEC_TEMP_FAILURE         = -1,
+	SIEVE_EXEC_BIN_CORRUPT          = -2,
+	SIEVE_EXEC_KEEP_FAILED          = -3,
+	SIEVE_EXEC_RESOURCE_LIMIT       = -4,
 };
 
 #endif

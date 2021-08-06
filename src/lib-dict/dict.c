@@ -39,11 +39,9 @@ static struct event_category event_category_dict = {
 
 static struct dict *dict_driver_lookup(const char *name)
 {
-	struct dict *const *dicts;
+	struct dict *dict;
 
-	array_foreach(&dict_drivers, dicts) {
-		struct dict *dict = *dicts;
-
+	array_foreach_elem(&dict_drivers, dict) {
 		if (strcmp(dict->name, name) == 0)
 			return dict;
 	}
@@ -219,7 +217,7 @@ void dict_post_api_callback(struct dict *dict)
 static void dict_lookup_finished(struct event *event, int ret, const char *error)
 {
 	i_assert(ret >= 0 || error != NULL);
-	const char *key = event_find_field_str(event, "key");
+	const char *key = event_find_field_recursive_str(event, "key");
 	if (ret < 0)
 		event_add_str(event, "error", error);
 	else if (ret == 0)
@@ -311,6 +309,7 @@ int dict_lookup(struct dict *dict, pool_t pool, const char *key,
 	return ret;
 }
 
+#undef dict_lookup_async
 void dict_lookup_async(struct dict *dict, const char *key,
 		       dict_lookup_callback_t *callback, void *context)
 {
@@ -370,6 +369,7 @@ dict_iterate_init_multiple(struct dict *dict, const char *const *paths,
 	   passed as parameter, e.g. it can be dict-fail when
 	   iteration is not supported. */
 	ctx->event = event_create(dict->event);
+	ctx->flags = flags;
 
 	event_add_str(ctx->event, "key", paths[0]);
 	event_set_name(ctx->event, "dict_iteration_started");
@@ -381,6 +381,19 @@ dict_iterate_init_multiple(struct dict *dict, const char *const *paths,
 bool dict_iterate(struct dict_iterate_context *ctx,
 		  const char **key_r, const char **value_r)
 {
+	const char *const *values;
+
+	if (!dict_iterate_values(ctx, key_r, &values))
+		return FALSE;
+	if ((ctx->flags & DICT_ITERATE_FLAG_NO_VALUE) == 0)
+		*value_r = values[0];
+	return TRUE;
+}
+
+bool dict_iterate_values(struct dict_iterate_context *ctx,
+			 const char **key_r, const char *const **values_r)
+{
+
 	if (ctx->max_rows > 0 && ctx->row_count >= ctx->max_rows) {
 		e_debug(ctx->event, "Maximum row count (%"PRIu64") reached",
 			ctx->max_rows);
@@ -388,12 +401,20 @@ bool dict_iterate(struct dict_iterate_context *ctx,
 		ctx->has_more = FALSE;
 		return FALSE;
 	}
-	if (!ctx->dict->v.iterate(ctx, key_r, value_r))
+	if (!ctx->dict->v.iterate(ctx, key_r, values_r))
 		return FALSE;
+	if ((ctx->flags & DICT_ITERATE_FLAG_NO_VALUE) != 0) {
+		/* always return value as NULL to be consistent across
+		   drivers */
+		*values_r = NULL;
+	} else {
+		i_assert(values_r[0] != NULL);
+	}
 	ctx->row_count++;
 	return TRUE;
 }
 
+#undef dict_iterate_set_async_callback
 void dict_iterate_set_async_callback(struct dict_iterate_context *ctx,
 				     dict_iterate_callback_t *callback,
 				     void *context)
@@ -417,6 +438,10 @@ int dict_iterate_deinit(struct dict_iterate_context **_ctx,
 			const char **error_r)
 {
 	struct dict_iterate_context *ctx = *_ctx;
+
+	if (ctx == NULL)
+		return 0;
+
 	struct event *event = ctx->event;
 	int ret;
 	uint64_t rows;
@@ -534,6 +559,7 @@ int dict_transaction_commit(struct dict_transaction_context **_ctx,
 	return result.ret;
 }
 
+#undef dict_transaction_commit_async
 void dict_transaction_commit_async(struct dict_transaction_context **_ctx,
 				   dict_transaction_commit_callback_t *callback,
 				   void *context)
@@ -561,9 +587,19 @@ void dict_transaction_commit_async(struct dict_transaction_context **_ctx,
 	cctx->delayed_callback = FALSE;
 }
 
+void dict_transaction_commit_async_nocallback(
+	struct dict_transaction_context **ctx)
+{
+	dict_transaction_commit_async(ctx, NULL, NULL);
+}
+
 void dict_transaction_rollback(struct dict_transaction_context **_ctx)
 {
 	struct dict_transaction_context *ctx = *_ctx;
+
+	if (ctx == NULL)
+		return;
+
 	struct event *event = ctx->event;
 
 	*_ctx = NULL;

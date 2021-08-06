@@ -54,6 +54,9 @@
 /* Disable asserts */
 #undef DISABLE_ASSERTS
 
+/* Lua scripts will be able to yield */
+#undef DLUA_WITH_YIELDS
+
 /* Dovecot ABI version */
 #undef DOVECOT_ABI_VERSION
 
@@ -119,6 +122,10 @@
 /* Define to 1 if you have the declaration of
    `ZSTD_error_parameter_unsupported', and to 0 if you don't. */
 #undef HAVE_DECL_ZSTD_ERROR_PARAMETER_UNSUPPORTED
+
+/* Define to 1 if you have the declaration of `ZSTD_minCLevel', and to 0 if
+   you don't. */
+#undef HAVE_DECL_ZSTD_MINCLEVEL
 
 /* Define if you have struct dirent->d_type */
 #undef HAVE_DIRENT_D_TYPE
@@ -296,6 +303,9 @@
 /* Define if you have libsodium */
 #undef HAVE_LIBSODIUM
 
+/* Define to 1 if you have libsystemd */
+#undef HAVE_LIBSYSTEMD
+
 /* Define to 1 if you have the <libtextcat/textcat.h> header file. */
 #undef HAVE_LIBTEXTCAT_TEXTCAT_H
 
@@ -322,6 +332,27 @@
 
 /* Define to 1 if you have lua */
 #undef HAVE_LUA
+
+/* Define to 1 if you have the `luaL_setfuncs' function. */
+#undef HAVE_LUAL_SETFUNCS
+
+/* Define to 1 if you have the `luaL_setmetatable' function. */
+#undef HAVE_LUAL_SETMETATABLE
+
+/* Define to 1 if you have the `lua_isinteger' function. */
+#undef HAVE_LUA_ISINTEGER
+
+/* Define to 1 if you have the `lua_resume' function. */
+#undef HAVE_LUA_RESUME
+
+/* Define to 1 if you have the `lua_seti' function. */
+#undef HAVE_LUA_SETI
+
+/* Define to 1 if you have the `lua_tointegerx' function. */
+#undef HAVE_LUA_TOINTEGERX
+
+/* Define to 1 if you have the `lua_yieldk' function. */
+#undef HAVE_LUA_YIELDK
 
 /* Define if you have lz4 library */
 #undef HAVE_LZ4
@@ -573,9 +604,6 @@
 /* Define to 1 if the system has the type `struct sockpeercred'. */
 #undef HAVE_STRUCT_SOCKPEERCRED
 
-/* Define if you want to use systemd socket activation */
-#undef HAVE_SYSTEMD
-
 /* Define to 1 if you have the <sys/event.h> header file. */
 #undef HAVE_SYS_EVENT_H
 
@@ -657,9 +685,6 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
-/* Define to 1 if you have the `unsetenv' function. */
-#undef HAVE_UNSETENV
-
 /* Define if you have a native uoff_t type */
 #undef HAVE_UOFF_T
 
@@ -671,6 +696,15 @@
 
 /* Define to 1 if you have the `writev' function. */
 #undef HAVE_WRITEV
+
+/* OpenSSL supports X509_check_host() */
+#undef HAVE_X509_CHECK_HOST
+
+/* OpenSSL supports X509_check_ip() */
+#undef HAVE_X509_CHECK_IP
+
+/* OpenSSL supports X509_check_ip_asc() */
+#undef HAVE_X509_CHECK_IP_ASC
 
 /* Define to 1 if you have the <xfs/xqm.h> header file. */
 #undef HAVE_XFS_XQM_H
@@ -839,9 +873,6 @@
 
 /* Define if your time_t is signed */
 #undef TIME_T_SIGNED
-
-/* Define if unsetenv() returns int */
-#undef UNSETENV_RET_INT
 
 /* Define if off_t is int */
 #undef UOFF_T_INT

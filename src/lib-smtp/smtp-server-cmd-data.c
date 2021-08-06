@@ -152,13 +152,13 @@ cmd_data_replied_one(struct smtp_server_cmd_ctx *cmd,
 {
 	struct smtp_server_connection *conn = cmd->conn;
 	struct smtp_server_transaction *trans = conn->state.trans;
-	struct smtp_server_recipient **rcptp;
+	struct smtp_server_recipient *rcpt;
 
 	if (trans == NULL || !array_is_created(&trans->rcpt_to))
 		return;
 
-	array_foreach_modifiable(&trans->rcpt_to, rcptp)
-		smtp_server_recipient_data_replied(*rcptp);
+	array_foreach_elem(&trans->rcpt_to, rcpt)
+		smtp_server_recipient_data_replied(rcpt);
 }
 
 static void
@@ -244,7 +244,7 @@ static void cmd_data_input_error(struct smtp_server_cmd_ctx *cmd)
 	struct smtp_server_command *command = cmd->cmd;
 	struct cmd_data_context *data_cmd = command->data;
 	struct istream *data_input = conn->state.data_input;
-	unsigned int stream_errno = data_input->stream_errno;
+	const char *error;
 
 	conn->state.data_failed = TRUE;
 
@@ -256,18 +256,9 @@ static void cmd_data_input_error(struct smtp_server_cmd_ctx *cmd)
 		return;
 	}
 
-	if (stream_errno != EPIPE && stream_errno != ECONNRESET) {
-		e_error(conn->event, "Connection lost during data transfer: "
-			"read(%s) failed: %s",
-			i_stream_get_name(data_input),
-			i_stream_get_error(data_input));
-		smtp_server_connection_close(&conn, "Read failure");
-	} else {
-		e_debug(conn->event, "Connection lost during data transfer: "
-			"Remote disconnected");
-		smtp_server_connection_close(&conn,
-			"Remote closed connection unexpectedly");
-	}
+	error = i_stream_get_disconnect_reason(data_input);
+	e_debug(conn->event, "Connection lost during data transfer: %s", error);
+	smtp_server_connection_close(&conn, error);
 }
 
 static int cmd_data_do_handle_input(struct smtp_server_cmd_ctx *cmd)
@@ -363,14 +354,14 @@ cmd_data_next(struct smtp_server_cmd_ctx *cmd,
 
 	e_debug(cmd->event, "Command is next to be replied");
 
+	if (trans != NULL)
+		smtp_server_transaction_data_command(trans, cmd);
+
 	/* check whether we have had successful mail and rcpt commands */
 	if (!smtp_server_connection_data_check_state(cmd))
 		return;
 
 	if (data_cmd->chunk_last) {
-		/* This is the last chunk */
-		smtp_server_transaction_last_data(trans, cmd);
-
 		/* LMTP 'DATA' and 'BDAT LAST' commands need to send more than
 		   one reply per recipient */
 		if (HAS_ALL_BITS(trans->flags,
@@ -477,9 +468,8 @@ cmd_data_start(struct smtp_server_cmd_ctx *cmd,
 	i_assert(conn->state.pending_mail_cmds == 0 &&
 		conn->state.pending_rcpt_cmds == 0);
 
-	/* this is the one and only data command */
 	if (trans != NULL)
-		smtp_server_transaction_last_data(trans, cmd);
+		smtp_server_transaction_data_command(trans, cmd);
 
 	/* check whether we have had successful mail and rcpt commands */
 	if (!smtp_server_connection_data_check_state(cmd))
@@ -570,12 +560,16 @@ int smtp_server_connection_data_chunk_add(struct smtp_server_cmd_ctx *cmd,
 	bool client_input)
 {
 	struct smtp_server_connection *conn = cmd->conn;
+	struct smtp_server_transaction *trans = conn->state.trans;
 	const struct smtp_server_settings *set = &conn->set;
 	struct smtp_server_command *command = cmd->cmd;
 	struct cmd_data_context *data_cmd = command->data;
 	uoff_t new_size;
 
 	i_assert(data_cmd != NULL);
+
+	if (trans != NULL)
+		smtp_server_transaction_data_command(trans, cmd);
 
 	if (!smtp_server_connection_data_check_state(cmd))
 		return -1;
@@ -653,9 +647,9 @@ void smtp_server_cmd_bdat(struct smtp_server_cmd_ctx *cmd,
 		}
 	}
 
-	if (ret > 0 || size > 0) {
-		/* read/skip data even in case of error, as long as size is
-		   known */
+	if (ret > 0 || (size > 0 && !conn->disconnected)) {
+		/* Read/skip data even in case of error, as long as size is
+		   known and connection is still usable. */
 		input = smtp_command_parse_data_with_size(conn->smtp_parser,
 							  size);
 	}

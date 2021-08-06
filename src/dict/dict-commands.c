@@ -49,10 +49,8 @@ static void dict_connection_cmd_free(struct dict_connection_cmd *cmd)
 {
 	const char *error;
 
-	if (cmd->iter != NULL) {
-		if (dict_iterate_deinit(&cmd->iter, &error) < 0)
-			e_error(cmd->event, "dict_iterate() failed: %s", error);
-	}
+	if (dict_iterate_deinit(&cmd->iter, &error) < 0)
+		e_error(cmd->event, "dict_iterate() failed: %s", error);
 	i_free(cmd->reply);
 	if (cmd->uncork_pending)
 		o_stream_uncork(cmd->conn->conn.output);
@@ -195,9 +193,9 @@ cmd_lookup_write_reply(struct dict_connection_cmd *cmd,
 }
 
 static void
-cmd_lookup_callback(const struct dict_lookup_result *result, void *context)
+cmd_lookup_callback(const struct dict_lookup_result *result,
+		    struct dict_connection_cmd *cmd)
 {
-	struct dict_connection_cmd *cmd = context;
 	string_t *str = t_str_new(128);
 
 	event_set_name(cmd->event, "dict_server_lookup_finished");
@@ -270,7 +268,7 @@ cmd_iterate_flush_finish(struct dict_connection_cmd *cmd, string_t *str)
 static int cmd_iterate_flush(struct dict_connection_cmd *cmd)
 {
 	string_t *str = t_str_new(256);
-	const char *key, *value;
+	const char *key, *const *values;
 
 	if (cmd->conn->destroyed) {
 		cmd_iterate_flush_finish(cmd, str);
@@ -280,7 +278,7 @@ static int cmd_iterate_flush(struct dict_connection_cmd *cmd)
 	if (!dict_connection_flush_if_full(cmd->conn))
 		return 0;
 
-	while (dict_iterate(cmd->iter, &key, &value)) {
+	while (dict_iterate_values(cmd->iter, &key, &values)) {
 		cmd->rows++;
 		str_truncate(str, 0);
 		if (cmd->async_reply_id != 0) {
@@ -290,8 +288,13 @@ static int cmd_iterate_flush(struct dict_connection_cmd *cmd)
 		str_append_c(str, DICT_PROTOCOL_REPLY_OK);
 		str_append_tabescaped(str, key);
 		str_append_c(str, '\t');
-		if ((cmd->iter_flags & DICT_ITERATE_FLAG_NO_VALUE) == 0)
-			str_append_tabescaped(str, value);
+		if ((cmd->iter_flags & DICT_ITERATE_FLAG_NO_VALUE) == 0) {
+			str_append_tabescaped(str, values[0]);
+			for (unsigned int i = 1; values[i] != NULL; i++) {
+				str_append_c(str, '\t');
+				str_append_tabescaped(str, values[i]);
+			}
+		}
 		str_append_c(str, '\n');
 		o_stream_nsend(cmd->conn->conn.output, str_data(str), str_len(str));
 
@@ -307,9 +310,8 @@ static int cmd_iterate_flush(struct dict_connection_cmd *cmd)
 	return 1;
 }
 
-static void cmd_iterate_callback(void *context)
+static void cmd_iterate_callback(struct dict_connection_cmd *cmd)
 {
-	struct dict_connection_cmd *cmd = context;
 	struct dict_connection *conn = cmd->conn;
 
 	dict_connection_ref(conn);
@@ -493,18 +495,14 @@ cmd_commit_finish(struct dict_connection_cmd *cmd,
 }
 
 static void cmd_commit_callback(const struct dict_commit_result *result,
-				void *context)
+				struct dict_connection_cmd *cmd)
 {
-	struct dict_connection_cmd *cmd = context;
-
 	cmd_commit_finish(cmd, result, FALSE);
 }
 
 static void cmd_commit_callback_async(const struct dict_commit_result *result,
-				      void *context)
+				      struct dict_connection_cmd *cmd)
 {
-	struct dict_connection_cmd *cmd = context;
-
 	cmd_commit_finish(cmd, result, TRUE);
 }
 
@@ -686,12 +684,10 @@ int dict_command_input(struct dict_connection *conn, const char *line)
 
 static bool dict_connection_cmds_try_output_more(struct dict_connection *conn)
 {
-	struct dict_connection_cmd *const *cmdp, *cmd;
+	struct dict_connection_cmd *cmd;
 
 	/* only iterators may be returning a lot of data */
-	array_foreach(&conn->cmds, cmdp) {
-		cmd = *cmdp;
-
+	array_foreach_elem(&conn->cmds, cmd) {
 		if (cmd->iter == NULL) {
 			/* not an iterator */
 		} else if (cmd_iterate_flush(cmd) == 0) {

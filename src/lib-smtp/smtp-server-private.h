@@ -144,7 +144,7 @@ struct smtp_server_connection {
 	struct smtp_server *server;
 	pool_t pool;
 	int refcount;
-	struct event *event;
+	struct event *event, *next_trans_event;
 
 	struct smtp_server_settings set;
 
@@ -172,8 +172,6 @@ struct smtp_server_connection {
 	struct smtp_server_command *command_queue_head, *command_queue_tail;
 	unsigned int command_queue_count;
 	unsigned int bad_counter;
-
-	char *disconnect_reason;
 
 	struct smtp_server_state_data state;
 
@@ -369,14 +367,12 @@ void smtp_server_recipient_ref(struct smtp_server_recipient *rcpt);
 bool smtp_server_recipient_unref(struct smtp_server_recipient **_rcpt);
 void smtp_server_recipient_destroy(struct smtp_server_recipient **_rcpt);
 
-void smtp_server_recipient_initialize(struct smtp_server_recipient *rcpt);
-
 bool smtp_server_recipient_approved(struct smtp_server_recipient **_rcpt);
 void smtp_server_recipient_denied(struct smtp_server_recipient *rcpt,
 				  const struct smtp_server_reply *reply);
 
-void smtp_server_recipient_last_data(struct smtp_server_recipient *rcpt,
-				     struct smtp_server_cmd_ctx *cmd);
+void smtp_server_recipient_data_command(struct smtp_server_recipient *rcpt,
+					struct smtp_server_cmd_ctx *cmd);
 void smtp_server_recipient_data_replied(struct smtp_server_recipient *rcpt);
 
 void smtp_server_recipient_reset(struct smtp_server_recipient *rcpt);
@@ -402,8 +398,8 @@ bool smtp_server_transaction_has_rcpt(struct smtp_server_transaction *trans);
 unsigned int
 smtp_server_transaction_rcpt_count(struct smtp_server_transaction *trans);
 
-void smtp_server_transaction_last_data(struct smtp_server_transaction *trans,
-				       struct smtp_server_cmd_ctx *cmd);
+void smtp_server_transaction_data_command(struct smtp_server_transaction *trans,
+					  struct smtp_server_cmd_ctx *cmd);
 
 void smtp_server_transaction_received(struct smtp_server_transaction *trans,
 				      uoff_t data_size);

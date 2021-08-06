@@ -8,6 +8,8 @@ struct setting_parser_context;
 struct master_service;
 
 struct master_service_settings {
+	/* NOTE: log process won't see any new settings unless they're
+	   explicitly sent via environment variables by master process. */
 	const char *base_dir;
 	const char *state_dir;
 	const char *instance_name;
@@ -39,7 +41,10 @@ struct master_service_settings_input {
 	bool use_sysexits;
 	bool parse_full_config;
 
+	/* Either/both module and extra_modules can be set. Usually just one
+	   is needed, so module is simpler to set. */
 	const char *module;
+	const char *const *extra_modules;
 	const char *service;
 	const char *username;
 	struct ip_addr local_ip, remote_ip;

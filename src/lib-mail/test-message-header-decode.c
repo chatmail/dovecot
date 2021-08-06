@@ -9,22 +9,6 @@
 #include "message-header-decode.h"
 #include "test-common.h"
 
-
-bool charset_is_utf8(const char *charset ATTR_UNUSED) { return TRUE; }
-
-int charset_to_utf8_begin(const char *charset ATTR_UNUSED,
-			  normalizer_func_t *normalizer ATTR_UNUSED,
-			  struct charset_translation **t_r ATTR_UNUSED) { return 0; }
-void charset_to_utf8_end(struct charset_translation **t ATTR_UNUSED) {}
-
-enum charset_result
-charset_to_utf8(struct charset_translation *t ATTR_UNUSED,
-		const unsigned char *src, size_t *src_size, buffer_t *dest)
-{
-	buffer_append(dest, src, *src_size);
-	return CHARSET_RET_OK;
-}
-
 static void test_message_header_decode(void)
 {
 	static const char *data[] = {
@@ -35,6 +19,10 @@ static void test_message_header_decode(void)
 		"a =?utf-8?q?=c3=a4?=  x  =?utf-8?q?=c3=a4?= b", "a \xC3\xA4  x  \xC3\xA4 b",
 		"a =?utf-8?b?w6TDpCDDpA==?= b", "a \xC3\xA4\xC3\xA4 \xC3\xA4 b",
 		"=?utf-8?b?w6Qgw6Q=?=", "\xC3\xA4 \xC3\xA4",
+		"a =?utf-8?b?////?= b", "a "UNICODE_REPLACEMENT_CHAR_UTF8" b",
+		"a =?utf-16le?b?UADkAGkAdgDkAOQA?= b", "a P\xC3\xA4iv\xC3\xA4\xC3\xA4 b",
+		"a =?utf-9?b?UMOkaXbDpMOk?= b", "a P\xC3\xA4iv\xC3\xA4\xC3\xA4 b",
+
 	};
 	string_t *dest;
 	unsigned int i;
@@ -94,7 +82,7 @@ check_encode_decode_result(const unsigned char *inbuf, size_t inbuf_len,
 {
 	static const unsigned char *rep_char =
 		(const unsigned char *)UNICODE_REPLACEMENT_CHAR_UTF8;
-	static const unsigned int rep_char_len =
+	static const ptrdiff_t rep_char_len =
 		UNICODE_REPLACEMENT_CHAR_UTF8_LEN;
 	const unsigned char *outbuf = str_data(out);
 	size_t outbuf_len = str_len(out);

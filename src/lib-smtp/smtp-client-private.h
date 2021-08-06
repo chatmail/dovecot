@@ -174,7 +174,7 @@ struct smtp_client_connection {
 
 	struct smtp_client_settings set;
 	char *password;
-	ARRAY_TYPE(const_string) extra_capabilities;
+	ARRAY(struct smtp_client_capability_extra) extra_capabilities;
 
 	pool_t cap_pool;
 	struct {
@@ -183,6 +183,11 @@ struct smtp_client_connection {
 		const char **auth_mechanisms;
 		const char **xclient_args;
 		uoff_t size;
+
+		/* Lists of custom MAIL/RCPT parameters supported by peer. These
+		   arrays always end in NULL pointer once created. */
+		ARRAY_TYPE(const_string) mail_param_extensions;
+		ARRAY_TYPE(const_string) rcpt_param_extensions;
 	} caps;
 
 	struct smtp_reply_parser *reply_parser;
@@ -285,6 +290,9 @@ void smtp_client_commands_fail_delayed(struct smtp_client_connection *conn);
 void smtp_client_transaction_connection_result(
 	struct smtp_client_transaction *trans,
 	const struct smtp_reply *reply);
+void smtp_client_transaction_connection_destroyed(
+	struct smtp_client_transaction *trans);
+
 void smtp_client_transaction_switch_ioloop(
 	struct smtp_client_transaction *trans);
 

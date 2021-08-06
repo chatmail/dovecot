@@ -88,6 +88,16 @@ int i_stream_get_fd(struct istream *stream)
 	return _stream->fd;
 }
 
+void i_stream_copy_fd(struct istream *dest, struct istream *source)
+{
+	int fd = i_stream_get_fd(source);
+
+	i_assert(fd != -1);
+	i_assert(dest->real_stream->fd == -1);
+	dest->real_stream->fd = fd;
+	dest->readable_fd = source->readable_fd;
+}
+
 const char *i_stream_get_error(struct istream *stream)
 {
 	struct istream *s;
@@ -266,14 +276,17 @@ ssize_t i_stream_read(struct istream *stream)
 	}
 #endif
 
-	_stream->prev_snapshot =
-		_stream->snapshot(_stream, _stream->prev_snapshot);
+	if (_stream->skip != _stream->pos || _stream->prev_snapshot != NULL) {
+		_stream->prev_snapshot =
+			_stream->snapshot(_stream, _stream->prev_snapshot);
+	}
 	ret = i_stream_read_memarea(stream);
 	if (ret > 0)
 		i_stream_snapshot_free(&_stream->prev_snapshot);
 #ifdef DEBUG
 	else if (!invalid) {
-		i_assert((_stream->pos - _stream->skip) == (prev_pos - prev_skip));
+		i_assert((_stream->pos - _stream->skip) == (prev_pos - prev_skip) ||
+			 prev_pos == prev_skip);
 		if (prev_pos - prev_skip <= 4)
 			i_assert(memcmp(prev_buf, prev_data + prev_skip, prev_pos - prev_skip) == 0);
 		else {
@@ -981,7 +994,8 @@ static void
 i_stream_default_set_max_buffer_size(struct iostream_private *stream,
 				     size_t max_size)
 {
-	struct istream_private *_stream = (struct istream_private *)stream;
+	struct istream_private *_stream =
+		container_of(stream, struct istream_private, iostream);
 
 	_stream->max_buffer_size = max_size;
 	if (_stream->parent != NULL)
@@ -991,7 +1005,8 @@ i_stream_default_set_max_buffer_size(struct iostream_private *stream,
 static void i_stream_default_close(struct iostream_private *stream,
 				   bool close_parent)
 {
-	struct istream_private *_stream = (struct istream_private *)stream;
+	struct istream_private *_stream =
+		container_of(stream, struct istream_private, iostream);
 
 	if (close_parent)
 		i_stream_close(_stream->parent);
@@ -999,7 +1014,8 @@ static void i_stream_default_close(struct iostream_private *stream,
 
 static void i_stream_default_destroy(struct iostream_private *stream)
 {
-	struct istream_private *_stream = (struct istream_private *)stream;
+	struct istream_private *_stream =
+		container_of(stream, struct istream_private, iostream);
 
 	i_stream_free_buffer(_stream);
 	i_stream_unref(&_stream->parent);
@@ -1222,6 +1238,10 @@ struct istream *i_stream_create_error(int stream_errno)
 	stream->istream.seekable = TRUE;
 	stream->istream.eof = TRUE;
 	stream->istream.stream_errno = stream_errno;
+	/* Nothing can ever actually be read from this stream, but set a
+	   reasonable max_buffer_size anyway since some filter istreams don't
+	   behave properly otherwise. */
+	stream->max_buffer_size = IO_BLOCK_SIZE;
 	i_stream_create(stream, NULL, -1, 0);
 	i_stream_set_name(&stream->istream, "(error)");
 	return &stream->istream;

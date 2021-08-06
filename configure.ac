@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.3.13],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.3.ABIv13($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.3.16],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.3.ABIv16($PACKAGE_VERSION)", [Dovecot ABI version])
 
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_MACRO_DIR([m4])
@@ -11,6 +11,7 @@ AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign])
 
 AM_MAINTAINER_MODE
+PKG_PREREQ([0.28])
 PKG_PROG_PKG_CONFIG
 
 ACLOCAL_AMFLAGS='-I $(top_srcdir)/m4'
@@ -172,7 +173,7 @@ AS_HELP_STRING([--with-bzlib], [Build with bzlib compression support (auto)]),
   want_bzlib=auto)
 
 AC_ARG_WITH(lzma,
-AS_HELP_STRING([--with-lzma], [Build with LZMA compression support (auto)]),
+AS_HELP_STRING([--with-lzma], [Build with LZMA decompression support (auto)]),
   TEST_WITH(lzma, $withval),
   want_lzma=auto)
 
@@ -239,19 +240,13 @@ AS_HELP_STRING([--with-statedir=DIR], [Permanent data directory (LOCALSTATEDIR/l
 )
 AC_SUBST(statedir)
 
-AC_ARG_WITH([systemdsystemunitdir],
-AS_HELP_STRING([--with-systemdsystemunitdir=DIR], [Directory for systemd service files (auto=detect)]), [
-	if test "$withval" = "auto"; then
-		systemdsystemunitdir=`$PKG_CONFIG --variable=systemdsystemunitdir systemd`
-	elif test "$withval" != "no"; then
-		systemdsystemunitdir=$withval
-	fi
-], [])
-if test "$systemdsystemunitdir" != ""; then
-        AC_SUBST(systemdsystemunitdir)
-        AC_DEFINE(HAVE_SYSTEMD,, [Define if you want to use systemd socket activation])
-fi
-AM_CONDITIONAL(HAVE_SYSTEMD, test "$systemdsystemunitdir" != "")
+AC_ARG_WITH([systemd],
+   AS_HELP_STRING([--with-systemd], [Build with systemd support (default=auto)]),
+   want_systemd="$withval",
+   want_systemd="auto"
+)
+
+DOVECOT_WANT_SYSTEMD
 
 dovecot_moduledir="$libdir/dovecot"
 DC_DOVECOT_MODULEDIR
@@ -310,6 +305,7 @@ AC_CHECK_HEADERS(strings.h stdint.h unistd.h dirent.h malloc.h \
 CC_CLANG
 AC_LD_WHOLE_ARCHIVE
 DC_DOVECOT_HARDENING
+DC_DOVECOT_FUZZER
 DC_DOVECOT_CFLAGS
 
 DOVECOT_NSL
@@ -324,7 +320,7 @@ AC_DEFINE(PACKAGE_WEBPAGE, "http://www.dovecot.org/", [Support URL])
 
 dnl * after -lsocket and -lnsl tests, inet_aton() may be in them
 AC_CHECK_FUNCS(fcntl flock lockf inet_aton sigaction getpagesize madvise \
-               strcasecmp stricmp vsyslog writev pread uname unsetenv \
+               strcasecmp stricmp vsyslog writev pread uname \
 	       setrlimit setproctitle seteuid setreuid setegid setresgid \
 	       getmntinfo setpriority quotactl getmntent kqueue kevent \
 	       backtrace_symbols walkcontext dirfd clearenv \
@@ -491,8 +487,6 @@ DOVECOT_FD_PASSING
 
 DOVECOT_SENDFILE
 
-DOVECOT_UNSETENV_RET_INT
-
 DOVECOT_CRYPT_XPG6
 DOVECOT_CRYPT
 
@@ -552,12 +546,13 @@ DOVECOT_WANT_CASSANDRA
 DOVECOT_SQL
 
 AM_CONDITIONAL([AUTH_LUA_PLUGIN], [test "x$with_lua_plugin" = "xyes"])
-AM_CONDITIONAL([HAVE_LUA], [test "x$with_luajit" = "xyes" || test "x$with_lua" = "xyes"])
-AS_IF([test "x$with_luajit" = "xyes" || test "x$with_lua" = "xyes"],
+AM_CONDITIONAL([HAVE_LUA], [test "x$with_lua" = "xyes"])
+AS_IF([test "x$with_lua" = "xyes"],
   AS_IF([test "x$with_lua_plugin" = "xyes"],
       [userdb="$userdb lua (plugin)"; passdb="$passdb lua (plugin)"],
       [userdb="$userdb lua"; passdb="$passdb lua"],
   ), [])
+AM_CONDITIONAL([DLUA_WITH_YIELDS], [test "$dlua_with_yields" = "yes"])
 
 if test $have_modules = yes; then
   AC_DEFINE(HAVE_MODULES,, [Define if you have dynamic module support])
@@ -656,6 +651,13 @@ LIBDOVECOT_DSYNC='$(top_builddir)/src/doveadm/dsync/libdovecot-dsync.la'
 LIBDOVECOT_SQL='$(top_builddir)/src/lib-sql/libsql.la'
 LIBDOVECOT_COMPRESS='$(top_builddir)/src/lib-compression/libcompression.la'
 LIBDOVECOT_LIBFTS='$(top_builddir)/src/lib-fts/libfts.la'
+
+if test $with_lua != no; then
+  LIBDOVECOT_LUA='$(top_builddir)/src/lib-lua/libdovecot-lua.la'
+else
+  LIBDOVECOT_LUA=''
+fi
+
 AC_SUBST(LIBDOVECOT)
 AC_SUBST(LIBDOVECOT_LA_LIBS)
 AC_SUBST(LIBDOVECOT_DEPS)
@@ -669,6 +671,8 @@ AC_SUBST(LIBDOVECOT_LDA)
 AC_SUBST(LIBDOVECOT_LDAP)
 AC_SUBST(LIBDOVECOT_LIBFTS)
 AC_SUBST(LIBDOVECOT_LIBFTS_DEPS)
+AC_SUBST(LIBDOVECOT_LUA)
+AC_SUBST(LIBDOVECOT_LUA_DEPS)
 
 dnl **
 dnl ** SQL drivers
@@ -760,7 +764,7 @@ dnl ** Settings
 dnl **
 
 dnl get a list of setting .[ch] files, but list .h files first
-FILES1=`find $srcdir/src -name '*settings.[[ch]]'|grep "$srcdir/src/lib-" | sed 's/^\(.*\)\(.\)$/\2 \1\2/' | grep -E -v 'lib-(master|smtp).*c$' | sort -r | sed s/^..//`
+FILES1=`find $srcdir/src -name '*settings.[[ch]]'|grep "$srcdir/src/lib-" | sed 's/^\(.*\)\(.\)$/\2 \1\2/' | grep -E -v 'lib-(master|smtp|settings).*c$' | sort -r | sed s/^..//`
 FILES2=`find $srcdir/src -name '*settings.[[ch]]'|grep -v "$srcdir/src/lib-" | sed 's/^\(.*\)\(.\)$/\2 \1\2/' | grep -v all-settings | sort -r | sed s/^..//`
 SETTING_FILES=`echo $FILES1 $FILES2 | sed -e s,$srcdir/src,./src,g -e 's,./src,$(top_srcdir)/src,g'`
 AC_SUBST(SETTING_FILES)
@@ -772,7 +776,7 @@ dnl **
 dnl IDLE doesn't really belong to banner. It's there just to make Blackberries
 dnl happy, because otherwise BIS server disables push email.
 capability_banner="IMAP4rev1 SASL-IR LOGIN-REFERRALS ID ENABLE IDLE"
-capability="$capability_banner SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE SNIPPET=FUZZY PREVIEW=FUZZY STATUS=SIZE SAVEDATE"
+capability="$capability_banner SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE SNIPPET=FUZZY PREVIEW=FUZZY PREVIEW STATUS=SIZE SAVEDATE"
 AC_DEFINE_UNQUOTED(CAPABILITY_STRING, "$capability", [IMAP capabilities])
 AC_DEFINE_UNQUOTED(CAPABILITY_BANNER_STRING, "$capability_banner", [IMAP capabilities advertised in banner])
 
@@ -854,7 +858,6 @@ src/lib-storage/index/mbox/Makefile
 src/lib-storage/index/dbox-common/Makefile
 src/lib-storage/index/dbox-multi/Makefile
 src/lib-storage/index/dbox-single/Makefile
-src/lib-storage/index/cydir/Makefile
 src/lib-storage/index/raw/Makefile
 src/lib-storage/index/shared/Makefile
 src/anvil/Makefile
@@ -889,8 +892,6 @@ src/util/Makefile
 src/plugins/Makefile
 src/plugins/acl/Makefile
 src/plugins/imap-acl/Makefile
-src/plugins/autocreate/Makefile
-src/plugins/expire/Makefile
 src/plugins/fs-compress/Makefile
 src/plugins/fts/Makefile
 src/plugins/fts-lucene/Makefile
@@ -899,7 +900,6 @@ src/plugins/fts-squat/Makefile
 src/plugins/last-login/Makefile
 src/plugins/lazy-expunge/Makefile
 src/plugins/listescape/Makefile
-src/plugins/mail-filter/Makefile
 src/plugins/mail-log/Makefile
 src/plugins/mail-lua/Makefile
 src/plugins/mailbox-alias/Makefile
@@ -911,7 +911,6 @@ src/plugins/quota/Makefile
 src/plugins/quota-clone/Makefile
 src/plugins/imap-quota/Makefile
 src/plugins/replication/Makefile
-src/plugins/snarf/Makefile
 src/plugins/old-stats/Makefile
 src/plugins/imap-old-stats/Makefile
 src/plugins/trash/Makefile
@@ -945,7 +944,6 @@ echo "I/O notifys .... : $have_notify"
 echo "SSL ............ : $have_ssl"
 echo "GSSAPI ......... : $have_gssapi"
 echo "passdbs ........ :$passdb"
-echo "CFLAGS ......... : $CFLAGS"
 if test "$not_passdb" != ""; then
   echo "                 :$not_passdb"
 fi
@@ -953,6 +951,14 @@ echo "userdbs ........ :$userdb"
 if test "$not_userdb" != ""; then
   echo "                 :$not_userdb"
 fi
+echo "CFLAGS ......... : $CFLAGS"
+
+if test "$systemdsystemunitdir" != ""; then
+  echo "SYSTEMD ........ : $systemdservicetype - $systemdsystemunitdir/dovecot.service";
+else
+  echo "SYSTEMD ........ : $systemdservicetype - (no unit file)"
+fi
+
 echo "SQL drivers .... :$sql_drivers"
 if test "$not_sql_drivers" != ""; then
   echo "                 :$not_sql_drivers"

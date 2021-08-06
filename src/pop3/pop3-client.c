@@ -75,11 +75,14 @@ static void client_commit_timeout(struct client *client)
 static void client_idle_timeout(struct client *client)
 {
 	if (client->cmd != NULL) {
-		client_destroy(client,
-			"Disconnected for inactivity in reading our output");
+		client_destroy(client, t_strdup_printf(
+			"Client has not read server output for for %"PRIdTIME_T" secs",
+			ioloop_time - client->last_output));
 	} else {
 		client_send_line(client, "-ERR Disconnected for inactivity.");
-		client_destroy(client, "Disconnected for inactivity");
+		client_destroy(client, t_strdup_printf(
+			"Inactivity - no input for %"PRIdTIME_T" secs",
+			ioloop_time - client->last_input));
 	}
 }
 
@@ -400,13 +403,7 @@ struct client *client_create(int fd_in, int fd_out,
 	o_stream_set_no_error_handling(client->output, TRUE);
 	o_stream_set_flush_callback(client->output, client_output, client);
 
-	if (set->rawlog_dir[0] != '\0') {
-		(void)iostream_rawlog_create(set->rawlog_dir, &client->input,
-					     &client->output);
-	}
-
 	p_array_init(&client->module_contexts, client->pool, 5);
-	client->io = io_add_istream(client->input, client_input, client);
         client->last_input = ioloop_time;
 	client->to_idle = timeout_add(CLIENT_IDLE_TIMEOUT_MSECS,
 				      client_idle_timeout, client);
@@ -437,6 +434,15 @@ struct client *client_create(int fd_in, int fd_out,
 		hook_client_created(&client);
 
 	return client;
+}
+
+void client_create_finish(struct client *client)
+{
+	if (client->set->rawlog_dir[0] != '\0') {
+		(void)iostream_rawlog_create(client->set->rawlog_dir,
+					     &client->input, &client->output);
+	}
+	client->io = io_add_istream(client->input, client_input, client);
 }
 
 int client_init_mailbox(struct client *client, const char **error_r)
@@ -575,7 +581,7 @@ static void client_default_destroy(struct client *client, const char *reason)
 			reason = io_stream_get_disconnect_reason(client->input,
 								 client->output);
 		}
-		i_info("%s %s", reason, client_stats(client));
+		i_info("Disconnected: %s %s", reason, client_stats(client));
 	}
 
 	if (client->cmd != NULL) {
@@ -840,11 +846,11 @@ static int client_output(struct client *client)
 void clients_destroy_all(void)
 {
 	while (pop3_clients != NULL) {
+		mail_storage_service_io_activate_user(pop3_clients->service_user);
 		if (pop3_clients->cmd == NULL) {
 			client_send_line(pop3_clients,
 				"-ERR [SYS/TEMP] Server shutting down.");
 		}
-		mail_storage_service_io_activate_user(pop3_clients->service_user);
 		client_destroy(pop3_clients, "Server shutting down.");
 	}
 }

@@ -7,9 +7,30 @@
 
 #include <sys/stat.h>
 
+#define SIEVE_BINARY_FILE_LOCK_TIMEOUT 10
+
 /*
  * Binary file
  */
+
+enum SIEVE_BINARY_FLAGS {
+	SIEVE_BINARY_FLAG_RESOURCE_LIMIT = BIT(0),
+};
+
+struct sieve_binary_header {
+	uint32_t magic;
+	uint16_t version_major;
+	uint16_t version_minor;
+	uint32_t blocks;
+
+	uint32_t hdr_size;
+	uint32_t flags;
+
+	struct {
+		uint64_t update_time;
+		uint32_t cpu_time_msecs;
+	} resource_usage;
+};
 
 struct sieve_binary_file {
 	pool_t pool;
@@ -19,11 +40,6 @@ struct sieve_binary_file {
 	struct stat st;
 	int fd;
 	off_t offset;
-
-	const void *(*load_data)(struct sieve_binary_file *file,
-				 off_t *offset, size_t size);
-	buffer_t *(*load_buffer)(struct sieve_binary_file *file,
-				 off_t *offset, size_t size);
 };
 
 void sieve_binary_file_close(struct sieve_binary_file **_file);
@@ -79,6 +95,8 @@ struct sieve_binary {
 	struct sieve_script *script;
 
 	struct sieve_binary_file *file;
+	struct sieve_binary_header header;
+	struct sieve_resource_usage rusage;
 
 	/* When the binary is loaded into memory or when it is being constructed
 	   by the generator, extensions can be associated to the binary. The
@@ -103,6 +121,8 @@ struct sieve_binary {
 
 	/* Blocks */
 	ARRAY(struct sieve_binary_block *) blocks;
+
+	bool rusage_updated:1;
 };
 
 void sieve_binary_update_event(struct sieve_binary *sbin, const char *new_path)
@@ -206,5 +226,15 @@ sieve_binary_extension_register(struct sieve_binary *sbin,
 /* Load/Save */
 
 bool sieve_binary_load_block(struct sieve_binary_block *);
+
+/*
+ * Resource limits
+ */
+
+bool sieve_binary_check_resource_usage(struct sieve_binary *sbin);
+
+int sieve_binary_file_update_resource_usage(struct sieve_binary *sbin,
+					    enum sieve_error *error_r)
+					    ATTR_NULL(2);
 
 #endif

@@ -120,7 +120,8 @@ fs_list_rename_invalid(struct fs_list_iterate_context *ctx,
 	(void)imap_utf8_to_utf7(str_c(destname), dest);
 
 	if (rename(src, str_c(dest)) < 0 && errno != ENOENT)
-		i_error("rename(%s, %s) failed: %m", src, str_c(dest));
+		e_error(ctx->ctx.list->ns->user->event,
+			"rename(%s, %s) failed: %m", src, str_c(dest));
 }
 
 static const char *
@@ -401,7 +402,7 @@ static void fs_list_get_roots(struct fs_list_iterate_context *ctx)
 	char ns_sep = mail_namespace_get_sep(ns);
 	bool full_fs_access =
 		ctx->ctx.list->mail_set->mail_full_filesystem_access;
-	const char *const *patterns, *pattern, *const *parentp, *const *childp;
+	const char *const *patterns, *pattern, *parent, *child;
 	const char *p, *last, *root, *prefix_vname;
 	unsigned int i;
 	size_t parentlen;
@@ -479,13 +480,13 @@ static void fs_list_get_roots(struct fs_list_iterate_context *ctx)
 	array_sort(&ctx->roots, i_strcmp_p);
 	/* remove /foo/bar when there already exists /foo parent */
 	for (i = 1; i < array_count(&ctx->roots); ) {
-		parentp = array_idx(&ctx->roots, i-1);
-		childp = array_idx(&ctx->roots, i);
-		parentlen = strlen(*parentp);
-		if (str_begins(*childp, *parentp) &&
+		parent = array_idx_elem(&ctx->roots, i-1);
+		child = array_idx_elem(&ctx->roots, i);
+		parentlen = strlen(parent);
+		if (str_begins(child, parent) &&
 		    (parentlen == 0 ||
-		     (*childp)[parentlen] == ctx->sep ||
-		     (*childp)[parentlen] == '\0'))
+		     child[parentlen] == ctx->sep ||
+		     child[parentlen] == '\0'))
 			array_delete(&ctx->roots, i, 1);
 		else
 			i++;

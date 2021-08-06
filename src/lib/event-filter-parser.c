@@ -1,8 +1,9 @@
-/* A Bison parser, made by GNU Bison 3.0.4.  */
+/* A Bison parser, made by GNU Bison 3.3.2.  */
 
 /* Bison implementation for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
+   Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -40,11 +41,14 @@
    define necessary library symbols; they are noted "INFRINGES ON
    USER NAME SPACE" below.  */
 
+/* Undocumented macros, especially those whose name start with YY_,
+   are private implementation details.  Do not rely on them.  */
+
 /* Identify Bison output.  */
 #define YYBISON 1
 
 /* Bison version.  */
-#define YYBISON_VERSION "3.0.4"
+#define YYBISON_VERSION "3.3.2"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -68,10 +72,11 @@
 #define yynerrs         event_filter_parser_nerrs
 
 
-/* Copy the first part of user declarations.  */
-#line 11 "event-filter-parser.y" /* yacc.c:339  */
+/* First part of user prologue.  */
+#line 11 "event-filter-parser.y" /* yacc.c:337  */
 
 #include "lib.h"
+#include "wildcard-match.h"
 #include "lib-event-private.h"
 #include "event-filter-private.h"
 
@@ -96,16 +101,16 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 	enum event_filter_node_type type;
 
 	if (strcmp(a, "event") == 0)
-		type = EVENT_FILTER_NODE_TYPE_EVENT_NAME;
+		type = EVENT_FILTER_NODE_TYPE_EVENT_NAME_WILDCARD;
 	else if (strcmp(a, "category") == 0)
 		type = EVENT_FILTER_NODE_TYPE_EVENT_CATEGORY;
 	else if (strcmp(a, "source_location") == 0)
 		type = EVENT_FILTER_NODE_TYPE_EVENT_SOURCE_LOCATION;
 	else
-		type = EVENT_FILTER_NODE_TYPE_EVENT_FIELD;
+		type = EVENT_FILTER_NODE_TYPE_EVENT_FIELD_WILDCARD;
 
 	/* only fields support comparators other than EQ */
-	if ((type != EVENT_FILTER_NODE_TYPE_EVENT_FIELD) &&
+	if ((type != EVENT_FILTER_NODE_TYPE_EVENT_FIELD_WILDCARD) &&
 	    (op != EVENT_FILTER_OP_CMP_EQ)) {
 		state->error = "Only fields support inequality comparisons";
 		return NULL;
@@ -118,8 +123,10 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 	switch (type) {
 	case EVENT_FILTER_NODE_TYPE_LOGIC:
 		i_unreached();
-	case EVENT_FILTER_NODE_TYPE_EVENT_NAME:
+	case EVENT_FILTER_NODE_TYPE_EVENT_NAME_WILDCARD:
 		node->str = p_strdup(state->pool, b);
+		if (wildcard_is_literal(node->str))
+			node->type = EVENT_FILTER_NODE_TYPE_EVENT_NAME_EXACT;
 		state->has_event_name = TRUE;
 		break;
 	case EVENT_FILTER_NODE_TYPE_EVENT_SOURCE_LOCATION: {
@@ -136,7 +143,7 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 				file = p_strdup_until(state->pool, b, colon);
 			}
 		} else {
-			file = p_strdup_empty(state->pool, b);
+			file = p_strdup(state->pool, b);
 			line = 0;
 		}
 
@@ -150,7 +157,7 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 			node->category.ptr = event_category_find_registered(b);
 		}
 		break;
-	case EVENT_FILTER_NODE_TYPE_EVENT_FIELD:
+	case EVENT_FILTER_NODE_TYPE_EVENT_FIELD_WILDCARD:
 		node->field.key = p_strdup(state->pool, a);
 		node->field.value.str = p_strdup(state->pool, b);
 
@@ -161,7 +168,13 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 			   Either we have a string, or a number with wildcards */
 			node->field.value.intmax = INT_MIN;
 		}
+
+		if (wildcard_is_literal(node->field.value.str))
+			node->type = EVENT_FILTER_NODE_TYPE_EVENT_FIELD_EXACT;
 		break;
+	case EVENT_FILTER_NODE_TYPE_EVENT_NAME_EXACT:
+	case EVENT_FILTER_NODE_TYPE_EVENT_FIELD_EXACT:
+		i_unreached();
 	}
 
 	return node;
@@ -190,13 +203,16 @@ static struct event_filter_node *logic(struct event_filter_parser_state *state,
 #pragma clang diagnostic ignored "-Wstrict-bool"
 #endif
 
-#line 194 "event-filter-parser.c" /* yacc.c:339  */
-
+#line 207 "event-filter-parser.c" /* yacc.c:337  */
 # ifndef YY_NULLPTR
-#  if defined __cplusplus && 201103L <= __cplusplus
-#   define YY_NULLPTR nullptr
+#  if defined __cplusplus
+#   if 201103L <= __cplusplus
+#    define YY_NULLPTR nullptr
+#   else
+#    define YY_NULLPTR 0
+#   endif
 #  else
-#   define YY_NULLPTR 0
+#   define YY_NULLPTR ((void*)0)
 #  endif
 # endif
 
@@ -246,13 +262,13 @@ extern int event_filter_parser_debug;
 
 union EVENT_FILTER_PARSER_STYPE
 {
-#line 132 "event-filter-parser.y" /* yacc.c:355  */
+#line 141 "event-filter-parser.y" /* yacc.c:352  */
 
 	const char *str;
 	enum event_filter_node_op op;
 	struct event_filter_node *node;
 
-#line 256 "event-filter-parser.c" /* yacc.c:355  */
+#line 272 "event-filter-parser.c" /* yacc.c:352  */
 };
 
 typedef union EVENT_FILTER_PARSER_STYPE EVENT_FILTER_PARSER_STYPE;
@@ -266,9 +282,7 @@ int event_filter_parser_parse (struct event_filter_parser_state *state);
 
 #endif /* !YY_EVENT_FILTER_PARSER_EVENT_FILTER_PARSER_H_INCLUDED  */
 
-/* Copy the second part of user declarations.  */
 
-#line 272 "event-filter-parser.c" /* yacc.c:358  */
 
 #ifdef short
 # undef short
@@ -289,13 +303,13 @@ typedef signed char yytype_int8;
 #ifdef YYTYPE_UINT16
 typedef YYTYPE_UINT16 yytype_uint16;
 #else
-typedef unsigned short int yytype_uint16;
+typedef unsigned short yytype_uint16;
 #endif
 
 #ifdef YYTYPE_INT16
 typedef YYTYPE_INT16 yytype_int16;
 #else
-typedef short int yytype_int16;
+typedef short yytype_int16;
 #endif
 
 #ifndef YYSIZE_T
@@ -307,7 +321,7 @@ typedef short int yytype_int16;
 #  include <stddef.h> /* INFRINGES ON USER NAME SPACE */
 #  define YYSIZE_T size_t
 # else
-#  define YYSIZE_T unsigned int
+#  define YYSIZE_T unsigned
 # endif
 #endif
 
@@ -343,15 +357,6 @@ typedef short int yytype_int16;
 # define YY_ATTRIBUTE_UNUSED YY_ATTRIBUTE ((__unused__))
 #endif
 
-#if !defined _Noreturn \
-     && (!defined __STDC_VERSION__ || __STDC_VERSION__ < 201112)
-# if defined _MSC_VER && 1200 <= _MSC_VER
-#  define _Noreturn __declspec (noreturn)
-# else
-#  define _Noreturn YY_ATTRIBUTE ((__noreturn__))
-# endif
-#endif
-
 /* Suppress unused-variable warnings by "using" E.  */
 #if ! defined lint || defined __GNUC__
 # define YYUSE(E) ((void) (E))
@@ -359,7 +364,7 @@ typedef short int yytype_int16;
 # define YYUSE(E) /* empty */
 #endif
 
-#if defined __GNUC__ && 407 <= __GNUC__ * 100 + __GNUC_MINOR__
+#if defined __GNUC__ && ! defined __ICC && 407 <= __GNUC__ * 100 + __GNUC_MINOR__
 /* Suppress an incorrect diagnostic about yylval being uninitialized.  */
 # define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN \
     _Pragma ("GCC diagnostic push") \
@@ -521,16 +526,16 @@ union yyalloc
 /* YYNSTATES -- Number of states.  */
 #define YYNSTATES  29
 
-/* YYTRANSLATE[YYX] -- Symbol number corresponding to YYX as returned
-   by yylex, with out-of-bounds checking.  */
 #define YYUNDEFTOK  2
 #define YYMAXUTOK   262
 
+/* YYTRANSLATE(TOKEN-NUM) -- Symbol number corresponding to TOKEN-NUM
+   as returned by yylex, with out-of-bounds checking.  */
 #define YYTRANSLATE(YYX)                                                \
-  ((unsigned int) (YYX) <= YYMAXUTOK ? yytranslate[YYX] : YYUNDEFTOK)
+  ((unsigned) (YYX) <= YYMAXUTOK ? yytranslate[YYX] : YYUNDEFTOK)
 
 /* YYTRANSLATE[TOKEN-NUM] -- Symbol number corresponding to TOKEN-NUM
-   as returned by yylex, without out-of-bounds checking.  */
+   as returned by yylex.  */
 static const yytype_uint8 yytranslate[] =
 {
        0,     2,     2,     2,     2,     2,     2,     2,     2,     2,
@@ -566,9 +571,9 @@ static const yytype_uint8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,   149,   149,   150,   153,   154,   155,   156,   157,   160,
-     169,   170,   173,   174,   175,   176,   177,   180,   181,   182,
-     183,   184
+       0,   158,   158,   159,   162,   163,   164,   165,   166,   169,
+     178,   179,   182,   183,   184,   185,   186,   189,   190,   191,
+     192,   193
 };
 #endif
 
@@ -607,7 +612,7 @@ static const yytype_uint16 yytoknum[] =
      STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-      -1,    -6,    -6,    -1,    -1,     4,    13,    -6,    12,    13,
+      -1,    -6,    -6,    -1,    -1,     4,    13,    -6,    12,    -6,
       11,    -6,    -1,    -1,    -6,    -5,    -2,     8,    -6,    -6,
       -6,    -6,    -6,    -6,    -6,    -6,    -6,    -6,    -6
 };
@@ -689,22 +694,22 @@ static const yytype_uint8 yyr2[] =
 
 #define YYRECOVERING()  (!!yyerrstatus)
 
-#define YYBACKUP(Token, Value)                                  \
-do                                                              \
-  if (yychar == YYEMPTY)                                        \
-    {                                                           \
-      yychar = (Token);                                         \
-      yylval = (Value);                                         \
-      YYPOPSTACK (yylen);                                       \
-      yystate = *yyssp;                                         \
-      goto yybackup;                                            \
-    }                                                           \
-  else                                                          \
-    {                                                           \
-      yyerror (state, YY_("syntax error: cannot back up")); \
-      YYERROR;                                                  \
-    }                                                           \
-while (0)
+#define YYBACKUP(Token, Value)                                    \
+  do                                                              \
+    if (yychar == YYEMPTY)                                        \
+      {                                                           \
+        yychar = (Token);                                         \
+        yylval = (Value);                                         \
+        YYPOPSTACK (yylen);                                       \
+        yystate = *yyssp;                                         \
+        goto yybackup;                                            \
+      }                                                           \
+    else                                                          \
+      {                                                           \
+        yyerror (state, YY_("syntax error: cannot back up")); \
+        YYERROR;                                                  \
+      }                                                           \
+  while (0)
 
 /* Error token number */
 #define YYTERROR        1
@@ -744,38 +749,38 @@ do {                                                                      \
 } while (0)
 
 
-/*----------------------------------------.
-| Print this symbol's value on YYOUTPUT.  |
-`----------------------------------------*/
+/*-----------------------------------.
+| Print this symbol's value on YYO.  |
+`-----------------------------------*/
 
 static void
-yy_symbol_value_print (FILE *yyoutput, int yytype, YYSTYPE const * const yyvaluep, struct event_filter_parser_state *state)
+yy_symbol_value_print (FILE *yyo, int yytype, YYSTYPE const * const yyvaluep, struct event_filter_parser_state *state)
 {
-  FILE *yyo = yyoutput;
-  YYUSE (yyo);
+  FILE *yyoutput = yyo;
+  YYUSE (yyoutput);
   YYUSE (state);
   if (!yyvaluep)
     return;
 # ifdef YYPRINT
   if (yytype < YYNTOKENS)
-    YYPRINT (yyoutput, yytoknum[yytype], *yyvaluep);
+    YYPRINT (yyo, yytoknum[yytype], *yyvaluep);
 # endif
   YYUSE (yytype);
 }
 
 
-/*--------------------------------.
-| Print this symbol on YYOUTPUT.  |
-`--------------------------------*/
+/*---------------------------.
+| Print this symbol on YYO.  |
+`---------------------------*/
 
 static void
-yy_symbol_print (FILE *yyoutput, int yytype, YYSTYPE const * const yyvaluep, struct event_filter_parser_state *state)
+yy_symbol_print (FILE *yyo, int yytype, YYSTYPE const * const yyvaluep, struct event_filter_parser_state *state)
 {
-  YYFPRINTF (yyoutput, "%s %s (",
+  YYFPRINTF (yyo, "%s %s (",
              yytype < YYNTOKENS ? "token" : "nterm", yytname[yytype]);
 
-  yy_symbol_value_print (yyoutput, yytype, yyvaluep, state);
-  YYFPRINTF (yyoutput, ")");
+  yy_symbol_value_print (yyo, yytype, yyvaluep, state);
+  YYFPRINTF (yyo, ")");
 }
 
 /*------------------------------------------------------------------.
@@ -809,7 +814,7 @@ do {                                                            \
 static void
 yy_reduce_print (yytype_int16 *yyssp, YYSTYPE *yyvsp, int yyrule, struct event_filter_parser_state *state)
 {
-  unsigned long int yylno = yyrline[yyrule];
+  unsigned long yylno = yyrline[yyrule];
   int yynrhs = yyr2[yyrule];
   int yyi;
   YYFPRINTF (stderr, "Reducing stack by rule %d (line %lu):\n",
@@ -820,7 +825,7 @@ yy_reduce_print (yytype_int16 *yyssp, YYSTYPE *yyvsp, int yyrule, struct event_f
       YYFPRINTF (stderr, "   $%d = ", yyi + 1);
       yy_symbol_print (stderr,
                        yystos[yyssp[yyi + 1 - yynrhs]],
-                       &(yyvsp[(yyi + 1) - (yynrhs)])
+                       &yyvsp[(yyi + 1) - (yynrhs)]
                                               , state);
       YYFPRINTF (stderr, "\n");
     }
@@ -924,7 +929,10 @@ yytnamerr (char *yyres, const char *yystr)
           case '\\':
             if (*++yyp != '\\')
               goto do_not_strip_quotes;
-            /* Fall through.  */
+            else
+              goto append;
+
+          append:
           default:
             if (yyres)
               yyres[yyn] = *yyp;
@@ -942,7 +950,7 @@ yytnamerr (char *yyres, const char *yystr)
   if (! yyres)
     return yystrlen (yystr);
 
-  return yystpcpy (yyres, yystr) - yyres;
+  return (YYSIZE_T) (yystpcpy (yyres, yystr) - yyres);
 }
 # endif
 
@@ -1020,10 +1028,10 @@ yysyntax_error (YYSIZE_T *yymsg_alloc, char **yymsg,
                 yyarg[yycount++] = yytname[yyx];
                 {
                   YYSIZE_T yysize1 = yysize + yytnamerr (YY_NULLPTR, yytname[yyx]);
-                  if (! (yysize <= yysize1
-                         && yysize1 <= YYSTACK_ALLOC_MAXIMUM))
+                  if (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM)
+                    yysize = yysize1;
+                  else
                     return 2;
-                  yysize = yysize1;
                 }
               }
         }
@@ -1035,6 +1043,7 @@ yysyntax_error (YYSIZE_T *yymsg_alloc, char **yymsg,
       case N:                               \
         yyformat = S;                       \
       break
+    default: /* Avoid compiler warnings. */
       YYCASE_(0, YY_("syntax error"));
       YYCASE_(1, YY_("syntax error, unexpected %s"));
       YYCASE_(2, YY_("syntax error, unexpected %s, expecting %s"));
@@ -1046,9 +1055,10 @@ yysyntax_error (YYSIZE_T *yymsg_alloc, char **yymsg,
 
   {
     YYSIZE_T yysize1 = yysize + yystrlen (yyformat);
-    if (! (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM))
+    if (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM)
+      yysize = yysize1;
+    else
       return 2;
-    yysize = yysize1;
   }
 
   if (*yymsg_alloc < yysize)
@@ -1179,23 +1189,31 @@ YYSTYPE yylval YY_INITIAL_VALUE (= yyval_default);
   yychar = YYEMPTY; /* Cause a token to be read.  */
   goto yysetstate;
 
+
 /*------------------------------------------------------------.
-| yynewstate -- Push a new state, which is found in yystate.  |
+| yynewstate -- push a new state, which is found in yystate.  |
 `------------------------------------------------------------*/
- yynewstate:
+yynewstate:
   /* In all cases, when you get here, the value and location stacks
      have just been pushed.  So pushing a state here evens the stacks.  */
   yyssp++;
 
- yysetstate:
-  *yyssp = yystate;
+
+/*--------------------------------------------------------------------.
+| yynewstate -- set current state (the top of the stack) to yystate.  |
+`--------------------------------------------------------------------*/
+yysetstate:
+  *yyssp = (yytype_int16) yystate;
 
   if (yyss + yystacksize - 1 <= yyssp)
+#if !defined yyoverflow && !defined YYSTACK_RELOCATE
+    goto yyexhaustedlab;
+#else
     {
       /* Get the current used size of the three stacks, in elements.  */
-      YYSIZE_T yysize = yyssp - yyss + 1;
+      YYSIZE_T yysize = (YYSIZE_T) (yyssp - yyss + 1);
 
-#ifdef yyoverflow
+# if defined yyoverflow
       {
         /* Give user a chance to reallocate the stack.  Use copies of
            these so that the &'s don't force the real ones into
@@ -1211,14 +1229,10 @@ YYSTYPE yylval YY_INITIAL_VALUE (= yyval_default);
                     &yyss1, yysize * sizeof (*yyssp),
                     &yyvs1, yysize * sizeof (*yyvsp),
                     &yystacksize);
-
         yyss = yyss1;
         yyvs = yyvs1;
       }
-#else /* no yyoverflow */
-# ifndef YYSTACK_RELOCATE
-      goto yyexhaustedlab;
-# else
+# else /* defined YYSTACK_RELOCATE */
       /* Extend the stack our own way.  */
       if (YYMAXDEPTH <= yystacksize)
         goto yyexhaustedlab;
@@ -1234,22 +1248,22 @@ YYSTYPE yylval YY_INITIAL_VALUE (= yyval_default);
           goto yyexhaustedlab;
         YYSTACK_RELOCATE (yyss_alloc, yyss);
         YYSTACK_RELOCATE (yyvs_alloc, yyvs);
-#  undef YYSTACK_RELOCATE
+# undef YYSTACK_RELOCATE
         if (yyss1 != yyssa)
           YYSTACK_FREE (yyss1);
       }
 # endif
-#endif /* no yyoverflow */
 
       yyssp = yyss + yysize - 1;
       yyvsp = yyvs + yysize - 1;
 
       YYDPRINTF ((stderr, "Stack size increased to %lu\n",
-                  (unsigned long int) yystacksize));
+                  (unsigned long) yystacksize));
 
       if (yyss + yystacksize - 1 <= yyssp)
         YYABORT;
     }
+#endif /* !defined yyoverflow && !defined YYSTACK_RELOCATE */
 
   YYDPRINTF ((stderr, "Entering state %d\n", yystate));
 
@@ -1258,11 +1272,11 @@ YYSTYPE yylval YY_INITIAL_VALUE (= yyval_default);
 
   goto yybackup;
 
+
 /*-----------.
 | yybackup.  |
 `-----------*/
 yybackup:
-
   /* Do appropriate processing given the current state.  Read a
      lookahead token if we need one and don't already have one.  */
 
@@ -1335,7 +1349,7 @@ yydefault:
 
 
 /*-----------------------------.
-| yyreduce -- Do a reduction.  |
+| yyreduce -- do a reduction.  |
 `-----------------------------*/
 yyreduce:
   /* yyn is the number of a rule to reduce with.  */
@@ -1356,49 +1370,49 @@ yyreduce:
   switch (yyn)
     {
         case 2:
-#line 149 "event-filter-parser.y" /* yacc.c:1646  */
+#line 158 "event-filter-parser.y" /* yacc.c:1652  */
     { state->output = (yyvsp[0].node); }
-#line 1362 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1376 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 3:
-#line 150 "event-filter-parser.y" /* yacc.c:1646  */
+#line 159 "event-filter-parser.y" /* yacc.c:1652  */
     { state->output = NULL; }
-#line 1368 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1382 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 4:
-#line 153 "event-filter-parser.y" /* yacc.c:1646  */
+#line 162 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = logic(state, (yyvsp[-2].node), (yyvsp[0].node), EVENT_FILTER_OP_AND); }
-#line 1374 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1388 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 5:
-#line 154 "event-filter-parser.y" /* yacc.c:1646  */
+#line 163 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = logic(state, (yyvsp[-2].node), (yyvsp[0].node), EVENT_FILTER_OP_OR); }
-#line 1380 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1394 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 6:
-#line 155 "event-filter-parser.y" /* yacc.c:1646  */
+#line 164 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = logic(state, (yyvsp[0].node), NULL, EVENT_FILTER_OP_NOT); }
-#line 1386 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1400 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 7:
-#line 156 "event-filter-parser.y" /* yacc.c:1646  */
+#line 165 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = (yyvsp[-1].node); }
-#line 1392 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1406 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 8:
-#line 157 "event-filter-parser.y" /* yacc.c:1646  */
+#line 166 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = (yyvsp[0].node); }
-#line 1398 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1412 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 9:
-#line 160 "event-filter-parser.y" /* yacc.c:1646  */
+#line 169 "event-filter-parser.y" /* yacc.c:1652  */
     {
 					(yyval.node) = key_value(state, (yyvsp[-2].str), (yyvsp[0].str), (yyvsp[-1].op));
 					if ((yyval.node) == NULL) {
@@ -1406,83 +1420,83 @@ yyreduce:
 						YYERROR;
 					}
 				}
-#line 1410 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1424 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 10:
-#line 169 "event-filter-parser.y" /* yacc.c:1646  */
+#line 178 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = (yyvsp[0].str); }
-#line 1416 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1430 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 11:
-#line 170 "event-filter-parser.y" /* yacc.c:1646  */
+#line 179 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = (yyvsp[0].str); }
-#line 1422 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1436 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 12:
-#line 173 "event-filter-parser.y" /* yacc.c:1646  */
+#line 182 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = (yyvsp[0].str); }
-#line 1428 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1442 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 13:
-#line 174 "event-filter-parser.y" /* yacc.c:1646  */
+#line 183 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = (yyvsp[0].str); }
-#line 1434 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1448 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 14:
-#line 175 "event-filter-parser.y" /* yacc.c:1646  */
+#line 184 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = "and"; }
-#line 1440 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1454 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 15:
-#line 176 "event-filter-parser.y" /* yacc.c:1646  */
+#line 185 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = "or"; }
-#line 1446 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1460 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 16:
-#line 177 "event-filter-parser.y" /* yacc.c:1646  */
+#line 186 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = "not"; }
-#line 1452 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1466 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 17:
-#line 180 "event-filter-parser.y" /* yacc.c:1646  */
+#line 189 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_EQ; }
-#line 1458 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1472 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 18:
-#line 181 "event-filter-parser.y" /* yacc.c:1646  */
+#line 190 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_GT; }
-#line 1464 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1478 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 19:
-#line 182 "event-filter-parser.y" /* yacc.c:1646  */
+#line 191 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_LT; }
-#line 1470 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1484 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 20:
-#line 183 "event-filter-parser.y" /* yacc.c:1646  */
+#line 192 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_GE; }
-#line 1476 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1490 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 21:
-#line 184 "event-filter-parser.y" /* yacc.c:1646  */
+#line 193 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_LE; }
-#line 1482 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1496 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
 
-#line 1486 "event-filter-parser.c" /* yacc.c:1646  */
+#line 1500 "event-filter-parser.c" /* yacc.c:1652  */
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -1507,14 +1521,13 @@ yyreduce:
   /* Now 'shift' the result of the reduction.  Determine what state
      that goes to, based on the state we popped back to and the rule
      number reduced by.  */
-
-  yyn = yyr1[yyn];
-
-  yystate = yypgoto[yyn - YYNTOKENS] + *yyssp;
-  if (0 <= yystate && yystate <= YYLAST && yycheck[yystate] == *yyssp)
-    yystate = yytable[yystate];
-  else
-    yystate = yydefgoto[yyn - YYNTOKENS];
+  {
+    const int yylhs = yyr1[yyn] - YYNTOKENS;
+    const int yyi = yypgoto[yylhs] + *yyssp;
+    yystate = (0 <= yyi && yyi <= YYLAST && yycheck[yyi] == *yyssp
+               ? yytable[yyi]
+               : yydefgoto[yylhs]);
+  }
 
   goto yynewstate;
 
@@ -1597,12 +1610,10 @@ yyerrlab:
 | yyerrorlab -- error raised explicitly by YYERROR.  |
 `---------------------------------------------------*/
 yyerrorlab:
-
-  /* Pacify compilers like GCC when the user code never invokes
-     YYERROR and the label yyerrorlab therefore never appears in user
-     code.  */
-  if (/*CONSTCOND*/ 0)
-     goto yyerrorlab;
+  /* Pacify compilers when the user code never invokes YYERROR and the
+     label yyerrorlab therefore never appears in user code.  */
+  if (0)
+    YYERROR;
 
   /* Do not reclaim the symbols of the rule whose action triggered
      this YYERROR.  */
@@ -1664,12 +1675,14 @@ yyacceptlab:
   yyresult = 0;
   goto yyreturn;
 
+
 /*-----------------------------------.
 | yyabortlab -- YYABORT comes here.  |
 `-----------------------------------*/
 yyabortlab:
   yyresult = 1;
   goto yyreturn;
+
 
 #if !defined yyoverflow || YYERROR_VERBOSE
 /*-------------------------------------------------.
@@ -1681,6 +1694,10 @@ yyexhaustedlab:
   /* Fall through.  */
 #endif
 
+
+/*-----------------------------------------------------.
+| yyreturn -- parsing is finished, return the result.  |
+`-----------------------------------------------------*/
 yyreturn:
   if (yychar != YYEMPTY)
     {
@@ -1710,5 +1727,5 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 186 "event-filter-parser.y" /* yacc.c:1906  */
+#line 195 "event-filter-parser.y" /* yacc.c:1918  */
 

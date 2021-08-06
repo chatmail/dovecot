@@ -31,10 +31,10 @@ test_subprocess_signal(const siginfo_t *si ATTR_UNUSED,
 
 static void test_subprocess_free_all(void)
 {
-	struct test_subprocess **subpp;
+	struct test_subprocess *subp;
 
-	array_foreach_modifiable(&test_subprocesses, subpp)
-		i_free(*subpp);
+	array_foreach_elem(&test_subprocesses, subp)
+		i_free(subp);
 	array_free(&test_subprocesses);
 }
 
@@ -72,7 +72,7 @@ test_subprocess_child(int (*func)(void *context), void *context,
 
 	if (!continue_test) {
 		lib_deinit();
-		exit(ret);
+		lib_exit(ret);
 	}
 	test_exit((test_has_failed() ? 1 : 0));
 }

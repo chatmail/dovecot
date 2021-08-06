@@ -21,7 +21,8 @@ static void i_stream_concat_skip(struct concat_istream *cstream);
 static void i_stream_concat_close(struct iostream_private *stream,
 				  bool close_parent)
 {
-	struct concat_istream *cstream = (struct concat_istream *)stream;
+	struct concat_istream *cstream =
+		container_of(stream, struct concat_istream, istream.iostream);
 	i_assert(cstream->cur_input == cstream->input[cstream->cur_idx]);
 	unsigned int i;
 
@@ -38,7 +39,8 @@ static void i_stream_concat_close(struct iostream_private *stream,
 
 static void i_stream_concat_destroy(struct iostream_private *stream)
 {
-	struct concat_istream *cstream = (struct concat_istream *)stream;
+	struct concat_istream *cstream =
+		container_of(stream, struct concat_istream, istream.iostream);
 	i_assert(cstream->cur_input == cstream->input[cstream->cur_idx]);
 	unsigned int i;
 
@@ -53,7 +55,8 @@ static void
 i_stream_concat_set_max_buffer_size(struct iostream_private *stream,
 				    size_t max_size)
 {
-	struct concat_istream *cstream = (struct concat_istream *)stream;
+	struct concat_istream *cstream =
+		container_of(stream, struct concat_istream, istream.iostream);
 	i_assert(cstream->cur_input == cstream->input[cstream->cur_idx]);
 	unsigned int i;
 
@@ -128,16 +131,20 @@ static void i_stream_concat_skip(struct concat_istream *cstream)
 		bytes_skipped -= cstream->prev_stream_left;
 		cstream->prev_stream_left = 0;
 	}
-	stream->pos -= bytes_skipped;
-	stream->skip -= bytes_skipped;
-	stream->buffer += bytes_skipped;
+	if (bytes_skipped > 0) {
+		i_assert(stream->buffer != NULL);
+		stream->pos -= bytes_skipped;
+		stream->skip -= bytes_skipped;
+		stream->buffer += bytes_skipped;
+	}
 	cstream->prev_skip = stream->skip;
 	i_stream_skip(cstream->cur_input, bytes_skipped);
 }
 
 static ssize_t i_stream_concat_read(struct istream_private *stream)
 {
-	struct concat_istream *cstream = (struct concat_istream *)stream;
+	struct concat_istream *cstream =
+		container_of(stream, struct concat_istream, istream);
 	i_assert(cstream->cur_input == cstream->input[cstream->cur_idx]);
 	const unsigned char *data;
 	size_t size, data_size, cur_data_pos, new_pos;
@@ -271,7 +278,8 @@ find_v_offset(struct concat_istream *cstream, uoff_t *v_offset,
 static void i_stream_concat_seek(struct istream_private *stream,
 				 uoff_t v_offset, bool mark ATTR_UNUSED)
 {
-	struct concat_istream *cstream = (struct concat_istream *)stream;
+	struct concat_istream *cstream =
+		container_of(stream, struct concat_istream, istream);
 	i_assert(cstream->cur_input == cstream->input[cstream->cur_idx]);
 
 	stream->istream.v_offset = v_offset;
@@ -307,7 +315,8 @@ static void i_stream_concat_seek(struct istream_private *stream,
 static int
 i_stream_concat_stat(struct istream_private *stream, bool exact ATTR_UNUSED)
 {
-	struct concat_istream *cstream = (struct concat_istream *)stream;
+	struct concat_istream *cstream =
+		container_of(stream, struct concat_istream, istream);
 	i_assert(cstream->cur_input == cstream->input[cstream->cur_idx]);
 	uoff_t v_offset = UOFF_T_MAX;
 	unsigned int i, cur_idx;

@@ -117,8 +117,7 @@ testsuite_interpreter_free(const struct sieve_extension *ext ATTR_UNUSED,
 	struct testsuite_interpreter_context *ctx =
 		(struct testsuite_interpreter_context *)context;
 
-	if (ctx->compiled_script != NULL)
-		sieve_binary_unref(&ctx->compiled_script);
+	sieve_binary_unref(&ctx->compiled_script);
 }
 
 const struct sieve_interpreter_extension testsuite_interpreter_ext = {
@@ -288,7 +287,8 @@ bool testsuite_testcase_result(bool expect_failure)
 			return FALSE;
 		}
 
-		printf("\nPASS: %d tests failed.\n\n", test_index);
+		printf("\nPASS: %d tests failed (expected to fail).\n\n",
+		       (test_index == 0 ? 1 : test_index));
 		return TRUE;
 	}
 
