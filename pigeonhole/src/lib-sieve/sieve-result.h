@@ -37,6 +37,7 @@ const struct sieve_message_data *
 sieve_result_get_message_data(struct sieve_result *result);
 struct sieve_message_context *
 sieve_result_get_message_context(struct sieve_result *result);
+unsigned int sieve_result_get_exec_seq(struct sieve_result *result);
 
 /*
  * Extension support
@@ -101,21 +102,22 @@ void sieve_result_set_failure_action(struct sieve_result *result,
  * Result execution
  */
 
-int sieve_result_implicit_keep(struct sieve_result *result,
-			       struct sieve_error_handler *ehandler,
-			       bool success);
+struct sieve_result_execution;
 
 void sieve_result_mark_executed(struct sieve_result *result);
 
-int sieve_result_execute(struct sieve_result *result, bool last, bool *keep,
-			 struct sieve_error_handler *ehandler);
+struct sieve_result_execution *
+sieve_result_execution_create(struct sieve_result *result, pool_t pool);
+void sieve_result_execution_destroy(struct sieve_result_execution **_rexec);
 
-void sieve_result_finish(struct sieve_result *result,
-			 struct sieve_error_handler *ehandler, bool success);
+int sieve_result_execute(struct sieve_result_execution *rexec, int status,
+			 bool commit, struct sieve_error_handler *ehandler,
+			 bool *keep_r);
 
-bool sieve_result_executed(struct sieve_result *result);
+bool sieve_result_executed(struct sieve_result_execution *rexec);
+bool sieve_result_committed(struct sieve_result_execution *rexec);
 
-bool sieve_result_executed_delivery(struct sieve_result *result);
+bool sieve_result_executed_delivery(struct sieve_result_execution *rexec);
 
 /*
  * Result evaluation

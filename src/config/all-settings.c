@@ -7,6 +7,7 @@
    systems might not have Perl installed.) */
 #include "lib.h"
 #include "array.h"
+#include "str.h"
 #include "ipwd.h"
 #include "var-expand.h"
 #include "file-lock.h"
@@ -2792,21 +2793,21 @@ static bool stats_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 				 const char **error_r)
 {
 	struct stats_settings *set = _set;
-	struct stats_exporter_settings *const *exporter;
-	struct stats_metric_settings *const *metric;
+	struct stats_exporter_settings *exporter;
+	struct stats_metric_settings *metric;
 
 	if (!array_is_created(&set->metrics) || !array_is_created(&set->exporters))
 		return TRUE;
 
 	/* check that all metrics refer to exporters that exist */
-	array_foreach(&set->metrics, metric) {
+	array_foreach_elem(&set->metrics, metric) {
 		bool found = FALSE;
 
-		if ((*metric)->exporter[0] == '\0')
+		if (metric->exporter[0] == '\0')
 			continue; /* metric not exported */
 
-		array_foreach(&set->exporters, exporter) {
-			if (strcmp((*metric)->exporter, (*exporter)->name) == 0) {
+		array_foreach_elem(&set->exporters, exporter) {
+			if (strcmp(metric->exporter, exporter->name) == 0) {
 				found = TRUE;
 				break;
 			}
@@ -2815,8 +2816,8 @@ static bool stats_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 		if (!found) {
 			*error_r = t_strdup_printf("metric %s refers to "
 						   "non-existent exporter '%s'",
-						   (*metric)->metric_name,
-						   (*metric)->exporter);
+						   metric->metric_name,
+						   metric->exporter);
 			return FALSE;
 		}
 	}
@@ -3486,16 +3487,14 @@ fix_file_listener_paths(ARRAY_TYPE(file_listener_settings) *l,
 			ARRAY_TYPE(const_string) *all_listeners,
 			const char **error_r)
 {
-	struct file_listener_settings *const *sets;
+	struct file_listener_settings *set;
 	size_t base_dir_len = strlen(master_set->base_dir);
 	enum service_user_default user_default;
 
 	if (!array_is_created(l))
 		return TRUE;
 
-	array_foreach(l, sets) {
-		struct file_listener_settings *set = *sets;
-
+	array_foreach_elem(l, set) {
 		if (set->path[0] == '\0') {
 			*error_r = "path must not be empty";
 			return FALSE;
@@ -3521,15 +3520,13 @@ fix_file_listener_paths(ARRAY_TYPE(file_listener_settings) *l,
 static void add_inet_listeners(ARRAY_TYPE(inet_listener_settings) *l,
 			       ARRAY_TYPE(const_string) *all_listeners)
 {
-	struct inet_listener_settings *const *sets;
+	struct inet_listener_settings *set;
 	const char *str;
 
 	if (!array_is_created(l))
 		return;
 
-	array_foreach(l, sets) {
-		struct inet_listener_settings *set = *sets;
-
+	array_foreach_elem(l, set) {
 		if (set->port != 0) {
 			str = t_strdup_printf("%u:%s", set->port, set->address);
 			array_push_back(all_listeners, &str);
@@ -3577,11 +3574,9 @@ static void service_set_login_dump_core(struct service_settings *set)
 static bool
 services_have_protocol(struct master_settings *set, const char *name)
 {
-	struct service_settings *const *services;
+	struct service_settings *service;
 
-	array_foreach(&set->services, services) {
-		struct service_settings *service = *services;
-
+	array_foreach_elem(&set->services, service) {
 		if (strcmp(service->protocol, name) == 0)
 			return TRUE;
 	}
@@ -3593,11 +3588,11 @@ static const struct service_settings *
 master_default_settings_get_service(const char *name)
 {
 	extern struct master_settings master_default_settings;
-	struct service_settings *const *setp;
+	struct service_settings *set;
 
-	array_foreach(&master_default_settings.services, setp) {
-		if (strcmp((*setp)->name, name) == 0)
-			return *setp;
+	array_foreach_elem(&master_default_settings.services, set) {
+		if (strcmp(set->name, name) == 0)
+			return set;
 	}
 	return NULL;
 }
@@ -3606,12 +3601,12 @@ master_default_settings_get_service(const char *name)
 static unsigned int
 service_get_client_limit(struct master_settings *set, const char *name)
 {
-	struct service_settings *const *servicep;
+	struct service_settings *service;
 
-	array_foreach(&set->services, servicep) {
-		if (strcmp((*servicep)->name, name) == 0) {
-			if ((*servicep)->client_limit != 0)
-				return (*servicep)->client_limit;
+	array_foreach_elem(&set->services, service) {
+		if (strcmp(service->name, name) == 0) {
+			if (service->client_limit != 0)
+				return service->client_limit;
 			else
 				return set->default_client_limit;
 		}
@@ -3630,6 +3625,8 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 	struct passwd pw;
 	unsigned int i, j, count, client_limit, process_limit;
 	unsigned int max_auth_client_processes, max_anvil_client_processes;
+	string_t *max_auth_client_processes_reason = t_str_new(64);
+	string_t *max_anvil_client_processes_reason = t_str_new(64);
 	size_t len;
 #ifdef CONFIG_BINARY
 	const struct service_settings *default_service;
@@ -3785,12 +3782,20 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 			   imap-hibernate doesn't do any auth lookups. */
 			if ((service->service_count != 1 ||
 			     strcmp(service->type, "login") == 0) &&
-			    strcmp(service->name, "imap-hibernate") != 0)
+			    strcmp(service->name, "imap-hibernate") != 0) {
+				str_printfa(max_auth_client_processes_reason,
+					    " + service %s { process_limit=%u }",
+					    service->name, process_limit);
 				max_auth_client_processes += process_limit;
+			}
 		}
 		if (strcmp(service->type, "login") == 0 ||
-		    strcmp(service->name, "auth") == 0)
+		    strcmp(service->name, "auth") == 0) {
 			max_anvil_client_processes += process_limit;
+			str_printfa(max_anvil_client_processes_reason,
+				    " + service %s { process_limit=%u }",
+				    service->name, process_limit);
+		}
 
 		if (!fix_file_listener_paths(&service->unix_listeners, pool,
 					     set, &all_listeners, error_r)) {
@@ -3810,17 +3815,22 @@ master_settings_verify(void *_set, pool_t pool, const char **error_r)
 	client_limit = service_get_client_limit(set, "auth");
 	if (client_limit < max_auth_client_processes && !warned_auth) {
 		warned_auth = TRUE;
+		str_delete(max_auth_client_processes_reason, 0, 3);
 		i_warning("service auth { client_limit=%u } is lower than "
-			  "required under max. load (%u)",
-			  client_limit, max_auth_client_processes);
+			  "required under max. load (%u). "
+			  "Counted for protocol services with service_count != 1: %s",
+			  client_limit, max_auth_client_processes,
+			  str_c(max_auth_client_processes_reason));
 	}
 
 	client_limit = service_get_client_limit(set, "anvil");
 	if (client_limit < max_anvil_client_processes && !warned_anvil) {
 		warned_anvil = TRUE;
+		str_delete(max_anvil_client_processes_reason, 0, 3);
 		i_warning("service anvil { client_limit=%u } is lower than "
-			  "required under max. load (%u)",
-			  client_limit, max_anvil_client_processes);
+			  "required under max. load (%u). Counted with: %s",
+			  client_limit, max_anvil_client_processes,
+			  str_c(max_anvil_client_processes_reason));
 	}
 #ifndef CONFIG_BINARY
 	if (restrict_get_fd_limit(&fd_limit) == 0 &&
@@ -5655,7 +5665,7 @@ struct service_settings auth_worker_service_settings = {
 	.process_min_avail = 0,
 	.process_limit = 0,
 	.client_limit = 1,
-	.service_count = 1,
+	.service_count = 0,
 	.idle_kill = 0,
 	.vsz_limit = UOFF_T_MAX,
 

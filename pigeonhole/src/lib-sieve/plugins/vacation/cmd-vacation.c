@@ -188,8 +188,7 @@ static void
 act_vacation_print(const struct sieve_action *action,
 		   const struct sieve_result_print_env *rpenv, bool *keep);
 static int
-act_vacation_commit(const struct sieve_action_exec_env *aenv, void *tr_context,
-		    bool *keep);
+act_vacation_commit(const struct sieve_action_exec_env *aenv, void *tr_context);
 
 /* Action object */
 
@@ -768,7 +767,7 @@ act_vacation_check_duplicate(const struct sieve_runtime_env *renv ATTR_UNUSED,
 			     const struct sieve_action *act,
 			     const struct sieve_action *act_other)
 {
-	if (!act_other->executed) {
+	if (!sieve_action_is_executed(act_other, renv->result)) {
 		sieve_runtime_error(
 			renv, act->location,
 			"duplicate vacation action not allowed "
@@ -786,7 +785,7 @@ int act_vacation_check_conflict(const struct sieve_runtime_env *renv,
 				const struct sieve_action *act_other)
 {
 	if ((act_other->def->flags & SIEVE_ACTFLAG_SENDS_RESPONSE) > 0) {
-		if (!act_other->executed && !act->executed) {
+		if (!sieve_action_is_executed(act_other, renv->result)) {
 			sieve_runtime_error(
 				renv, act->location,
 				"vacation action conflicts with other action: "
@@ -1226,7 +1225,7 @@ act_vacation_hash(struct act_vacation_context *vctx, const char *sender,
 
 static int
 act_vacation_commit(const struct sieve_action_exec_env *aenv,
-		    void *tr_context ATTR_UNUSED, bool *keep ATTR_UNUSED)
+		    void *tr_context ATTR_UNUSED)
 {
 	const struct sieve_action *action = aenv->action;
 	const struct sieve_extension *ext = action->ext;

@@ -105,6 +105,7 @@ acl_rights_is_same_user(const struct acl_rights *right, struct mail_user *user)
 static int acl_lookup_dict_rebuild_add_backend(struct mail_namespace *ns,
 					       ARRAY_TYPE(const_string) *ids)
 {
+	struct acl_mailbox_list *alist = ACL_LIST_CONTEXT(ns->list);
 	struct acl_backend *backend;
 	struct acl_mailbox_list_context *ctx;
 	struct acl_object *aclobj;
@@ -115,7 +116,7 @@ static int acl_lookup_dict_rebuild_add_backend(struct mail_namespace *ns,
 	int ret = 0;
 
 	if ((ns->flags & NAMESPACE_FLAG_NOACL) != 0 || ns->owner == NULL ||
-	    ACL_LIST_CONTEXT(ns->list) == NULL)
+	    alist == NULL || alist->ignore_acls)
 		return 0;
 
 	id = t_str_new(128);
@@ -266,15 +267,15 @@ int acl_lookup_dict_rebuild(struct acl_lookup_dict *dict)
 static void acl_lookup_dict_iterate_read(struct acl_lookup_dict_iter *iter)
 {
 	struct dict_iterate_context *dict_iter;
-	const char *const *idp, *prefix, *key, *value, *error;
+	const char *id, *prefix, *key, *value, *error;
 	size_t prefix_len;
 
-	idp = array_idx(&iter->iter_ids, iter->iter_idx);
+	id = array_idx_elem(&iter->iter_ids, iter->iter_idx);
 	iter->iter_idx++;
 	iter->iter_value_idx = 0;
 
 	prefix = t_strconcat(DICT_PATH_SHARED DICT_SHARED_BOXES_PATH,
-			     *idp, "/", NULL);
+			     id, "/", NULL);
 	prefix_len = strlen(prefix);
 
 	/* read all of it to memory. at least currently dict-proxy can support

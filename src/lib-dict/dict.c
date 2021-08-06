@@ -39,11 +39,9 @@ static struct event_category event_category_dict = {
 
 static struct dict *dict_driver_lookup(const char *name)
 {
-	struct dict *const *dicts;
+	struct dict *dict;
 
-	array_foreach(&dict_drivers, dicts) {
-		struct dict *dict = *dicts;
-
+	array_foreach_elem(&dict_drivers, dict) {
 		if (strcmp(dict->name, name) == 0)
 			return dict;
 	}
@@ -219,7 +217,7 @@ void dict_post_api_callback(struct dict *dict)
 static void dict_lookup_finished(struct event *event, int ret, const char *error)
 {
 	i_assert(ret >= 0 || error != NULL);
-	const char *key = event_find_field_str(event, "key");
+	const char *key = event_find_field_recursive_str(event, "key");
 	if (ret < 0)
 		event_add_str(event, "error", error);
 	else if (ret == 0)

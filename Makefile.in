@@ -118,7 +118,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ssl.m4 $(top_srcdir)/m4/st_tim.m4 \
 	$(top_srcdir)/m4/static_array.m4 $(top_srcdir)/m4/test_with.m4 \
 	$(top_srcdir)/m4/time_t.m4 $(top_srcdir)/m4/typeof.m4 \
-	$(top_srcdir)/m4/typeof_dev_t.m4 $(top_srcdir)/m4/unsetenv.m4 \
+	$(top_srcdir)/m4/typeof_dev_t.m4 \
 	$(top_srcdir)/m4/uoff_t_max.m4 $(top_srcdir)/m4/vararg.m4 \
 	$(top_srcdir)/m4/want_apparmor.m4 \
 	$(top_srcdir)/m4/want_bsdauth.m4 \
@@ -1193,7 +1193,7 @@ uninstall-hook:
 distcheck-hook:
 	if which scan-build > /dev/null; then \
 	  cd $(distdir)/_build; \
-	  scan-build -o scan-reports ../configure --with-ldap=auto --with-pgsql=auto --with-mysql=auto --with-sqlite=auto --with-solr=auto --with-gssapi=auto --with-libwrap=auto; \
+	  scan-build -o scan-reports ../configure --with-ldap=auto --with-pgsql=auto --with-mysql=auto --with-sqlite=auto --with-solr=auto --with-cassandra=auto --with-lua=auto --with-gssapi=auto --with-libwrap=auto --enable-static-checker; \
 	  rm -rf scan-reports; \
 	  scan-build -o scan-reports make 2>&1 || exit 1; \
 	  if ! rmdir scan-reports 2>/dev/null; then \

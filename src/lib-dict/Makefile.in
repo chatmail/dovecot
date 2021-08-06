@@ -93,16 +93,11 @@ host_triplet = @host@
 
 # Internally, the dict methods yield via lua_yieldk() as implemented in Lua
 # 5.3 and newer.
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@am__append_1 = \
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@	dict-lua.c \
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@	dict-iter-lua.c \
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@	dict-txn-lua.c
-
+@DLUA_WITH_YIELDS_TRUE@am__append_1 = libdict_lua.la
 @DLUA_WITH_YIELDS_FALSE@libdict_lua_la_DEPENDENCIES =
-@HAVE_LUA_FALSE@libdict_lua_la_DEPENDENCIES =
-@HAVE_LUA_TRUE@am__append_2 = \
-@HAVE_LUA_TRUE@	dict-lua.h \
-@HAVE_LUA_TRUE@	dict-lua-private.h
+@DLUA_WITH_YIELDS_TRUE@am__append_2 = \
+@DLUA_WITH_YIELDS_TRUE@	dict-lua.h \
+@DLUA_WITH_YIELDS_TRUE@	dict-lua-private.h
 
 noinst_PROGRAMS = $(am__EXEEXT_1) test-dict-client$(EXEEXT)
 subdir = src/lib-dict
@@ -134,7 +129,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ssl.m4 $(top_srcdir)/m4/st_tim.m4 \
 	$(top_srcdir)/m4/static_array.m4 $(top_srcdir)/m4/test_with.m4 \
 	$(top_srcdir)/m4/time_t.m4 $(top_srcdir)/m4/typeof.m4 \
-	$(top_srcdir)/m4/typeof_dev_t.m4 $(top_srcdir)/m4/unsetenv.m4 \
+	$(top_srcdir)/m4/typeof_dev_t.m4 \
 	$(top_srcdir)/m4/uoff_t_max.m4 $(top_srcdir)/m4/vararg.m4 \
 	$(top_srcdir)/m4/want_apparmor.m4 \
 	$(top_srcdir)/m4/want_bsdauth.m4 \
@@ -180,11 +175,12 @@ am__v_lt_0 = --silent
 am__v_lt_1 = 
 am__libdict_lua_la_SOURCES_DIST = dict-lua.c dict-iter-lua.c \
 	dict-txn-lua.c
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@am__objects_2 = libdict_lua_la-dict-lua.lo \
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@	libdict_lua_la-dict-iter-lua.lo \
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@	libdict_lua_la-dict-txn-lua.lo
-@HAVE_LUA_TRUE@am_libdict_lua_la_OBJECTS = $(am__objects_2)
+@DLUA_WITH_YIELDS_TRUE@am_libdict_lua_la_OBJECTS =  \
+@DLUA_WITH_YIELDS_TRUE@	libdict_lua_la-dict-lua.lo \
+@DLUA_WITH_YIELDS_TRUE@	libdict_lua_la-dict-iter-lua.lo \
+@DLUA_WITH_YIELDS_TRUE@	libdict_lua_la-dict-txn-lua.lo
 libdict_lua_la_OBJECTS = $(am_libdict_lua_la_OBJECTS)
+@DLUA_WITH_YIELDS_TRUE@am_libdict_lua_la_rpath =
 am_test_dict_OBJECTS = test-dict.$(OBJEXT)
 test_dict_OBJECTS = $(am_test_dict_OBJECTS)
 am_test_dict_client_OBJECTS = test-dict-client.$(OBJEXT)
@@ -512,10 +508,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-noinst_LTLIBRARIES = \
-	libdict.la \
-	libdict_lua.la
-
+noinst_LTLIBRARIES = libdict.la $(am__append_1)
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
@@ -536,15 +529,19 @@ libdict_la_SOURCES = \
 
 headers = dict.h dict-client.h dict-private.h \
 	dict-transaction-memory.h $(am__append_2)
-@HAVE_LUA_TRUE@libdict_lua_la_SOURCES = $(am__append_1)
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@libdict_lua_la_CPPFLAGS = \
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@	$(AM_CPPFLAGS) \
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@	$(LUA_CFLAGS) \
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@	-I$(top_srcdir)/src/lib-lua
+@DLUA_WITH_YIELDS_TRUE@libdict_lua_la_SOURCES = \
+@DLUA_WITH_YIELDS_TRUE@	dict-lua.c \
+@DLUA_WITH_YIELDS_TRUE@	dict-iter-lua.c \
+@DLUA_WITH_YIELDS_TRUE@	dict-txn-lua.c
 
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@libdict_lua_la_LIBADD = 
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@libdict_lua_la_DEPENDENCIES = \
-@DLUA_WITH_YIELDS_TRUE@@HAVE_LUA_TRUE@	libdict.la
+@DLUA_WITH_YIELDS_TRUE@libdict_lua_la_CPPFLAGS = \
+@DLUA_WITH_YIELDS_TRUE@	$(AM_CPPFLAGS) \
+@DLUA_WITH_YIELDS_TRUE@	$(LUA_CFLAGS) \
+@DLUA_WITH_YIELDS_TRUE@	-I$(top_srcdir)/src/lib-lua
+
+@DLUA_WITH_YIELDS_TRUE@libdict_lua_la_LIBADD = 
+@DLUA_WITH_YIELDS_TRUE@libdict_lua_la_DEPENDENCIES = \
+@DLUA_WITH_YIELDS_TRUE@	libdict.la
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
@@ -619,7 +616,7 @@ libdict.la: $(libdict_la_OBJECTS) $(libdict_la_DEPENDENCIES) $(EXTRA_libdict_la_
 	$(AM_V_CCLD)$(LINK)  $(libdict_la_OBJECTS) $(libdict_la_LIBADD) $(LIBS)
 
 libdict_lua.la: $(libdict_lua_la_OBJECTS) $(libdict_lua_la_DEPENDENCIES) $(EXTRA_libdict_lua_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(LINK)  $(libdict_lua_la_OBJECTS) $(libdict_lua_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(LINK) $(am_libdict_lua_la_rpath) $(libdict_lua_la_OBJECTS) $(libdict_lua_la_LIBADD) $(LIBS)
 
 test-dict$(EXEEXT): $(test_dict_OBJECTS) $(test_dict_DEPENDENCIES) $(EXTRA_test_dict_DEPENDENCIES) 
 	@rm -f test-dict$(EXEEXT)

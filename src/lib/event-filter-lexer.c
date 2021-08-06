@@ -585,7 +585,7 @@ static const YY_CHAR yy_ec[256] =
         1,    2,    1,    4,    1,    1,    1,    1,    1,    5,
         5,    6,    1,    1,    6,    6,    1,    6,    6,    6,
         6,    6,    6,    6,    6,    6,    6,    6,    1,    5,
-        5,    5,    1,    1,    7,    6,    6,    8,    6,    6,
+        5,    5,    6,    1,    7,    6,    6,    8,    6,    6,
         6,    6,    6,    6,    6,    6,    6,    9,   10,    6,
         6,   11,    6,   12,    6,    6,    6,    6,    6,    6,
         1,   13,    1,    1,    6,    1,    7,    6,    6,    8,
@@ -1106,21 +1106,38 @@ case 13:
 YY_RULE_SETUP
 #line 77 "event-filter-lexer.l"
 {
-					char msg[160];
-
-					i_snprintf(msg, sizeof(msg),
-						   "syntax error, unexpected character '%c'",
-						   yytext[0]);
-
-					event_filter_parser_error(yyextra, msg);
+					/*
+					 * We simply return the char to the
+					 * and let the grammar error out
+					 * with a syntax error.
+					 *
+					 * Note: The cast is significant
+					 * since utf-8 bytes >=128 will
+					 * otherwise result in sign
+					 * extension and a negative int
+					 * getting returned on some
+					 * platforms (e.g., x86) which in
+					 * turn confuses the parser.  E.g.,
+					 * if:
+					 *    *yytext = '\x80'
+					 * we get:
+					 *    *yytext             -> -128
+					 *    (int) *yytext       -> -128
+					 * which is wrong.  With the
+					 * unsigned char cast, we get:
+					 *    (u.c.) *yytext      -> 128
+					 *    (int)(u.c.) *yytext -> 128
+					 * which is correct.
+					 */
+					return (unsigned char) *yytext;
 				}
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 86 "event-filter-lexer.l"
+#line 103 "event-filter-lexer.l"
 ECHO;
 	YY_BREAK
-#line 1124 "event-filter-lexer.c"
+#line 1141 "event-filter-lexer.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(string):
 	yyterminate();
@@ -2236,7 +2253,7 @@ static int yy_flex_strlen (const char * s , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 86 "event-filter-lexer.l"
+#line 103 "event-filter-lexer.l"
 
 #ifdef __clang__
 #pragma clang diagnostic pop

@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.3.15],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.3.ABIv15($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.3.16],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.3.ABIv16($PACKAGE_VERSION)", [Dovecot ABI version])
 
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_MACRO_DIR([m4])
@@ -320,7 +320,7 @@ AC_DEFINE(PACKAGE_WEBPAGE, "http://www.dovecot.org/", [Support URL])
 
 dnl * after -lsocket and -lnsl tests, inet_aton() may be in them
 AC_CHECK_FUNCS(fcntl flock lockf inet_aton sigaction getpagesize madvise \
-               strcasecmp stricmp vsyslog writev pread uname unsetenv \
+               strcasecmp stricmp vsyslog writev pread uname \
 	       setrlimit setproctitle seteuid setreuid setegid setresgid \
 	       getmntinfo setpriority quotactl getmntent kqueue kevent \
 	       backtrace_symbols walkcontext dirfd clearenv \
@@ -486,8 +486,6 @@ DOVECOT_MMAP_WRITE
 DOVECOT_FD_PASSING
 
 DOVECOT_SENDFILE
-
-DOVECOT_UNSETENV_RET_INT
 
 DOVECOT_CRYPT_XPG6
 DOVECOT_CRYPT

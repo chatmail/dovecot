@@ -120,7 +120,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ssl.m4 $(top_srcdir)/m4/st_tim.m4 \
 	$(top_srcdir)/m4/static_array.m4 $(top_srcdir)/m4/test_with.m4 \
 	$(top_srcdir)/m4/time_t.m4 $(top_srcdir)/m4/typeof.m4 \
-	$(top_srcdir)/m4/typeof_dev_t.m4 $(top_srcdir)/m4/unsetenv.m4 \
+	$(top_srcdir)/m4/typeof_dev_t.m4 \
 	$(top_srcdir)/m4/uoff_t_max.m4 $(top_srcdir)/m4/vararg.m4 \
 	$(top_srcdir)/m4/want_apparmor.m4 \
 	$(top_srcdir)/m4/want_bsdauth.m4 \
@@ -151,7 +151,8 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-am__EXEEXT_1 = test-mail-cache$(EXEEXT) test-mail-cache-purge$(EXEEXT) \
+am__EXEEXT_1 = test-mail-cache$(EXEEXT) \
+	test-mail-cache-fields$(EXEEXT) test-mail-cache-purge$(EXEEXT) \
 	test-mail-index$(EXEEXT) test-mail-index-map$(EXEEXT) \
 	test-mail-index-modseq$(EXEEXT) \
 	test-mail-index-sync-ext$(EXEEXT) \
@@ -181,7 +182,8 @@ am_libindex_la_OBJECTS = mail-cache.lo mail-cache-decisions.lo \
 	mail-index-util.lo mail-index-view.lo mail-index-view-sync.lo \
 	mail-index-write.lo mail-transaction-log.lo \
 	mail-transaction-log-append.lo mail-transaction-log-file.lo \
-	mail-transaction-log-view.lo mailbox-log.lo
+	mail-transaction-log-modseq.lo mail-transaction-log-view.lo \
+	mailbox-log.lo
 libindex_la_OBJECTS = $(am_libindex_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -190,6 +192,9 @@ am__v_lt_1 =
 am_test_mail_cache_OBJECTS = test-mail-cache-common.$(OBJEXT) \
 	test-mail-cache.$(OBJEXT)
 test_mail_cache_OBJECTS = $(am_test_mail_cache_OBJECTS)
+am_test_mail_cache_fields_OBJECTS = test-mail-cache-common.$(OBJEXT) \
+	test-mail-cache-fields.$(OBJEXT)
+test_mail_cache_fields_OBJECTS = $(am_test_mail_cache_fields_OBJECTS)
 am_test_mail_cache_purge_OBJECTS = test-mail-cache-common.$(OBJEXT) \
 	test-mail-cache-purge.$(OBJEXT)
 test_mail_cache_purge_OBJECTS = $(am_test_mail_cache_purge_OBJECTS)
@@ -272,10 +277,12 @@ am__depfiles_remade = ./$(DEPDIR)/mail-cache-decisions.Plo \
 	./$(DEPDIR)/mail-index-write.Plo ./$(DEPDIR)/mail-index.Plo \
 	./$(DEPDIR)/mail-transaction-log-append.Plo \
 	./$(DEPDIR)/mail-transaction-log-file.Plo \
+	./$(DEPDIR)/mail-transaction-log-modseq.Plo \
 	./$(DEPDIR)/mail-transaction-log-view.Plo \
 	./$(DEPDIR)/mail-transaction-log.Plo \
 	./$(DEPDIR)/mailbox-log.Plo \
 	./$(DEPDIR)/test-mail-cache-common.Po \
+	./$(DEPDIR)/test-mail-cache-fields.Po \
 	./$(DEPDIR)/test-mail-cache-purge.Po \
 	./$(DEPDIR)/test-mail-cache.Po \
 	./$(DEPDIR)/test-mail-index-map.Po \
@@ -308,6 +315,7 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libindex_la_SOURCES) $(test_mail_cache_SOURCES) \
+	$(test_mail_cache_fields_SOURCES) \
 	$(test_mail_cache_purge_SOURCES) $(test_mail_index_SOURCES) \
 	$(test_mail_index_map_SOURCES) \
 	$(test_mail_index_modseq_SOURCES) \
@@ -319,6 +327,7 @@ SOURCES = $(libindex_la_SOURCES) $(test_mail_cache_SOURCES) \
 	$(test_mail_transaction_log_file_SOURCES) \
 	$(test_mail_transaction_log_view_SOURCES)
 DIST_SOURCES = $(libindex_la_SOURCES) $(test_mail_cache_SOURCES) \
+	$(test_mail_cache_fields_SOURCES) \
 	$(test_mail_cache_purge_SOURCES) $(test_mail_index_SOURCES) \
 	$(test_mail_index_map_SOURCES) \
 	$(test_mail_index_modseq_SOURCES) \
@@ -643,6 +652,7 @@ libindex_la_SOURCES = \
         mail-transaction-log.c \
         mail-transaction-log-append.c \
         mail-transaction-log-file.c \
+        mail-transaction-log-modseq.c \
         mail-transaction-log-view.c \
         mailbox-log.c
 
@@ -665,6 +675,7 @@ headers = \
 
 test_programs = \
 	test-mail-cache \
+	test-mail-cache-fields \
 	test-mail-cache-purge \
 	test-mail-index \
 	test-mail-index-map \
@@ -686,6 +697,9 @@ test_deps = $(noinst_LTLIBRARIES) $(test_libs)
 test_mail_cache_SOURCES = test-mail-cache-common.c test-mail-cache.c
 test_mail_cache_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
 test_mail_cache_DEPENDENCIES = $(test_deps)
+test_mail_cache_fields_SOURCES = test-mail-cache-common.c test-mail-cache-fields.c
+test_mail_cache_fields_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
+test_mail_cache_fields_DEPENDENCIES = $(test_deps)
 test_mail_cache_purge_SOURCES = test-mail-cache-common.c test-mail-cache-purge.c
 test_mail_cache_purge_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
 test_mail_cache_purge_DEPENDENCIES = $(test_deps)
@@ -699,7 +713,7 @@ test_mail_index_modseq_SOURCES = test-mail-index-modseq.c
 test_mail_index_modseq_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
 test_mail_index_modseq_DEPENDENCIES = $(test_deps)
 test_mail_index_sync_ext_SOURCES = test-mail-index-sync-ext.c
-test_mail_index_sync_ext_LDADD = mail-index-sync-ext.lo $(test_libs)
+test_mail_index_sync_ext_LDADD = $(noinst_LTLIBRARIES) $(test_libs)
 test_mail_index_sync_ext_DEPENDENCIES = $(test_deps)
 test_mail_index_transaction_finish_SOURCES = test-mail-index-transaction-finish.c
 test_mail_index_transaction_finish_LDADD = mail-index-transaction-finish.lo $(test_libs)
@@ -786,6 +800,10 @@ test-mail-cache$(EXEEXT): $(test_mail_cache_OBJECTS) $(test_mail_cache_DEPENDENC
 	@rm -f test-mail-cache$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_mail_cache_OBJECTS) $(test_mail_cache_LDADD) $(LIBS)
 
+test-mail-cache-fields$(EXEEXT): $(test_mail_cache_fields_OBJECTS) $(test_mail_cache_fields_DEPENDENCIES) $(EXTRA_test_mail_cache_fields_DEPENDENCIES) 
+	@rm -f test-mail-cache-fields$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_mail_cache_fields_OBJECTS) $(test_mail_cache_fields_LDADD) $(LIBS)
+
 test-mail-cache-purge$(EXEEXT): $(test_mail_cache_purge_OBJECTS) $(test_mail_cache_purge_DEPENDENCIES) $(EXTRA_test_mail_cache_purge_DEPENDENCIES) 
 	@rm -f test-mail-cache-purge$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_mail_cache_purge_OBJECTS) $(test_mail_cache_purge_LDADD) $(LIBS)
@@ -869,10 +887,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-index.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-append.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-file.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-modseq.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log-view.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mail-transaction-log.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-log.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-cache-common.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-cache-fields.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-cache-purge.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-cache.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-mail-index-map.Po@am__quote@ # am--include-marker
@@ -1102,10 +1122,12 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/mail-index.Plo
 	-rm -f ./$(DEPDIR)/mail-transaction-log-append.Plo
 	-rm -f ./$(DEPDIR)/mail-transaction-log-file.Plo
+	-rm -f ./$(DEPDIR)/mail-transaction-log-modseq.Plo
 	-rm -f ./$(DEPDIR)/mail-transaction-log-view.Plo
 	-rm -f ./$(DEPDIR)/mail-transaction-log.Plo
 	-rm -f ./$(DEPDIR)/mailbox-log.Plo
 	-rm -f ./$(DEPDIR)/test-mail-cache-common.Po
+	-rm -f ./$(DEPDIR)/test-mail-cache-fields.Po
 	-rm -f ./$(DEPDIR)/test-mail-cache-purge.Po
 	-rm -f ./$(DEPDIR)/test-mail-cache.Po
 	-rm -f ./$(DEPDIR)/test-mail-index-map.Po
@@ -1196,10 +1218,12 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/mail-index.Plo
 	-rm -f ./$(DEPDIR)/mail-transaction-log-append.Plo
 	-rm -f ./$(DEPDIR)/mail-transaction-log-file.Plo
+	-rm -f ./$(DEPDIR)/mail-transaction-log-modseq.Plo
 	-rm -f ./$(DEPDIR)/mail-transaction-log-view.Plo
 	-rm -f ./$(DEPDIR)/mail-transaction-log.Plo
 	-rm -f ./$(DEPDIR)/mailbox-log.Plo
 	-rm -f ./$(DEPDIR)/test-mail-cache-common.Po
+	-rm -f ./$(DEPDIR)/test-mail-cache-fields.Po
 	-rm -f ./$(DEPDIR)/test-mail-cache-purge.Po
 	-rm -f ./$(DEPDIR)/test-mail-cache.Po
 	-rm -f ./$(DEPDIR)/test-mail-index-map.Po

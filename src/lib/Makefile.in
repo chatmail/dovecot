@@ -120,7 +120,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ssl.m4 $(top_srcdir)/m4/st_tim.m4 \
 	$(top_srcdir)/m4/static_array.m4 $(top_srcdir)/m4/test_with.m4 \
 	$(top_srcdir)/m4/time_t.m4 $(top_srcdir)/m4/typeof.m4 \
-	$(top_srcdir)/m4/typeof_dev_t.m4 $(top_srcdir)/m4/unsetenv.m4 \
+	$(top_srcdir)/m4/typeof_dev_t.m4 \
 	$(top_srcdir)/m4/uoff_t_max.m4 $(top_srcdir)/m4/vararg.m4 \
 	$(top_srcdir)/m4/want_apparmor.m4 \
 	$(top_srcdir)/m4/want_bsdauth.m4 \
@@ -218,6 +218,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-crc32.$(OBJEXT) \
 	test_lib-test-cpu-limit.$(OBJEXT) \
 	test_lib-test-data-stack.$(OBJEXT) \
+	test_lib-test-env-util.$(OBJEXT) \
 	test_lib-test-event-category-register.$(OBJEXT) \
 	test_lib-test-event-filter.$(OBJEXT) \
 	test_lib-test-event-filter-expr.$(OBJEXT) \
@@ -400,6 +401,7 @@ am__depfiles_remade = ./$(DEPDIR)/aqueue.Plo ./$(DEPDIR)/array.Plo \
 	./$(DEPDIR)/test_lib-test-cpu-limit.Po \
 	./$(DEPDIR)/test_lib-test-crc32.Po \
 	./$(DEPDIR)/test_lib-test-data-stack.Po \
+	./$(DEPDIR)/test_lib-test-env-util.Po \
 	./$(DEPDIR)/test_lib-test-event-category-register.Po \
 	./$(DEPDIR)/test_lib-test-event-filter-expr.Po \
 	./$(DEPDIR)/test_lib-test-event-filter-merge.Po \
@@ -1155,6 +1157,7 @@ test_lib_SOURCES = \
 	test-crc32.c \
 	test-cpu-limit.c \
 	test-data-stack.c \
+	test-env-util.c \
 	test-event-category-register.c \
 	test-event-filter.c \
 	test-event-filter-expr.c \
@@ -1468,6 +1471,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-cpu-limit.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-crc32.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-data-stack.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-env-util.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-category-register.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-filter-expr.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-event-filter-merge.Po@am__quote@ # am--include-marker
@@ -1793,6 +1797,20 @@ test_lib-test-data-stack.obj: test-data-stack.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-data-stack.c' object='test_lib-test-data-stack.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-data-stack.obj `if test -f 'test-data-stack.c'; then $(CYGPATH_W) 'test-data-stack.c'; else $(CYGPATH_W) '$(srcdir)/test-data-stack.c'; fi`
+
+test_lib-test-env-util.o: test-env-util.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-env-util.o -MD -MP -MF $(DEPDIR)/test_lib-test-env-util.Tpo -c -o test_lib-test-env-util.o `test -f 'test-env-util.c' || echo '$(srcdir)/'`test-env-util.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-env-util.Tpo $(DEPDIR)/test_lib-test-env-util.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-env-util.c' object='test_lib-test-env-util.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-env-util.o `test -f 'test-env-util.c' || echo '$(srcdir)/'`test-env-util.c
+
+test_lib-test-env-util.obj: test-env-util.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-env-util.obj -MD -MP -MF $(DEPDIR)/test_lib-test-env-util.Tpo -c -o test_lib-test-env-util.obj `if test -f 'test-env-util.c'; then $(CYGPATH_W) 'test-env-util.c'; else $(CYGPATH_W) '$(srcdir)/test-env-util.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-env-util.Tpo $(DEPDIR)/test_lib-test-env-util.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-env-util.c' object='test_lib-test-env-util.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-env-util.obj `if test -f 'test-env-util.c'; then $(CYGPATH_W) 'test-env-util.c'; else $(CYGPATH_W) '$(srcdir)/test-env-util.c'; fi`
 
 test_lib-test-event-category-register.o: test-event-category-register.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-event-category-register.o -MD -MP -MF $(DEPDIR)/test_lib-test-event-category-register.Tpo -c -o test_lib-test-event-category-register.o `test -f 'test-event-category-register.c' || echo '$(srcdir)/'`test-event-category-register.c
@@ -3165,6 +3183,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/test_lib-test-cpu-limit.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-crc32.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-data-stack.Po
+	-rm -f ./$(DEPDIR)/test_lib-test-env-util.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-event-category-register.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-event-filter-expr.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-event-filter-merge.Po
@@ -3458,6 +3477,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/test_lib-test-cpu-limit.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-crc32.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-data-stack.Po
+	-rm -f ./$(DEPDIR)/test_lib-test-env-util.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-event-category-register.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-event-filter-expr.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-event-filter-merge.Po

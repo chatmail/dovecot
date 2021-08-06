@@ -76,6 +76,7 @@
 #line 11 "event-filter-parser.y" /* yacc.c:337  */
 
 #include "lib.h"
+#include "wildcard-match.h"
 #include "lib-event-private.h"
 #include "event-filter-private.h"
 
@@ -100,16 +101,16 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 	enum event_filter_node_type type;
 
 	if (strcmp(a, "event") == 0)
-		type = EVENT_FILTER_NODE_TYPE_EVENT_NAME;
+		type = EVENT_FILTER_NODE_TYPE_EVENT_NAME_WILDCARD;
 	else if (strcmp(a, "category") == 0)
 		type = EVENT_FILTER_NODE_TYPE_EVENT_CATEGORY;
 	else if (strcmp(a, "source_location") == 0)
 		type = EVENT_FILTER_NODE_TYPE_EVENT_SOURCE_LOCATION;
 	else
-		type = EVENT_FILTER_NODE_TYPE_EVENT_FIELD;
+		type = EVENT_FILTER_NODE_TYPE_EVENT_FIELD_WILDCARD;
 
 	/* only fields support comparators other than EQ */
-	if ((type != EVENT_FILTER_NODE_TYPE_EVENT_FIELD) &&
+	if ((type != EVENT_FILTER_NODE_TYPE_EVENT_FIELD_WILDCARD) &&
 	    (op != EVENT_FILTER_OP_CMP_EQ)) {
 		state->error = "Only fields support inequality comparisons";
 		return NULL;
@@ -122,8 +123,10 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 	switch (type) {
 	case EVENT_FILTER_NODE_TYPE_LOGIC:
 		i_unreached();
-	case EVENT_FILTER_NODE_TYPE_EVENT_NAME:
+	case EVENT_FILTER_NODE_TYPE_EVENT_NAME_WILDCARD:
 		node->str = p_strdup(state->pool, b);
+		if (wildcard_is_literal(node->str))
+			node->type = EVENT_FILTER_NODE_TYPE_EVENT_NAME_EXACT;
 		state->has_event_name = TRUE;
 		break;
 	case EVENT_FILTER_NODE_TYPE_EVENT_SOURCE_LOCATION: {
@@ -154,7 +157,7 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 			node->category.ptr = event_category_find_registered(b);
 		}
 		break;
-	case EVENT_FILTER_NODE_TYPE_EVENT_FIELD:
+	case EVENT_FILTER_NODE_TYPE_EVENT_FIELD_WILDCARD:
 		node->field.key = p_strdup(state->pool, a);
 		node->field.value.str = p_strdup(state->pool, b);
 
@@ -165,7 +168,13 @@ static struct event_filter_node *key_value(struct event_filter_parser_state *sta
 			   Either we have a string, or a number with wildcards */
 			node->field.value.intmax = INT_MIN;
 		}
+
+		if (wildcard_is_literal(node->field.value.str))
+			node->type = EVENT_FILTER_NODE_TYPE_EVENT_FIELD_EXACT;
 		break;
+	case EVENT_FILTER_NODE_TYPE_EVENT_NAME_EXACT:
+	case EVENT_FILTER_NODE_TYPE_EVENT_FIELD_EXACT:
+		i_unreached();
 	}
 
 	return node;
@@ -194,7 +203,7 @@ static struct event_filter_node *logic(struct event_filter_parser_state *state,
 #pragma clang diagnostic ignored "-Wstrict-bool"
 #endif
 
-#line 198 "event-filter-parser.c" /* yacc.c:337  */
+#line 207 "event-filter-parser.c" /* yacc.c:337  */
 # ifndef YY_NULLPTR
 #  if defined __cplusplus
 #   if 201103L <= __cplusplus
@@ -253,13 +262,13 @@ extern int event_filter_parser_debug;
 
 union EVENT_FILTER_PARSER_STYPE
 {
-#line 132 "event-filter-parser.y" /* yacc.c:352  */
+#line 141 "event-filter-parser.y" /* yacc.c:352  */
 
 	const char *str;
 	enum event_filter_node_op op;
 	struct event_filter_node *node;
 
-#line 263 "event-filter-parser.c" /* yacc.c:352  */
+#line 272 "event-filter-parser.c" /* yacc.c:352  */
 };
 
 typedef union EVENT_FILTER_PARSER_STYPE EVENT_FILTER_PARSER_STYPE;
@@ -562,9 +571,9 @@ static const yytype_uint8 yytranslate[] =
   /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_uint8 yyrline[] =
 {
-       0,   149,   149,   150,   153,   154,   155,   156,   157,   160,
-     169,   170,   173,   174,   175,   176,   177,   180,   181,   182,
-     183,   184
+       0,   158,   158,   159,   162,   163,   164,   165,   166,   169,
+     178,   179,   182,   183,   184,   185,   186,   189,   190,   191,
+     192,   193
 };
 #endif
 
@@ -1361,49 +1370,49 @@ yyreduce:
   switch (yyn)
     {
         case 2:
-#line 149 "event-filter-parser.y" /* yacc.c:1652  */
+#line 158 "event-filter-parser.y" /* yacc.c:1652  */
     { state->output = (yyvsp[0].node); }
-#line 1367 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1376 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 3:
-#line 150 "event-filter-parser.y" /* yacc.c:1652  */
+#line 159 "event-filter-parser.y" /* yacc.c:1652  */
     { state->output = NULL; }
-#line 1373 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1382 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 4:
-#line 153 "event-filter-parser.y" /* yacc.c:1652  */
+#line 162 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = logic(state, (yyvsp[-2].node), (yyvsp[0].node), EVENT_FILTER_OP_AND); }
-#line 1379 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1388 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 5:
-#line 154 "event-filter-parser.y" /* yacc.c:1652  */
+#line 163 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = logic(state, (yyvsp[-2].node), (yyvsp[0].node), EVENT_FILTER_OP_OR); }
-#line 1385 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1394 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 6:
-#line 155 "event-filter-parser.y" /* yacc.c:1652  */
+#line 164 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = logic(state, (yyvsp[0].node), NULL, EVENT_FILTER_OP_NOT); }
-#line 1391 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1400 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 7:
-#line 156 "event-filter-parser.y" /* yacc.c:1652  */
+#line 165 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = (yyvsp[-1].node); }
-#line 1397 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1406 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 8:
-#line 157 "event-filter-parser.y" /* yacc.c:1652  */
+#line 166 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.node) = (yyvsp[0].node); }
-#line 1403 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1412 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 9:
-#line 160 "event-filter-parser.y" /* yacc.c:1652  */
+#line 169 "event-filter-parser.y" /* yacc.c:1652  */
     {
 					(yyval.node) = key_value(state, (yyvsp[-2].str), (yyvsp[0].str), (yyvsp[-1].op));
 					if ((yyval.node) == NULL) {
@@ -1411,83 +1420,83 @@ yyreduce:
 						YYERROR;
 					}
 				}
-#line 1415 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1424 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 10:
-#line 169 "event-filter-parser.y" /* yacc.c:1652  */
+#line 178 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = (yyvsp[0].str); }
-#line 1421 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1430 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 11:
-#line 170 "event-filter-parser.y" /* yacc.c:1652  */
+#line 179 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = (yyvsp[0].str); }
-#line 1427 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1436 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 12:
-#line 173 "event-filter-parser.y" /* yacc.c:1652  */
+#line 182 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = (yyvsp[0].str); }
-#line 1433 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1442 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 13:
-#line 174 "event-filter-parser.y" /* yacc.c:1652  */
+#line 183 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = (yyvsp[0].str); }
-#line 1439 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1448 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 14:
-#line 175 "event-filter-parser.y" /* yacc.c:1652  */
+#line 184 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = "and"; }
-#line 1445 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1454 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 15:
-#line 176 "event-filter-parser.y" /* yacc.c:1652  */
+#line 185 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = "or"; }
-#line 1451 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1460 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 16:
-#line 177 "event-filter-parser.y" /* yacc.c:1652  */
+#line 186 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.str) = "not"; }
-#line 1457 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1466 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 17:
-#line 180 "event-filter-parser.y" /* yacc.c:1652  */
+#line 189 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_EQ; }
-#line 1463 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1472 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 18:
-#line 181 "event-filter-parser.y" /* yacc.c:1652  */
+#line 190 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_GT; }
-#line 1469 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1478 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 19:
-#line 182 "event-filter-parser.y" /* yacc.c:1652  */
+#line 191 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_LT; }
-#line 1475 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1484 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 20:
-#line 183 "event-filter-parser.y" /* yacc.c:1652  */
+#line 192 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_GE; }
-#line 1481 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1490 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
   case 21:
-#line 184 "event-filter-parser.y" /* yacc.c:1652  */
+#line 193 "event-filter-parser.y" /* yacc.c:1652  */
     { (yyval.op) = EVENT_FILTER_OP_CMP_LE; }
-#line 1487 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1496 "event-filter-parser.c" /* yacc.c:1652  */
     break;
 
 
-#line 1491 "event-filter-parser.c" /* yacc.c:1652  */
+#line 1500 "event-filter-parser.c" /* yacc.c:1652  */
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires
@@ -1718,5 +1727,5 @@ yyreturn:
 #endif
   return yyresult;
 }
-#line 186 "event-filter-parser.y" /* yacc.c:1918  */
+#line 195 "event-filter-parser.y" /* yacc.c:1918  */
 

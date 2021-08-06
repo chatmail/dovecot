@@ -685,9 +685,6 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
-/* Define to 1 if you have the `unsetenv' function. */
-#undef HAVE_UNSETENV
-
 /* Define if you have a native uoff_t type */
 #undef HAVE_UOFF_T
 
@@ -876,9 +873,6 @@
 
 /* Define if your time_t is signed */
 #undef TIME_T_SIGNED
-
-/* Define if unsetenv() returns int */
-#undef UNSETENV_RET_INT
 
 /* Define if off_t is int */
 #undef UOFF_T_INT

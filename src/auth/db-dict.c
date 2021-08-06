@@ -377,11 +377,11 @@ static void db_dict_iter_find_used_keys(struct db_dict_value_iter *iter)
 
 static void db_dict_iter_find_used_objects(struct db_dict_value_iter *iter)
 {
-	const struct db_dict_key *const *keyp;
+	const struct db_dict_key *dict_key;
 	struct db_dict_iter_key *key;
 
-	array_foreach(iter->objects, keyp) {
-		key = db_dict_iter_find_key(iter, (*keyp)->name);
+	array_foreach_elem(iter->objects, dict_key) {
+		key = db_dict_iter_find_key(iter, dict_key->name);
 		i_assert(key != NULL); /* checked at init */
 		i_assert(key->key->parsed_format != DB_DICT_VALUE_FORMAT_VALUE);
 		key->used = TRUE;
@@ -541,7 +541,7 @@ static bool
 db_dict_value_iter_object_next(struct db_dict_value_iter *iter,
 			       const char **key_r, const char **value_r)
 {
-	const struct db_dict_key *const *keyp;
+	const struct db_dict_key *dict_key;
 	struct db_dict_iter_key *key;
 
 	if (iter->json_parser != NULL)
@@ -549,8 +549,8 @@ db_dict_value_iter_object_next(struct db_dict_value_iter *iter,
 	if (iter->object_idx == array_count(iter->objects))
 		return FALSE;
 
-	keyp = array_idx(iter->objects, iter->object_idx);
-	key = db_dict_iter_find_key(iter, (*keyp)->name);
+	dict_key = array_idx_elem(iter->objects, iter->object_idx);
+	key = db_dict_iter_find_key(iter, dict_key->name);
 	i_assert(key != NULL); /* checked at init */
 
 	switch (key->key->parsed_format) {

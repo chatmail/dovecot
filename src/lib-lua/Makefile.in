@@ -90,6 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+@DLUA_WITH_YIELDS_TRUE@am__append_1 = ../lib-dict/libdict_lua.la
 noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-lua
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -120,7 +121,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
 	$(top_srcdir)/m4/ssl.m4 $(top_srcdir)/m4/st_tim.m4 \
 	$(top_srcdir)/m4/static_array.m4 $(top_srcdir)/m4/test_with.m4 \
 	$(top_srcdir)/m4/time_t.m4 $(top_srcdir)/m4/typeof.m4 \
-	$(top_srcdir)/m4/typeof_dev_t.m4 $(top_srcdir)/m4/unsetenv.m4 \
+	$(top_srcdir)/m4/typeof_dev_t.m4 \
 	$(top_srcdir)/m4/uoff_t_max.m4 $(top_srcdir)/m4/vararg.m4 \
 	$(top_srcdir)/m4/want_apparmor.m4 \
 	$(top_srcdir)/m4/want_bsdauth.m4 \
@@ -184,8 +185,9 @@ am__installdirs = "$(DESTDIR)$(pkglibdir)" \
 	"$(DESTDIR)$(pkginc_libdir)"
 LTLIBRARIES = $(pkglib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-am_libdovecot_lua_la_OBJECTS = dlua-script.lo dlua-dovecot.lo \
-	dlua-compat.lo dlua-resume.lo dlua-table.lo dlua-thread.lo
+am_libdovecot_lua_la_OBJECTS = dlua-script.lo dlua-pushstring.lo \
+	dlua-error.lo dlua-dovecot.lo dlua-compat.lo dlua-resume.lo \
+	dlua-table.lo dlua-thread.lo
 libdovecot_lua_la_OBJECTS = $(am_libdovecot_lua_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -216,7 +218,8 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/dlua-compat.Plo \
-	./$(DEPDIR)/dlua-dovecot.Plo ./$(DEPDIR)/dlua-resume.Plo \
+	./$(DEPDIR)/dlua-dovecot.Plo ./$(DEPDIR)/dlua-error.Plo \
+	./$(DEPDIR)/dlua-pushstring.Plo ./$(DEPDIR)/dlua-resume.Plo \
 	./$(DEPDIR)/dlua-script.Plo ./$(DEPDIR)/dlua-table.Plo \
 	./$(DEPDIR)/dlua-thread.Plo ./$(DEPDIR)/test_lua-test-lua.Po
 am__mv = mv -f
@@ -493,20 +496,24 @@ AM_CPPFLAGS = \
 pkglib_LTLIBRARIES = libdovecot-lua.la
 libdovecot_lua_la_SOURCES = \
 	dlua-script.c \
+	dlua-pushstring.c \
+	dlua-error.c \
 	dlua-dovecot.c \
 	dlua-compat.c \
 	dlua-resume.c \
 	dlua-table.c \
 	dlua-thread.c
 
+LIBDICT_LUA = $(am__append_1)
+
 # Note: the only things this lib should depend on are libdovecot and lua.
 libdovecot_lua_la_DEPENDENCIES = \
 	../lib-dovecot/libdovecot.la \
-	../lib-dict/libdict_lua.la
+	$(LIBDICT_LUA)
 
 libdovecot_lua_la_LIBADD = \
 	../lib-dovecot/libdovecot.la \
-	../lib-dict/libdict_lua.la \
+	$(LIBDICT_LUA) \
 	$(LUA_LIBS)
 
 libdovecot_lua_la_LDFLAGS = -export-dynamic
@@ -621,6 +628,8 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-compat.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-dovecot.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-error.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-pushstring.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-resume.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-script.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-table.Plo@am__quote@ # am--include-marker
@@ -826,6 +835,8 @@ clean-am: clean-generic clean-libtool clean-noinstPROGRAMS \
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/dlua-compat.Plo
 	-rm -f ./$(DEPDIR)/dlua-dovecot.Plo
+	-rm -f ./$(DEPDIR)/dlua-error.Plo
+	-rm -f ./$(DEPDIR)/dlua-pushstring.Plo
 	-rm -f ./$(DEPDIR)/dlua-resume.Plo
 	-rm -f ./$(DEPDIR)/dlua-script.Plo
 	-rm -f ./$(DEPDIR)/dlua-table.Plo
@@ -878,6 +889,8 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/dlua-compat.Plo
 	-rm -f ./$(DEPDIR)/dlua-dovecot.Plo
+	-rm -f ./$(DEPDIR)/dlua-error.Plo
+	-rm -f ./$(DEPDIR)/dlua-pushstring.Plo
 	-rm -f ./$(DEPDIR)/dlua-resume.Plo
 	-rm -f ./$(DEPDIR)/dlua-script.Plo
 	-rm -f ./$(DEPDIR)/dlua-table.Plo
