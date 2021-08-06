@@ -10,7 +10,7 @@ This is mandatory for SSL support in 2.3
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/doc/example-config/conf.d/10-ssl.conf b/doc/example-config/conf.d/10-ssl.conf
-index ea1c1a8..134b7b3 100644
+index 4867a07..c4502fc 100644
 --- a/doc/example-config/conf.d/10-ssl.conf
 +++ b/doc/example-config/conf.d/10-ssl.conf
 @@ -52,7 +52,7 @@ ssl_client_ca_dir = /etc/ssl/certs
@@ -21,4 +21,4 @@ index ea1c1a8..134b7b3 100644
 +ssl_dh = </usr/share/dovecot/dh.pem
  
  # Minimum SSL protocol version to use. Potentially recognized values are SSLv3,
- # TLSv1, TLSv1.1, and TLSv1.2, depending on the OpenSSL version used.
+ # TLSv1, TLSv1.1, TLSv1.2 and TLSv1.3, depending on the OpenSSL version used.

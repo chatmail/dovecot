@@ -8,12 +8,7 @@ dovecot_name.patch
 ssl-dh-params-location.patch
 skip-rfc-subdir.patch
 Correct-misspellings.patch
-fix-compiler-warnings.patch
-systemd-sd-notify-support.patch
 test-backtrace.patch
 doveadm-director.1-drop-acute-accent.patch
 Fix-32bit-sign-comparisons.patch
-Fix-32-bit-test-case.patch
 Improve-cross-compile-support.patch
-CVE-2021-29157.patch
-CVE-2021-33515.patch

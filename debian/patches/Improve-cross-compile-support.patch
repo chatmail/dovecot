@@ -17,42 +17,10 @@ no clue why one would add LUA_LIBS to DEPENDENCIES as it already is
 being correctly added to LIBADD. My patch suggests to quite simply drop
 that.
 ---
- m4/size_t_signed.m4     | 11 ++++------
  m4/want_mysql.m4        | 54 ++++++++++++++++++++++++-------------------------
- src/lib-lua/Makefile.am |  2 +-
- 3 files changed, 31 insertions(+), 36 deletions(-)
+ src/lib-lua/Makefile.am |  4 +---
+ 2 files changed, 27 insertions(+), 31 deletions(-)
 
-diff --git a/m4/size_t_signed.m4 b/m4/size_t_signed.m4
-index a875405..c4a1b54 100644
---- a/m4/size_t_signed.m4
-+++ b/m4/size_t_signed.m4
-@@ -3,14 +3,11 @@ dnl * it's more likely vulnerable to buffer overflows. Anyway, C99 specifies
- dnl * that it's unsigned and only some old systems define it as signed.
- AC_DEFUN([DOVECOT_SIZE_T_SIGNED], [
-   AC_CACHE_CHECK([whether size_t is signed],i_cv_signed_size_t,[
--    AC_RUN_IFELSE([AC_LANG_SOURCE([[
-+    AC_COMPUTE_INT([i_cv_signed_size_t_num],[[(size_t)(int)-1 <= 0 ? 0 : 1]],[[
-       #include <sys/types.h>
-       #include <stdlib.h>
--      int main() {
--        /* return 0 if we're signed */
--        exit((size_t)(int)-1 <= 0 ? 0 : 1);
--      }
--    ]])],[
-+      ]])
-+    AS_IF([test "$i_cv_signed_size_t_num" = 0],[
-       i_cv_signed_size_t=yes
-   
-       echo
-@@ -25,7 +22,7 @@ AC_DEFUN([DOVECOT_SIZE_T_SIGNED], [
-       echo "..ignoring as requested.."
-     ],[
-       i_cv_signed_size_t=no
--    ],[])
-+    ])
-   ])
-   dnl Note: we check size_t rather than ssize_t here, because on OSX 10.2
-   dnl ssize_t = int and size_t = unsigned long. We're mostly concerned about
 diff --git a/m4/want_mysql.m4 b/m4/want_mysql.m4
 index 98e6f93..425bcdd 100644
 --- a/m4/want_mysql.m4
@@ -132,15 +100,17 @@ index 98e6f93..425bcdd 100644
 +  ])
  ])
 diff --git a/src/lib-lua/Makefile.am b/src/lib-lua/Makefile.am
-index 1006d11..d24475c 100644
+index bbf727a..f69bb83 100644
 --- a/src/lib-lua/Makefile.am
 +++ b/src/lib-lua/Makefile.am
-@@ -9,7 +9,7 @@ libdovecot_lua_la_SOURCES = \
- 	dlua-script.c \
- 	dlua-dovecot.c \
- 	dlua-compat.c
--libdovecot_lua_la_DEPENDENCIES = ../lib-dovecot/libdovecot.la $(LUA_LIBS)
-+libdovecot_lua_la_DEPENDENCIES = ../lib-dovecot/libdovecot.la
- libdovecot_lua_la_LIBADD = ../lib-dovecot/libdovecot.la $(LUA_LIBS)
+@@ -20,9 +20,7 @@ LIBDICT_LUA += ../lib-dict/libdict_lua.la
+ endif
  
- headers = \
+ # Note: the only things this lib should depend on are libdovecot and lua.
+-libdovecot_lua_la_DEPENDENCIES = \
+-	../lib-dovecot/libdovecot.la \
+-	$(LIBDICT_LUA)
++libdovecot_lua_la_DEPENDENCIES = ../lib-dovecot/libdovecot.la
+ libdovecot_lua_la_LIBADD = \
+ 	../lib-dovecot/libdovecot.la \
+ 	$(LIBDICT_LUA) \

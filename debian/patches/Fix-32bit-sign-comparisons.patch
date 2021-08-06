@@ -33,14 +33,13 @@ login-proxy.c:319:58: warning: comparison of integer expressions of different si
 ---
  src/lib-mail/test-message-header-decode.c | 2 +-
  src/lib/test-time-util.c                  | 4 ++--
- src/login-common/login-proxy.c            | 2 +-
- 3 files changed, 4 insertions(+), 4 deletions(-)
+ 2 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/src/lib-mail/test-message-header-decode.c b/src/lib-mail/test-message-header-decode.c
-index 7934c7b..d50df3f 100644
+index 0221d1a..cc31fb8 100644
 --- a/src/lib-mail/test-message-header-decode.c
 +++ b/src/lib-mail/test-message-header-decode.c
-@@ -122,7 +122,7 @@ check_encode_decode_result(const unsigned char *inbuf, size_t inbuf_len,
+@@ -110,7 +110,7 @@ check_encode_decode_result(const unsigned char *inbuf, size_t inbuf_len,
  				/* Only one character is substituted for a run
  				   of bad stuff. */
  				test_assert_idx(
@@ -50,10 +49,10 @@ index 7934c7b..d50df3f 100644
  					       rep_char_len) == 0, test_idx);
  				pout += rep_char_len;
 diff --git a/src/lib/test-time-util.c b/src/lib/test-time-util.c
-index cfa3220..5f906e8 100644
+index 675a5db..ec044ab 100644
 --- a/src/lib/test-time-util.c
 +++ b/src/lib/test-time-util.c
-@@ -384,8 +384,8 @@ static void test_str_to_timeval(void)
+@@ -385,8 +385,8 @@ static void test_str_to_timeval(void)
  	test_begin("str_to_timeval");
  	for (unsigned int i = 0; i < N_ELEMENTS(tests); i++) {
  		test_assert_idx(str_to_timeval(tests[i].str, &tv) == 0, i);
@@ -64,16 +63,3 @@ index cfa3220..5f906e8 100644
  	}
  	for (unsigned int i = 0; i < N_ELEMENTS(test_failures); i++)
  		test_assert_idx(str_to_timeval(test_failures[i], &tv) == -1, i);
-diff --git a/src/login-common/login-proxy.c b/src/login-common/login-proxy.c
-index 53c4f9b..0b81808 100644
---- a/src/login-common/login-proxy.c
-+++ b/src/login-common/login-proxy.c
-@@ -317,7 +317,7 @@ static int login_proxy_connect(struct login_proxy *proxy)
- 	if (proxy->host_immediate_failure_after_secs != 0 &&
- 	    timeval_cmp(&rec->last_failure, &rec->last_success) > 0 &&
- 	    rec->last_failure.tv_sec - rec->last_success.tv_sec >
--	    	proxy->host_immediate_failure_after_secs &&
-+	    	(time_t)proxy->host_immediate_failure_after_secs &&
- 	    rec->num_waiting_connections > 1) {
- 		/* the server is down. fail immediately */
- 		proxy->disable_reconnect = TRUE;

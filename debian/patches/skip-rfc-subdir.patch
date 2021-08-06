@@ -10,7 +10,7 @@ Forwarded: no (Debian-specific)
  3 files changed, 3 deletions(-)
 
 diff --git a/pigeonhole/configure.ac b/pigeonhole/configure.ac
-index d7b96f5..d7e4f1b 100644
+index b1ac729..2ba55dc 100644
 --- a/pigeonhole/configure.ac
 +++ b/pigeonhole/configure.ac
 @@ -176,7 +176,6 @@ doc/Makefile
@@ -34,7 +34,7 @@ index 5131ece..258c135 100644
  	locations \
  	plugins
 diff --git a/pigeonhole/doc/Makefile.in b/pigeonhole/doc/Makefile.in
-index 4326dd9..203a82f 100644
+index 00d1ff3..18517bc 100644
 --- a/pigeonhole/doc/Makefile.in
 +++ b/pigeonhole/doc/Makefile.in
 @@ -399,7 +399,6 @@ top_srcdir = @top_srcdir@

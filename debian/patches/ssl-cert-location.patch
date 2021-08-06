@@ -13,7 +13,7 @@ it doesn't belong.
  2 files changed, 9 insertions(+), 8 deletions(-)
 
 diff --git a/doc/example-config/conf.d/10-ssl.conf b/doc/example-config/conf.d/10-ssl.conf
-index 9be3f91..ea1c1a8 100644
+index ad84766..4867a07 100644
 --- a/doc/example-config/conf.d/10-ssl.conf
 +++ b/doc/example-config/conf.d/10-ssl.conf
 @@ -3,14 +3,14 @@
