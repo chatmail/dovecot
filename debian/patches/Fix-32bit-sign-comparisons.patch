@@ -2,64 +2,24 @@ From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
 Date: Mon, 4 Jan 2021 16:06:43 +0100
 Subject: Fix 32bit sign comparisons
 
-In file included from test-lib.h:5,
-                 from test-time-util.c:3:
-test-time-util.c: In function 'test_str_to_timeval':
-test-time-util.c:387:29: warning: comparison of integer expressions of different signedness: '__time_t' {aka 'long int'} and 'unsigned int' [-Wsign-compare]
-  387 |   test_assert_idx(tv.tv_sec == tests[i].tv_sec, i);
-      |                             ^~
-../../src/lib-test/test-common.h:26:9: note: in definition of macro 'test_assert_idx'
-   26 |   if (!(code)) test_assert_failed_idx(#code, __FILE__, __LINE__, i); \
-      |         ^~~~
-test-time-util.c:388:30: warning: comparison of integer expressions of different signedness: '__suseconds_t' {aka 'long int'} and 'unsigned int' [-Wsign-compare]
-  388 |   test_assert_idx(tv.tv_usec == tests[i].tv_usec, i);
-      |                              ^~
-../../src/lib-test/test-common.h:26:9: note: in definition of macro 'test_assert_idx'
-   26 |   if (!(code)) test_assert_failed_idx(#code, __FILE__, __LINE__, i); \
-      |         ^~~~
-
-test-message-header-decode.c: In function 'check_encode_decode_result':
-test-message-header-decode.c:125:23: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]
-  125 |      (poutend - pout) >= rep_char_len &&
-      |                       ^~
-../../src/lib-test/test-common.h:26:9: note: in definition of macro 'test_assert_idx'
-   26 |   if (!(code)) test_assert_failed_idx(#code, __FILE__, __LINE__, i); \
-      |         ^~~~
-
-login-proxy.c: In function 'login_proxy_connect':
-login-proxy.c:319:58: warning: comparison of integer expressions of different signedness: '__time_t' {aka 'long int'} and 'unsigned int' [-Wsign-compare]
-  319 |      rec->last_failure.tv_sec - rec->last_success.tv_sec >
-      |                                                          ^
+sieve-binary.c: In function 'sieve_binary_get_resource_usage':
+sieve-binary.c:199:54: warning: comparison of integer expressions of different signedness: 'time_t' {aka 'long int'} and 'unsigned int' [-Wsign-compare]
+  199 |  if (update_time != 0 && (ioloop_time - update_time) > timeout)
+      |                                                      ^
 ---
- src/lib-mail/test-message-header-decode.c | 2 +-
- src/lib/test-time-util.c                  | 4 ++--
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ pigeonhole/src/lib-sieve/sieve-binary.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/src/lib-mail/test-message-header-decode.c b/src/lib-mail/test-message-header-decode.c
-index 0221d1a..cc31fb8 100644
---- a/src/lib-mail/test-message-header-decode.c
-+++ b/src/lib-mail/test-message-header-decode.c
-@@ -110,7 +110,7 @@ check_encode_decode_result(const unsigned char *inbuf, size_t inbuf_len,
- 				/* Only one character is substituted for a run
- 				   of bad stuff. */
- 				test_assert_idx(
--					(poutend - pout) >= rep_char_len &&
-+					(size_t)(poutend - pout) >= rep_char_len &&
- 					memcmp(pout, rep_char,
- 					       rep_char_len) == 0, test_idx);
- 				pout += rep_char_len;
-diff --git a/src/lib/test-time-util.c b/src/lib/test-time-util.c
-index 675a5db..ec044ab 100644
---- a/src/lib/test-time-util.c
-+++ b/src/lib/test-time-util.c
-@@ -385,8 +385,8 @@ static void test_str_to_timeval(void)
- 	test_begin("str_to_timeval");
- 	for (unsigned int i = 0; i < N_ELEMENTS(tests); i++) {
- 		test_assert_idx(str_to_timeval(tests[i].str, &tv) == 0, i);
--		test_assert_idx(tv.tv_sec == tests[i].tv_sec, i);
--		test_assert_idx(tv.tv_usec == tests[i].tv_usec, i);
-+		test_assert_idx(tv.tv_sec == (time_t)tests[i].tv_sec, i);
-+		test_assert_idx(tv.tv_usec == (suseconds_t)tests[i].tv_usec, i);
- 	}
- 	for (unsigned int i = 0; i < N_ELEMENTS(test_failures); i++)
- 		test_assert_idx(str_to_timeval(test_failures[i], &tv) == -1, i);
+diff --git a/pigeonhole/src/lib-sieve/sieve-binary.c b/pigeonhole/src/lib-sieve/sieve-binary.c
+index 06cf598..c971921 100644
+--- a/pigeonhole/src/lib-sieve/sieve-binary.c
++++ b/pigeonhole/src/lib-sieve/sieve-binary.c
+@@ -196,7 +196,7 @@ void sieve_binary_get_resource_usage(struct sieve_binary *sbin,
+ 	time_t update_time = header->resource_usage.update_time;
+ 	unsigned int timeout = sbin->svinst->resource_usage_timeout_secs;
+ 
+-	if (update_time != 0 && (ioloop_time - update_time) > timeout)
++	if (update_time != 0 && (ioloop_time - update_time) > (time_t)timeout)
+ 		i_zero(&header->resource_usage);
+ 
+ 	sieve_resource_usage_init(rusage_r);
