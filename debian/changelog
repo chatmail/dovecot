@@ -1,3 +1,17 @@
+dovecot (1:2.3.16+dfsg1-1) UNRELEASED; urgency=medium
+
+  * [850e1d6] New upstream version 2.3.16+dfsg1
+
+  * [5e0c898] d/watch: adjust dversionmangle for dfsg suffix
+  * [7140b87] d/patches: rebase patches
+  * [fb1b77e] d/rules: enable LTO
+  * [ce7055d] d/control: add libsystemd-dev dependency
+  * [db93263] d/copyright: drop unused section
+  * [aeec1e8] d/rules: update how to set systemdsystemunitdir
+  * [ebe9709] d/patches: resolve compiler warnings
+
+ -- Christian Göttsche <cgzones@googlemail.com>  Fri, 06 Aug 2021 16:41:28 +0200
+
 dovecot (1:2.3.13+dfsg1-2) unstable; urgency=high
 
   * Import upstream fixes for security issues (Closes: #990566):
