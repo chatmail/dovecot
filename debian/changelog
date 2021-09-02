@@ -2,7 +2,7 @@ dovecot (1:2.3.16+dfsg1-1) unstable; urgency=medium
 
   [ Christian Göttsche ]
   * [ff4a227] New upstream version 2.3.14+dfsg1
-  * [963fa3b] New upstream version 2.3.15+dfsg1
+  * [963fa3b] New upstream version 2.3.15+dfsg1 (Closes: #991323, #983510)
   * [5e0c898] d/watch: adjust dversionmangle for dfsg suffix
   * [9ffb0f5] d/patches: update
   * [850e1d6] New upstream version 2.3.16+dfsg1
