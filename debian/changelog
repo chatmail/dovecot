@@ -1,4 +1,4 @@
-dovecot (1:2.3.16+dfsg1-1) UNRELEASED; urgency=medium
+dovecot (1:2.3.16+dfsg1-1) unstable; urgency=medium
 
   [ Christian Göttsche ]
   * [ff4a227] New upstream version 2.3.14+dfsg1
@@ -18,8 +18,9 @@ dovecot (1:2.3.16+dfsg1-1) UNRELEASED; urgency=medium
   [ Noah Meyerhans ]
   * [f217c2e] Fix indexer crash
   * [b075317] Import upstream patch for indexer crash on client disconnect
+  * [36e8740] drop debian/dovecot-core.maintscript
 
- -- Noah Meyerhans <noahm@debian.org>  Thu, 02 Sep 2021 12:40:47 -0700
+ -- Noah Meyerhans <noahm@debian.org>  Thu, 02 Sep 2021 13:22:16 -0700
 
 dovecot (1:2.3.13+dfsg1-2) unstable; urgency=high
 
