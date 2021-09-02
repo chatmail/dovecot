@@ -16,3 +16,4 @@ Silence-LTO-related-compiler-warning.patch
 indexer-crash/indexer-crash-1.patch
 indexer-crash/indexer-crash-2.patch
 indexer-crash/indexer-crash-3.patch
+indexer-Fix-crash-if-client-disconnects-while-it-s-w.patch
