@@ -1,0 +1,133 @@
+From dd4eb3dc08a8fd3dc5f1afff30e2d7389c5840a8 Mon Sep 17 00:00:00 2001
+From: Timo Sirainen <timo.sirainen@open-xchange.com>
+Date: Tue, 31 Aug 2021 12:12:49 +0300
+Subject: [PATCH 2/3] indexer: Don't free worker_connection too early
+
+There's no need for the status callback anymore to free the connection.
+It will be tracked automatically.
+---
+ src/indexer/indexer.c           |  2 --
+ src/indexer/worker-connection.c | 17 +----------------
+ src/indexer/worker-connection.h |  2 +-
+ src/indexer/worker-pool.c       |  8 +-------
+ src/indexer/worker-pool.h       |  2 --
+ 5 files changed, 3 insertions(+), 28 deletions(-)
+
+diff --git a/src/indexer/indexer.c b/src/indexer/indexer.c
+index 508c185512..9a7af6e28c 100644
+--- a/src/indexer/indexer.c
++++ b/src/indexer/indexer.c
+@@ -108,8 +108,6 @@ static void worker_status_callback(int percentage, void *context)
+ 
+ 	indexer_queue_request_finish(queue, &request,
+ 				     percentage == 100);
+-	if (worker_pool != NULL) /* not in deinit */
+-		worker_pool_release_connection(worker_pool, conn);
+ 
+ 	/* if this was the last request for the connection, we can send more
+ 	   through it. delay it a bit, since we may be coming here from
+diff --git a/src/indexer/worker-connection.c b/src/indexer/worker-connection.c
+index 90f536d2b2..a9b9ae464c 100644
+--- a/src/indexer/worker-connection.c
++++ b/src/indexer/worker-connection.c
+@@ -25,8 +25,6 @@
+ struct worker_connection {
+ 	struct connection conn;
+ 
+-	int refcount;
+-
+ 	indexer_status_callback_t *callback;
+ 
+ 	char *request_username;
+@@ -44,7 +42,7 @@ static void worker_connection_call_callback(struct worker_connection *worker,
+ 		worker->request = NULL;
+ }
+ 
+-static void worker_connection_destroy(struct connection *conn)
++void worker_connection_destroy(struct connection *conn)
+ {
+ 	struct worker_connection *worker =
+ 		container_of(conn, struct worker_connection, conn);
+@@ -52,18 +50,6 @@ static void worker_connection_destroy(struct connection *conn)
+ 	worker->request = NULL;
+ 	i_free_and_null(worker->request_username);
+ 	connection_deinit(conn);
+-}
+-
+-void worker_connection_unref(struct connection **_conn)
+-{
+-	struct connection *conn = *_conn;
+-	struct worker_connection *worker =
+-		container_of(conn, struct worker_connection, conn);
+-
+-	i_assert(worker->refcount > 0);
+-	if (--worker->refcount > 0)
+-		return;
+-	worker_connection_destroy(conn);
+ 	i_free(conn);
+ }
+ 
+@@ -220,7 +206,6 @@ worker_connection_create(const char *socket_path,
+ 	struct worker_connection *conn;
+ 
+ 	conn = i_new(struct worker_connection, 1);
+-	conn->refcount = 1;
+ 	conn->callback = callback;
+ 	connection_init_client_unix(list, &conn->conn, socket_path);
+ 
+diff --git a/src/indexer/worker-connection.h b/src/indexer/worker-connection.h
+index 58fd050660..f8d6c39d1a 100644
+--- a/src/indexer/worker-connection.h
++++ b/src/indexer/worker-connection.h
+@@ -10,7 +10,7 @@ struct connection *
+ worker_connection_create(const char *socket_path,
+ 			 indexer_status_callback_t *callback,
+ 			 struct connection_list *list);
+-void worker_connection_unref(struct connection **_conn);
++void worker_connection_destroy(struct connection *conn);
+ 
+ struct connection_list *worker_connection_list_create(void);
+ 
+diff --git a/src/indexer/worker-pool.c b/src/indexer/worker-pool.c
+index 6367265885..16f8feb6e3 100644
+--- a/src/indexer/worker-pool.c
++++ b/src/indexer/worker-pool.c
+@@ -60,7 +60,7 @@ static int worker_pool_add_connection(struct worker_pool *pool,
+ 	conn = worker_connection_create(pool->socket_path, pool->callback,
+ 					pool->connection_list);
+ 	if (connection_client_connect(conn) < 0) {
+-		worker_connection_unref(&conn);
++		worker_connection_destroy(conn);
+ 		return -1;
+ 	}
+ 
+@@ -99,12 +99,6 @@ bool worker_pool_get_connection(struct worker_pool *pool,
+ 	return TRUE;
+ }
+ 
+-void worker_pool_release_connection(struct worker_pool *pool ATTR_UNUSED,
+-				    struct connection *conn)
+-{
+-	worker_connection_unref(&conn);
+-}
+-
+ struct connection *
+ worker_pool_find_username_connection(struct worker_pool *pool,
+ 				     const char *username)
+diff --git a/src/indexer/worker-pool.h b/src/indexer/worker-pool.h
+index 057d67f37c..3f114d2024 100644
+--- a/src/indexer/worker-pool.h
++++ b/src/indexer/worker-pool.h
+@@ -13,8 +13,6 @@ bool worker_pool_have_busy_connections(struct worker_pool *pool);
+ 
+ bool worker_pool_get_connection(struct worker_pool *pool,
+ 				struct connection **conn_r);
+-void worker_pool_release_connection(struct worker_pool *pool,
+-				    struct connection *conn);
+ 
+ struct connection *
+ worker_pool_find_username_connection(struct worker_pool *pool,
+-- 
+GitLab
+
+

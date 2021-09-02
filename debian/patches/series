@@ -13,3 +13,6 @@ doveadm-director.1-drop-acute-accent.patch
 Fix-32bit-sign-comparisons.patch
 Improve-cross-compile-support.patch
 Silence-LTO-related-compiler-warning.patch
+indexer-crash/indexer-crash-1.patch
+indexer-crash/indexer-crash-2.patch
+indexer-crash/indexer-crash-3.patch
