@@ -5,30 +5,32 @@ Subject: Updates the symbol to check for in the backtrace unit tests
 Updates the symbol to check for in the backtrace unit tests to
 something that appears in all the traces on the platforms we support.
 ---
- src/lib/test-backtrace.c | 6 ++----
- 1 file changed, 2 insertions(+), 4 deletions(-)
+ src/lib/test-backtrace.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/src/lib/test-backtrace.c b/src/lib/test-backtrace.c
-index fdebe0f..19c819a 100644
+index fdebe0f..640dc5b 100644
 --- a/src/lib/test-backtrace.c
 +++ b/src/lib/test-backtrace.c
-@@ -17,8 +17,7 @@ static void test_backtrace_append(void)
+@@ -17,8 +17,8 @@ static void test_backtrace_append(void)
  #elif (defined(HAVE_BACKTRACE_SYMBOLS) && defined(HAVE_EXECINFO_H)) || \
        (defined(HAVE_WALKCONTEXT) && defined(HAVE_UCONTEXT_H))
  	test_assert(backtrace_append(bt) == 0);
 -	/* it should have some kind of main in it */
 -	test_assert(strstr(str_c(bt), "main") != NULL);
-+	test_assert(strstr(str_c(bt), "backtrace_append") != NULL || strstr(str_c(bt), "main") != NULL);
++	i_debug("backtrace: '%s'", str_c(bt));
++	test_assert(strstr(str_c(bt), "test_backtrace_append") != NULL || strstr(str_c(bt), "main") != NULL);
  #else
  	/* should not work in this context */
  	test_assert(backtrace_append(bt) == -1);
-@@ -41,8 +40,7 @@ static void test_backtrace_get(void)
+@@ -41,8 +41,8 @@ static void test_backtrace_get(void)
  #elif (defined(HAVE_BACKTRACE_SYMBOLS) && defined(HAVE_EXECINFO_H)) || \
        (defined(HAVE_WALKCONTEXT) && defined(HAVE_UCONTEXT_H))
  	test_assert(backtrace_get(&bt) == 0);
 -	/* it should have some kind of main in it */
 -	test_assert(strstr(bt, "main") != NULL);
-+	test_assert(strstr(bt, "backtrace_append") != NULL || strstr(bt, "main") != NULL);
++	i_debug("backtrace: '%s'", bt);
++	test_assert(strstr(bt, "test_backtrace_get") != NULL || strstr(bt, "main") != NULL);
  #else
  	/* should not work in this context */
  	test_assert(backtrace_get(&bt) == -1);
