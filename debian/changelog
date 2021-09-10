@@ -1,3 +1,11 @@
+dovecot (1:2.3.16+dfsg1-2) unstable; urgency=medium
+
+  [ Christian Göttsche ]
+  * [e1e9ece] d/patches: rework backtrace test patch
+  * [be404bf] d/patches: add big-endian patch
+
+ -- Noah Meyerhans <noahm@debian.org>  Fri, 10 Sep 2021 16:10:50 -0700
+
 dovecot (1:2.3.16+dfsg1-1) unstable; urgency=medium
 
   [ Christian Göttsche ]
