@@ -20,7 +20,7 @@ DOV_DEB_LDFLAGS=
 # Ensure that stacktrace generation works:
 DOV_DEB_LDFLAGS += -rdynamic
 include /usr/share/dpkg/architecture.mk
-ifneq ($(filter armel armhf, $(DEB_HOST_ARCH)),)
+ifneq ($(filter armel armhf mips64el mipsel, $(DEB_HOST_ARCH)),)
   DOV_DEB_CFLAGS += -funwind-tables
 endif
 
