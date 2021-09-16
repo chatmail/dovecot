@@ -1,3 +1,10 @@
+dovecot (1:2.3.16+dfsg1-3) unstable; urgency=medium
+
+  * [7b858b6] Fix FTBFS on mips(64)el.  Stacktrace generation on these
+    architectures requires -funwind-tables, as with 32-bit arm.
+
+ -- Noah Meyerhans <noahm@debian.org>  Thu, 16 Sep 2021 08:41:27 -0700
+
 dovecot (1:2.3.16+dfsg1-2) unstable; urgency=medium
 
   [ Christian Göttsche ]
