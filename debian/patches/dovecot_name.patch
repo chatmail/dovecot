@@ -19,7 +19,7 @@ Last-Update: 2020-05-23
  6 files changed, 13 insertions(+), 8 deletions(-)
 
 diff --git a/configure.ac b/configure.ac
-index 96d1b8c..3479e29 100644
+index 8b0d8f3..f8b3e3b 100644
 --- a/configure.ac
 +++ b/configure.ac
 @@ -287,7 +287,12 @@ AM_ICONV
@@ -37,10 +37,10 @@ index 96d1b8c..3479e29 100644
  AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", [Dovecot version])
  
 diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index fc16f83..7724c66 100644
+index 231100f..c1896b2 100644
 --- a/src/config/all-settings.c
 +++ b/src/config/all-settings.c
-@@ -2315,7 +2315,7 @@ static const struct submission_settings submission_default_settings = {
+@@ -2306,7 +2306,7 @@ static const struct submission_settings submission_default_settings = {
  
  	.hostname = "",
  
@@ -49,7 +49,7 @@ index fc16f83..7724c66 100644
  	.login_trusted_networks = "",
  
  	.recipient_delimiter = "+",
-@@ -4111,7 +4111,7 @@ static const struct setting_define login_setting_defines[] = {
+@@ -4103,7 +4103,7 @@ static const struct setting_define login_setting_defines[] = {
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
@@ -58,7 +58,7 @@ index fc16f83..7724c66 100644
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
-@@ -4322,7 +4322,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+@@ -4315,7 +4315,7 @@ static const struct lmtp_settings lmtp_default_settings = {
  
  	.lmtp_client_workarounds = "",
  
@@ -94,10 +94,10 @@ index 5cec2be..8e018f7 100644
  
  	.mail_plugins = "",
 diff --git a/src/login-common/login-settings.c b/src/login-common/login-settings.c
-index b1e0b06..f133717 100644
+index bc8020e..8d2b123 100644
 --- a/src/login-common/login-settings.c
 +++ b/src/login-common/login-settings.c
-@@ -50,7 +50,7 @@ static const struct setting_define login_setting_defines[] = {
+@@ -51,7 +51,7 @@ static const struct setting_define login_setting_defines[] = {
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",

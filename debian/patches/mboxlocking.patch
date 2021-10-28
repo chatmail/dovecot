@@ -33,10 +33,10 @@ index a69224f..b47235f 100644
  # Maximum time to wait for lock (all of them) before aborting.
  #mbox_lock_timeout = 5 mins
 diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index 2df662b..fc16f83 100644
+index 391da6d..231100f 100644
 --- a/src/config/all-settings.c
 +++ b/src/config/all-settings.c
-@@ -1252,7 +1252,7 @@ static const struct setting_define mbox_setting_defines[] = {
+@@ -1239,7 +1239,7 @@ static const struct setting_define mbox_setting_defines[] = {
  };
  static const struct mbox_settings mbox_default_settings = {
  	.mbox_read_locks = "fcntl",

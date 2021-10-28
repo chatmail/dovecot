@@ -100,10 +100,10 @@ index 98e6f93..425bcdd 100644
 +  ])
  ])
 diff --git a/src/lib-lua/Makefile.am b/src/lib-lua/Makefile.am
-index bbf727a..f69bb83 100644
+index 20ce311..7d44e89 100644
 --- a/src/lib-lua/Makefile.am
 +++ b/src/lib-lua/Makefile.am
-@@ -20,9 +20,7 @@ LIBDICT_LUA += ../lib-dict/libdict_lua.la
+@@ -24,9 +24,7 @@ test_programs += test-dict-lua
  endif
  
  # Note: the only things this lib should depend on are libdovecot and lua.

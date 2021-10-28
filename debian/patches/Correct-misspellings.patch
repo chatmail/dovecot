@@ -15,10 +15,10 @@ Found by Lintian
  8 files changed, 10 insertions(+), 10 deletions(-)
 
 diff --git a/ChangeLog b/ChangeLog
-index a737cb3..e0de15f 100644
+index 3ff7ec1..3167053 100644
 --- a/ChangeLog
 +++ b/ChangeLog
-@@ -63898,7 +63898,7 @@ M	src/lib-storage/index/index-mail.c
+@@ -67473,7 +67473,7 @@ M	src/lib-storage/index/index-mail.c
      lib-index: Add mail_cache_close_mail() to smartly drop cached data with
      INDEX=MEMORY
  
@@ -27,7 +27,7 @@ index a737cb3..e0de15f 100644
      just drop mails have have been marked closed with mail_cache_close_mail(). 
      If that's not enough, continue deleting forcibly until the buffer is below 
      256 kB.
-@@ -83798,7 +83798,7 @@ M	src/lib-storage/index/dbox-single/sdbox-storage.c
+@@ -87373,7 +87373,7 @@ M	src/lib-storage/index/dbox-single/sdbox-storage.c
  
  2016-09-21 20:50:24 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2e5e2047af)
  
@@ -36,7 +36,7 @@ index a737cb3..e0de15f 100644
  
      Broken by c8eb8314a, which moved adding num_waiting_connections earlier. 
      After that it was never 0 at the check time.
-@@ -100740,7 +100740,7 @@ M	src/login-common/ssl-proxy-openssl.c
+@@ -104315,7 +104315,7 @@ M	src/login-common/ssl-proxy-openssl.c
  
  2015-12-07 11:29:29 +0200 Timo Sirainen <tss@iki.fi> (975c2cdc1b)
  
@@ -46,10 +46,10 @@ index a737cb3..e0de15f 100644
      multiple commands in a single doveadm-server connection.
  
 diff --git a/NEWS b/NEWS
-index d02850a..3b04c98 100644
+index 70efcf9..216f2ea 100644
 --- a/NEWS
 +++ b/NEWS
-@@ -1802,7 +1802,7 @@ v2.2.26 2016-10-27  Timo Sirainen <tss@iki.fi>
+@@ -1910,7 +1910,7 @@ v2.2.26 2016-10-27  Timo Sirainen <tss@iki.fi>
  	- zlib, IMAP BINARY: Fixed internal caching when accessing multiple
  	  newly created mails. They all had UID=0 and the next mail could have
  	  wrongly used the previously cached mail.
@@ -72,10 +72,10 @@ index f9456f8..c0d982a 100644
  			sieve_address_error(
  				ctx, "address ends in invalid characters");
 diff --git a/src/director/director-connection.c b/src/director/director-connection.c
-index 72211bd..14a1c5d 100644
+index d563cda..2ad8bc0 100644
 --- a/src/director/director-connection.c
 +++ b/src/director/director-connection.c
-@@ -893,7 +893,7 @@ static bool director_cmd_director(struct director_connection *conn,
+@@ -896,7 +896,7 @@ static bool director_cmd_director(struct director_connection *conn,
  
  		/* already have this. just reset its last_network_failure
  		   timestamp, since it might be up now, but only if this
@@ -98,7 +98,7 @@ index 360e597..d39cbe2 100644
  		reset = array_idx_modifiable(&t->ext_resets, ext_id);
  		if (reset->new_reset_id == (uint32_t)-1)
 diff --git a/src/lib-index/mail-index.h b/src/lib-index/mail-index.h
-index 7f34eb5..06e2e6e 100644
+index 4a397f4..68b1dd4 100644
 --- a/src/lib-index/mail-index.h
 +++ b/src/lib-index/mail-index.h
 @@ -384,7 +384,7 @@ void mail_index_set_lock_method(struct mail_index *index,
@@ -111,7 +111,7 @@ index 7f34eb5..06e2e6e 100644
  void mail_index_set_ext_init_data(struct mail_index *index, uint32_t ext_id,
  				  const void *data, size_t size);
 diff --git a/src/lib-index/mail-transaction-log-file.c b/src/lib-index/mail-transaction-log-file.c
-index 3e66d7e..807cb0c 100644
+index 753cb65..b6abbde 100644
 --- a/src/lib-index/mail-transaction-log-file.c
 +++ b/src/lib-index/mail-transaction-log-file.c
 @@ -760,7 +760,7 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
