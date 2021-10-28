@@ -1,2 +1,16 @@
-# The corresponding binary is Debian only
-dovecot source: maintainer-manual-page debian/maildirmake.dovecot.1
+# ignore long source lines
+dovecot source: very-long-line-length-in-source-file configure line 30462 is 3100 characters long (>512)
+dovecot source: very-long-line-length-in-source-file dovecot-config.in.in line 31 is 540 characters long (>512)
+dovecot source: very-long-line-length-in-source-file m4/libtool.m4 line 6621 is 738 characters long (>512)
+dovecot source: very-long-line-length-in-source-file pigeonhole/configure line 13685 is 2058 characters long (>512)
+dovecot source: very-long-line-length-in-source-file pigeonhole/m4/libtool.m4 line 6621 is 738 characters long (>512)
+dovecot source: very-long-line-length-in-source-file pigeonhole/src/lib-sieve/storage/ldap/Makefile.in line 601 is 562 characters long (>512)
+dovecot source: very-long-line-length-in-source-file pigeonhole/src/managesieve-login/Makefile.in line 634 is 584 characters long (>512)
+dovecot source: very-long-line-length-in-source-file pigeonhole/src/plugins/imapsieve/Makefile.in line 620 is 525 characters long (>512)
+dovecot source: very-long-line-length-in-source-file pigeonhole/tests/execute/errors/cpu-limit.sieve line 4 is 3399 characters long (>512)
+dovecot source: very-long-line-length-in-source-file src/lib-fts/stopwords/stopwords_malformed.txt line 105 is 2366 characters long (>512)
+dovecot source: very-long-line-length-in-source-file src/lib-fts/test-fts-tokenizer.c line 347 is 657 characters long (>512)
+dovecot source: very-long-line-length-in-source-file src/lib-fts/udhr_fra.txt line 17 is 620 characters long (>512)
+dovecot source: very-long-line-length-in-source-file src/lib-imap/test-imap-bodystructure.c line 225 is 841 characters long (>512)
+dovecot source: very-long-line-length-in-source-file src/lib/test-hmac.c line * is 622 characters long (>512)
+dovecot source: very-long-line-length-in-source-file src/plugins/push-notification/Makefile.in line 744 is 579 characters long (>512)

@@ -26,49 +26,8 @@ dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib99_welco
 dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/xml2text
 # ignore extra man pages
 dovecot-core: spare-manual-page usr/share/man/man1/deliver.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-acl.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-altmove.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-auth.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-backup.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-batch.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-config.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-copy.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-deduplicate.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-director.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-dump.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-exec.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-expunge.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-fetch.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-flags.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-force-resync.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-fs.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-fts.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-help.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-import.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-index.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-instance.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-kick.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-log.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-mailbox-cryptokey.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-mailbox.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-move.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-penalty.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-proxy.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-purge.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-pw.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-quota.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-rebuild.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-reload.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-replicator.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-save.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-search.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-sieve.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-stats.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-stop.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-sync.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-user.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/doveadm-who.1.gz
-dovecot-core: spare-manual-page usr/share/man/man1/dovecot-lda.1.gz
+# keep all man pages in section 1 for now
+dovecot-core: manual-page-for-system-command usr/sbin/dovecot
 # ignore executable-in-usr-lib, maybe move to libexec at some point
 dovecot-core: executable-in-usr-lib usr/lib/dovecot/aggregator
 dovecot-core: executable-in-usr-lib usr/lib/dovecot/anvil
@@ -113,3 +72,5 @@ dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dov
 dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_ru.txt
 dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_sv.txt
 dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_tr.txt
+# ulimit -c might be specified but is supported by bash and dash
+dovecot-core: bash-term-in-posix-shell [etc/init.d/dovecot:43] '| ulimit'
