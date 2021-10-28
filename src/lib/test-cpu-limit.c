@@ -68,8 +68,6 @@ test_cpu_limit_simple(enum cpu_limit_type type, const char *type_str)
 	cpu = get_cpu_time(type);
 	diff_msecs = timeval_diff_msecs(&cpu, &usage);
 	test_assert_cmp(diff_msecs, >=, 2000 - ALLOW_MSECS_BELOW);
-	if ((type & CPU_LIMIT_TYPE_SYSTEM) == 0)
-		test_assert_cmp(diff_msecs, <=, 2000 + ALLOW_MSECS_ABOVE);
 
 	lib_signals_deinit();
 	test_end();
@@ -78,7 +76,7 @@ test_cpu_limit_simple(enum cpu_limit_type type, const char *type_str)
 static void test_cpu_limit_nested(enum cpu_limit_type type, const char *type_str)
 {
 	struct cpu_limit *climit1, *climit2;
-	struct timeval usage1, usage2, cpu;
+	struct timeval usage1, cpu;
 	unsigned int n;
 	int diff_msecs;
 
@@ -90,26 +88,17 @@ static void test_cpu_limit_nested(enum cpu_limit_type type, const char *type_str
 
 	while (!cpu_limit_exceeded(climit1) && !test_has_failed()) {
 		climit2 = cpu_limit_init(1, type);
-		usage2 = get_cpu_time(type);
 
 		while (!cpu_limit_exceeded(climit2) && !test_has_failed())
 			test_cpu_loop_once();
 
 		cpu_limit_deinit(&climit2);
-		cpu = get_cpu_time(type);
-		/* we may have looped only for a short time in case climit1
-		   was triggered during this loop. */
-		diff_msecs = timeval_diff_msecs(&cpu, &usage2);
-		if ((type & CPU_LIMIT_TYPE_SYSTEM) == 0)
-			test_assert_cmp(diff_msecs, <=, 1000 + ALLOW_MSECS_ABOVE);
 	}
 
 	cpu_limit_deinit(&climit1);
 	cpu = get_cpu_time(type);
 	diff_msecs = timeval_diff_msecs(&cpu, &usage1);
 	test_assert_cmp(diff_msecs, >=, 3000 - ALLOW_MSECS_BELOW);
-	if ((type & CPU_LIMIT_TYPE_SYSTEM) == 0)
-		test_assert_cmp(diff_msecs, <=, 3000 + ALLOW_MSECS_ABOVE);
 
 	lib_signals_deinit();
 	test_end();
@@ -128,26 +117,17 @@ static void test_cpu_limit_nested(enum cpu_limit_type type, const char *type_str
 			continue;
 		}
 		climit2 = cpu_limit_init(1, type);
-		usage2 = get_cpu_time(type);
 
 		while (!cpu_limit_exceeded(climit2) && !test_has_failed())
 			test_cpu_loop_once();
 
 		cpu_limit_deinit(&climit2);
-		cpu = get_cpu_time(type);
-		/* we may have looped only for a short time in case climit1
-		   was triggered during this loop. */
-		diff_msecs = timeval_diff_msecs(&cpu, &usage2);
-		if ((type & CPU_LIMIT_TYPE_SYSTEM) == 0)
-			test_assert_cmp(diff_msecs, <=, 1000 + ALLOW_MSECS_ABOVE);
 	}
 
 	cpu_limit_deinit(&climit1);
 	cpu = get_cpu_time(type);
 	diff_msecs = timeval_diff_msecs(&cpu, &usage1);
 	test_assert_cmp(diff_msecs, >=, 3000 - ALLOW_MSECS_BELOW);
-	if ((type & CPU_LIMIT_TYPE_SYSTEM) == 0)
-		test_assert_cmp(diff_msecs, <=, 3000 + ALLOW_MSECS_ABOVE);
 
 	i_unlink_if_exists(test_path);
 	lib_signals_deinit();

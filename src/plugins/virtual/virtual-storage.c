@@ -275,6 +275,7 @@ virtual_mailbox_alloc(struct mail_storage *_storage, struct mailbox_list *list,
 
 	mbox->storage = storage;
 	mbox->virtual_ext_id = (uint32_t)-1;
+	mbox->virtual_ext2_id = (uint32_t)-1;
 	mbox->virtual_guid_ext_id = (uint32_t)-1;
 	return &mbox->box;
 }
@@ -497,17 +498,19 @@ static int virtual_mailbox_open(struct mailbox *box)
 		ret = virtual_mailboxes_open(mbox, box->flags);
 		array_pop_back(&mbox->storage->open_stack);
 	}
+	if (ret == 0)
+		ret = index_storage_mailbox_open(box, FALSE);
 	if (ret < 0) {
 		virtual_mailbox_close_internal(mbox);
 		return -1;
 	}
-	if (index_storage_mailbox_open(box, FALSE) < 0)
-		return -1;
 
 	mbox->virtual_ext_id =
 		mail_index_ext_register(mbox->box.index, "virtual", 0,
 			sizeof(struct virtual_mail_index_record),
 			sizeof(uint32_t));
+	mbox->virtual_ext2_id =
+		mail_index_ext_register(mbox->box.index, "virtual2", 0, 0, 0);
 
 	mbox->virtual_guid_ext_id =
 		mail_index_ext_register(mbox->box.index, "virtual-guid", GUID_128_SIZE,
@@ -874,7 +877,8 @@ virtual_list_index_update_sync(struct mailbox *box ATTR_UNUSED,
 
 struct mail_storage virtual_storage = {
 	.name = VIRTUAL_STORAGE_NAME,
-	.class_flags = MAIL_STORAGE_CLASS_FLAG_NOQUOTA,
+	.class_flags = MAIL_STORAGE_CLASS_FLAG_NOQUOTA |
+		       MAIL_STORAGE_CLASS_FLAG_SECONDARY_INDEX,
 
 	.v = {
 		NULL,

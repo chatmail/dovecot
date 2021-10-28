@@ -17,6 +17,7 @@
 #include "unichar.h"
 #include "hash-method.h"
 #include "settings-parser.h"
+#include "message-header-parser.h"
 #include "all-settings.h"
 #include <stddef.h>
 #include <unistd.h>
@@ -82,17 +83,6 @@ struct mail_storage_settings {
 	const char *hostname;
 	const char *recipient_delimiter;
 
-	const char *ssl_client_ca_file;
-	const char *ssl_client_ca_dir;
-	const char *ssl_client_cert;
-	const char *ssl_client_key;
-	const char *ssl_cipher_list;
-	const char *ssl_cipher_suites;
-	const char *ssl_curve_list;
-	const char *ssl_min_protocol;
-	const char *ssl_crypto_device;
-	bool ssl_client_require_valid_cert;
-	bool verbose_ssl;
 	const char *mail_attachment_detection_options;
 
 	enum file_lock_method parsed_lock_method;
@@ -361,19 +351,14 @@ struct service_settings {
 ARRAY_DEFINE_TYPE(service_settings, struct service_settings *);
 /* ../../src/lib-master/master-service-ssl-settings.h */
 extern const struct setting_parser_info master_service_ssl_setting_parser_info;
+extern const struct setting_parser_info master_service_ssl_server_setting_parser_info;
 struct master_service_ssl_settings {
 	const char *ssl;
 	const char *ssl_ca;
-	const char *ssl_cert;
-	const char *ssl_alt_cert;
-	const char *ssl_key;
-	const char *ssl_alt_key;
-	const char *ssl_key_password;
 	const char *ssl_client_ca_file;
 	const char *ssl_client_ca_dir;
 	const char *ssl_client_cert;
 	const char *ssl_client_key;
-	const char *ssl_dh;
 	const char *ssl_cipher_list;
 	const char *ssl_cipher_suites;
 	const char *ssl_curve_list;
@@ -393,6 +378,14 @@ struct master_service_ssl_settings {
 		bool compression;
 		bool tickets;
 	} parsed_opts;
+};
+struct master_service_ssl_server_settings {
+	const char *ssl_cert;
+	const char *ssl_alt_cert;
+	const char *ssl_key;
+	const char *ssl_alt_key;
+	const char *ssl_key_password;
+	const char *ssl_dh;
 };
 /* ../../src/lib-master/master-service-settings.h */
 extern const struct setting_parser_info master_service_setting_parser_info;
@@ -457,6 +450,25 @@ struct dict_ldap_settings {
 extern const struct setting_parser_info mailbox_setting_parser_info;
 extern const struct setting_parser_info mail_namespace_setting_parser_info;
 /* <settings checks> */
+static bool mail_cache_fields_parse(const char *key, const char *value,
+				    const char **error_r)
+{
+	const char *const *arr;
+
+	for (arr = t_strsplit_spaces(value, " ,"); *arr != NULL; arr++) {
+		const char *name = *arr;
+
+		if (strncasecmp(name, "hdr.", 4) == 0 &&
+		    !message_header_name_is_valid(name+4)) {
+			*error_r = t_strdup_printf(
+				"Invalid %s: %s is not a valid header name",
+				key, name);
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+
 static bool mail_storage_settings_check(void *_set, pool_t pool,
 					const char **error_r)
 {
@@ -553,15 +565,6 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 		return FALSE;
 	}
 	hash_format_deinit_free(&format);
-#ifndef CONFIG_BINARY
-	if (*set->ssl_client_ca_dir != '\0' &&
-	    access(set->ssl_client_ca_dir, X_OK) < 0) {
-		*error_r = t_strdup_printf(
-			"ssl_client_ca_dir: access(%s) failed: %m",
-			set->ssl_client_ca_dir);
-		return FALSE;
-	}
-#endif
 
 	// FIXME: check set->mail_server_admin syntax (RFC 5464, Section 6.2.2)
 
@@ -603,6 +606,15 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 		set->parsed_mail_attachment_content_type_filter = array_front(&content_types);
 	}
 
+	if (!mail_cache_fields_parse("mail_cache_fields",
+				     set->mail_cache_fields, error_r))
+		return FALSE;
+	if (!mail_cache_fields_parse("mail_always_cache_fields",
+				     set->mail_always_cache_fields, error_r))
+		return FALSE;
+	if (!mail_cache_fields_parse("mail_never_cache_fields",
+				     set->mail_never_cache_fields, error_r))
+		return FALSE;
 	return TRUE;
 }
 
@@ -859,18 +871,6 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(STR, hostname),
 	DEF(STR, recipient_delimiter),
 
-	DEF(STR, ssl_client_ca_file),
-	DEF(STR, ssl_client_ca_dir),
-	DEF(STR, ssl_client_cert),
-	DEF(STR, ssl_client_key),
-	DEF(STR, ssl_cipher_list),
-	DEF(STR, ssl_cipher_suites),
-	DEF(STR, ssl_curve_list),
-	DEF(STR, ssl_min_protocol),
-	DEF(STR, ssl_crypto_device),
-	DEF(BOOL, ssl_client_require_valid_cert),
-	DEF(BOOL, verbose_ssl),
-
 	SETTING_DEFINE_LIST_END
 };
 const struct mail_storage_settings mail_storage_default_settings = {
@@ -925,19 +925,6 @@ const struct mail_storage_settings mail_storage_default_settings = {
 
 	.hostname = "",
 	.recipient_delimiter = "+",
-
-	/* Keep synced with master-service-ssl-settings */
-	.ssl_client_ca_file = "",
-	.ssl_client_ca_dir = "",
-	.ssl_client_cert = "",
-	.ssl_client_key = "",
-	.ssl_cipher_list = "ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH",
-	.ssl_cipher_suites = "", /* Use TLS library provided value */
-	.ssl_curve_list = "",
-	.ssl_min_protocol = "TLSv1.2",
-	.ssl_crypto_device = "",
-	.ssl_client_require_valid_cert = TRUE,
-	.verbose_ssl = FALSE,
 };
 const struct setting_parser_info mail_storage_setting_parser_info = {
 	.module_name = "mail",
@@ -1609,6 +1596,7 @@ struct submission_login_settings {
 };
 /* ../../src/stats/stats-settings.h */
 extern const struct setting_parser_info stats_setting_parser_info;
+extern const struct setting_parser_info stats_metric_setting_parser_info;
 /* <settings checks> */
 /*
  * We allow a selection of a timestamp format.
@@ -1688,6 +1676,8 @@ struct stats_metric_settings_group_by {
 	struct stats_metric_settings_bucket_range *ranges;
 };
 /* </settings checks> */
+#define STATS_METRIC_SETTINGS_DEFAULT_EXPORTER_INCLUDE \
+	"name hostname timestamps categories fields"
 struct stats_exporter_settings {
 	const char *name;
 	const char *transport;
@@ -1835,6 +1825,7 @@ struct login_settings {
 	unsigned int login_proxy_timeout;
 	unsigned int login_proxy_max_reconnects;
 	unsigned int login_proxy_max_disconnect_delay;
+	const char *login_proxy_rawlog_dir;
 	const char *director_username_hash;
 
 	bool auth_ssl_require_client_cert;
@@ -2898,7 +2889,7 @@ static const struct stats_metric_settings stats_metric_default_settings = {
 	.filter = "",
 	.exporter = "",
 	.group_by = "",
-	.exporter_include = "name hostname timestamps categories fields",
+	.exporter_include = STATS_METRIC_SETTINGS_DEFAULT_EXPORTER_INCLUDE,
 	.description = "",
 };
 const struct setting_parser_info stats_metric_setting_parser_info = {
@@ -4094,6 +4085,7 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(TIME_MSECS, login_proxy_timeout),
 	DEF(UINT, login_proxy_max_reconnects),
 	DEF(TIME, login_proxy_max_disconnect_delay),
+	DEF(STR, login_proxy_rawlog_dir),
 	DEF(STR, director_username_hash),
 
 	DEF(BOOL, auth_ssl_require_client_cert),
@@ -4121,6 +4113,7 @@ static const struct login_settings login_default_settings = {
 	.login_proxy_timeout = 30*1000,
 	.login_proxy_max_reconnects = 3,
 	.login_proxy_max_disconnect_delay = 0,
+	.login_proxy_rawlog_dir = "",
 	.director_username_hash = "%u",
 
 	.auth_ssl_require_client_cert = FALSE,
@@ -5993,6 +5986,7 @@ buffer_t config_all_services_buf = {
 const struct setting_parser_info *all_default_roots[] = {
 	&master_service_setting_parser_info,
 	&master_service_ssl_setting_parser_info,
+	&master_service_ssl_server_setting_parser_info,
 	&smtp_submit_setting_parser_info,
 	&aggregator_setting_parser_info, 
 	&auth_setting_parser_info, 

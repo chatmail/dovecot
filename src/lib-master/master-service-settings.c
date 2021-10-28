@@ -223,10 +223,12 @@ master_service_exec_config(struct master_service *service,
 			strarr_push(&conf_argv, input->extra_modules[i]);
 		}
 	}
-	if (service->want_ssl_settings &&
-	    (input->module != NULL || input->extra_modules != NULL)) {
+	if (input->module != NULL || input->extra_modules != NULL) {
 		strarr_push(&conf_argv, "-m");
-		strarr_push(&conf_argv, "ssl");
+		if (service->want_ssl_server)
+			strarr_push(&conf_argv, "ssl-server");
+		else
+			strarr_push(&conf_argv, "ssl");
 	}
 	if (input->parse_full_config)
 		strarr_push(&conf_argv, "-p");
@@ -357,9 +359,12 @@ config_build_request(struct master_service *service, string_t *str,
 		for (unsigned int i = 0; input->extra_modules[i] != NULL; i++)
 			str_printfa(str, "\tmodule=%s", input->extra_modules[i]);
 	}
-	if (service->want_ssl_settings &&
-	    (input->module != NULL || input->extra_modules != NULL))
-		str_append(str, "\tmodule=ssl");
+	if (input->module != NULL || input->extra_modules != NULL) {
+		str_printfa(str, "\tmodule=%s",
+			    service->want_ssl_server ? "ssl-server" : "ssl");
+	}
+	if (input->no_ssl_ca)
+		str_append(str, "\texclude=ssl_ca\texclude=ssl_verify_client_cert");
 	if (input->service != NULL)
 		str_printfa(str, "\tservice=%s", input->service);
 	if (input->username != NULL)
@@ -606,8 +611,10 @@ int master_service_settings_read(struct master_service *service,
 	p_array_init(&all_roots, service->set_pool, 8);
 	tmp_root = &master_service_setting_parser_info;
 	array_push_back(&all_roots, &tmp_root);
-	if (service->want_ssl_settings) {
-		tmp_root = &master_service_ssl_setting_parser_info;
+	tmp_root = &master_service_ssl_setting_parser_info;
+	array_push_back(&all_roots, &tmp_root);
+	if (service->want_ssl_server) {
+		tmp_root = &master_service_ssl_server_setting_parser_info;
 		array_push_back(&all_roots, &tmp_root);
 	}
 	if (input->roots != NULL) {
@@ -756,8 +763,8 @@ void **master_service_settings_get_others(struct master_service *service)
 void **master_service_settings_parser_get_others(struct master_service *service,
 						 const struct setting_parser_context *set_parser)
 {
-	return settings_parser_get_list(set_parser) + 1 +
-		(service->want_ssl_settings ? 1 : 0);
+	return settings_parser_get_list(set_parser) + 2 +
+		(service->want_ssl_server ? 1 : 0);
 }
 
 struct setting_parser_context *

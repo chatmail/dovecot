@@ -22,6 +22,8 @@ static const struct message_parser_settings msg_parser_set = {
 	.flags = MESSAGE_PARSER_FLAG_SKIP_BODY_BLOCK,
 };
 
+static void index_mail_filter_stream_destroy(struct index_mail *mail);
+
 static int header_line_cmp(const struct index_mail_line *l1,
 			   const struct index_mail_line *l2)
 {
@@ -30,6 +32,11 @@ static int header_line_cmp(const struct index_mail_line *l1,
 	diff = (int)l1->field_idx - (int)l2->field_idx;
 	return diff != 0 ? diff :
 		(int)l1->line_num - (int)l2->line_num;
+}
+
+void index_mail_parse_header_deinit(struct index_mail *mail)
+{
+	mail->data.header_parser_initialized = FALSE;
 }
 
 static void index_mail_parse_header_finish(struct index_mail *mail)
@@ -134,7 +141,7 @@ static void index_mail_parse_header_finish(struct index_mail *mail)
 	}
 
 	mail->data.dont_cache_field_idx = UINT_MAX;
-	mail->data.header_parser_initialized = FALSE;
+	index_mail_parse_header_deinit(mail);
 }
 
 static unsigned int
@@ -195,6 +202,7 @@ void index_mail_parse_header_init(struct index_mail *mail,
 	const uint8_t *match;
 	unsigned int i, field_idx, match_count;
 
+	index_mail_filter_stream_destroy(mail);
 	i_assert(!mail->data.header_parser_initialized);
 
 	mail->header_seq = data->seq;
@@ -425,6 +433,8 @@ static void index_mail_init_parser(struct index_mail *mail)
 		}
 	}
 
+	/* make sure parsing starts from the beginning of the stream */
+	i_stream_seek(mail->data.stream, 0);
 	if (data->parts == NULL) {
 		data->parser_input = data->stream;
 		data->parser_ctx = message_parser_init(mail->mail.data_pool,
@@ -463,8 +473,11 @@ int index_mail_parse_headers_internal(struct index_mail *mail,
 				     msg_parser_set.hdr_flags,
 				     index_mail_parse_header_cb, mail);
 	}
-	if (index_mail_stream_check_failure(mail) < 0)
+	if (index_mail_stream_check_failure(mail) < 0) {
+		index_mail_parse_header_deinit(mail);
 		return -1;
+	}
+	i_assert(!mail->data.header_parser_initialized);
 	data->hdr_size_set = TRUE;
 	data->access_part &= ENUM_NEGATE(PARSE_HDR);
 	return 0;
@@ -887,6 +900,27 @@ header_cache_callback(struct header_filter_istream *input ATTR_UNUSED,
 	index_mail_parse_header(NULL, hdr, mail);
 }
 
+static void index_mail_filter_stream_destroy(struct index_mail *mail)
+{
+	if (mail->data.filter_stream == NULL)
+		return;
+
+	const unsigned char *data;
+	size_t size;
+
+	/* read through the previous filter_stream. this makes sure that the
+	   fields are added to cache, and most importantly it resets
+	   header_parser_initialized=FALSE so we don't assert on it. */
+	while (i_stream_read_more(mail->data.filter_stream, &data, &size) > 0)
+		i_stream_skip(mail->data.filter_stream, size);
+	if (mail->data.header_parser_initialized) {
+		/* istream failed while reading the header */
+		i_assert(mail->data.filter_stream->stream_errno != 0);
+		index_mail_parse_header_deinit(mail);
+	}
+	i_stream_destroy(&mail->data.filter_stream);
+}
+
 int index_mail_get_header_stream(struct mail *_mail,
 				 struct mailbox_header_lookup_ctx *headers,
 				 struct istream **stream_r)
@@ -895,18 +929,7 @@ int index_mail_get_header_stream(struct mail *_mail,
 	struct istream *input;
 	string_t *dest;
 
-	if (mail->data.filter_stream != NULL) {
-		const unsigned char *data;
-		size_t size;
-
-		/* read through the previous filter_stream. this makes sure
-		   that the fields are added to cache, and most importantly it
-		   resets header_parser_initialized=FALSE so we don't assert
-		   on it. */
-		while (i_stream_read_more(mail->data.filter_stream, &data, &size) > 0)
-			i_stream_skip(mail->data.filter_stream, size);
-		i_stream_destroy(&mail->data.filter_stream);
-	}
+	index_mail_filter_stream_destroy(mail);
 
 	if (mail->data.save_bodystructure_header) {
 		/* we have to parse the header. */

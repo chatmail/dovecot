@@ -8,6 +8,7 @@
 #include "hostpid.h"
 #include "settings-parser.h"
 #include "message-address.h"
+#include "message-header-parser.h"
 #include "smtp-address.h"
 #include "mail-index.h"
 #include "mail-user.h"
@@ -82,18 +83,6 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(STR, hostname),
 	DEF(STR, recipient_delimiter),
 
-	DEF(STR, ssl_client_ca_file),
-	DEF(STR, ssl_client_ca_dir),
-	DEF(STR, ssl_client_cert),
-	DEF(STR, ssl_client_key),
-	DEF(STR, ssl_cipher_list),
-	DEF(STR, ssl_cipher_suites),
-	DEF(STR, ssl_curve_list),
-	DEF(STR, ssl_min_protocol),
-	DEF(STR, ssl_crypto_device),
-	DEF(BOOL, ssl_client_require_valid_cert),
-	DEF(BOOL, verbose_ssl),
-
 	SETTING_DEFINE_LIST_END
 };
 
@@ -149,19 +138,6 @@ const struct mail_storage_settings mail_storage_default_settings = {
 
 	.hostname = "",
 	.recipient_delimiter = "+",
-
-	/* Keep synced with master-service-ssl-settings */
-	.ssl_client_ca_file = "",
-	.ssl_client_ca_dir = "",
-	.ssl_client_cert = "",
-	.ssl_client_key = "",
-	.ssl_cipher_list = "ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH",
-	.ssl_cipher_suites = "", /* Use TLS library provided value */
-	.ssl_curve_list = "",
-	.ssl_min_protocol = "TLSv1.2",
-	.ssl_crypto_device = "",
-	.ssl_client_require_valid_cert = TRUE,
-	.verbose_ssl = FALSE,
 };
 
 const struct setting_parser_info mail_storage_setting_parser_info = {
@@ -433,6 +409,25 @@ fix_base_path(struct mail_user_settings *set, pool_t pool, const char **str)
 }
 
 /* <settings checks> */
+static bool mail_cache_fields_parse(const char *key, const char *value,
+				    const char **error_r)
+{
+	const char *const *arr;
+
+	for (arr = t_strsplit_spaces(value, " ,"); *arr != NULL; arr++) {
+		const char *name = *arr;
+
+		if (strncasecmp(name, "hdr.", 4) == 0 &&
+		    !message_header_name_is_valid(name+4)) {
+			*error_r = t_strdup_printf(
+				"Invalid %s: %s is not a valid header name",
+				key, name);
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+
 static bool mail_storage_settings_check(void *_set, pool_t pool,
 					const char **error_r)
 {
@@ -529,15 +524,6 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 		return FALSE;
 	}
 	hash_format_deinit_free(&format);
-#ifndef CONFIG_BINARY
-	if (*set->ssl_client_ca_dir != '\0' &&
-	    access(set->ssl_client_ca_dir, X_OK) < 0) {
-		*error_r = t_strdup_printf(
-			"ssl_client_ca_dir: access(%s) failed: %m",
-			set->ssl_client_ca_dir);
-		return FALSE;
-	}
-#endif
 
 	// FIXME: check set->mail_server_admin syntax (RFC 5464, Section 6.2.2)
 
@@ -579,6 +565,15 @@ static bool mail_storage_settings_check(void *_set, pool_t pool,
 		set->parsed_mail_attachment_content_type_filter = array_front(&content_types);
 	}
 
+	if (!mail_cache_fields_parse("mail_cache_fields",
+				     set->mail_cache_fields, error_r))
+		return FALSE;
+	if (!mail_cache_fields_parse("mail_always_cache_fields",
+				     set->mail_always_cache_fields, error_r))
+		return FALSE;
+	if (!mail_cache_fields_parse("mail_never_cache_fields",
+				     set->mail_never_cache_fields, error_r))
+		return FALSE;
 	return TRUE;
 }
 
@@ -811,27 +806,4 @@ bool mail_user_set_get_postmaster_smtp(const struct mail_user_settings *set,
 	/* parsing failed - do it again to get the error */
 	get_postmaster_address_error(set, error_r);
 	return FALSE;
-}
-
-void mail_storage_settings_init_ssl_client_settings(const struct mail_storage_settings *mail_set,
-		                                    struct ssl_iostream_settings *ssl_set_r)
-{
-	i_zero(ssl_set_r);
-	if (*mail_set->ssl_client_ca_dir != '\0')
-		ssl_set_r->ca_dir = mail_set->ssl_client_ca_dir;
-	if (*mail_set->ssl_client_ca_file != '\0')
-		ssl_set_r->ca_file = mail_set->ssl_client_ca_file;
-	if (*mail_set->ssl_client_cert != '\0')
-		ssl_set_r->cert.cert = mail_set->ssl_client_cert;
-	if (*mail_set->ssl_client_key != '\0')
-		ssl_set_r->cert.key = mail_set->ssl_client_key;
-	ssl_set_r->cipher_list = mail_set->ssl_cipher_list;
-	if (*mail_set->ssl_cipher_suites != '\0')
-		ssl_set_r->ciphersuites = mail_set->ssl_cipher_suites;
-	ssl_set_r->curve_list = mail_set->ssl_curve_list;
-	ssl_set_r->min_protocol = mail_set->ssl_min_protocol;
-	ssl_set_r->crypto_device = mail_set->ssl_crypto_device;
-	ssl_set_r->verify_remote_cert = mail_set->ssl_client_require_valid_cert;
-	ssl_set_r->allow_invalid_cert = !ssl_set_r->verify_remote_cert;
-	ssl_set_r->verbose = mail_set->verbose_ssl;
 }

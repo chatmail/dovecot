@@ -25,53 +25,41 @@
 struct worker_connection {
 	struct connection conn;
 
-	int refcount;
-
 	indexer_status_callback_t *callback;
+	worker_available_callback_t *avail_callback;
 
 	char *request_username;
 	struct indexer_request *request;
-
-	unsigned int process_limit;
 };
+
+static unsigned int worker_last_process_limit = 0;
 
 static void worker_connection_call_callback(struct worker_connection *worker,
 					    int percentage)
 {
 	if (worker->request != NULL)
-		worker->callback(percentage, &worker->conn);
+		worker->callback(percentage, worker->request);
 	if (percentage < 0 || percentage == 100)
 		worker->request = NULL;
 }
 
-static void worker_connection_destroy(struct connection *conn)
+void worker_connection_destroy(struct connection *conn)
 {
 	struct worker_connection *worker =
 		container_of(conn, struct worker_connection, conn);
 
-	worker->request = NULL;
+	worker_connection_call_callback(worker, -1);
 	i_free_and_null(worker->request_username);
 	connection_deinit(conn);
-}
 
-void worker_connection_unref(struct connection **_conn)
-{
-	struct connection *conn = *_conn;
-	struct worker_connection *worker =
-		container_of(conn, struct worker_connection, conn);
-
-	i_assert(worker->refcount > 0);
-	if (--worker->refcount > 0)
-		return;
-	worker_connection_destroy(conn);
+	worker->avail_callback();
 	i_free(conn);
 }
 
 static int
 worker_connection_handshake_args(struct connection *conn, const char *const *args)
 {
-	struct worker_connection *worker =
-		container_of(conn, struct worker_connection, conn);
+	unsigned int process_limit;
 	int ret;
 	if (!conn->version_received) {
 		if ((ret = connection_handshake_args_default(conn, args)) < 1)
@@ -79,13 +67,13 @@ worker_connection_handshake_args(struct connection *conn, const char *const *arg
 		/* we are not done yet */
 		return 0;
 	}
-	i_assert(worker->process_limit == 0);
-	if (str_to_uint(args[0], &worker->process_limit) < 0 ||
-	    worker->process_limit == 0) {
+	if (str_to_uint(args[0], &process_limit) < 0 ||
+	    process_limit == 0) {
 		e_error(conn->event, "Worker sent invalid process limit '%s'",
 			args[0]);
 		return -1;
 	}
+	worker_last_process_limit = process_limit;
 	return 1;
 }
 
@@ -107,6 +95,10 @@ worker_connection_input_args(struct connection *conn, const char *const *args)
 		ret = -1;
 
 	worker_connection_call_callback(worker, percentage);
+	if (worker->request == NULL) {
+		/* disconnect after each request */
+		ret = -1;
+	}
 
 	return ret;
 }
@@ -116,17 +108,9 @@ bool worker_connection_is_connected(struct connection *conn)
 	return !conn->disconnected;
 }
 
-bool worker_connection_get_process_limit(struct connection *conn,
-					 unsigned int *limit_r)
+unsigned int worker_connections_get_process_limit(void)
 {
-	struct worker_connection *worker =
-		container_of(conn, struct worker_connection, conn);
-
-	if (worker->process_limit == 0)
-		return FALSE;
-
-	*limit_r = worker->process_limit;
-	return TRUE;
+	return worker_last_process_limit;
 }
 
 void worker_connection_request(struct connection *conn,
@@ -168,26 +152,11 @@ void worker_connection_request(struct connection *conn,
 	} T_END;
 }
 
-bool worker_connection_is_busy(struct connection *conn)
-{
-	struct worker_connection *worker =
-		container_of(conn, struct worker_connection, conn);
-	return worker->request != NULL;
-}
-
 const char *worker_connection_get_username(struct connection *conn)
 {
 	struct worker_connection *worker =
 		container_of(conn, struct worker_connection, conn);
 	return worker->request_username;
-}
-
-struct indexer_request *
-worker_connection_get_request(struct connection *conn)
-{
-	struct worker_connection *worker =
-		container_of(conn, struct worker_connection, conn);
-	return worker->request;
 }
 
 static const struct connection_vfuncs worker_connection_vfuncs = {
@@ -215,13 +184,14 @@ struct connection_list *worker_connection_list_create(void)
 struct connection *
 worker_connection_create(const char *socket_path,
 			 indexer_status_callback_t *callback,
+			 worker_available_callback_t *avail_callback,
 			 struct connection_list *list)
 {
 	struct worker_connection *conn;
 
 	conn = i_new(struct worker_connection, 1);
-	conn->refcount = 1;
 	conn->callback = callback;
+	conn->avail_callback = avail_callback;
 	connection_init_client_unix(list, &conn->conn, socket_path);
 
 	return &conn->conn;

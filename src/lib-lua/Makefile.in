@@ -91,7 +91,8 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 @DLUA_WITH_YIELDS_TRUE@am__append_1 = ../lib-dict/libdict_lua.la
-noinst_PROGRAMS = $(am__EXEEXT_1)
+@DLUA_WITH_YIELDS_TRUE@am__append_2 = test-dict-lua
+noinst_PROGRAMS = $(am__EXEEXT_2)
 subdir = src/lib-lua
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -152,7 +153,8 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-am__EXEEXT_1 = test-lua$(EXEEXT)
+@DLUA_WITH_YIELDS_TRUE@am__EXEEXT_1 = test-dict-lua$(EXEEXT)
+am__EXEEXT_2 = test-lua$(EXEEXT) $(am__EXEEXT_1)
 PROGRAMS = $(noinst_PROGRAMS)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
@@ -197,6 +199,8 @@ libdovecot_lua_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(AM_CFLAGS) $(CFLAGS) $(libdovecot_lua_la_LDFLAGS) $(LDFLAGS) \
 	-o $@
+am_test_dict_lua_OBJECTS = test-dict-lua.$(OBJEXT)
+test_dict_lua_OBJECTS = $(am_test_dict_lua_OBJECTS)
 am_test_lua_OBJECTS = test_lua-test-lua.$(OBJEXT)
 test_lua_OBJECTS = $(am_test_lua_OBJECTS)
 test_lua_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
@@ -221,7 +225,8 @@ am__depfiles_remade = ./$(DEPDIR)/dlua-compat.Plo \
 	./$(DEPDIR)/dlua-dovecot.Plo ./$(DEPDIR)/dlua-error.Plo \
 	./$(DEPDIR)/dlua-pushstring.Plo ./$(DEPDIR)/dlua-resume.Plo \
 	./$(DEPDIR)/dlua-script.Plo ./$(DEPDIR)/dlua-table.Plo \
-	./$(DEPDIR)/dlua-thread.Plo ./$(DEPDIR)/test_lua-test-lua.Po
+	./$(DEPDIR)/dlua-thread.Plo ./$(DEPDIR)/test-dict-lua.Po \
+	./$(DEPDIR)/test_lua-test-lua.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -241,8 +246,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libdovecot_lua_la_SOURCES) $(test_lua_SOURCES)
-DIST_SOURCES = $(libdovecot_lua_la_SOURCES) $(test_lua_SOURCES)
+SOURCES = $(libdovecot_lua_la_SOURCES) $(test_dict_lua_SOURCES) \
+	$(test_lua_SOURCES)
+DIST_SOURCES = $(libdovecot_lua_la_SOURCES) $(test_dict_lua_SOURCES) \
+	$(test_lua_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -491,6 +498,7 @@ top_srcdir = @top_srcdir@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
+	-I$(top_srcdir)/src/lib-dict \
 	$(LUA_CFLAGS)
 
 pkglib_LTLIBRARIES = libdovecot-lua.la
@@ -504,6 +512,7 @@ libdovecot_lua_la_SOURCES = \
 	dlua-table.c \
 	dlua-thread.c
 
+test_programs = test-lua $(am__append_2)
 LIBDICT_LUA = $(am__append_1)
 
 # Note: the only things this lib should depend on are libdovecot and lua.
@@ -525,7 +534,6 @@ headers = \
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
-test_programs = test-lua
 test_libs = \
  libdovecot-lua.la \
  ../lib-dovecot/libdovecot.la
@@ -535,6 +543,9 @@ test_lua_CFLAGS = $(AM_CPPFLAGS) $(BINARY_CFLAGS)
 test_lua_LDFLAGS = $(BINARY_LDFLAGS)
 test_lua_LDADD = $(test_libs) $(LUA_LIBS)
 test_lua_DEPENDENCIES = $(test_libs)
+test_dict_lua_SOURCES = test-dict-lua.c
+test_dict_lua_LDADD = $(test_libs) $(LUA_LIBS)
+test_dict_lua_DEPENDENCIES = $(test_libs)
 all: all-am
 
 .SUFFIXES:
@@ -616,6 +627,10 @@ clean-pkglibLTLIBRARIES:
 libdovecot-lua.la: $(libdovecot_lua_la_OBJECTS) $(libdovecot_lua_la_DEPENDENCIES) $(EXTRA_libdovecot_lua_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libdovecot_lua_la_LINK) -rpath $(pkglibdir) $(libdovecot_lua_la_OBJECTS) $(libdovecot_lua_la_LIBADD) $(LIBS)
 
+test-dict-lua$(EXEEXT): $(test_dict_lua_OBJECTS) $(test_dict_lua_DEPENDENCIES) $(EXTRA_test_dict_lua_DEPENDENCIES) 
+	@rm -f test-dict-lua$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_dict_lua_OBJECTS) $(test_dict_lua_LDADD) $(LIBS)
+
 test-lua$(EXEEXT): $(test_lua_OBJECTS) $(test_lua_DEPENDENCIES) $(EXTRA_test_lua_DEPENDENCIES) 
 	@rm -f test-lua$(EXEEXT)
 	$(AM_V_CCLD)$(test_lua_LINK) $(test_lua_OBJECTS) $(test_lua_LDADD) $(LIBS)
@@ -634,6 +649,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-script.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-table.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-thread.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-dict-lua.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lua-test-lua.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -841,6 +857,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/dlua-script.Plo
 	-rm -f ./$(DEPDIR)/dlua-table.Plo
 	-rm -f ./$(DEPDIR)/dlua-thread.Plo
+	-rm -f ./$(DEPDIR)/test-dict-lua.Po
 	-rm -f ./$(DEPDIR)/test_lua-test-lua.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -895,6 +912,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/dlua-script.Plo
 	-rm -f ./$(DEPDIR)/dlua-table.Plo
 	-rm -f ./$(DEPDIR)/dlua-thread.Plo
+	-rm -f ./$(DEPDIR)/test-dict-lua.Po
 	-rm -f ./$(DEPDIR)/test_lua-test-lua.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic

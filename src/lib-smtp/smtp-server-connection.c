@@ -1117,6 +1117,7 @@ bool smtp_server_connection_unref(struct smtp_server_connection **_conn)
 
 	connection_deinit(&conn->conn);
 
+	i_free(conn->proxy_helo);
 	i_free(conn->helo_domain);
 	i_free(conn->username);
 	event_unref(&conn->next_trans_event);
@@ -1205,12 +1206,12 @@ void smtp_server_connection_login(struct smtp_server_connection *conn,
 				  unsigned int pdata_len, bool ssl_secured)
 {
 	i_assert(!conn->started);
-	i_assert(conn->username == NULL);
-	i_assert(conn->helo_domain == NULL);
 
 	conn->set.capabilities &= ENUM_NEGATE(SMTP_CAPABILITY_STARTTLS);
+	i_free(conn->username);
 	conn->username = i_strdup(username);
 	if (helo != NULL && *helo != '\0') {
+		i_free(conn->helo_domain);
 		conn->helo_domain = i_strdup(helo);
 		conn->helo.domain = conn->helo_domain;
 		conn->helo.domain_valid = TRUE;
@@ -1518,7 +1519,9 @@ void smtp_server_connection_get_proxy_data(struct smtp_server_connection *conn,
 	i_zero(proxy_data);
 	proxy_data->source_ip = conn->conn.remote_ip;
 	proxy_data->source_port = conn->conn.remote_port;
-	if (conn->helo.domain_valid)
+	if (conn->proxy_helo != NULL)
+		proxy_data->helo = conn->proxy_helo;
+	else if (conn->helo.domain_valid)
 		proxy_data->helo = conn->helo.domain;
 	proxy_data->login = conn->username;
 
@@ -1548,6 +1551,10 @@ void smtp_server_connection_set_proxy_data(
 		conn->helo_domain = i_strdup(proxy_data->helo);
 		conn->helo.domain = conn->helo_domain;
 		conn->helo.domain_valid = TRUE;
+		if (conn->helo.domain_valid) {
+			i_free(conn->proxy_helo);
+			conn->proxy_helo = i_strdup(proxy_data->helo);
+		}
 	}
 	if (proxy_data->login != NULL) {
 		i_free(conn->username);
@@ -1565,14 +1572,7 @@ void smtp_server_connection_set_proxy_data(
 	    conn->callbacks->conn_proxy_data_updated != NULL) {
 		struct smtp_proxy_data full_data;
 
-		i_zero(&full_data);
-		full_data.source_ip = conn->conn.remote_ip;
-		full_data.source_port = conn->conn.remote_port;
-		full_data.helo = conn->helo.domain;
-		full_data.login = conn->username;
-		full_data.proto = conn->proxy_proto;
-		full_data.ttl_plus_1 = conn->proxy_ttl_plus_1;
-		full_data.timeout_secs = conn->proxy_timeout_secs;
+		smtp_server_connection_get_proxy_data(conn, &full_data);
 
 		conn->callbacks->
 			conn_proxy_data_updated(conn->context, &full_data);

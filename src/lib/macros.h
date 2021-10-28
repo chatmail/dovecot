@@ -41,7 +41,7 @@
 #define POINTER_CAST(i) \
 	((void *) (((uintptr_t)NULL) + (i)))
 #define POINTER_CAST_TO(p, type) \
-	((type) ((const char *) (p) - (const char *) NULL))
+	((type)(uintptr_t)(p))
 
 /* Define VA_COPY() to do the right thing for copying va_list variables.
    config.h may have already defined VA_COPY as va_copy or __va_copy. */
@@ -298,5 +298,11 @@
 #endif
 
 /* negate enumeration flags in a way that avoids implicit conversion */
-#define ENUM_NEGATE(x) \
+#ifndef STATIC_CHECKER
+#  define ENUM_NEGATE(x) \
 	((unsigned int)(~(x)) + COMPILE_ERROR_IF_TRUE(sizeof((x)) > sizeof(int) || (x) < 0 || (x) > INT_MAX))
+#else
+/* clang scan-build keeps complaining about x > 2147483647 case, so disable the
+   sizeof check. */
+#  define ENUM_NEGATE(x) ((unsigned int)(~(x)))
+#endif

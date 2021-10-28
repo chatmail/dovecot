@@ -52,6 +52,7 @@ bool login_ssl_initialized;
 
 const struct login_settings *global_login_settings;
 const struct master_service_ssl_settings *global_ssl_settings;
+const struct master_service_ssl_server_settings *global_ssl_server_settings;
 void **global_other_settings;
 
 static ARRAY(struct ip_addr) login_source_ips_array;
@@ -164,14 +165,17 @@ client_connected_finish(const struct master_service_connection *conn)
 	struct client *client;
 	const struct login_settings *set;
 	const struct master_service_ssl_settings *ssl_set;
+	const struct master_service_ssl_server_settings *ssl_server_set;
 	pool_t pool;
 	void **other_sets;
 
 	pool = pool_alloconly_create("login client", 8*1024);
 	set = login_settings_read(pool, &conn->local_ip,
-				  &conn->remote_ip, NULL, &ssl_set, &other_sets);
+				  &conn->remote_ip, NULL,
+				  &ssl_set, &ssl_server_set, &other_sets);
 
-	client = client_alloc(conn->fd, pool, conn, set, ssl_set);
+	client = client_alloc(conn->fd, pool, conn, set,
+			      ssl_set, ssl_server_set);
 	if (ssl_connections || conn->ssl) {
 		if (client_init_ssl(client) < 0) {
 			client_unref(&client);
@@ -380,9 +384,8 @@ static void login_ssl_init(void)
 	if (strcmp(global_ssl_settings->ssl, "no") == 0)
 		return;
 
-	master_service_ssl_settings_to_iostream_set(global_ssl_settings,
-		pool_datastack_create(),
-		MASTER_SERVICE_SSL_SETTINGS_TYPE_SERVER, &ssl_set);
+	master_service_ssl_server_settings_to_iostream_set(global_ssl_settings,
+		global_ssl_server_settings, pool_datastack_create(), &ssl_set);
 	if (io_stream_ssl_global_init(&ssl_set, &error) < 0)
 		i_fatal("Failed to initialize SSL library: %s", error);
 	login_ssl_initialized = TRUE;
@@ -509,7 +512,6 @@ int login_binary_run(struct login_binary *binary,
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN |
 		MASTER_SERVICE_FLAG_TRACK_LOGIN_STATE |
-		MASTER_SERVICE_FLAG_USE_SSL_SETTINGS |
 		MASTER_SERVICE_FLAG_HAVE_STARTTLS |
 		MASTER_SERVICE_FLAG_NO_SSL_INIT;
 	pool_t set_pool;
@@ -553,6 +555,7 @@ int login_binary_run(struct login_binary *binary,
 	global_login_settings =
 		login_settings_read(set_pool, NULL, NULL, NULL,
 				    &global_ssl_settings,
+				    &global_ssl_server_settings,
 				    &global_other_settings);
 
 	main_preinit();

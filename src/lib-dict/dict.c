@@ -15,6 +15,7 @@ struct dict_commit_callback_ctx {
 	struct dict *dict;
 	struct event *event;
 	dict_transaction_commit_callback_t *callback;
+	struct dict_op_settings_private set;
 	struct timeout *to;
 	void *context;
 	struct dict_commit_result result;
@@ -92,8 +93,6 @@ int dict_init(const char *uri, const struct dict_settings *set,
 	struct dict *dict;
 	const char *p, *name, *error;
 
-	i_assert(set->username != NULL);
-
 	p = strchr(uri, ':');
 	if (p == NULL) {
 		*error_r = t_strdup_printf("Dictionary URI is missing ':': %s",
@@ -110,10 +109,8 @@ int dict_init(const char *uri, const struct dict_settings *set,
 	struct event *event = event_create(set->event_parent);
 	event_add_category(event, &event_category_dict);
 	event_add_str(event, "driver", dict->name);
-	if (set->username[0] != '\0')
-		event_add_str(event, "user", set->username);
-	event_set_append_log_prefix(event, t_strdup_printf("dict(%s)<%s>: ",
-				    dict->name, set->username));
+	event_set_append_log_prefix(event, t_strdup_printf("dict(%s): ",
+				    dict->name));
 	set_dup.event_parent = event;
 	if (dict->v.init(dict, p+1, &set_dup, dict_r, &error) < 0) {
 		*error_r = t_strdup_printf("dict %s: %s", name, error);
@@ -123,6 +120,8 @@ int dict_init(const char *uri, const struct dict_settings *set,
 	i_assert(*dict_r != NULL);
 	(*dict_r)->refcount++;
 	(*dict_r)->event = event;
+	e_debug(event_create_passthrough(event)->set_name("dict_created")->event(),
+		"dict created (uri=%s, base_dir=%s)", uri, set->base_dir);
 
 	return 0;
 }
@@ -144,6 +143,8 @@ static void dict_unref(struct dict **_dict)
 	i_assert(dict->refcount > 0);
 	if (--dict->refcount == 0) {
 		dict->v.deinit(dict);
+		e_debug(event_create_passthrough(event)->
+			set_name("dict_destroyed")->event(), "dict destroyed");
 		event_unref(&event);
 	}
 }
@@ -190,10 +191,16 @@ bool dict_switch_ioloop(struct dict *dict)
 	return ret;
 }
 
-static bool dict_key_prefix_is_valid(const char *key)
+static bool dict_key_prefix_is_valid(const char *key, const char *username)
 {
-	return str_begins(key, DICT_PATH_SHARED) ||
-		str_begins(key, DICT_PATH_PRIVATE);
+	if (str_begins(key, DICT_PATH_SHARED))
+		return TRUE;
+	if (str_begins(key, DICT_PATH_PRIVATE)) {
+		i_assert(username != NULL && username[0] != '\0');
+		return TRUE;
+	}
+	return FALSE;
+
 }
 
 void dict_pre_api_callback(struct dict *dict)
@@ -274,6 +281,7 @@ dict_commit_async_timeout(struct dict_commit_callback_ctx *ctx)
 	dict_post_api_callback(ctx->dict);
 
 	dict_transaction_finished(ctx->event, ctx->result.ret, FALSE, ctx->result.error);
+	dict_op_settings_private_free(&ctx->set);
 	event_unref(&ctx->event);
 	dict_unref(&ctx->dict);
 	pool_unref(&ctx->pool);
@@ -294,31 +302,42 @@ static void dict_commit_callback(const struct dict_commit_result *result,
 	}
 }
 
-int dict_lookup(struct dict *dict, pool_t pool, const char *key,
-		const char **value_r, const char **error_r)
+static struct event *
+dict_event_create(struct dict *dict, const struct dict_op_settings *set)
 {
 	struct event *event = event_create(dict->event);
+	if (set->username != NULL)
+		event_add_str(event, "user", set->username);
+	return event;
+}
+
+int dict_lookup(struct dict *dict, const struct dict_op_settings *set,
+		pool_t pool, const char *key,
+		const char **value_r, const char **error_r)
+{
+	struct event *event = dict_event_create(dict, set);
 	int ret;
-	i_assert(dict_key_prefix_is_valid(key));
+	i_assert(dict_key_prefix_is_valid(key, set->username));
 
 	e_debug(event, "Looking up '%s'", key);
 	event_add_str(event, "key", key);
-	ret = dict->v.lookup(dict, pool, key, value_r, error_r);
+	ret = dict->v.lookup(dict, set, pool, key, value_r, error_r);
 	dict_lookup_finished(event, ret, *error_r);
 	event_unref(&event);
 	return ret;
 }
 
 #undef dict_lookup_async
-void dict_lookup_async(struct dict *dict, const char *key,
-		       dict_lookup_callback_t *callback, void *context)
+void dict_lookup_async(struct dict *dict, const struct dict_op_settings *set,
+		       const char *key, dict_lookup_callback_t *callback,
+		       void *context)
 {
 	if (dict->v.lookup_async == NULL) {
 		struct dict_lookup_result result;
 
 		i_zero(&result);
 		/* event is going to be sent by dict_lookup */
-		result.ret = dict_lookup(dict, pool_datastack_create(),
+		result.ret = dict_lookup(dict, set, pool_datastack_create(),
 					 key, &result.value, &result.error);
 		const char *const values[] = { result.value, NULL };
 		result.values = values;
@@ -331,49 +350,37 @@ void dict_lookup_async(struct dict *dict, const char *key,
 	dict_ref(lctx->dict);
 	lctx->callback = callback;
 	lctx->context = context;
-	lctx->event = event_create(dict->event);
+	lctx->event = dict_event_create(dict, set);
 	event_add_str(lctx->event, "key", key);
 	e_debug(lctx->event, "Looking up (async) '%s'", key);
-	dict->v.lookup_async(dict, key, dict_lookup_callback, lctx);
+	dict->v.lookup_async(dict, set, key, dict_lookup_callback, lctx);
 }
 
 struct dict_iterate_context *
-dict_iterate_init(struct dict *dict, const char *path, 
-		  enum dict_iterate_flags flags)
-{
-	const char *paths[2];
-
-	paths[0] = path;
-	paths[1] = NULL;
-	return dict_iterate_init_multiple(dict, paths, flags);
-}
-
-struct dict_iterate_context *
-dict_iterate_init_multiple(struct dict *dict, const char *const *paths,
-			   enum dict_iterate_flags flags)
+dict_iterate_init(struct dict *dict, const struct dict_op_settings *set,
+		  const char *path, enum dict_iterate_flags flags)
 {
 	struct dict_iterate_context *ctx;
-	unsigned int i;
 
-	i_assert(paths[0] != NULL);
-	for (i = 0; paths[i] != NULL; i++)
-		i_assert(dict_key_prefix_is_valid(paths[i]));
+	i_assert(path != NULL);
+	i_assert(dict_key_prefix_is_valid(path, set->username));
 
 	if (dict->v.iterate_init == NULL) {
 		/* not supported by backend */
 		ctx = &dict_iter_unsupported;
 	} else {
-		ctx = dict->v.iterate_init(dict, paths, flags);
+		ctx = dict->v.iterate_init(dict, set, path, flags);
 	}
 	/* the dict in context can differ from the dict
 	   passed as parameter, e.g. it can be dict-fail when
 	   iteration is not supported. */
-	ctx->event = event_create(dict->event);
+	ctx->event = dict_event_create(dict, set);
 	ctx->flags = flags;
+	dict_op_settings_dup(set, &ctx->set);
 
-	event_add_str(ctx->event, "key", paths[0]);
+	event_add_str(ctx->event, "key", path);
 	event_set_name(ctx->event, "dict_iteration_started");
-	e_debug(ctx->event, "Iterating prefix %s", paths[0]);
+	e_debug(ctx->event, "Iterating prefix %s", path);
 	ctx->dict->iter_count++;
 	return ctx;
 }
@@ -451,7 +458,9 @@ int dict_iterate_deinit(struct dict_iterate_context **_ctx,
 
 	*_ctx = NULL;
 	rows = ctx->row_count;
+	struct dict_op_settings_private set_copy = ctx->set;
 	ret = ctx->dict->v.iterate_deinit(ctx, error_r);
+	dict_op_settings_private_free(&set_copy);
 
 	event_add_int(event, "rows", rows);
 	event_set_name(event, "dict_iteration_finished");
@@ -469,7 +478,8 @@ int dict_iterate_deinit(struct dict_iterate_context **_ctx,
 	return ret;
 }
 
-struct dict_transaction_context *dict_transaction_begin(struct dict *dict)
+struct dict_transaction_context *
+dict_transaction_begin(struct dict *dict, const struct dict_op_settings *set)
 {
 	struct dict_transaction_context *ctx;
 	guid_128_t guid;
@@ -482,7 +492,8 @@ struct dict_transaction_context *dict_transaction_begin(struct dict *dict)
 	   transactions are not supported. */
 	ctx->dict->transaction_count++;
 	DLLIST_PREPEND(&ctx->dict->transactions, ctx);
-	ctx->event = event_create(dict->event);
+	ctx->event = dict_event_create(dict, set);
+	dict_op_settings_dup(set, &ctx->set);
 	guid_128_generate(guid);
 	event_add_str(ctx->event, "txid", guid_128_to_string(guid));
 	event_set_name(ctx->event, "dict_transaction_started");
@@ -552,6 +563,7 @@ int dict_transaction_commit(struct dict_transaction_context **_ctx,
 	cctx->callback = dict_transaction_commit_sync_callback;
 	cctx->context = &result;
 	cctx->event = ctx->event;
+	cctx->set = ctx->set;
 
 	ctx->dict->v.transaction_commit(ctx, FALSE, dict_commit_callback, cctx);
 	*error_r = t_strdup(result.error);
@@ -582,6 +594,7 @@ void dict_transaction_commit_async(struct dict_transaction_context **_ctx,
 	cctx->callback = callback;
 	cctx->context = context;
 	cctx->event = ctx->event;
+	cctx->set = ctx->set;
 	cctx->delayed_callback = TRUE;
 	ctx->dict->v.transaction_commit(ctx, TRUE, dict_commit_callback, cctx);
 	cctx->delayed_callback = FALSE;
@@ -606,15 +619,17 @@ void dict_transaction_rollback(struct dict_transaction_context **_ctx)
 	i_assert(ctx->dict->transaction_count > 0);
 	ctx->dict->transaction_count--;
 	DLLIST_REMOVE(&ctx->dict->transactions, ctx);
+	struct dict_op_settings_private set_copy = ctx->set;
 	ctx->dict->v.transaction_rollback(ctx);
 	dict_transaction_finished(event, DICT_COMMIT_RET_OK, TRUE, NULL);
+	dict_op_settings_private_free(&set_copy);
 	event_unref(&event);
 }
 
 void dict_set(struct dict_transaction_context *ctx,
 	      const char *key, const char *value)
 {
-	i_assert(dict_key_prefix_is_valid(key));
+	i_assert(dict_key_prefix_is_valid(key, ctx->set.username));
 	struct event_passthrough *e = event_create_passthrough(ctx->event)->
 		set_name("dict_set_key")->
 		add_str("key", key);
@@ -630,7 +645,7 @@ void dict_set(struct dict_transaction_context *ctx,
 void dict_unset(struct dict_transaction_context *ctx,
 		const char *key)
 {
-	i_assert(dict_key_prefix_is_valid(key));
+	i_assert(dict_key_prefix_is_valid(key, ctx->set.username));
 	struct event_passthrough *e = event_create_passthrough(ctx->event)->
 		set_name("dict_unset_key")->
 		add_str("key", key);
@@ -646,7 +661,7 @@ void dict_unset(struct dict_transaction_context *ctx,
 void dict_atomic_inc(struct dict_transaction_context *ctx,
 		     const char *key, long long diff)
 {
-	i_assert(dict_key_prefix_is_valid(key));
+	i_assert(dict_key_prefix_is_valid(key, ctx->set.username));
 	struct event_passthrough *e = event_create_passthrough(ctx->event)->
 		set_name("dict_increment_key")->
 		add_str("key", key);
@@ -726,4 +741,18 @@ const char *dict_unescape_string(const char *str)
 		}
 	}
 	return str_c(ret);
+}
+
+void dict_op_settings_dup(const struct dict_op_settings *source,
+			  struct dict_op_settings_private *dest_r)
+{
+	i_zero(dest_r);
+	dest_r->username = i_strdup(source->username);
+	dest_r->home_dir = i_strdup(source->home_dir);
+}
+
+void dict_op_settings_private_free(struct dict_op_settings_private *set)
+{
+	i_free(set->username);
+	i_free(set->home_dir);
 }
