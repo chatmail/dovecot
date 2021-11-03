@@ -15,3 +15,4 @@ Improve-cross-compile-support.patch
 Silence-LTO-related-compiler-warning.patch
 mail-cache-bigendian-1.patch
 login-proxy-Fix-potential-memory-leak-if-backend-login-fa.patch
+plugins-imapsieve-imap-sieve-storage-Make-sure-mail_set_u.patch
