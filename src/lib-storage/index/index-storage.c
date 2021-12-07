@@ -9,6 +9,8 @@
 #include "str-sanitize.h"
 #include "mkdir-parents.h"
 #include "dict.h"
+#include "fs-api.h"
+#include "message-header-parser.h"
 #include "mail-index-alloc-cache.h"
 #include "mail-index-private.h"
 #include "mail-index-modseq.h"
@@ -48,9 +50,19 @@ static void set_cache_decisions(struct mail_cache *cache,
 		if (idx != UINT_MAX) {
 			field = *mail_cache_register_get_field(cache, idx);
 		} else if (strncasecmp(name, "hdr.", 4) == 0) {
-			i_zero(&field);
-			field.name = name;
-			field.type = MAIL_CACHE_FIELD_HEADER;
+			/* Do some sanity checking for the header name. Mainly
+			   to make sure there aren't UTF-8 characters that look
+			   like their ASCII equivalents or are completely
+			   invisible. */
+			if (message_header_name_is_valid(name+4)) {
+				i_zero(&field);
+				field.name = name;
+				field.type = MAIL_CACHE_FIELD_HEADER;
+			} else {
+				i_error("%s: Header name '%s' has invalid character, ignoring",
+					set, name);
+				continue;
+			}
 		} else {
 			i_error("%s: Unknown cache field name '%s', ignoring",
 				set, *arr);
@@ -678,10 +690,12 @@ int index_storage_mailbox_create(struct mailbox *box, bool directory)
 				return -1;
 			if (existence != MAILBOX_EXISTENCE_SELECT)
 				return 1;
+		} else if (!box->storage->rebuilding_list_index) {
+			/* ignore existing location if we are recovering list index */
+			mail_storage_set_error(box->storage, MAIL_ERROR_EXISTS,
+					       "Mailbox already exists");
+			return -1;
 		}
-		mail_storage_set_error(box->storage, MAIL_ERROR_EXISTS,
-				       "Mailbox already exists");
-		return -1;
 	}
 
 	if (directory) {
@@ -1114,6 +1128,7 @@ void index_storage_destroy(struct mail_storage *storage)
 		dict_wait(storage->_shared_attr_dict);
 		dict_deinit(&storage->_shared_attr_dict);
 	}
+	fs_unref(&storage->mailboxes_fs);
 }
 
 static void index_storage_expunging_init(struct mailbox *box)

@@ -189,7 +189,7 @@ am__DEPENDENCIES_1 =
 @HAVE_LDAP_TRUE@@LDAP_PLUGIN_FALSE@	$(am__DEPENDENCIES_1)
 libdict_backend_la_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am__objects_1 = dict-ldap.lo dict-ldap-settings.lo
-am_libdict_backend_la_OBJECTS = dict-db.lo dict-cdb.lo dict-sql.lo \
+am_libdict_backend_la_OBJECTS = dict-cdb.lo dict-sql.lo \
 	dict-sql-settings.lo $(am__objects_1)
 nodist_libdict_backend_la_OBJECTS = dict-drivers-register.lo
 libdict_backend_la_OBJECTS = $(am_libdict_backend_la_OBJECTS) \
@@ -228,7 +228,7 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/dict-cdb.Plo ./$(DEPDIR)/dict-db.Plo \
+am__depfiles_remade = ./$(DEPDIR)/dict-cdb.Plo \
 	./$(DEPDIR)/dict-drivers-register.Plo \
 	./$(DEPDIR)/dict-ldap-settings.Plo ./$(DEPDIR)/dict-ldap.Plo \
 	./$(DEPDIR)/dict-sql-settings.Plo ./$(DEPDIR)/dict-sql.Plo \
@@ -520,7 +520,6 @@ ldap_sources = \
 	dict-ldap-settings.c
 
 libdict_backend_la_SOURCES = \
-	dict-db.c \
 	dict-cdb.c \
 	dict-sql.c \
 	dict-sql-settings.c \
@@ -672,7 +671,6 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-cdb.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-db.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-drivers-register.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-ldap-settings.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-ldap.Plo@am__quote@ # am--include-marker
@@ -869,7 +867,6 @@ clean-am: clean-generic clean-libtool clean-module_dictLTLIBRARIES \
 
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/dict-cdb.Plo
-	-rm -f ./$(DEPDIR)/dict-db.Plo
 	-rm -f ./$(DEPDIR)/dict-drivers-register.Plo
 	-rm -f ./$(DEPDIR)/dict-ldap-settings.Plo
 	-rm -f ./$(DEPDIR)/dict-ldap.Plo
@@ -924,7 +921,6 @@ installcheck-am:
 
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/dict-cdb.Plo
-	-rm -f ./$(DEPDIR)/dict-db.Plo
 	-rm -f ./$(DEPDIR)/dict-drivers-register.Plo
 	-rm -f ./$(DEPDIR)/dict-ldap-settings.Plo
 	-rm -f ./$(DEPDIR)/dict-ldap.Plo

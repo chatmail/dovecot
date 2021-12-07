@@ -38,7 +38,7 @@ struct ext_include_generator_context {
 
 static inline struct ext_include_generator_context *
 ext_include_get_generator_context(const struct sieve_extension *ext_this,
-				 struct sieve_generator *gentr);
+				  struct sieve_generator *gentr);
 
 /* Interpreter context */
 
@@ -102,10 +102,10 @@ bool ext_include_load(const struct sieve_extension *ext, void **context)
 
 	if (sieve_setting_get_uint_value(
 		svinst, "sieve_include_max_nesting_depth", &uint_setting))
-		ctx->max_nesting_depth = (unsigned int) uint_setting;
+		ctx->max_nesting_depth = (unsigned int)uint_setting;
 	if (sieve_setting_get_uint_value(
 		svinst, "sieve_include_max_includes", &uint_setting))
-		ctx->max_includes = (unsigned int) uint_setting;
+		ctx->max_includes = (unsigned int)uint_setting;
 
 	/* Extension dependencies */
 	ctx->var_ext = sieve_ext_variables_get_extension(ext->svinst);
@@ -530,9 +530,9 @@ int ext_include_generate_include(
 	if (included != NULL) {
 		/* Yes, only update flags */
 		if ((flags & EXT_INCLUDE_FLAG_OPTIONAL) == 0)
-			included->flags &= ~EXT_INCLUDE_FLAG_OPTIONAL;
+			included->flags &= ENUM_NEGATE(EXT_INCLUDE_FLAG_OPTIONAL);
 		if ((flags & EXT_INCLUDE_FLAG_ONCE) == 0)
-			included->flags &= ~EXT_INCLUDE_FLAG_ONCE;
+			included->flags &= ENUM_NEGATE(EXT_INCLUDE_FLAG_ONCE);
 	} else 	{
 		const char *script_name = sieve_script_name(script);
 		enum sieve_compile_flags cpflags = cgenv->flags;
@@ -583,10 +583,12 @@ int ext_include_generate_include(
 			(void)ext_include_create_ast_context(
 				this_ext, ast, cmd->ast_node->ast);
 
-			if (location == EXT_INCLUDE_LOCATION_GLOBAL)
-				cpflags &= ~SIEVE_EXECUTE_FLAG_NOGLOBAL;
-			else
+			if (location == EXT_INCLUDE_LOCATION_GLOBAL) {
+				cpflags &=
+					ENUM_NEGATE(SIEVE_EXECUTE_FLAG_NOGLOBAL);
+			} else {
 				cpflags |= SIEVE_EXECUTE_FLAG_NOGLOBAL;
+			}
 
 			/* Validate */
 			if (!sieve_validate(ast, ehandler, cpflags, NULL)) {
@@ -606,7 +608,7 @@ int ext_include_generate_include(
 		 	subgentr = sieve_generator_create(ast, ehandler, cpflags);
 			ext_include_initialize_generator_context(
 				cmd->ext, subgentr, ctx, script);
-	
+
 			if (sieve_generator_run(subgentr, &inc_block) == NULL) {
 				sieve_command_generate_error(
 					gentr, cmd,
@@ -621,7 +623,7 @@ int ext_include_generate_include(
 			sieve_ast_unref(&ast);
 		}
 	}
-	
+
 	if (result > 0)
 		*included_r = included;
 	return result;
@@ -737,8 +739,10 @@ int ext_include_execute_include(const struct sieve_runtime_env *renv,
 
 			if (included->location != EXT_INCLUDE_LOCATION_GLOBAL)
 				eenv_new.flags |= SIEVE_EXECUTE_FLAG_NOGLOBAL;
-			else
-				eenv_new.flags &= ~SIEVE_EXECUTE_FLAG_NOGLOBAL;
+			else {
+				eenv_new.flags &=
+					ENUM_NEGATE(SIEVE_EXECUTE_FLAG_NOGLOBAL);
+			}
 
 			/* Create interpreter for top-level included script
 			   (first sub-interpreter)
@@ -808,8 +812,10 @@ int ext_include_execute_include(const struct sieve_runtime_env *renv,
 
 							if (curctx->include->location != EXT_INCLUDE_LOCATION_GLOBAL)
 								eenv_new.flags |= SIEVE_EXECUTE_FLAG_NOGLOBAL;
-							else
-								eenv_new.flags &= ~SIEVE_EXECUTE_FLAG_NOGLOBAL;
+							else {
+								eenv_new.flags &=
+									ENUM_NEGATE(SIEVE_EXECUTE_FLAG_NOGLOBAL);
+							}
 
 							/* Create sub-interpreter */
 							subinterp = sieve_interpreter_create_for_block(

@@ -46,12 +46,6 @@ static void client_connected(struct master_service_connection *conn)
 	}
 }
 
-void help(const struct doveadm_cmd *cmd)
-{
-	i_fatal("Client sent invalid command. Usage: %s %s",
-		cmd->name, cmd->short_usage);
-}
-
 void help_ver2(const struct doveadm_cmd_ver2 *cmd)
 {
 	i_fatal("Client sent invalid command. Usage: %s %s",
@@ -105,8 +99,7 @@ int main(int argc, char *argv[])
 {
 	enum master_service_flags service_flags =
 		MASTER_SERVICE_FLAG_KEEP_CONFIG_OPEN |
-		MASTER_SERVICE_FLAG_HAVE_STARTTLS |
-		MASTER_SERVICE_FLAG_USE_SSL_SETTINGS;
+		MASTER_SERVICE_FLAG_HAVE_STARTTLS;
 	int c;
 
 	master_service = master_service_init("doveadm", service_flags,

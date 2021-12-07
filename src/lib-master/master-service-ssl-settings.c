@@ -18,16 +18,10 @@ master_service_ssl_settings_check(void *_set, pool_t pool, const char **error_r)
 static const struct setting_define master_service_ssl_setting_defines[] = {
 	DEF(ENUM, ssl),
 	DEF(STR, ssl_ca),
-	DEF(STR, ssl_cert),
-	DEF(STR, ssl_key),
-	DEF(STR, ssl_alt_cert),
-	DEF(STR, ssl_alt_key),
-	DEF(STR, ssl_key_password),
 	DEF(STR, ssl_client_ca_file),
 	DEF(STR, ssl_client_ca_dir),
 	DEF(STR, ssl_client_cert),
 	DEF(STR, ssl_client_key),
-	DEF(STR, ssl_dh),
 	DEF(STR, ssl_cipher_list),
 	DEF(STR, ssl_cipher_suites),
 	DEF(STR, ssl_curve_list),
@@ -50,18 +44,11 @@ static const struct master_service_ssl_settings master_service_ssl_default_setti
 #else
 	.ssl = "no:yes:required",
 #endif
-	/* keep synced with mail-storage-settings */
 	.ssl_ca = "",
-	.ssl_cert = "",
-	.ssl_key = "",
-	.ssl_alt_cert = "",
-	.ssl_alt_key = "",
-	.ssl_key_password = "",
 	.ssl_client_ca_file = "",
 	.ssl_client_ca_dir = "",
 	.ssl_client_cert = "",
 	.ssl_client_key = "",
-	.ssl_dh = "",
 	.ssl_cipher_list = "ALL:!kRSA:!SRP:!kDHd:!DSS:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK:!RC4:!ADH:!LOW@STRENGTH",
 	.ssl_cipher_suites = "", /* Use TLS library provided value */
 	.ssl_curve_list = "",
@@ -86,6 +73,47 @@ const struct setting_parser_info master_service_ssl_setting_parser_info = {
 
 	.parent_offset = SIZE_MAX,
 	.check_func = master_service_ssl_settings_check
+};
+
+#undef DEF
+#define DEF(type, name) \
+	SETTING_DEFINE_STRUCT_##type(#name, name, struct master_service_ssl_server_settings)
+
+static const struct setting_define master_service_ssl_server_setting_defines[] = {
+	DEF(STR, ssl_cert),
+	DEF(STR, ssl_key),
+	DEF(STR, ssl_alt_cert),
+	DEF(STR, ssl_alt_key),
+	DEF(STR, ssl_key_password),
+	DEF(STR, ssl_dh),
+
+	SETTING_DEFINE_LIST_END
+};
+
+static const struct master_service_ssl_server_settings master_service_ssl_server_default_settings = {
+	.ssl_cert = "",
+	.ssl_key = "",
+	.ssl_alt_cert = "",
+	.ssl_alt_key = "",
+	.ssl_key_password = "",
+	.ssl_dh = "",
+};
+
+static const struct setting_parser_info *master_service_ssl_server_setting_dependencies[] = {
+	&master_service_ssl_setting_parser_info,
+	NULL
+};
+
+const struct setting_parser_info master_service_ssl_server_setting_parser_info = {
+	.module_name = "ssl-server",
+	.defines = master_service_ssl_server_setting_defines,
+	.defaults = &master_service_ssl_server_default_settings,
+
+	.type_offset = SIZE_MAX,
+	.struct_size = sizeof(struct master_service_ssl_server_settings),
+
+	.parent_offset = SIZE_MAX,
+	.dependencies = master_service_ssl_server_setting_dependencies,
 };
 
 /* <settings checks> */
@@ -164,16 +192,30 @@ master_service_ssl_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 const struct master_service_ssl_settings *
 master_service_ssl_settings_get(struct master_service *service)
 {
+	return master_service_ssl_settings_get_from_parser(service->set_parser);
+}
+
+const struct master_service_ssl_settings *
+master_service_ssl_settings_get_from_parser(struct setting_parser_context *set_parser)
+{
 	void **sets;
 
-	i_assert(service->want_ssl_settings);
-	sets = settings_parser_get_list(service->set_parser);
+	sets = settings_parser_get_list(set_parser);
 	return sets[1];
 }
 
-void master_service_ssl_settings_to_iostream_set(
+const struct master_service_ssl_server_settings *
+master_service_ssl_server_settings_get(struct master_service *service)
+{
+	void **sets;
+
+	i_assert(service->want_ssl_server);
+	sets = settings_parser_get_list(service->set_parser);
+	return sets[2];
+}
+
+static void master_service_ssl_common_settings_to_iostream_set(
 	const struct master_service_ssl_settings *ssl_set, pool_t pool,
-	enum master_service_ssl_settings_type type,
 	struct ssl_iostream_settings *set_r)
 {
 	i_zero(set_r);
@@ -185,30 +227,6 @@ void master_service_ssl_settings_to_iostream_set(
 	   clients. But at least for now it's needed for login-proxy. */
 	set_r->ca = p_strdup_empty(pool, ssl_set->ssl_ca);
 
-	switch (type) {
-	case MASTER_SERVICE_SSL_SETTINGS_TYPE_SERVER:
-		set_r->cert.cert = p_strdup(pool, ssl_set->ssl_cert);
-		set_r->cert.key = p_strdup(pool, ssl_set->ssl_key);
-		set_r->cert.key_password = p_strdup(pool, ssl_set->ssl_key_password);
-		if (ssl_set->ssl_alt_cert != NULL && *ssl_set->ssl_alt_cert != '\0') {
-			set_r->alt_cert.cert = p_strdup(pool, ssl_set->ssl_alt_cert);
-			set_r->alt_cert.key = p_strdup(pool, ssl_set->ssl_alt_key);
-			set_r->alt_cert.key_password = p_strdup(pool, ssl_set->ssl_key_password);
-		}
-		set_r->verify_remote_cert = ssl_set->ssl_verify_client_cert;
-		set_r->allow_invalid_cert = !set_r->verify_remote_cert;
-		break;
-	case MASTER_SERVICE_SSL_SETTINGS_TYPE_CLIENT:
-		set_r->ca_file = p_strdup_empty(pool, ssl_set->ssl_client_ca_file);
-		set_r->ca_dir = p_strdup_empty(pool, ssl_set->ssl_client_ca_dir);
-		set_r->cert.cert = p_strdup_empty(pool, ssl_set->ssl_client_cert);
-		set_r->cert.key = p_strdup_empty(pool, ssl_set->ssl_client_key);
-		set_r->verify_remote_cert = ssl_set->ssl_client_require_valid_cert;
-		set_r->allow_invalid_cert = !set_r->verify_remote_cert;
-		break;
-	}
-
-	set_r->dh = p_strdup(pool, ssl_set->ssl_dh);
 	set_r->crypto_device = p_strdup(pool, ssl_set->ssl_crypto_device);
 	set_r->cert_username_field = p_strdup(pool, ssl_set->ssl_cert_username_field);
 
@@ -219,4 +237,39 @@ void master_service_ssl_settings_to_iostream_set(
 	set_r->compression = ssl_set->parsed_opts.compression;
 	set_r->tickets = ssl_set->parsed_opts.tickets;
 	set_r->curve_list = p_strdup(pool, ssl_set->ssl_curve_list);
+}
+
+void master_service_ssl_client_settings_to_iostream_set(
+	const struct master_service_ssl_settings *ssl_set, pool_t pool,
+	struct ssl_iostream_settings *set_r)
+{
+	master_service_ssl_common_settings_to_iostream_set(ssl_set, pool, set_r);
+
+	set_r->ca_file = p_strdup_empty(pool, ssl_set->ssl_client_ca_file);
+	set_r->ca_dir = p_strdup_empty(pool, ssl_set->ssl_client_ca_dir);
+	set_r->cert.cert = p_strdup_empty(pool, ssl_set->ssl_client_cert);
+	set_r->cert.key = p_strdup_empty(pool, ssl_set->ssl_client_key);
+	set_r->verify_remote_cert = ssl_set->ssl_client_require_valid_cert;
+	set_r->allow_invalid_cert = !set_r->verify_remote_cert;
+}
+
+void master_service_ssl_server_settings_to_iostream_set(
+	const struct master_service_ssl_settings *ssl_set,
+	const struct master_service_ssl_server_settings *ssl_server_set,
+	pool_t pool, struct ssl_iostream_settings *set_r)
+{
+	master_service_ssl_common_settings_to_iostream_set(ssl_set, pool, set_r);
+
+	set_r->cert.cert = p_strdup(pool, ssl_server_set->ssl_cert);
+	set_r->cert.key = p_strdup(pool, ssl_server_set->ssl_key);
+	set_r->cert.key_password = p_strdup(pool, ssl_server_set->ssl_key_password);
+	if (ssl_server_set->ssl_alt_cert != NULL &&
+	    *ssl_server_set->ssl_alt_cert != '\0') {
+		set_r->alt_cert.cert = p_strdup(pool, ssl_server_set->ssl_alt_cert);
+		set_r->alt_cert.key = p_strdup(pool, ssl_server_set->ssl_alt_key);
+		set_r->alt_cert.key_password = p_strdup(pool, ssl_server_set->ssl_key_password);
+	}
+	set_r->dh = p_strdup(pool, ssl_server_set->ssl_dh);
+	set_r->verify_remote_cert = ssl_set->ssl_verify_client_cert;
+	set_r->allow_invalid_cert = !set_r->verify_remote_cert;
 }

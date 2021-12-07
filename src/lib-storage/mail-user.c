@@ -18,6 +18,7 @@
 #include "fs-api.h"
 #include "auth-master.h"
 #include "master-service.h"
+#include "master-service-ssl-settings.h"
 #include "dict.h"
 #include "mail-storage-settings.h"
 #include "mail-storage-private.h"
@@ -217,8 +218,10 @@ void mail_user_unref(struct mail_user **_user)
 
 	/* call deinit() and deinit_pre() with refcount=1, otherwise we may
 	   assert-crash in mail_user_ref() that is called by some handlers. */
-	user->v.deinit_pre(user);
-	user->v.deinit(user);
+	T_BEGIN {
+		user->v.deinit_pre(user);
+		user->v.deinit(user);
+	} T_END;
 	event_unref(&user->event);
 	i_assert(user->refcount == 1);
 	pool_unref(&user->pool);
@@ -564,6 +567,14 @@ void mail_user_set_get_temp_prefix(string_t *dest,
 	str_append_c(dest, '.');
 }
 
+const char *mail_user_get_volatile_dir(struct mail_user *user)
+{
+	struct mailbox_list *inbox_list =
+		mail_namespace_find_inbox(user->namespaces)->list;
+
+	return inbox_list->set.volatile_dir;
+}
+
 int mail_user_lock_file_create(struct mail_user *user, const char *lock_fname,
 			       unsigned int lock_secs,
 			       struct file_lock **lock_r, const char **error_r)
@@ -587,7 +598,9 @@ int mail_user_lock_file_create(struct mail_user *user, const char *lock_fname,
 		mail_user_set_get_storage_set(user);
 	struct file_create_settings lock_set = {
 		.lock_timeout_secs = lock_secs,
-		.lock_method = mail_set->parsed_lock_method,
+		.lock_settings = {
+			.lock_method = mail_set->parsed_lock_method,
+		},
 	};
 	struct mailbox_list *inbox_list =
 		mail_namespace_find_inbox(user->namespaces)->list;
@@ -690,17 +703,25 @@ struct mail_user *mail_user_dup(struct mail_user *user)
 }
 
 void mail_user_init_ssl_client_settings(struct mail_user *user,
-				struct ssl_iostream_settings *ssl_set)
+	struct ssl_iostream_settings *ssl_set_r)
 {
-	const struct mail_storage_settings *mail_set =
-		mail_user_set_get_storage_set(user);
+	if (user->_service_user == NULL) {
+		/* Internal test user that should never actually need any
+		   SSL settings. */
+		i_zero(ssl_set_r);
+		return;
+	}
 
-	mail_storage_settings_init_ssl_client_settings(mail_set, ssl_set);
+	const struct master_service_ssl_settings *ssl_set =
+		mail_storage_service_user_get_ssl_settings(user->_service_user);
+
+	master_service_ssl_client_settings_to_iostream_set(ssl_set,
+		pool_datastack_create(), ssl_set_r);
 }
 
 void mail_user_init_fs_settings(struct mail_user *user,
 				struct fs_settings *fs_set,
-				struct ssl_iostream_settings *ssl_set)
+				struct ssl_iostream_settings *ssl_set_r)
 {
 	fs_set->event_parent = user->event;
 	fs_set->username = user->username;
@@ -710,8 +731,8 @@ void mail_user_init_fs_settings(struct mail_user *user,
 	fs_set->debug = user->mail_debug;
 	fs_set->enable_timing = user->stats_enabled;
 
-	fs_set->ssl_client_set = ssl_set;
-	mail_user_init_ssl_client_settings(user, ssl_set);
+	fs_set->ssl_client_set = ssl_set_r;
+	mail_user_init_ssl_client_settings(user, ssl_set_r);
 }
 
 void mail_user_stats_fill(struct mail_user *user, struct stats *stats)
@@ -779,6 +800,18 @@ int mail_user_home_mkdir(struct mail_user *user)
 		return -1;
 	}
 	return 0;
+}
+
+const struct dict_op_settings *
+mail_user_get_dict_op_settings(struct mail_user *user)
+{
+	if (user->dict_op_set == NULL) {
+		user->dict_op_set = p_new(user->pool, struct dict_op_settings, 1);
+		user->dict_op_set->username = p_strdup(user->pool, user->username);
+		if (mail_user_get_home(user, &user->dict_op_set->home_dir) <= 0)
+			user->dict_op_set->home_dir = NULL;
+	}
+	return user->dict_op_set;
 }
 
 static const struct var_expand_func_table mail_user_var_expand_func_table_arr[] = {

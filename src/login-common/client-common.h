@@ -110,6 +110,7 @@ struct client_auth_reply {
 	const char *const *all_fields;
 
 	bool proxy:1;
+	bool proxy_noauth:1;
 	bool proxy_nopipelining:1;
 	bool proxy_not_trusted:1;
 	bool nologin:1;
@@ -173,6 +174,7 @@ struct client {
 	struct ssl_iostream *ssl_iostream;
 	const struct login_settings *set;
 	const struct master_service_ssl_settings *ssl_set;
+	const struct master_service_ssl_server_settings *ssl_server_set;
 	const char *session_id, *listener_name, *postlogin_socket_path;
 	const char *local_name;
 	const char *client_cert_common_name;
@@ -247,6 +249,7 @@ struct client {
 	bool auth_process_comm_fail:1;
 	bool auth_anonymous:1;
 	bool proxy_auth_failed:1;
+	bool proxy_noauth:1;
 	bool proxy_nopipelining:1;
 	bool proxy_not_trusted:1;
 	bool auth_waiting:1;
@@ -277,7 +280,8 @@ struct client *
 client_alloc(int fd, pool_t pool,
 	     const struct master_service_connection *conn,
 	     const struct login_settings *set,
-	     const struct master_service_ssl_settings *ssl_set);
+	     const struct master_service_ssl_settings *ssl_set,
+	     const struct master_service_ssl_server_settings *ssl_server_set);
 void client_init(struct client *client, void **other_sets);
 void client_disconnect(struct client *client, const char *reason,
 		       bool add_disconnected_prefix);

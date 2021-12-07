@@ -201,13 +201,17 @@ static void client_auth_parse_args(struct client *client, bool success,
 			}
 		} else if (strcmp(key, "proxy_mech") == 0)
 			reply_r->proxy_mech = value;
+		else if (strcmp(key, "proxy_noauth") == 0)
+			reply_r->proxy_noauth = TRUE;
 		else if (strcmp(key, "proxy_nopipelining") == 0)
 			reply_r->proxy_nopipelining = TRUE;
 		else if (strcmp(key, "proxy_not_trusted") == 0)
 			reply_r->proxy_not_trusted = TRUE;
-		else if (strcmp(key, "master") == 0)
-			reply_r->master_user = value;
-		else if (strcmp(key, "ssl") == 0) {
+		else if (strcmp(key, "master") == 0) {
+			/* ignore empty master field */
+			if (*value != '\0')
+				reply_r->master_user = value;
+		} else if (strcmp(key, "ssl") == 0) {
 			reply_r->ssl_flags |= PROXY_SSL_FLAG_YES;
 			if (strcmp(value, "any-cert") == 0)
 				reply_r->ssl_flags |= PROXY_SSL_FLAG_ANY_CERT;
@@ -360,6 +364,10 @@ static void proxy_input(struct client *client)
 	}
 
 	output = client->output;
+	/* The "line" variable is allocated from the istream, but the istream
+	   may be freed by proxy_parse_line(). Keep the istream referenced to
+	   make sure the line isn't freed too early. */
+	i_stream_ref(input);
 	o_stream_ref(output);
 	o_stream_cork(output);
 	while ((line = i_stream_next_line(input)) != NULL) {
@@ -368,6 +376,7 @@ static void proxy_input(struct client *client)
 	}
 	o_stream_uncork(output);
 	o_stream_unref(&output);
+	i_stream_unref(&input);
 }
 
 void client_common_proxy_failed(struct client *client,
@@ -492,6 +501,7 @@ static int proxy_start(struct client *client,
 	proxy_set.ssl_flags = reply->ssl_flags;
 	proxy_set.host_immediate_failure_after_secs =
 		reply->proxy_host_immediate_failure_after_secs;
+	proxy_set.rawlog_dir = client->set->login_proxy_rawlog_dir;
 
 	/* Include destination ip:port also in the log prefix */
 	event_set_append_log_prefix(event, t_strdup_printf(
@@ -509,6 +519,7 @@ static int proxy_start(struct client *client,
 	client->proxy_user = i_strdup(reply->destuser);
 	client->proxy_master_user = i_strdup(reply->master_user);
 	client->proxy_password = i_strdup(reply->password);
+	client->proxy_noauth = reply->proxy_noauth;
 	client->proxy_nopipelining = reply->proxy_nopipelining;
 	client->proxy_not_trusted = reply->proxy_not_trusted;
 

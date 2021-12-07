@@ -18,6 +18,7 @@
 #include "http-client.h"
 
 #include <unistd.h>
+#include <sys/signal.h>
 
 #define CLIENT_PROGRESS_TIMEOUT     10
 #define SERVER_KILL_TIMEOUT_SECS    20
@@ -376,6 +377,8 @@ static void
 test_server_connection_refused(unsigned int index ATTR_UNUSED)
 {
 	i_close_fd(&fd_listen);
+
+	test_subprocess_notify_signal_send_parent(SIGUSR1);
 }
 
 /* client */
@@ -415,6 +418,9 @@ test_client_connection_refused(const struct http_client_settings *client_set)
 	struct http_client_request *hreq;
 	struct _connection_refused *ctx;
 
+	/* wait for the server side to close the socket */
+	test_subprocess_notify_signal_wait(SIGUSR1, 10000);
+
 	ctx = i_new(struct _connection_refused, 1);
 	ctx->count = 2;
 
@@ -451,6 +457,7 @@ static void test_connection_refused(void)
 	test_client_defaults(&http_client_set);
 
 	test_begin("connection refused");
+	test_subprocess_notify_signal_reset(SIGUSR1);
 	test_run_client_server(&http_client_set,
 			       test_client_connection_refused,
 			       test_server_connection_refused, 1, NULL);
@@ -459,6 +466,7 @@ static void test_connection_refused(void)
 	http_client_set.max_connect_attempts = 3;
 
 	test_begin("connection refused backoff");
+	test_subprocess_notify_signal_reset(SIGUSR1);
 	test_run_client_server(&http_client_set,
 			       test_client_connection_refused,
 			       test_server_connection_refused, 1, NULL);
@@ -3774,6 +3782,7 @@ static int test_run_server(struct test_server_data *data)
 	if (debug)
 		i_debug("PID=%s", my_pid);
 
+	test_subprocess_notify_signal_send_parent(SIGHUP);
 	ioloop = io_loop_create();
 	data->server_test(data->index);
 	io_loop_destroy(&ioloop);
@@ -3816,8 +3825,6 @@ test_run_client(const struct http_client_settings *client_set,
 	if (debug)
 		i_debug("PID=%s", my_pid);
 
-	i_sleep_msecs(100); /* wait a little for server setup */
-
 	ioloop = io_loop_create();
 	test_client_run(client_test, client_set);
 	io_loop_destroy(&ioloop);
@@ -3835,6 +3842,7 @@ test_run_client_server(const struct http_client_settings *client_set,
 {
 	unsigned int i;
 
+	test_subprocess_notify_signal_reset(SIGHUP);
 	test_server_init = NULL;
 	test_server_deinit = NULL;
 	test_server_input = NULL;
@@ -3857,6 +3865,8 @@ test_run_client_server(const struct http_client_settings *client_set,
 			fd_listen = fds[i];
 			test_subprocess_fork(test_run_server, &data, FALSE);
 			i_close_fd(&fd_listen);
+			test_subprocess_notify_signal_wait(SIGHUP, 10000);
+			test_subprocess_notify_signal_reset(SIGHUP);
 		}
 	}
 

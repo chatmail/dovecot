@@ -259,6 +259,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-lib-signals.$(OBJEXT) \
 	test_lib-test-llist.$(OBJEXT) \
 	test_lib-test-log-throttle.$(OBJEXT) \
+	test_lib-test-macros.$(OBJEXT) \
 	test_lib-test-malloc-overflow.$(OBJEXT) \
 	test_lib-test-memarea.$(OBJEXT) \
 	test_lib-test-mempool.$(OBJEXT) \
@@ -445,6 +446,7 @@ am__depfiles_remade = ./$(DEPDIR)/aqueue.Plo ./$(DEPDIR)/array.Plo \
 	./$(DEPDIR)/test_lib-test-lib.Po \
 	./$(DEPDIR)/test_lib-test-llist.Po \
 	./$(DEPDIR)/test_lib-test-log-throttle.Po \
+	./$(DEPDIR)/test_lib-test-macros.Po \
 	./$(DEPDIR)/test_lib-test-malloc-overflow.Po \
 	./$(DEPDIR)/test_lib-test-memarea.Po \
 	./$(DEPDIR)/test_lib-test-mempool-allocfree.Po \
@@ -1200,6 +1202,7 @@ test_lib_SOURCES = \
 	test-lib-signals.c \
 	test-llist.c \
 	test-log-throttle.c \
+	test-macros.c \
 	test-malloc-overflow.c \
 	test-memarea.c \
 	test-mempool.c \
@@ -1515,6 +1518,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-lib.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-llist.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-log-throttle.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-macros.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-malloc-overflow.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-memarea.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-mempool-allocfree.Po@am__quote@ # am--include-marker
@@ -2400,6 +2404,20 @@ test_lib-test-log-throttle.obj: test-log-throttle.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-log-throttle.obj `if test -f 'test-log-throttle.c'; then $(CYGPATH_W) 'test-log-throttle.c'; else $(CYGPATH_W) '$(srcdir)/test-log-throttle.c'; fi`
 
+test_lib-test-macros.o: test-macros.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-macros.o -MD -MP -MF $(DEPDIR)/test_lib-test-macros.Tpo -c -o test_lib-test-macros.o `test -f 'test-macros.c' || echo '$(srcdir)/'`test-macros.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-macros.Tpo $(DEPDIR)/test_lib-test-macros.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-macros.c' object='test_lib-test-macros.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-macros.o `test -f 'test-macros.c' || echo '$(srcdir)/'`test-macros.c
+
+test_lib-test-macros.obj: test-macros.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-macros.obj -MD -MP -MF $(DEPDIR)/test_lib-test-macros.Tpo -c -o test_lib-test-macros.obj `if test -f 'test-macros.c'; then $(CYGPATH_W) 'test-macros.c'; else $(CYGPATH_W) '$(srcdir)/test-macros.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-macros.Tpo $(DEPDIR)/test_lib-test-macros.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-macros.c' object='test_lib-test-macros.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-macros.obj `if test -f 'test-macros.c'; then $(CYGPATH_W) 'test-macros.c'; else $(CYGPATH_W) '$(srcdir)/test-macros.c'; fi`
+
 test_lib-test-malloc-overflow.o: test-malloc-overflow.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-malloc-overflow.o -MD -MP -MF $(DEPDIR)/test_lib-test-malloc-overflow.Tpo -c -o test_lib-test-malloc-overflow.o `test -f 'test-malloc-overflow.c' || echo '$(srcdir)/'`test-malloc-overflow.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-malloc-overflow.Tpo $(DEPDIR)/test_lib-test-malloc-overflow.Po
@@ -3227,6 +3245,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/test_lib-test-lib.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-llist.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-log-throttle.Po
+	-rm -f ./$(DEPDIR)/test_lib-test-macros.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-malloc-overflow.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-memarea.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-mempool-allocfree.Po
@@ -3521,6 +3540,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/test_lib-test-lib.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-llist.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-log-throttle.Po
+	-rm -f ./$(DEPDIR)/test_lib-test-macros.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-malloc-overflow.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-memarea.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-mempool-allocfree.Po

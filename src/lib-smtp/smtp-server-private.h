@@ -158,6 +158,7 @@ struct smtp_server_connection {
 	enum smtp_proxy_protocol proxy_proto;
 	unsigned int proxy_ttl_plus_1;
 	unsigned int proxy_timeout_secs;
+	char *proxy_helo;
 
 	struct smtp_server_helo_data helo, *pending_helo;
 	char *helo_domain, *username;
@@ -350,10 +351,6 @@ void smtp_server_connection_clear(struct smtp_server_connection *conn);
 
 struct smtp_server_transaction *
 smtp_server_connection_get_transaction(struct smtp_server_connection *conn);
-
-void smtp_server_connection_set_proxy_data(
-	struct smtp_server_connection *conn,
-	const struct smtp_proxy_data *proxy_data);
 
 /*
  * Recipient

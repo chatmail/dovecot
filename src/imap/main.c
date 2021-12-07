@@ -165,9 +165,9 @@ client_parse_imap_login_request(const unsigned char *data, size_t len,
 {
 	size_t taglen;
 
-	i_assert(len > 0);
-
 	i_zero(input_r);
+	if (len == 0)
+		return;
 
 	if (data[0] == '1')
 		input_r->send_untagged_capability = TRUE;
@@ -179,24 +179,6 @@ client_parse_imap_login_request(const unsigned char *data, size_t len,
 	if (len > taglen) {
 		input_r->input = data + taglen;
 		input_r->input_size = len - taglen;
-	}
-}
-
-static void
-client_add_input(struct client *client, const unsigned char *client_input,
-		 size_t client_input_size, struct imap_login_request *request_r)
-{
-	if (client_input_size > 0) {
-		client_parse_imap_login_request(client_input, client_input_size,
-						request_r);
-		if (request_r->input_size > 0) {
-			client_add_istream_prefix(client, request_r->input,
-						  request_r->input_size);
-		}
-	} else {
-		/* IMAPLOGINTAG environment is compatible with mailfront */
-		i_zero(request_r);
-		request_r->tag = getenv("IMAPLOGINTAG");
 	}
 }
 
@@ -344,12 +326,18 @@ static void main_stdio_run(const char *username)
 		i_fatal("%s", error);
 
 	input_base64 = getenv("CLIENT_INPUT");
-	if (input_base64 == NULL)
-		client_add_input(client, NULL, 0, &request);
-	else {
+	if (input_base64 == NULL) {
+		/* IMAPLOGINTAG environment is compatible with mailfront */
+		i_zero(&request);
+		request.tag = getenv("IMAPLOGINTAG");
+	} else {
 		const buffer_t *input_buf = t_base64_decode_str(input_base64);
-		client_add_input(client, input_buf->data, input_buf->used,
-				 &request);
+		client_parse_imap_login_request(input_buf->data, input_buf->used,
+						&request);
+		if (request.input_size > 0) {
+			client_add_istream_prefix(client, request.input,
+						  request.input_size);
+		}
 	}
 
 	client_create_finish_io(client);
@@ -387,12 +375,15 @@ login_client_connected(const struct master_login_client *login_client,
 	if ((flags & MAIL_AUTH_REQUEST_FLAG_CONN_SSL_SECURED) != 0)
 		input.conn_ssl_secured = TRUE;
 
+	client_parse_imap_login_request(login_client->data,
+					login_client->auth_req.data_size,
+					&request);
+
 	if (client_create_from_input(&input, login_client->fd, login_client->fd,
 				     &client, &error) < 0) {
 		int fd = login_client->fd;
 		struct ostream *output =
 			o_stream_create_fd_autoclose(&fd, IO_BLOCK_SIZE);
-		i_zero(&request);
 		client_send_login_reply(output, NULL, NULL, &request);
 		o_stream_destroy(&output);
 
@@ -402,8 +393,10 @@ login_client_connected(const struct master_login_client *login_client,
 	}
 	if ((flags & MAIL_AUTH_REQUEST_FLAG_TLS_COMPRESSION) != 0)
 		client->tls_compression = TRUE;
-	client_add_input(client, login_client->data,
-			 login_client->auth_req.data_size, &request);
+	if (request.input_size > 0) {
+		client_add_istream_prefix(client, request.input,
+					  request.input_size);
+	}
 
 	/* The order here is important:
 	   1. Finish setting up rawlog, so all input/output is written there.
@@ -470,6 +463,7 @@ int main(int argc, char *argv[])
 	struct master_login_settings login_set;
 	enum master_service_flags service_flags = 0;
 	enum mail_storage_service_flags storage_service_flags =
+		MAIL_STORAGE_SERVICE_FLAG_NO_SSL_CA |
 		/*
 		 * We include MAIL_STORAGE_SERVICE_FLAG_NO_NAMESPACES so
 		 * that the mail_user initialization is fast and we can

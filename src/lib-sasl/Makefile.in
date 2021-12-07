@@ -15,6 +15,7 @@
 @SET_MAKE@
 
 
+
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -89,6 +90,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/lib-sasl
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -149,6 +151,8 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
+am__EXEEXT_1 = test-sasl-client$(EXEEXT)
+PROGRAMS = $(noinst_PROGRAMS)
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libsasl_la_LIBADD =
 am_libsasl_la_OBJECTS = mech-external.lo mech-login.lo mech-plain.lo \
@@ -158,6 +162,8 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am_test_sasl_client_OBJECTS = test-sasl-client.$(OBJEXT)
+test_sasl_client_OBJECTS = $(am_test_sasl_client_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -175,7 +181,8 @@ depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/dsasl-client.Plo \
 	./$(DEPDIR)/mech-external.Plo ./$(DEPDIR)/mech-login.Plo \
-	./$(DEPDIR)/mech-oauthbearer.Plo ./$(DEPDIR)/mech-plain.Plo
+	./$(DEPDIR)/mech-oauthbearer.Plo ./$(DEPDIR)/mech-plain.Plo \
+	./$(DEPDIR)/test-sasl-client.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -195,8 +202,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libsasl_la_SOURCES)
-DIST_SOURCES = $(libsasl_la_SOURCES)
+SOURCES = $(libsasl_la_SOURCES) $(test_sasl_client_SOURCES)
+DIST_SOURCES = $(libsasl_la_SOURCES) $(test_sasl_client_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -472,7 +479,8 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 noinst_LTLIBRARIES = libsasl.la
 AM_CPPFLAGS = \
-	-I$(top_srcdir)/src/lib
+	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test
 
 libsasl_la_SOURCES = \
 	mech-external.c \
@@ -487,6 +495,18 @@ headers = \
 
 pkginc_libdir = $(pkgincludedir)
 pkginc_lib_HEADERS = $(headers)
+test_programs = \
+	test-sasl-client
+
+test_libs = \
+	$(noinst_LTLIBRARIES) \
+	../lib-test/libtest.la \
+	../lib/liblib.la
+
+test_deps = $(test_libs)
+test_sasl_client_SOURCES = test-sasl-client.c
+test_sasl_client_LDADD = $(test_libs)
+test_sasl_client_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -521,6 +541,15 @@ $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
 clean-noinstLTLIBRARIES:
 	-test -z "$(noinst_LTLIBRARIES)" || rm -f $(noinst_LTLIBRARIES)
 	@list='$(noinst_LTLIBRARIES)'; \
@@ -535,6 +564,10 @@ clean-noinstLTLIBRARIES:
 libsasl.la: $(libsasl_la_OBJECTS) $(libsasl_la_DEPENDENCIES) $(EXTRA_libsasl_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libsasl_la_OBJECTS) $(libsasl_la_LIBADD) $(LIBS)
 
+test-sasl-client$(EXEEXT): $(test_sasl_client_OBJECTS) $(test_sasl_client_DEPENDENCIES) $(EXTRA_test_sasl_client_DEPENDENCIES) 
+	@rm -f test-sasl-client$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_sasl_client_OBJECTS) $(test_sasl_client_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -546,6 +579,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-login.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-oauthbearer.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mech-plain.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-sasl-client.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -687,8 +721,9 @@ distdir-am: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-am
-all-am: Makefile $(LTLIBRARIES) $(HEADERS)
+all-am: Makefile $(PROGRAMS) $(LTLIBRARIES) $(HEADERS)
 installdirs:
 	for dir in "$(DESTDIR)$(pkginc_libdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -726,7 +761,7 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
-	mostlyclean-am
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/dsasl-client.Plo
@@ -734,6 +769,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/mech-login.Plo
 	-rm -f ./$(DEPDIR)/mech-oauthbearer.Plo
 	-rm -f ./$(DEPDIR)/mech-plain.Plo
+	-rm -f ./$(DEPDIR)/test-sasl-client.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -784,6 +820,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/mech-login.Plo
 	-rm -f ./$(DEPDIR)/mech-oauthbearer.Plo
 	-rm -f ./$(DEPDIR)/mech-plain.Plo
+	-rm -f ./$(DEPDIR)/test-sasl-client.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -802,25 +839,31 @@ ps-am:
 
 uninstall-am: uninstall-pkginc_libHEADERS
 
-.MAKE: install-am install-strip
+.MAKE: check-am install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-am clean \
-	clean-generic clean-libtool clean-noinstLTLIBRARIES \
-	cscopelist-am ctags ctags-am distclean distclean-compile \
-	distclean-generic distclean-libtool distclean-tags distdir dvi \
-	dvi-am html html-am info info-am install install-am \
-	install-data install-data-am install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-info install-info-am install-man install-pdf \
-	install-pdf-am install-pkginc_libHEADERS install-ps \
-	install-ps-am install-strip installcheck installcheck-am \
-	installdirs maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-pkginc_libHEADERS
+.PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-am \
+	check-local clean clean-generic clean-libtool \
+	clean-noinstLTLIBRARIES clean-noinstPROGRAMS cscopelist-am \
+	ctags ctags-am distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-data \
+	install-data-am install-dvi install-dvi-am install-exec \
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-man install-pdf install-pdf-am \
+	install-pkginc_libHEADERS install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
+	uninstall-pkginc_libHEADERS
 
 .PRECIOUS: Makefile
 
+
+check-local:
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

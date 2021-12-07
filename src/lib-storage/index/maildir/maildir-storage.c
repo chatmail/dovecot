@@ -521,6 +521,9 @@ maildir_mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 		       bool directory)
 {
 	const char *root_dir, *shared_path;
+	/* allow physical location to exist when we rebuild list index, this
+	   happens with LAYOUT=INDEX only. */
+	bool verify = box->storage->rebuilding_list_index;
 	struct stat st;
 	int ret;
 
@@ -528,7 +531,7 @@ maildir_mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 		return ret;
 	ret = 0;
 	/* the maildir is created now. finish the creation as best as we can */
-	if (create_maildir_subdirs(box, FALSE) < 0)
+	if (create_maildir_subdirs(box, verify) < 0)
 		ret = -1;
 	if (maildir_create_maildirfolder_file(box) < 0)
 		ret = -1;
@@ -579,7 +582,8 @@ static void maildir_mailbox_close(struct mailbox *box)
 		mail_index_view_close(&mbox->flags_view);
 	if (mbox->keywords != NULL)
 		maildir_keywords_deinit(&mbox->keywords);
-	maildir_uidlist_deinit(&mbox->uidlist);
+	if (mbox->uidlist != NULL)
+		maildir_uidlist_deinit(&mbox->uidlist);
 	index_storage_mailbox_close(box);
 }
 
@@ -690,7 +694,7 @@ struct mail_storage maildir_storage = {
 		maildir_storage_autodetect,
 		maildir_mailbox_alloc,
 		NULL,
-		NULL,
+		mail_storage_list_index_rebuild,
 	}
 };
 

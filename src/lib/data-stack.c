@@ -113,6 +113,10 @@ static void data_stack_last_buffer_reset(bool preserve_data ATTR_UNUSED)
 #ifdef DEBUG
 		unsigned char *last_alloc_end, *p, *pend;
 
+		/* We assume that this function gets called before
+		   current_block changes. */
+		i_assert(last_buffer_block == current_block);
+
 		last_alloc_end = data_stack_after_last_alloc(current_block);
 		p = last_alloc_end + MEM_ALIGN(sizeof(size_t)) + last_buffer_size;
 		pend = last_alloc_end + ALLOC_SIZE(last_buffer_size);
@@ -125,6 +129,11 @@ static void data_stack_last_buffer_reset(bool preserve_data ATTR_UNUSED)
 		last_buffer_block = NULL;
 
 #ifdef DEBUG
+		/* NOTE: If the below panic triggers, it may also be due to an
+		   internal bug in data-stack (since this is rather complex). While
+		   debugging whether that is the case, it's a good idea to change the
+		   i_panic() to abort(). Otherwise the i_panic() changes the
+		   data-stack's internal state and complicates debugging. */
 		while (p < pend)
 			if (*p++ != CLEAR_CHR)
 				i_panic("t_buffer_get(): buffer overflow");
@@ -159,6 +168,10 @@ data_stack_frame_t t_push(const char *marker)
 	current_frame->block_space_left = current_block->left;
 	current_frame->last_alloc_size = 0;
 	current_frame->marker = marker;
+#ifdef DEBUG
+	current_frame->alloc_bytes = 0;
+	current_frame->alloc_count = 0;
+#endif
 
 	t_buffer_alloc(sizeof(*frame));
 
@@ -392,12 +405,6 @@ static void data_stack_send_grow_event(size_t last_alloc_size)
 	if (event_datastack == NULL)
 		event_datastack = event_create(NULL);
 	event_set_name(event_datastack, "data_stack_grow");
-	if (!event_want_debug(event_datastack))
-		return;
-
-	const char *backtrace;
-	if (backtrace_get(&backtrace) == 0)
-		event_add_str(event_datastack, "backtrace", backtrace);
 	event_add_int(event_datastack, "alloc_size", data_stack_get_alloc_size());
 	event_add_int(event_datastack, "used_size", data_stack_get_used_size());
 	event_add_int(event_datastack, "last_alloc_size", last_alloc_size);
@@ -409,6 +416,20 @@ static void data_stack_send_grow_event(size_t last_alloc_size)
 		      current_frame->alloc_count);
 #endif
 	event_add_str(event_datastack, "frame_marker", current_frame->marker);
+
+	/* It's possible that the data stack gets grown and shrunk rapidly.
+	   Try to avoid doing expensive work if the event isn't even used for
+	   anything. Note that at this point all the event fields must be
+	   set already that might potentially be used by the filters. */
+	if (!event_want_debug(event_datastack))
+		return;
+
+	/* Getting backtrace is potentially inefficient, so do it after
+	   checking if the event is wanted. Note that this prevents using the
+	   backtrace field in event field comparisons. */
+	const char *backtrace;
+	if (backtrace_get(&backtrace) == 0)
+		event_add_str(event_datastack, "backtrace", backtrace);
 
 	string_t *str = t_str_new(128);
 	str_printfa(str, "total_used=%zu, total_alloc=%zu, last_alloc_size=%zu",
@@ -491,9 +512,17 @@ static void *t_malloc_real(size_t size, bool permanent)
 		current_block->left -= alloc_size;
 
 	if (warn) T_BEGIN {
+		/* sending event can cause errno changes. */
+#ifdef DEBUG
+		i_assert(errno == old_errno);
+#else
+		int old_errno = errno;
+#endif
 		/* warn after allocation, so if e_debug() wants to
 		   allocate more memory we don't go to infinite loop */
 		data_stack_send_grow_event(alloc_size);
+		/* reset errno back to what it was */
+		errno = old_errno;
 	} T_END;
 #ifdef DEBUG
 	memcpy(ret, &size, sizeof(size));
@@ -532,6 +561,7 @@ t_try_realloc(void *mem, size_t size)
 	if (unlikely(size == 0 || size > SSIZE_T_MAX))
 		i_panic("Trying to allocate %zu bytes", size);
 	block_canary_check(current_block);
+	data_stack_last_buffer_reset(TRUE);
 
 	last_alloc_size = current_frame->last_alloc_size;
 
@@ -684,7 +714,7 @@ size_t data_stack_get_alloc_size(void)
 	i_assert(current_block->next == NULL);
 
 	for (block = current_block; block != NULL; block = block->prev)
-		size += current_block->size;
+		size += block->size;
 	return size;
 }
 
@@ -696,7 +726,7 @@ size_t data_stack_get_used_size(void)
 	i_assert(current_block->next == NULL);
 
 	for (block = current_block; block != NULL; block = block->prev)
-		size += current_block->size - current_block->left;
+		size += block->size - block->left;
 	return size;
 }
 
