@@ -1,0 +1,51 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Tue, 7 Dec 2021 13:01:10 +0100
+Subject: md4/md5: disable optimization causing unaligned access
+
+This restores unit tests with GCC 11 and LTO.
+
+    md5.c:92:23: warning: cast from 'const unsigned char *' to 'const uint32_t *' (aka 'const unsigned int *') increases required alignment from 1 to 4 [-Wcast-align]
+                    STEP(F, a, b, c, d, SET(0), 0xd76aa478, 7)
+                    ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+    md5.c:51:4: note: expanded from macro 'SET'
+            (*(const uint32_t *)&ptr[(n) * 4])
+              ^
+    md5.c:37:29: note: expanded from macro 'STEP'
+            (a) += f((b), (c), (d)) + (x) + (t); \
+                                       ^
+
+    md5.c:92:3: runtime error: load of misaligned address 0x61900000008b for type 'const uint32_t' (aka 'const unsigned int'), which requires 4 byte alignment
+    0x61900000008b: note: pointer points here
+     41  41 41 41 41 41 41 41 41  41 41 41 41 41 41 41 41  41 41 41 41 41 41 41 41  41 41 41 41 41 41 41
+                  ^
+---
+ src/lib/md4.c | 2 +-
+ src/lib/md5.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/lib/md4.c b/src/lib/md4.c
+index 06e3231..798292a 100644
+--- a/src/lib/md4.c
++++ b/src/lib/md4.c
+@@ -42,7 +42,7 @@
+  * memory accesses is just an optimization.  Nothing will break if it
+  * doesn't work.
+  */
+-#if defined(__i386__) || defined(__x86_64__) || defined(__vax__)
++#if 0 //defined(__i386__) || defined(__x86_64__) || defined(__vax__)
+ /* uint_fast32_t might be 64 bit, and thus may read 4 more bytes
+  * beyond the end of the buffer. So only read precisely 32 bits
+  */
+diff --git a/src/lib/md5.c b/src/lib/md5.c
+index 6b5da6c..c605639 100644
+--- a/src/lib/md5.c
++++ b/src/lib/md5.c
+@@ -46,7 +46,7 @@
+  * memory accesses is just an optimization.  Nothing will break if it
+  * doesn't work.
+  */
+-#if defined(__i386__) || defined(__x86_64__) || defined(__vax__)
++#if 0 //defined(__i386__) || defined(__x86_64__) || defined(__vax__)
+ #define SET(n) \
+ 	(*(const uint32_t *)&ptr[(n) * 4])
+ #define GET(n) \
