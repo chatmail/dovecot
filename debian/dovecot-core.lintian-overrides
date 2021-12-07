@@ -1,13 +1,18 @@
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/auth
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/config
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/director
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/gdbhelper
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/libdovecot-login.so.0.0.0
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib10_quota_plugin.so
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib20_replication_plugin.so
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/quota-status
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/script
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/script-login
+# hardening flags are set and blhc succeeds; might need some investigation
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/auth]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/config]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/director]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/gdbhelper]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/libdovecot-login.so.0.0.0]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/libdovecot-storage.so.0.0.0]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/modules/lib10_quota_plugin.so]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/modules/lib20_fts_plugin.so]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/modules/lib20_replication_plugin.so]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/modules/lib99_welcome_plugin.so]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/quota-status]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/script-login]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/script]
+dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/xml2text]
 dovecot-core: package-contains-empty-directory usr/share/dovecot/protocols.d/
 dovecot-core: package-contains-empty-directory usr/lib/dovecot/modules/dict/
 dovecot-core: spelling-error-in-readme-debian dovenull dovenull (duplicate word) dovenull
@@ -19,11 +24,6 @@ dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/lib20_l
 dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/settings/libpigeonhole_settings.so
 # this is a nasty hack, hopefully to be removed at some point (see #696382)
 dovecot-core: uses-dpkg-database-directly postinst
-# hardening flags are set and blhc succeeds; might need some investigation
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/libdovecot-storage.so.0.0.0
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib20_fts_plugin.so
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/modules/lib99_welcome_plugin.so
-dovecot-core: hardening-no-fortify-functions usr/lib/dovecot/xml2text
 # ignore extra man pages
 dovecot-core: spare-manual-page usr/share/man/man1/deliver.1.gz
 # keep all man pages in section 1 for now
@@ -73,4 +73,4 @@ dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dov
 dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_sv.txt
 dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_tr.txt
 # ulimit -c might be specified but is supported by bash and dash
-dovecot-core: bash-term-in-posix-shell [etc/init.d/dovecot:43] '| ulimit'
+dovecot-core: bash-term-in-posix-shell '| ulimit' [etc/init.d/dovecot:43]
