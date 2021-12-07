@@ -63,10 +63,11 @@ static int test_init_mail_user(void)
 		.debug = TRUE,
 	};
 
-	mail_storage_service = mail_storage_service_init(master_service, NULL,
-		MAIL_STORAGE_SERVICE_FLAG_NO_RESTRICT_ACCESS |
-		MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
-		MAIL_STORAGE_SERVICE_FLAG_NO_PLUGINS);
+	mail_storage_service = mail_storage_service_init(
+		master_service, NULL,
+		(MAIL_STORAGE_SERVICE_FLAG_NO_RESTRICT_ACCESS |
+		 MAIL_STORAGE_SERVICE_FLAG_NO_LOG_INIT |
+		 MAIL_STORAGE_SERVICE_FLAG_NO_PLUGINS));
 
 	if (mail_storage_service_lookup(mail_storage_service, &input,
 					&test_service_user, &error) < 0)
@@ -186,7 +187,7 @@ static void test_edit_mail_concatenated(void)
 	test_begin("edit-mail - concatenated");
 	test_init();
 
-	/* compose the message */
+	/* Compose the message */
 
 	inputs[0] = i_stream_create_from_data(msg_part1, strlen(msg_part1));
 	inputs[1] = i_stream_create_from_data(msg_part2, strlen(msg_part2));
@@ -203,7 +204,7 @@ static void test_edit_mail_concatenated(void)
 
 	rawmail = mail_raw_open_stream(test_raw_mail_user, input_msg);
 
-	/* add headers */
+	/* Add headers */
 
 	edmail = edit_mail_wrap(rawmail->mail);
 
@@ -212,22 +213,22 @@ static void test_edit_mail_concatenated(void)
 
 	mail = edit_mail_get_mail(edmail);
 
-	/* evaluate modified header */
+	/* Evaluate modified header */
 
 	test_assert(mail_get_first_header_utf8(mail, "Subject", &value) > 0);
 	test_assert(strcmp(value, "Sieve editheader breaks with LMTP") == 0);
 
 	test_assert(mail_get_first_header_utf8(mail, "X-Filter-Junk-Flag",
-					  &value) > 0);
+					       &value) > 0);
 	test_assert(strcmp(value, "NO") == 0);
 	test_assert(mail_get_first_header_utf8(mail, "X-Filter-Junk-Type",
-					  &value) > 0);
+					       &value) > 0);
 	test_assert(strcmp(value, "NONE") == 0);
 
 	test_assert(mail_get_first_header_utf8(mail, "Delivered-To",
-					  &value) > 0);
+					       &value) > 0);
 
-	/* prepare tests */
+	/* Prepare tests */
 
 	if (mail_get_stream(mail, NULL, NULL, &input_mail) < 0) {
 		i_fatal("Failed to open mail stream: %s",
@@ -237,7 +238,7 @@ static void test_edit_mail_concatenated(void)
 	buffer = buffer_create_dynamic(default_pool, 1024);
 	expected = t_str_new(1024);
 
-	/* added */
+	/* Added */
 
 	i_stream_seek(input_mail, 0);
 	buffer_set_used_size(buffer, 0);
@@ -252,10 +253,9 @@ static void test_edit_mail_concatenated(void)
 	str_append(expected, msg_part3);
 	str_append(expected, msg_part4);
 
-	test_out("added",
-		 strcmp(str_c(buffer), str_c(expected)) == 0);
+	test_out("added", strcmp(str_c(buffer), str_c(expected)) == 0);
 
-	/* added, slow */
+	/* Added, slow */
 
 	i_stream_seek(input_mail, 0);
 	buffer_set_used_size(buffer, 0);
@@ -269,18 +269,17 @@ static void test_edit_mail_concatenated(void)
 	str_append(expected, msg_part3);
 	str_append(expected, msg_part4);
 
-	test_out("added, slow",
-		 strcmp(str_c(buffer), str_c(expected)) == 0);
+	test_out("added, slow", strcmp(str_c(buffer), str_c(expected)) == 0);
 
-	/* added, filtered */
+	/* Added, filtered */
 
 	i_stream_seek(input_mail, 0);
 	buffer_set_used_size(buffer, 0);
 
-	input_filt = i_stream_create_header_filter(input_mail,
-		HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR, hide_headers,
-		N_ELEMENTS(hide_headers), *null_header_filter_callback,
-		(void *)NULL);
+	input_filt = i_stream_create_header_filter(
+		input_mail, (HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR),
+		hide_headers, N_ELEMENTS(hide_headers),
+		*null_header_filter_callback, (void *)NULL);
 	input = i_stream_create_lf(input_filt);
 	i_stream_unref(&input_filt);
 
@@ -299,15 +298,15 @@ static void test_edit_mail_concatenated(void)
 
 	i_stream_unref(&input);
 
-	/* added, filtered, slow */
+	/* Added, filtered, slow */
 
 	i_stream_seek(input_mail, 0);
 	buffer_set_used_size(buffer, 0);
 
-	input_filt = i_stream_create_header_filter(input_mail,
-		HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR, hide_headers,
-		N_ELEMENTS(hide_headers), *null_header_filter_callback,
-		(void *)NULL);
+	input_filt = i_stream_create_header_filter(
+		input_mail, (HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR),
+		hide_headers, N_ELEMENTS(hide_headers),
+		*null_header_filter_callback, (void *)NULL);
 	input = i_stream_create_lf(input_filt);
 	i_stream_unref(&input_filt);
 
@@ -326,26 +325,26 @@ static void test_edit_mail_concatenated(void)
 
 	i_stream_unref(&input);
 
-	/* delete header */
+	/* Delete header */
 
 	edit_mail_header_delete(edmail, "Delivered-To", 0);
 
-	/* evaluate modified header */
+	/* Evaluate modified header */
 
 	test_assert(mail_get_first_header_utf8(mail, "Subject", &value) > 0);
 	test_assert(strcmp(value, "Sieve editheader breaks with LMTP") == 0);
 
 	test_assert(mail_get_first_header_utf8(mail, "X-Filter-Junk-Flag",
-					  &value) > 0);
+					       &value) > 0);
 	test_assert(strcmp(value, "NO") == 0);
 	test_assert(mail_get_first_header_utf8(mail, "X-Filter-Junk-Type",
-					  &value) > 0);
+					       &value) > 0);
 	test_assert(strcmp(value, "NONE") == 0);
 
 	test_assert(mail_get_first_header_utf8(mail, "Delivered-To",
-					  &value) == 0);
+					       &value) == 0);
 
-	/* deleted */
+	/* Deleted */
 
 	i_stream_seek(input_mail, 0);
 	buffer_set_used_size(buffer, 0);
@@ -359,10 +358,9 @@ static void test_edit_mail_concatenated(void)
 	str_append(expected, msg_part2);
 	str_append(expected, msg_part4);
 
-	test_out("deleted",
-		 strcmp(str_c(buffer), str_c(expected)) == 0);
+	test_out("deleted", strcmp(str_c(buffer), str_c(expected)) == 0);
 
-	/* deleted, slow */
+	/* Deleted, slow */
 
 	i_stream_seek(input_mail, 0);
 	buffer_set_used_size(buffer, 0);
@@ -375,18 +373,17 @@ static void test_edit_mail_concatenated(void)
 	str_append(expected, msg_part2);
 	str_append(expected, msg_part4);
 
-	test_out("deleted, slow",
-		 strcmp(str_c(buffer), str_c(expected)) == 0);
+	test_out("deleted, slow", strcmp(str_c(buffer), str_c(expected)) == 0);
 
-	/* deleted, filtered */
+	/* Deleted, filtered */
 
 	i_stream_seek(input_mail, 0);
 	buffer_set_used_size(buffer, 0);
 
-	input_filt = i_stream_create_header_filter(input_mail,
-		HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR, hide_headers,
-		N_ELEMENTS(hide_headers), *null_header_filter_callback,
-		(void *)NULL);
+	input_filt = i_stream_create_header_filter(
+		input_mail, (HEADER_FILTER_EXCLUDE | HEADER_FILTER_NO_CR),
+		hide_headers, N_ELEMENTS(hide_headers),
+		*null_header_filter_callback, (void *)NULL);
 	input = i_stream_create_lf(input_filt);
 	i_stream_unref(&input_filt);
 
@@ -404,7 +401,7 @@ static void test_edit_mail_concatenated(void)
 
 	i_stream_unref(&input);
 
-	/* deleted, filtered, slow */
+	/* Deleted, filtered, slow */
 
 	i_stream_seek(input_mail, 0);
 	buffer_set_used_size(buffer, 0);
@@ -724,10 +721,78 @@ static void test_edit_mail_big_header(void)
 
 	/* evaluate modified header */
 
-	test_assert(mail_get_first_header_utf8(mail, "X-B",
-					  &value) == 0);
+	test_assert(mail_get_first_header_utf8(mail, "X-B", &value) == 0);
 
 	/* deleted */
+
+	i_stream_seek(input_mail, 0);
+	buffer_set_used_size(buffer, 0);
+
+	test_stream_data(input_mail, buffer);
+
+	/* clean up */
+
+	buffer_free(&buffer);
+	edit_mail_unwrap(&edmail);
+	mail_raw_close(&rawmail);
+	i_stream_unref(&input_msg);
+	test_deinit();
+	test_end();
+}
+
+static void test_edit_mail_small_buffer(void)
+{
+	static const char *message =
+		"X-A: AAAA\n"
+		"X-B: BBBB\n"
+		"\n"
+		"Frop!\n";
+	struct istream *input_msg, *input_mail;
+	buffer_t *buffer;
+	struct mail_raw *rawmail;
+	struct edit_mail *edmail;
+	struct mail *mail;
+	const char *value;
+	unsigned int i;
+
+	test_begin("edit-mail - small buffer");
+	test_init();
+
+	/* compose the message */
+
+	input_msg = i_stream_create_from_data(message, strlen(message));
+	i_stream_set_max_buffer_size(input_msg, 16);
+
+	rawmail = mail_raw_open_stream(test_raw_mail_user, input_msg);
+
+	edmail = edit_mail_wrap(rawmail->mail);
+
+	/* add headers */
+
+	for (i = 0; i < 16; i++) {
+		edit_mail_header_add(edmail, "X-F", "FF", FALSE);
+		edit_mail_header_add(edmail, "X-L", "LL", TRUE);
+	}
+
+	mail = edit_mail_get_mail(edmail);
+
+	/* prepare tests */
+
+	if (mail_get_stream(mail, NULL, NULL, &input_mail) < 0) {
+		i_fatal("Failed to open mail stream: %s",
+			mailbox_get_last_internal_error(mail->box, NULL));
+	}
+
+	buffer = buffer_create_dynamic(default_pool, 1024);
+
+	/* evaluate modified header */
+
+	test_assert(mail_get_first_header_utf8(mail, "X-F", &value) > 0);
+	test_assert(mail_get_first_header_utf8(mail, "X-A", &value) > 0);
+	test_assert(mail_get_first_header_utf8(mail, "X-B", &value) > 0);
+	test_assert(mail_get_first_header_utf8(mail, "X-L", &value) > 0);
+
+	/* check stream read */
 
 	i_stream_seek(input_mail, 0);
 	buffer_set_used_size(buffer, 0);
@@ -749,6 +814,7 @@ int main(int argc, char *argv[])
 	static void (*test_functions[])(void) = {
 		test_edit_mail_concatenated,
 		test_edit_mail_big_header,
+		test_edit_mail_small_buffer,
 		NULL
 	};
 	const enum master_service_flags service_flags =

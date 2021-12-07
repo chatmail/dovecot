@@ -1,3 +1,95 @@
+2021-11-30 12:50:17 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (a1a0b892)
+
+    Release v0.5.17.1
+
+
+M	NEWS
+M	configure.ac
+
+2021-12-03 09:05:16 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (2e3f79bb)
+
+    lib-sieve-tool: Sieve tools do not need SSL settings
+
+    Fixes argument list too long error.
+
+M	src/lib-sieve-tool/sieve-tool.c
+
+2021-11-04 10:46:57 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (44945af4)
+
+    lib-sieve: util: edit-mail - Fix returning buffer-full condition when data
+    was read.
+
+    Fixes:
+
+    Panic: file istream-crlf.c: line 24 (i_stream_crlf_read_common): assertion
+    failed: (ret != -2) Panic: file istream.h: line 228 (i_stream_read_more):
+    assertion failed: (ret != -2)
+    (various other similar panics are possible)
+
+M	src/lib-sieve/util/edit-mail.c
+M	src/lib-sieve/util/test-edit-mail.c
+
+2020-08-26 00:38:15 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (bff239ff)
+
+    lib-sieve: util: Reformat test-edit-mail.c.
+
+
+M	src/lib-sieve/util/test-edit-mail.c
+
+2020-08-26 00:00:04 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (9311a4a2)
+
+    lib-sieve: util: Reformat edit-mail.h.
+
+
+M	src/lib-sieve/util/edit-mail.h
+
+2020-08-25 23:55:28 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (b3d979a4)
+
+    lib-sieve: util: Reformat edit-mail.c.
+
+
+M	src/lib-sieve/util/edit-mail.c
+
+2021-11-02 09:54:08 -0400 Timo Sirainen <timo.sirainen@open-xchange.com> (07583f7b)
+
+    managesieve: Use MASTER_SERVICE_FLAG_DISABLE_SSL_SET when dumping capability
+
+    This prevents startup failures if ssl_ca has a large number of certificates.
+
+M	src/managesieve/main.c
+
+2021-10-28 00:40:58 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (67d6bee9)
+
+    lib-sieve: sieve-result - Fix panic occurring upon temp fail after committed
+    keep-equivalent action.
+
+    The determination of whether a keep-equivalent action was already executed
+    is performed in sieve_result_implicit_keep_execute(), which can also be
+    called from sieve_result_implicit_keep_finalize(). But there, the
+    keep-equivalent status was checked before any call to
+    sieve_result_implicit_keep_execute(), which would thus yield the wrong
+    result.
+
+    This change also makes the associated debug message more specific (otherwise
+    two identical debug messages are logged) and an assert is added that makes
+    sure the keep-equivalent action is actually finalized when the implicit keep
+    was supposed to be finalized.
+
+    Panic was:
+
+    Panic: file sieve-result.c: line 1706 (sieve_result_implicit_keep_finalize):
+    assertion failed: (aexec_keep->state ==
+    SIEVE_ACTION_EXECUTION_STATE_EXECUTED)
+
+M	src/lib-sieve/sieve-result.c
+
+2021-10-28 00:45:15 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (0aacbf5c)
+
+    lib-sieve: sieve-result - Move finalize debug message for implicit keep.
+
+
+M	src/lib-sieve/sieve-result.c
+
 2021-09-28 12:57:33 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (054dddfa)
 
     NEWS: Add news for 0.5.17
