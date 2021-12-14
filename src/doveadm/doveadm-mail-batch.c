@@ -55,25 +55,20 @@ cmd_batch_add(struct batch_cmd_context *batchctx,
 {
 	struct doveadm_mail_cmd_context *subctx;
 	const struct doveadm_cmd_ver2 *cmd_ver2;
-	struct doveadm_mail_cmd tmpcmd;
 	const struct doveadm_mail_cmd *cmd;
 	const char *getopt_args;
 	int c;
 
 	cmd_ver2 = doveadm_cmd_find_with_args_ver2(argv[0], &argc, &argv);
-
 	if (cmd_ver2 == NULL)
-		cmd = doveadm_mail_cmd_find_from_argv(argv[0], &argc, &argv);
-	else {
-		i_zero(&tmpcmd);
-		tmpcmd.usage_args = cmd_ver2->usage;
-		tmpcmd.name = cmd_ver2->name;
-		tmpcmd.alloc = cmd_ver2->mail_cmd;
-		cmd = &tmpcmd;
-	}
-
-	if (cmd == NULL)
 		i_fatal_status(EX_USAGE, "doveadm batch: '%s' mail command doesn't exist", argv[0]);
+
+	struct doveadm_mail_cmd *dyncmd =
+		p_new(batchctx->ctx.pool, struct doveadm_mail_cmd, 1);
+	dyncmd->usage_args = cmd_ver2->usage;
+	dyncmd->name = cmd_ver2->name;
+	dyncmd->alloc = cmd_ver2->mail_cmd;
+	cmd = dyncmd;
 
 	subctx = doveadm_mail_cmd_init(cmd, doveadm_settings);
 	subctx->full_args = argv + 1;
@@ -154,8 +149,8 @@ static void cmd_batch_deinit(struct doveadm_mail_cmd_context *_ctx)
 	struct doveadm_mail_cmd_context *cmd;
 
 	array_foreach_elem(&ctx->commands, cmd) {
-		if (cmd->v.deinit != NULL)
-			cmd->v.deinit(cmd);
+		doveadm_mail_cmd_deinit(cmd);
+		doveadm_mail_cmd_free(cmd);
 	}
 }
 
@@ -173,6 +168,14 @@ static struct doveadm_mail_cmd_context *cmd_batch_alloc(void)
 	return &ctx->ctx;
 }
 
-struct doveadm_mail_cmd cmd_batch = {
-	cmd_batch_alloc, "batch", "<sep> <cmd1> [<sep> <cmd2> [..]]"
+struct doveadm_cmd_ver2 doveadm_cmd_batch = {
+	.name = "batch",
+	.mail_cmd = cmd_batch_alloc,
+	.usage = "<sep> <cmd1> [<sep> <cmd2> [..]]",
+	.flags = CMD_FLAG_NO_UNORDERED_OPTIONS,
+DOVEADM_CMD_PARAMS_START
+DOVEADM_CMD_MAIL_COMMON
+DOVEADM_CMD_PARAM('\0', "separator", CMD_PARAM_STR, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAM('\0', "args", CMD_PARAM_ARRAY, CMD_PARAM_FLAG_POSITIONAL)
+DOVEADM_CMD_PARAMS_END
 };

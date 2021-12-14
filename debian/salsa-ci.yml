@@ -4,5 +4,5 @@ include:
 
 # The test suite does not pass reprotest
 variables:
-  SALSA_CI_LINTIAN_FAIL_WARNING: 1
   SALSA_CI_DISABLE_REPROTEST: 1
+  SALSA_CI_DISABLE_CROSSBUILD_ARM64: 1

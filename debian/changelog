@@ -1,3 +1,20 @@
+dovecot (1:2.3.17.1+dfsg1-1) UNRELEASED; urgency=medium
+
+  * [40b0010] New upstream version 2.3.17+dfsg1
+  * [3c377e0] New upstream version 2.3.17.1+dfsg1
+  * [e2f1ce2] d/patches: rebase and drop upstream applied ones
+  * [533b7ad] d/control: bump to standards version 4.6.0 (no further changes)
+  * [02ed6cf] debian: reduce Lintian issues
+  * [bb3ae48] d/salsa-ci.yml: skip cross build and do not fail on Lintian
+    warnings
+  * [bcda7e4] d/control: build against Lua 5.4
+  * [9eed0dd] d/control: enable libunwind support on available archs
+  * [1990699] d/patches: cherry-pick memory leak commit
+  * [426df46] d/patches: cherry-pick imapsieve fix
+  * [e3d0747] d/patches: add patch for LTO by avoiding unaligned access
+
+ -- Christian Göttsche <cgzones@googlemail.com>  Tue, 07 Dec 2021 15:48:47 +0100
+
 dovecot (1:2.3.16+dfsg1-3) unstable; urgency=medium
 
   * [7b858b6] Fix FTBFS on mips(64)el.  Stacktrace generation on these

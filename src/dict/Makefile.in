@@ -152,7 +152,8 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(pkglibexecdir)"
 PROGRAMS = $(pkglibexec_PROGRAMS)
 am_dict_OBJECTS = dict-connection.$(OBJEXT) dict-commands.$(OBJEXT) \
-	dict-settings.$(OBJEXT) main.$(OBJEXT)
+	dict-settings.$(OBJEXT) dict-init-cache.$(OBJEXT) \
+	main.$(OBJEXT)
 dict_OBJECTS = $(am_dict_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = ../lib-dict-backend/libdict_backend.la \
@@ -180,8 +181,8 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/dict-commands.Po \
-	./$(DEPDIR)/dict-connection.Po ./$(DEPDIR)/dict-settings.Po \
-	./$(DEPDIR)/main.Po
+	./$(DEPDIR)/dict-connection.Po ./$(DEPDIR)/dict-init-cache.Po \
+	./$(DEPDIR)/dict-settings.Po ./$(DEPDIR)/main.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -478,12 +479,14 @@ dict_SOURCES = \
 	dict-connection.c \
 	dict-commands.c \
 	dict-settings.c \
+	dict-init-cache.c \
 	main.c
 
 noinst_HEADERS = \
 	dict-connection.h \
 	dict-commands.h \
 	dict-settings.h \
+	dict-init-cache.h \
 	main.h
 
 all: all-am
@@ -581,6 +584,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-commands.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-connection.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-init-cache.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dict-settings.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@ # am--include-marker
 
@@ -747,6 +751,7 @@ clean-am: clean-generic clean-libtool clean-pkglibexecPROGRAMS \
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/dict-commands.Po
 	-rm -f ./$(DEPDIR)/dict-connection.Po
+	-rm -f ./$(DEPDIR)/dict-init-cache.Po
 	-rm -f ./$(DEPDIR)/dict-settings.Po
 	-rm -f ./$(DEPDIR)/main.Po
 	-rm -f Makefile
@@ -796,6 +801,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/dict-commands.Po
 	-rm -f ./$(DEPDIR)/dict-connection.Po
+	-rm -f ./$(DEPDIR)/dict-init-cache.Po
 	-rm -f ./$(DEPDIR)/dict-settings.Po
 	-rm -f ./$(DEPDIR)/main.Po
 	-rm -f Makefile

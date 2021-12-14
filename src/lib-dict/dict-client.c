@@ -72,7 +72,7 @@ struct client_dict {
 	struct dict dict;
 	struct dict_client_connection conn;
 
-	char *uri, *username;
+	char *uri;
 	enum dict_data_type value_type;
 	unsigned warn_slow_msecs;
 
@@ -98,7 +98,7 @@ struct client_dict_iter_result {
 struct client_dict_iterate_context {
 	struct dict_iterate_context ctx;
 	char *error;
-	const char **paths;
+	char *path;
 	enum dict_iterate_flags flags;
 	int refcount;
 
@@ -343,7 +343,8 @@ client_dict_cmd_send(struct client_dict *dict, struct client_dict_cmd **_cmd,
 }
 
 static bool
-client_dict_transaction_send_begin(struct client_dict_transaction_context *ctx)
+client_dict_transaction_send_begin(struct client_dict_transaction_context *ctx,
+				   const struct dict_op_settings_private *set)
 {
 	struct client_dict *dict = (struct client_dict *)ctx->ctx.dict;
 	struct client_dict_cmd *cmd;
@@ -354,7 +355,9 @@ client_dict_transaction_send_begin(struct client_dict_transaction_context *ctx)
 	ctx->sent_begin = TRUE;
 
 	/* transactions commands don't have replies. only COMMIT has. */
-	query = t_strdup_printf("%c%u", DICT_PROTOCOL_CMD_BEGIN, ctx->id);
+	query = t_strdup_printf("%c%u\t%s", DICT_PROTOCOL_CMD_BEGIN,
+				ctx->id,
+				set->username == NULL ? "" : str_tabescape(set->username));
 	cmd = client_dict_cmd_init(dict, query);
 	cmd->no_replies = TRUE;
 	cmd->retry_errors = TRUE;
@@ -370,6 +373,7 @@ client_dict_send_transaction_query(struct client_dict_transaction_context *ctx,
 				   const char *query)
 {
 	struct client_dict *dict = (struct client_dict *)ctx->ctx.dict;
+	const struct dict_op_settings_private *set = &ctx->ctx.set;
 	struct client_dict_cmd *cmd;
 	const char *error;
 
@@ -377,7 +381,7 @@ client_dict_send_transaction_query(struct client_dict_transaction_context *ctx,
 		return;
 
 	if (!ctx->sent_begin) {
-		if (!client_dict_transaction_send_begin(ctx))
+		if (!client_dict_transaction_send_begin(ctx, set))
 			return;
 	}
 
@@ -580,7 +584,9 @@ static int client_dict_connect(struct client_dict *dict, const char **error_r)
 				DICT_PROTOCOL_CMD_HELLO,
 				DICT_CLIENT_PROTOCOL_MAJOR_VERSION,
 				DICT_CLIENT_PROTOCOL_MINOR_VERSION,
-				dict->value_type, dict->username, dict->uri);
+				dict->value_type,
+				"",
+				str_tabescape(dict->uri));
 	o_stream_nsend_str(dict->conn.conn.output, query);
 	client_dict_add_timeout(dict);
 	return 0;
@@ -748,8 +754,6 @@ client_dict_init(struct dict *driver, const char *uri,
 	dict->dict = *driver;
 	dict->conn.dict = dict;
 	dict->conn.conn.event_parent = set->event_parent;
-	dict->value_type = set->value_type;
-	dict->username = i_strdup(set->username);
 	dict->idle_msecs = idle_msecs;
 	dict->warn_slow_msecs = warn_slow_msecs;
 	i_array_init(&dict->cmds, 32);
@@ -794,7 +798,6 @@ static void client_dict_deinit(struct dict *_dict)
 
 	array_free(&dict->cmds);
 	i_free(dict->last_connect_error);
-	i_free(dict->username);
 	i_free(dict->uri);
 	i_free(dict);
 
@@ -963,15 +966,17 @@ client_dict_lookup_async_callback(struct client_dict_cmd *cmd,
 }
 
 static void
-client_dict_lookup_async(struct dict *_dict, const char *key,
-			 dict_lookup_callback_t *callback, void *context)
+client_dict_lookup_async(struct dict *_dict, const struct dict_op_settings *set,
+			 const char *key, dict_lookup_callback_t *callback,
+			 void *context)
 {
 	struct client_dict *dict = (struct client_dict *)_dict;
 	struct client_dict_cmd *cmd;
 	const char *query;
 
-	query = t_strdup_printf("%c%s", DICT_PROTOCOL_CMD_LOOKUP,
-				str_tabescape(key));
+	query = t_strdup_printf("%c%s\t%s", DICT_PROTOCOL_CMD_LOOKUP,
+				str_tabescape(key),
+				set->username == NULL ? "" : str_tabescape(set->username));
 	cmd = client_dict_cmd_init(dict, query);
 	cmd->callback = client_dict_lookup_async_callback;
 	cmd->api_callback.lookup = callback;
@@ -997,7 +1002,9 @@ static void client_dict_lookup_callback(const struct dict_lookup_result *result,
 		lookup->value = i_strdup(result->value);
 }
 
-static int client_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
+static int client_dict_lookup(struct dict *_dict,
+			      const struct dict_op_settings *set,
+			      pool_t pool, const char *key,
 			      const char **value_r, const char **error_r)
 {
 	struct client_dict_sync_lookup lookup;
@@ -1005,7 +1012,7 @@ static int client_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
 	i_zero(&lookup);
 	lookup.ret = -2;
 
-	dict_lookup_async(_dict, key, client_dict_lookup_callback, &lookup);
+	dict_lookup_async(_dict, set, key, client_dict_lookup_callback, &lookup);
 	if (lookup.ret == -2)
 		client_dict_wait(_dict);
 
@@ -1144,8 +1151,9 @@ client_dict_iter_async_callback(struct client_dict_cmd *cmd,
 }
 
 static struct dict_iterate_context *
-client_dict_iterate_init(struct dict *_dict, const char *const *paths,
-			 enum dict_iterate_flags flags)
+client_dict_iterate_init(struct dict *_dict,
+			 const struct dict_op_settings *set ATTR_UNUSED,
+			 const char *path, enum dict_iterate_flags flags)
 {
         struct client_dict_iterate_context *ctx;
 
@@ -1153,7 +1161,7 @@ client_dict_iterate_init(struct dict *_dict, const char *const *paths,
 	ctx->ctx.dict = _dict;
 	ctx->results_pool = pool_alloconly_create("client dict iteration", 512);
 	ctx->flags = flags;
-	ctx->paths = p_strarray_dup(system_pool, paths);
+	ctx->path = i_strdup(path);
 	ctx->refcount = 1;
 	i_array_init(&ctx->results, 64);
 	return &ctx->ctx;
@@ -1163,18 +1171,18 @@ static void
 client_dict_iterate_cmd_send(struct client_dict_iterate_context *ctx)
 {
 	struct client_dict *dict = (struct client_dict *)ctx->ctx.dict;
+	const struct dict_op_settings_private *set = &ctx->ctx.set;
 	struct client_dict_cmd *cmd;
-	unsigned int i;
 	string_t *query = t_str_new(256);
 
 	/* we can't do this query in _iterate_init(), because
 	   _set_limit() hasn't been called yet at that point. */
 	str_printfa(query, "%c%d\t%"PRIu64, DICT_PROTOCOL_CMD_ITERATE,
 		    ctx->flags, ctx->ctx.max_rows);
-	for (i = 0; ctx->paths[i] != NULL; i++) {
-		str_append_c(query, '\t');
-		str_append(query, str_tabescape(ctx->paths[i]));
-	}
+	str_append_c(query, '\t');
+	str_append_tabescaped(query, ctx->path);
+	str_append_c(query, '\t');
+	str_append_tabescaped(query, set->username == NULL ? "" : set->username);
 
 	cmd = client_dict_cmd_init(dict, str_c(query));
 	cmd->iter = ctx;
@@ -1238,7 +1246,7 @@ static int client_dict_iterate_deinit(struct dict_iterate_context *_ctx,
 	*error_r = t_strdup(ctx->error);
 	array_free(&ctx->results);
 	pool_unref(&ctx->results_pool);
-	i_free(ctx->paths);
+	i_free(ctx->path);
 	client_dict_iterate_unref(ctx);
 
 	client_dict_add_timeout(dict);

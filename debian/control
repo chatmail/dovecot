@@ -18,7 +18,7 @@ Build-Depends: debhelper-compat (= 13),
                libexttextcat-dev,
                libicu-dev,
                libldap2-dev,
-               liblua5.3-dev,
+               liblua5.4-dev,
                liblz4-dev,
                liblzma-dev,
                libpam0g-dev,
@@ -29,12 +29,13 @@ Build-Depends: debhelper-compat (= 13),
                libssl-dev,
                libstemmer-dev,
                libsystemd-dev [linux-any],
+               libunwind-dev [amd64 arm64 armel armhf hppa i386 ia64 mips mips64 mips64el mipsel powerpc powerpcspe ppc64 ppc64el sh4],
                libwrap0-dev,
                libzstd-dev,
                lsb-release,
                pkg-config,
                zlib1g-dev
-Standards-Version: 4.5.1
+Standards-Version: 4.6.0
 Rules-Requires-Root: binary-targets
 Homepage: https://dovecot.org/
 Vcs-Git: https://salsa.debian.org/debian/dovecot.git

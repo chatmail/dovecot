@@ -1,0 +1,44 @@
+From: Stephan Bosch <stephan.bosch@open-xchange.com>
+Date: Mon, 20 Sep 2021 22:09:48 +0200
+Subject: plugins: imapsieve: imap-sieve-storage - Make sure mail_set_uid() is
+ never called with uid=0.
+
+Origin: https://github.com/dovecot/pigeonhole/commit/27ab897f30b83ee1f17e4e2a801334d87eeabd02
+Forwarded: not-needed
+---
+ pigeonhole/src/plugins/imapsieve/imap-sieve-storage.c | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/pigeonhole/src/plugins/imapsieve/imap-sieve-storage.c b/pigeonhole/src/plugins/imapsieve/imap-sieve-storage.c
+index 53761c6..f8e5efe 100644
+--- a/pigeonhole/src/plugins/imapsieve/imap-sieve-storage.c
++++ b/pigeonhole/src/plugins/imapsieve/imap-sieve-storage.c
+@@ -581,6 +581,7 @@ imap_sieve_mailbox_run_copy_source(
+ 		return;
+ 
+ 	i_assert(ismt->src_mail_trans->box == src_box);
++	i_assert(mevent->src_mail_uid > 0);
+ 
+ 	if (*src_mail == NULL)
+ 		*src_mail = mail_alloc(ismt->src_mail_trans, 0, NULL);
+@@ -741,11 +742,18 @@ imap_sieve_mailbox_transaction_run(
+ 		bool fatal;
+ 
+ 		/* Determine UID for saved message */
+-		if (mevent->dest_mail_uid > 0 ||
+-			!seq_range_array_iter_nth(&siter, mevent->save_seq, &uid))
++		if (mevent->dest_mail_uid > 0)
+ 			uid = mevent->dest_mail_uid;
++		else if (!seq_range_array_iter_nth(&siter, mevent->save_seq,
++						   &uid)) {
++			/* already gone for some reason */
++			imap_sieve_mailbox_debug(
++				sbox, "Message for Sieve event gone");
++			continue;
++		}
+ 
+ 		/* Select event message */
++		i_assert(uid > 0);
+ 		if (!mail_set_uid(mail, uid) || mail->expunged) {
+ 			/* already gone for some reason */
+ 			imap_sieve_mailbox_debug(sbox,

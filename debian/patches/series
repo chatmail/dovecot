@@ -13,8 +13,7 @@ doveadm-director.1-drop-acute-accent.patch
 Fix-32bit-sign-comparisons.patch
 Improve-cross-compile-support.patch
 Silence-LTO-related-compiler-warning.patch
-indexer-crash/indexer-crash-1.patch
-indexer-crash/indexer-crash-2.patch
-indexer-crash/indexer-crash-3.patch
-indexer-Fix-crash-if-client-disconnects-while-it-s-w.patch
 mail-cache-bigendian-1.patch
+login-proxy-Fix-potential-memory-leak-if-backend-login-fa.patch
+plugins-imapsieve-imap-sieve-storage-Make-sure-mail_set_u.patch
+md4-md5-disable-optimization-causing-unaligned-access.patch

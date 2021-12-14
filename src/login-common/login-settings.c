@@ -32,6 +32,7 @@ static const struct setting_define login_setting_defines[] = {
 	DEF(TIME_MSECS, login_proxy_timeout),
 	DEF(UINT, login_proxy_max_reconnects),
 	DEF(TIME, login_proxy_max_disconnect_delay),
+	DEF(STR, login_proxy_rawlog_dir),
 	DEF(STR, director_username_hash),
 
 	DEF(BOOL, auth_ssl_require_client_cert),
@@ -60,6 +61,7 @@ static const struct login_settings login_default_settings = {
 	.login_proxy_timeout = 30*1000,
 	.login_proxy_max_reconnects = 3,
 	.login_proxy_max_disconnect_delay = 0,
+	.login_proxy_rawlog_dir = "",
 	.director_username_hash = "%u",
 
 	.auth_ssl_require_client_cert = FALSE,
@@ -158,6 +160,7 @@ login_settings_read(pool_t pool,
 		    const struct ip_addr *remote_ip,
 		    const char *local_name,
 		    const struct master_service_ssl_settings **ssl_set_r,
+		    const struct master_service_ssl_server_settings **ssl_server_set_r,
 		    void ***other_settings_r)
 {
 	struct master_service_settings_input input;
@@ -210,6 +213,9 @@ login_settings_read(pool_t pool,
 	*ssl_set_r =
 		login_setting_dup(pool, &master_service_ssl_setting_parser_info,
 				  settings_parser_get_list(parser)[1]);
+	*ssl_server_set_r =
+		login_setting_dup(pool, &master_service_ssl_server_setting_parser_info,
+				  settings_parser_get_list(parser)[2]);
 	*other_settings_r = sets + 1;
 	return sets[0];
 }

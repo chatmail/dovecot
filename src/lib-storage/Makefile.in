@@ -235,9 +235,9 @@ am_libstorage_la_OBJECTS = fail-mail-storage.lo fail-mailbox.lo \
 	mailbox-attribute-internal.lo mailbox-get.lo \
 	mailbox-guid-cache.lo mailbox-header.lo mailbox-keywords.lo \
 	mailbox-list.lo mailbox-list-notify.lo \
-	mailbox-list-register.lo mailbox-recent-flags.lo \
-	mailbox-search-result.lo mailbox-tree.lo \
-	mailbox-uidvalidity.lo mailbox-watch.lo \
+	mailbox-list-register.lo mailbox-match-plugin.lo \
+	mailbox-recent-flags.lo mailbox-search-result.lo \
+	mailbox-tree.lo mailbox-uidvalidity.lo mailbox-watch.lo \
 	test-mail-storage-common.lo
 libstorage_la_OBJECTS = $(am_libstorage_la_OBJECTS)
 am_test_mail_OBJECTS = test-mail.$(OBJEXT)
@@ -308,6 +308,7 @@ am__depfiles_remade = ./$(DEPDIR)/fail-mail-storage.Plo \
 	./$(DEPDIR)/mailbox-list-notify.Plo \
 	./$(DEPDIR)/mailbox-list-register.Plo \
 	./$(DEPDIR)/mailbox-list.Plo \
+	./$(DEPDIR)/mailbox-match-plugin.Plo \
 	./$(DEPDIR)/mailbox-recent-flags.Plo \
 	./$(DEPDIR)/mailbox-search-result.Plo \
 	./$(DEPDIR)/mailbox-tree.Plo \
@@ -374,9 +375,9 @@ am__pkginc_lib_HEADERS_DIST = fail-mail-storage.h mail-autoexpunge.h \
 	mailbox-attribute.h mailbox-attribute-internal.h \
 	mailbox-attribute-private.h mailbox-guid-cache.h \
 	mailbox-list.h mailbox-list-iter.h mailbox-list-private.h \
-	mailbox-list-notify.h mailbox-recent-flags.h \
-	mailbox-search-result-private.h mailbox-tree.h \
-	mailbox-uidvalidity.h mailbox-watch.h \
+	mailbox-list-notify.h mailbox-match-plugin.h \
+	mailbox-recent-flags.h mailbox-search-result-private.h \
+	mailbox-tree.h mailbox-uidvalidity.h mailbox-watch.h \
 	test-mail-storage-common.h mail-storage-lua.h \
 	mail-storage-lua-private.h
 HEADERS = $(noinst_HEADERS) $(pkginc_lib_HEADERS)
@@ -713,6 +714,7 @@ libstorage_la_SOURCES = \
 	mailbox-list.c \
 	mailbox-list-notify.c \
 	mailbox-list-register.c \
+	mailbox-match-plugin.c \
 	mailbox-recent-flags.c \
 	mailbox-search-result.c \
 	mailbox-tree.c \
@@ -731,9 +733,9 @@ headers = fail-mail-storage.h mail-autoexpunge.h mail-copy.h \
 	mailbox-attribute.h mailbox-attribute-internal.h \
 	mailbox-attribute-private.h mailbox-guid-cache.h \
 	mailbox-list.h mailbox-list-iter.h mailbox-list-private.h \
-	mailbox-list-notify.h mailbox-recent-flags.h \
-	mailbox-search-result-private.h mailbox-tree.h \
-	mailbox-uidvalidity.h mailbox-watch.h \
+	mailbox-list-notify.h mailbox-match-plugin.h \
+	mailbox-recent-flags.h mailbox-search-result-private.h \
+	mailbox-tree.h mailbox-uidvalidity.h mailbox-watch.h \
 	test-mail-storage-common.h $(am__append_2)
 shlibs = \
 	index/shared/libstorage_shared.la \
@@ -992,6 +994,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-notify.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list-register.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-list.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-match-plugin.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-recent-flags.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-search-result.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mailbox-tree.Plo@am__quote@ # am--include-marker
@@ -1340,6 +1343,7 @@ distclean: distclean-recursive
 	-rm -f ./$(DEPDIR)/mailbox-list-notify.Plo
 	-rm -f ./$(DEPDIR)/mailbox-list-register.Plo
 	-rm -f ./$(DEPDIR)/mailbox-list.Plo
+	-rm -f ./$(DEPDIR)/mailbox-match-plugin.Plo
 	-rm -f ./$(DEPDIR)/mailbox-recent-flags.Plo
 	-rm -f ./$(DEPDIR)/mailbox-search-result.Plo
 	-rm -f ./$(DEPDIR)/mailbox-tree.Plo
@@ -1441,6 +1445,7 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f ./$(DEPDIR)/mailbox-list-notify.Plo
 	-rm -f ./$(DEPDIR)/mailbox-list-register.Plo
 	-rm -f ./$(DEPDIR)/mailbox-list.Plo
+	-rm -f ./$(DEPDIR)/mailbox-match-plugin.Plo
 	-rm -f ./$(DEPDIR)/mailbox-recent-flags.Plo
 	-rm -f ./$(DEPDIR)/mailbox-search-result.Plo
 	-rm -f ./$(DEPDIR)/mailbox-tree.Plo

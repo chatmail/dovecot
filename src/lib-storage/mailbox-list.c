@@ -2054,7 +2054,6 @@ int mailbox_list_init_fs(struct mailbox_list *list, struct event *event_parent,
 	struct mailbox_list_fs_context *ctx;
 	struct fs *parent_fs;
 
-	i_zero(&ssl_set);
 	i_zero(&fs_set);
 	mail_user_init_fs_settings(list->ns->user, &fs_set, &ssl_set);
 	/* fs_set.event_parent points to user->event by default */
@@ -2108,7 +2107,7 @@ int mailbox_list_lock(struct mailbox_list *list)
 	set.lock_timeout_secs = list->mail_set->mail_max_lock_timeout == 0 ?
 		MAILBOX_LIST_LOCK_SECS :
 		I_MIN(MAILBOX_LIST_LOCK_SECS, list->mail_set->mail_max_lock_timeout);
-	set.lock_method = list->mail_set->parsed_lock_method;
+	set.lock_settings.lock_method = list->mail_set->parsed_lock_method;
 	set.mode = perm.file_create_mode;
 	set.gid = perm.file_create_gid;
 	set.gid_origin = perm.file_create_gid_origin;

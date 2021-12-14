@@ -618,12 +618,16 @@ master_time_moved(const struct timeval *old_time,
 	long long diff = timeval_diff_usecs(old_time, new_time);
 	unsigned int msecs;
 
-	if (diff < 0)
+	if (diff < 0) {
+		diff = -diff;
+		i_warning("Time moved forwards by %lld.%06lld seconds - adjusting timeouts.",
+			  diff / 1000000, diff % 1000000);
 		return;
+	}
 	msecs = (unsigned int)(diff/1000);
 
 	/* time moved backwards. disable launching new service processes
-	   until  */
+	   until the throttling timeout has reached. */
 	if (msecs > SERVICE_TIME_MOVED_BACKWARDS_MAX_THROTTLE_MSECS)
 		msecs = SERVICE_TIME_MOVED_BACKWARDS_MAX_THROTTLE_MSECS;
 	services_throttle_time_sensitives(services, msecs);
@@ -787,7 +791,8 @@ int main(int argc, char *argv[])
 				MASTER_SERVICE_FLAG_STANDALONE |
 				MASTER_SERVICE_FLAG_DONT_SEND_STATS |
 				MASTER_SERVICE_FLAG_DONT_LOG_TO_STDERR |
-				MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME,
+				MASTER_SERVICE_FLAG_NO_INIT_DATASTACK_FRAME |
+				MASTER_SERVICE_FLAG_DISABLE_SSL_SET,
 				&argc, &argv, "+Fanp");
 	i_unset_failure_prefix();
 

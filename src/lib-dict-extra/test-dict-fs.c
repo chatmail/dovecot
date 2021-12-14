@@ -9,11 +9,14 @@ static void test_dict_set_get(struct dict *dict, const char *key,
 			     const char *value)
 {
 	const char *got_value, *error;
-	struct dict_transaction_context *t = dict_transaction_begin(dict);
+	struct dict_op_settings set = {
+		.username = "testuser",
+	};
+	struct dict_transaction_context *t = dict_transaction_begin(dict, &set);
 	dict_set(t, key, value);
 	if (dict_transaction_commit(&t, &error) < 0)
 		i_fatal("dict_transaction_commit(%s) failed: %s", key, error);
-	if (dict_lookup(dict, pool_datastack_create(), key, &got_value,
+	if (dict_lookup(dict, &set, pool_datastack_create(), key, &got_value,
 			&error) < 0)
 		i_fatal("dict_lookup(%s) failed: %s", key, error);
 	test_assert_strcmp(got_value, value);
@@ -35,7 +38,6 @@ static void test_dict_fs_set_get(void)
 	const char *error;
 	struct dict *dict;
 	struct dict_settings set = {
-		.username = "testuser",
 		.base_dir = ".",
 	};
 	if (dict_init("fs:posix:prefix=.test-dict/", &set, &dict, &error) < 0)

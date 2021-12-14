@@ -52,7 +52,7 @@ struct dict_memcached_ascii_commit_ctx {
 struct memcached_ascii_dict {
 	struct dict dict;
 	struct ip_addr ip;
-	char *username, *key_prefix;
+	char *key_prefix;
 	in_port_t port;
 	unsigned int timeout_msecs;
 
@@ -439,12 +439,6 @@ memcached_ascii_dict_init(struct dict *driver, const char *uri,
 	dict->conn.reply_str = str_new(default_pool, 256);
 	dict->conn.dict = dict;
 
-	if (strchr(set->username, DICT_USERNAME_SEPARATOR) == NULL)
-		dict->username = i_strdup(set->username);
-	else {
-		/* escape the username */
-		dict->username = i_strdup(memcached_ascii_escape_username(set->username));
-	}
 	i_array_init(&dict->input_states, 4);
 	i_array_init(&dict->replies, 4);
 
@@ -475,7 +469,6 @@ static void memcached_ascii_dict_deinit(struct dict *_dict)
 	array_free(&dict->replies);
 	array_free(&dict->input_states);
 	i_free(dict->key_prefix);
-	i_free(dict->username);
 	i_free(dict);
 
 	if (memcached_ascii_connections->connections == NULL)
@@ -501,14 +494,21 @@ static int memcached_ascii_connect(struct memcached_ascii_dict *dict,
 
 static const char *
 memcached_ascii_dict_get_full_key(struct memcached_ascii_dict *dict,
-				  const char *key)
+				  const char *username, const char *key)
 {
 	if (str_begins(key, DICT_PATH_SHARED))
 		key += strlen(DICT_PATH_SHARED);
 	else if (str_begins(key, DICT_PATH_PRIVATE)) {
-		key = t_strdup_printf("%s%c%s", dict->username,
-				      DICT_USERNAME_SEPARATOR,
-				      key + strlen(DICT_PATH_PRIVATE));
+		if (strchr(username, DICT_USERNAME_SEPARATOR) == NULL) {
+			key = t_strdup_printf("%s%c%s", username,
+					      DICT_USERNAME_SEPARATOR,
+					      key + strlen(DICT_PATH_PRIVATE));
+		} else {
+			/* escape the username */
+			key = t_strdup_printf("%s%c%s", memcached_ascii_escape_username(username),
+					      DICT_USERNAME_SEPARATOR,
+					      key + strlen(DICT_PATH_PRIVATE));
+		}
 	} else {
 		i_unreached();
 	}
@@ -518,8 +518,10 @@ memcached_ascii_dict_get_full_key(struct memcached_ascii_dict *dict,
 }
 
 static int
-memcached_ascii_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
-			    const char **value_r, const char **error_r)
+memcached_ascii_dict_lookup(struct dict *_dict,
+			    const struct dict_op_settings *set,
+			    pool_t pool, const char *key, const char **value_r,
+			    const char **error_r)
 {
 	struct memcached_ascii_dict *dict = (struct memcached_ascii_dict *)_dict;
 	struct memcached_ascii_dict_reply *reply;
@@ -528,7 +530,7 @@ memcached_ascii_dict_lookup(struct dict *_dict, pool_t pool, const char *key,
 	if (memcached_ascii_connect(dict, error_r) < 0)
 		return -1;
 
-	key = memcached_ascii_dict_get_full_key(dict, key);
+	key = memcached_ascii_dict_get_full_key(dict, set->username, key);
 	o_stream_nsend_str(dict->conn.conn.output,
 			   t_strdup_printf("get %s\r\n", key));
 	array_push_back(&dict->input_states, &state);
@@ -557,12 +559,14 @@ memcached_ascii_transaction_init(struct dict *_dict)
 
 static void
 memcached_send_change(struct dict_memcached_ascii_commit_ctx *ctx,
+		      const struct dict_op_settings_private *set,
 		      const struct dict_transaction_memory_change *change)
 {
 	enum memcached_ascii_input_state state;
 	const char *key, *value;
 
-	key = memcached_ascii_dict_get_full_key(ctx->dict, change->key);
+	key = memcached_ascii_dict_get_full_key(ctx->dict, set->username,
+						change->key);
 
 	str_truncate(ctx->str, 0);
 	switch (change->type) {
@@ -598,6 +602,7 @@ memcached_send_change(struct dict_memcached_ascii_commit_ctx *ctx,
 
 static int
 memcached_ascii_transaction_send(struct dict_memcached_ascii_commit_ctx *ctx,
+				 const struct dict_op_settings_private *set,
 				 const char **error_r)
 {
 	struct memcached_ascii_dict *dict = ctx->dict;
@@ -614,7 +619,7 @@ memcached_ascii_transaction_send(struct dict_memcached_ascii_commit_ctx *ctx,
 
 	o_stream_cork(dict->conn.conn.output);
 	for (i = 0; i < count; i++) T_BEGIN {
-		memcached_send_change(ctx, &changes[i]);
+		memcached_send_change(ctx, set, &changes[i]);
 	} T_END;
 	o_stream_uncork(dict->conn.conn.output);
 
@@ -637,6 +642,7 @@ memcached_ascii_transaction_commit(struct dict_transaction_context *_ctx,
 		(struct memcached_ascii_dict *)_ctx->dict;
 	struct dict_memcached_ascii_commit_ctx commit_ctx;
 	struct dict_commit_result result = { DICT_COMMIT_RET_OK, NULL };
+	const struct dict_op_settings_private *set = &_ctx->set;
 
 	if (_ctx->changed) {
 		i_zero(&commit_ctx);
@@ -646,7 +652,7 @@ memcached_ascii_transaction_commit(struct dict_transaction_context *_ctx,
 		commit_ctx.context = context;
 		commit_ctx.str = str_new(default_pool, 128);
 
-		result.ret = memcached_ascii_transaction_send(&commit_ctx, &result.error);
+		result.ret = memcached_ascii_transaction_send(&commit_ctx, set, &result.error);
 		str_free(&commit_ctx.str);
 
 		if (async && result.ret == 0) {
