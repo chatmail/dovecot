@@ -13,6 +13,7 @@ dovecot (1:2.3.17.1+dfsg1-1) unstable; urgency=medium
   * [1990699] d/patches: cherry-pick memory leak commit
   * [426df46] d/patches: cherry-pick imapsieve fix
   * [e3d0747] d/patches: add patch for LTO by avoiding unaligned access
+    (Closes: #997513)
 
  -- Noah Meyerhans <noahm@debian.org>  Tue, 14 Dec 2021 09:24:23 -0800
 
