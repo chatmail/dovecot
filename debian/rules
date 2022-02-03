@@ -6,7 +6,7 @@
 SHELL=/bin/bash -O extglob
 PIGEONHOLE_DIR=$(CURDIR)/pigeonhole
 
-export DEB_BUILD_MAINT_OPTIONS=hardening=+all
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all optimize=+lto
 
 # LP: 1636781 - strip incompatible default linker option
 ifeq ($(shell dpkg-vendor --derives-from Ubuntu && echo yes),yes)
@@ -23,10 +23,6 @@ include /usr/share/dpkg/architecture.mk
 ifneq ($(filter armel armhf mips64el mipsel, $(DEB_HOST_ARCH)),)
   DOV_DEB_CFLAGS += -funwind-tables
 endif
-
-DOV_DEB_CFLAGS += -flto
-DOV_DEB_CXXFLAGS += -flto
-DOV_DEB_LDFLAGS += -flto
 
 export DEB_CFLAGS_MAINT_APPEND = $(DOV_DEB_CFLAGS)
 export DEB_CXXFLAGS_MAINT_APPEND = $(DOV_DEB_CXXFLAGS)
