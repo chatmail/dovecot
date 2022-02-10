@@ -127,7 +127,7 @@ static void stats_client_destroy(struct connection *conn)
 static const struct connection_settings stats_client_set = {
 	.service_name_in = "stats-server",
 	.service_name_out = "stats-client",
-	.major_version = 3,
+	.major_version = 4,
 	.minor_version = 0,
 
 	.input_max_size = SIZE_MAX,
@@ -141,20 +141,23 @@ static const struct connection_vfuncs stats_client_vfuncs = {
 };
 
 static void
-stats_event_write(struct event *event, const struct failure_context *ctx,
-		  string_t *str, bool begin)
+stats_event_write(struct stats_client *client,
+		  struct event *event, struct event *global_event,
+		  const struct failure_context *ctx, string_t *str, bool begin)
 {
 	struct event *merged_event;
 	struct event *parent_event;
-	bool update = FALSE;
+	bool update = FALSE, flush_output = FALSE;
 
 	merged_event = begin ? event_ref(event) : event_minimize(event);
 	parent_event = merged_event->parent;
 
 	if (parent_event != NULL) {
 		if (parent_event->sent_to_stats_id !=
-		    parent_event->change_id)
-			stats_event_write(parent_event, ctx, str, TRUE);
+		    parent_event->change_id) {
+			stats_event_write(client, parent_event, NULL,
+					  ctx, str, TRUE);
+		}
 		i_assert(parent_event->sent_to_stats_id != 0);
 	}
 	if (begin) {
@@ -163,8 +166,13 @@ stats_event_write(struct event *event, const struct failure_context *ctx,
 		const char *cmd = !update ? "BEGIN" : "UPDATE";
 		str_printfa(str, "%s\t%"PRIu64"\t", cmd, event->id);
 		event->sent_to_stats_id = event->change_id;
+		/* Flush the BEGINs early on, because the stats event writing
+		   may trigger more events recursively (e.g. data_stack_grow),
+		   which may use the BEGIN events as parents. */
+		flush_output = !update;
 	} else {
-		str_append(str, "EVENT\t");
+		str_printfa(str, "EVENT\t%"PRIu64"\t",
+			    global_event == NULL ? 0 : global_event->id);
 	}
 	str_printfa(str, "%"PRIu64"\t",
 		    parent_event == NULL ? 0 : parent_event->id);
@@ -173,12 +181,18 @@ stats_event_write(struct event *event, const struct failure_context *ctx,
 	event_export(merged_event, str);
 	str_append_c(str, '\n');
 	event_unref(&merged_event);
+	if (flush_output) {
+		o_stream_nsend(client->conn.output, str_data(str), str_len(str));
+		str_truncate(str, 0);
+	}
 }
 
 static void
 stats_client_send_event(struct stats_client *client, struct event *event,
 			const struct failure_context *ctx)
 {
+	static int recursion = 0;
+
 	if (!client->handshaked)
 		return;
 
@@ -187,10 +201,20 @@ stats_client_send_event(struct stats_client *client, struct event *event,
 		return;
 
 	/* Need to send the event for stats and/or export */
-
 	string_t *str = t_str_new(256);
-	stats_event_write(event, ctx, str, FALSE);
+
+	if (++recursion == 0)
+		o_stream_cork(client->conn.output);
+	struct event *global_event = event_get_global();
+	if (global_event != NULL)
+		stats_event_write(client, global_event, NULL, ctx, str, TRUE);
+
+	stats_event_write(client, event, global_event, ctx, str, FALSE);
 	o_stream_nsend(client->conn.output, str_data(str), str_len(str));
+
+	i_assert(recursion > 0);
+	if (--recursion == 0)
+		o_stream_uncork(client->conn.output);
 }
 
 static void

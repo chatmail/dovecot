@@ -21,6 +21,9 @@
 
 #include <ctype.h>
 
+#define SMTP_CLIENT_ERROR_TEXT_CONNECT_FAILED \
+	"Failed to connect to remote server"
+
 const char *const smtp_client_connection_state_names[] = {
 	"disconnected",
 	"connecting",
@@ -183,9 +186,8 @@ smtp_client_connection_transactions_fail_reply(
 }
 
 static void
-smtp_client_connection_transactions_fail(
-	struct smtp_client_connection *conn,
-	unsigned int status, const char *error)
+smtp_client_connection_transactions_fail(struct smtp_client_connection *conn,
+					 unsigned int status, const char *error)
 {
 	struct smtp_reply reply;
 
@@ -286,8 +288,8 @@ smtp_client_command_timeout(struct smtp_client_connection *conn)
 {
 	smtp_client_connection_ref(conn);
 
-	e_error(conn->event, "Command timed out, disconnecting");
 	smtp_client_connection_fail(conn, SMTP_CLIENT_COMMAND_ERROR_TIMED_OUT,
+				    "Command timed out, disconnecting",
 				    "Command timed out");
 	smtp_client_connection_unref(&conn);
 }
@@ -368,10 +370,21 @@ smtp_client_connection_fail_reply(struct smtp_client_connection *conn,
 }
 
 void smtp_client_connection_fail(struct smtp_client_connection *conn,
-				 unsigned int status, const char *error)
+				 unsigned int status, const char *error,
+				 const char *user_error)
 {
 	struct smtp_reply reply;
-	const char *text_lines[] = {error, NULL};
+	const char *text_lines[2];
+
+	if (error != NULL)
+		e_error(conn->event, "%s", error);
+
+	i_zero(&text_lines);
+	i_assert(user_error != NULL);
+	if (conn->set.verbose_user_errors && error != NULL)
+		text_lines[0] = error;
+	else
+		text_lines[0] = user_error;
 
 	timeout_remove(&conn->to_connect);
 
@@ -388,6 +401,13 @@ void smtp_client_connection_fail(struct smtp_client_connection *conn,
 	reply.enhanced_code.x = 9;
 
 	smtp_client_connection_fail_reply(conn, &reply);
+}
+
+static void
+smtp_client_connection_fail_equal(struct smtp_client_connection *conn,
+				  unsigned int status, const char *error)
+{
+	smtp_client_connection_fail(conn, status, error, error);
 }
 
 static void
@@ -420,18 +440,16 @@ smtp_client_connection_lost(struct smtp_client_connection *conn,
 			/* This isn't really a "connection lost", but that we
 			   don't trust the remote's SSL certificate. */
 			i_assert(error != NULL);
-			e_error(conn->event, "%s", error);
 			smtp_client_connection_fail(
 				conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
-				user_error);
+				error, user_error);
 			return;
 		}
 	}
 
-	if (error != NULL)
-		e_error(conn->event, "%s", error);
 	smtp_client_connection_fail(
-		conn, SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST, user_error);
+		conn, SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST,
+		error, user_error);
 }
 
 void smtp_client_connection_handle_output_error(
@@ -454,8 +472,9 @@ void smtp_client_connection_handle_output_error(
 	}
 }
 
-static void stmp_client_connection_ready(struct smtp_client_connection *conn,
-					 const struct smtp_reply *reply)
+static void
+stmp_client_connection_ready(struct smtp_client_connection *conn,
+			     const struct smtp_reply *reply)
 {
 	timeout_remove(&conn->to_connect);
 
@@ -625,6 +644,13 @@ void smtp_client_connection_send_xclient(struct smtp_client_connection *conn)
 						   "LOGIN", xclient->login);
 	}
 
+	/* SESSION */
+	if (xclient->session != NULL &&
+	    str_array_icase_find(xclient_args, "SESSION")) {
+		smtp_client_connection_xclient_add(conn, str, offset,
+						   "SESSION", xclient->session);
+	}
+
 	/* TTL */
 	if (xclient->ttl_plus_1 > 0 &&
 	    str_array_icase_find(xclient_args, "TTL")) {
@@ -686,22 +712,56 @@ smtp_client_connection_clear_password(struct smtp_client_connection *conn)
 }
 
 static void
+smtp_client_connection_auth_deinit(struct smtp_client_connection *conn)
+{
+	dsasl_client_free(&conn->sasl_client);
+	i_free(conn->sasl_ir);
+}
+
+static void
 smtp_client_connection_auth_cb(const struct smtp_reply *reply,
 			       struct smtp_client_connection *conn)
 {
+	struct smtp_client_command *cmd, *cmd_auth = conn->cmd_auth;
+	const char *error;
+
+	conn->cmd_auth = NULL;
+	i_assert(cmd_auth != NULL);
+
 	if (reply->status == 334) {
 		const unsigned char *sasl_output;
 		size_t sasl_output_len, input_len;
 		buffer_t *buf;
-		const char *error;
 
 		if (reply->text_lines[1] != NULL) {
-			e_error(conn->event, "Authentication failed: "
+			error = t_strdup_printf(
+				"Authentication failed: "
 				"Server returned multi-line reply: %s",
 				smtp_reply_log(reply));
 			smtp_client_connection_fail(
 				conn, SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED,
-				"Authentication protocol error");
+				error, "Authentication protocol error");
+			return;
+		}
+		if (conn->sasl_ir != NULL) {
+			if (*reply->text_lines[0] == '\0') {
+				/* Send intial response */
+				cmd = smtp_client_command_new(
+					conn, SMTP_CLIENT_COMMAND_FLAG_PRELOGIN,
+					smtp_client_connection_auth_cb, conn);
+				smtp_client_command_write(cmd, conn->sasl_ir);
+				smtp_client_command_submit_after(cmd, cmd_auth);
+				conn->cmd_auth = cmd;
+				i_free(conn->sasl_ir);
+				return;
+			}
+			error = t_strdup_printf(
+				"Authentication failed: "
+				"Server sent unexpected server-first challenge: %s",
+				smtp_reply_log(reply));
+			smtp_client_connection_fail(
+				conn, SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED,
+				error, "Authentication protocol error");
 			return;
 		}
 
@@ -710,32 +770,36 @@ smtp_client_connection_auth_cb(const struct smtp_reply *reply,
 			MAX_BASE64_DECODED_SIZE(input_len));
 		if (base64_decode(reply->text_lines[0], input_len,
 				  NULL, buf) < 0) {
-			e_error(conn->event, "Authentication failed: "
+			error = t_strdup_printf(
+				"Authentication failed: "
 				"Server sent non-base64 input for AUTH: %s",
 				reply->text_lines[0]);
 		} else if (dsasl_client_input(conn->sasl_client,
 					      buf->data, buf->used,
 					      &error) < 0) {
-			e_error(conn->event, "Authentication failed: %s",
-				error);
+			error = t_strdup_printf("Authentication failed: %s",
+						error);
 		} else if (dsasl_client_output(conn->sasl_client, &sasl_output,
 					       &sasl_output_len, &error) < 0) {
-			e_error(conn->event, "Authentication failed: %s",
-				error);
+			error = t_strdup_printf("Authentication failed: %s",
+						error);
 		} else {
 			string_t *smtp_output = t_str_new(
 				MAX_BASE64_ENCODED_SIZE(sasl_output_len) + 2);
 			base64_encode(sasl_output, sasl_output_len,
 				      smtp_output);
-			str_append(smtp_output, "\r\n");
-			o_stream_nsend(conn->conn.output, str_data(smtp_output),
-				       str_len(smtp_output));
+			cmd = smtp_client_command_new(
+				conn, SMTP_CLIENT_COMMAND_FLAG_PRELOGIN,
+				smtp_client_connection_auth_cb, conn);
+			smtp_client_command_write(cmd, conn->sasl_ir);
+			smtp_client_command_submit_after(cmd, cmd_auth);
+			conn->cmd_auth = cmd;
 			return;
 		}
 
 		smtp_client_connection_fail(
 			conn, SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED,
-			"Authentication failed");
+			error, "Authentication failed");
 		return;
 	}
 
@@ -747,9 +811,9 @@ smtp_client_connection_auth_cb(const struct smtp_reply *reply,
 	}
 
 	smtp_client_connection_clear_password(conn);
+	smtp_client_connection_auth_deinit(conn);
 
 	e_debug(conn->event, "Authenticated successfully");
-	dsasl_client_free(&conn->sasl_client);
 
 	if (conn->to_connect != NULL)
 		timeout_reset(conn->to_connect);
@@ -814,7 +878,7 @@ smtp_client_connection_authenticate(struct smtp_client_connection *conn)
 	const unsigned char *sasl_output;
 	size_t sasl_output_len;
 	string_t *sasl_output_base64;
-	const char *init_resp, *error;
+	const char *error;
 
 	if (set->username == NULL && set->sasl_mech == NULL) {
 		if (!conn->set.xclient_defer)
@@ -831,7 +895,7 @@ smtp_client_connection_authenticate(struct smtp_client_connection *conn)
 	if ((conn->caps.standard & SMTP_CAPABILITY_AUTH) == 0) {
 		smtp_client_connection_fail(
 			conn, SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED,
-			"Authentication not supported");
+			NULL, "Authentication not supported");
 		return FALSE;
 	}
 
@@ -846,10 +910,10 @@ smtp_client_connection_authenticate(struct smtp_client_connection *conn)
 
 	if (smtp_client_connection_get_sasl_mech(conn, &sasl_mech,
 						 &error) < 0) {
-		e_error(conn->event, "Authentication failed: %s", error);
+		error = t_strdup_printf("Authentication failed: %s", error);
 		smtp_client_connection_fail(
 			conn, SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED,
-			"Server authentication mechanisms incompatible");
+			error, "Server authentication mechanisms incompatible");
 		return FALSE;
 	}
 
@@ -866,12 +930,12 @@ smtp_client_connection_authenticate(struct smtp_client_connection *conn)
 
 	if (dsasl_client_output(conn->sasl_client, &sasl_output,
 				&sasl_output_len, &error) < 0) {
-		e_error(conn->event,
+		error = t_strdup_printf(
 			"Failed to create initial %s SASL reply: %s",
 			dsasl_client_mech_get_name(sasl_mech), error);
 		smtp_client_connection_fail(
 			conn, SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED,
-			"Internal authentication failure");
+			error, "Internal authentication failure");
 		return FALSE;
 	}
 
@@ -881,19 +945,39 @@ smtp_client_connection_authenticate(struct smtp_client_connection *conn)
 
 	/* RFC 4954, Section 4:
 
-	   If the client is transmitting an initial response of zero
-	   length, it MUST instead transmit the response as a single
-	   equals sign ("=").  This indicates that the response is
-	   present, but contains no data. */
-	init_resp = (str_len(sasl_output_base64) == 0 ?
-		     "=" : str_c(sasl_output_base64));
+	   Note that the AUTH command is still subject to the line length
+	   limitations defined in [SMTP]. If use of the initial response
+	   argument would cause the AUTH command to exceed this length, the
+	   client MUST NOT use the initial response parameter (and instead
+	   proceed as defined in Section 5.1 of [SASL]).
+
+	   If the client is transmitting an initial response of zero length, it
+	   MUST instead transmit the response as a single equals sign ("=").
+	   This indicates that the response is present, but contains no data.
+	 */
+
+	const char *init_resp = "";
+	const char *mech_name =  dsasl_client_mech_get_name(sasl_mech);
+
+	i_assert(conn->sasl_ir == NULL);
+	if (str_len(sasl_output_base64) == 0)
+		init_resp = "=";
+	else if ((5 + strlen(mech_name) + 1 + str_len(sasl_output_base64)) >
+		 SMTP_CLIENT_BASE_LINE_LENGTH_LIMIT)
+		conn->sasl_ir = i_strdup(str_c(sasl_output_base64));
+	else
+		init_resp = str_c(sasl_output_base64);
 
 	cmd = smtp_client_command_new(conn, SMTP_CLIENT_COMMAND_FLAG_PRELOGIN,
 				      smtp_client_connection_auth_cb, conn);
-	smtp_client_command_printf(cmd, "AUTH %s %s",
-				   dsasl_client_mech_get_name(sasl_mech),
-				   init_resp);
+	if (*init_resp == '\0')
+		smtp_client_command_printf(cmd, "AUTH %s", mech_name);
+	else {
+		smtp_client_command_printf(cmd, "AUTH %s %s",
+					   mech_name, init_resp);
+	}
 	smtp_client_command_submit(cmd);
+	conn->cmd_auth = cmd;
 
 	smtp_client_connection_set_state(
 		conn, SMTP_CLIENT_CONNECTION_STATE_AUTHENTICATING);
@@ -916,7 +1000,8 @@ smtp_client_connection_starttls_cb(const struct smtp_reply *reply,
 
 	if (smtp_client_connection_ssl_init(conn, &error) < 0) {
 		smtp_client_connection_fail(
-			conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED, error);
+			conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
+			error, SMTP_CLIENT_ERROR_TEXT_CONNECT_FAILED);
 	} else {
 		if (conn->to_connect != NULL)
 			timeout_reset(conn->to_connect);
@@ -924,18 +1009,17 @@ smtp_client_connection_starttls_cb(const struct smtp_reply *reply,
 	}
 }
 
-static bool
-smtp_client_connection_starttls(struct smtp_client_connection *conn)
+static bool smtp_client_connection_starttls(struct smtp_client_connection *conn)
 {
 	struct smtp_client_command *cmd;
 
 	if (conn->ssl_mode == SMTP_CLIENT_SSL_MODE_STARTTLS &&
 	    conn->ssl_iostream == NULL) {
 		if ((conn->caps.standard & SMTP_CAPABILITY_STARTTLS) == 0) {
-			e_error(conn->event, "Requested STARTTLS, "
-				"but server doesn't support it");
 			smtp_client_connection_fail(
 				conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
+				"Requested STARTTLS, "
+				"but server doesn't support it",
 				"STARTTLS not supported");
 			return FALSE;
 		}
@@ -1054,7 +1138,7 @@ smtp_client_connection_handshake_cb(const struct smtp_reply *reply,
 
 	lines = reply->text_lines;
 	if (*lines == NULL) {
-		smtp_client_connection_fail(
+		smtp_client_connection_fail_equal(
 			conn, SMTP_CLIENT_COMMAND_ERROR_BAD_REPLY,
 			"Invalid handshake reply");
 		return;
@@ -1164,7 +1248,7 @@ smtp_client_connection_input_reply(struct smtp_client_connection *conn,
 			smtp_reply_log(reply));
 		if (reply->status != 220) {
 			if (smtp_reply_is_success(reply)) {
-				smtp_client_connection_fail(
+				smtp_client_connection_fail_equal(
 					conn,
 					SMTP_CLIENT_COMMAND_ERROR_BAD_REPLY,
 					"Received inappropriate greeting");
@@ -1184,10 +1268,10 @@ smtp_client_connection_input_reply(struct smtp_client_connection *conn,
 
 	/* unexpected reply? */
 	if (conn->cmd_wait_list_head == NULL) {
-		e_debug(conn->event, "Unexpected reply: %s",
-			smtp_reply_log(reply));
 		smtp_client_connection_fail(
 			conn, SMTP_CLIENT_COMMAND_ERROR_BAD_REPLY,
+			t_strdup_printf("Unexpected reply: %s",
+					smtp_reply_log(reply)),
 			"Got unexpected reply");
 		return -1;
 	}
@@ -1195,10 +1279,15 @@ smtp_client_connection_input_reply(struct smtp_client_connection *conn,
 	/* replied early? */
 	if (conn->cmd_wait_list_head == conn->cmd_streaming &&
 	    !conn->cmd_wait_list_head->stream_finished) {
-		e_debug(conn->event, "Early reply: %s", smtp_reply_log(reply));
-		if (smtp_reply_is_success(reply)) {
+		if (!smtp_reply_is_success(reply)) {
+			e_debug(conn->event, "Early reply: %s",
+				smtp_reply_log(reply));
+		} else {
 			smtp_client_connection_fail(
 				conn, SMTP_CLIENT_COMMAND_ERROR_BAD_REPLY,
+				t_strdup_printf(
+					"Got early success reply: %s",
+					smtp_reply_log(reply)),
 				"Got early success reply");
 			return -1;
 		}
@@ -1234,14 +1323,14 @@ static void smtp_client_connection_input(struct connection *_conn)
 		if (ret < 0) {
 			/* failed somehow */
 			i_assert(ret != -2);
-			e_error(conn->event,
+			error = t_strdup_printf(
 				"SSL handshaking with %s failed: "
 				"read(%s) failed: %s", _conn->name,
 				i_stream_get_name(conn->conn.input),
 				i_stream_get_error(conn->conn.input));
 			smtp_client_connection_fail(
 				conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
-				"Failed to connect to remote server");
+				error, SMTP_CLIENT_ERROR_TEXT_CONNECT_FAILED);
 			return;
 		}
 
@@ -1288,7 +1377,7 @@ static void smtp_client_connection_input(struct connection *_conn)
 
 	if (ret < 0 || (ret == 0 && conn->conn.input->eof)) {
 		if (conn->conn.input->stream_errno == ENOBUFS) {
-			smtp_client_connection_fail(
+			smtp_client_connection_fail_equal(
 				conn, SMTP_CLIENT_COMMAND_ERROR_BAD_REPLY,
 				"Command reply line too long");
 		} else if (conn->conn.input->stream_errno != 0) {
@@ -1311,10 +1400,11 @@ static void smtp_client_connection_input(struct connection *_conn)
 			}
 		} else {
 			i_assert(error != NULL);
-			smtp_client_connection_fail(
+			error = t_strdup_printf("Invalid command reply: %s",
+						error);
+			smtp_client_connection_fail_equal(
 				conn, SMTP_CLIENT_COMMAND_ERROR_BAD_REPLY,
-				t_strdup_printf("Invalid command reply: %s",
-						error));
+				error);
 		}
 	}
 	if (ret >= 0 && conn->conn.output != NULL && !conn->corked) {
@@ -1360,6 +1450,7 @@ static void smtp_client_connection_destroy(struct connection *_conn)
 {
 	struct smtp_client_connection *conn =
 		(struct smtp_client_connection *)_conn;
+	const char *error;
 
 	switch (_conn->disconnect_reason) {
 	case CONNECTION_DISCONNECT_NOT:
@@ -1369,18 +1460,19 @@ static void smtp_client_connection_destroy(struct connection *_conn)
 		smtp_client_connection_close(&conn);
 		break;
 	case CONNECTION_DISCONNECT_CONNECT_TIMEOUT:
-		e_error(conn->event, "connect(%s) failed: Connection timed out",
+		error = t_strdup_printf(
+			"connect(%s) failed: Connection timed out",
 			_conn->name);
 		smtp_client_connection_fail(
 			conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
-			"Connect timed out");
+			error, "Connect timed out");
 		break;
 	default:
 	case CONNECTION_DISCONNECT_CONN_CLOSED:
 		if (conn->connect_failed) {
 			smtp_client_connection_fail(conn,
 				SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
-				"Failed to connect to remote server");
+				NULL, SMTP_CLIENT_ERROR_TEXT_CONNECT_FAILED);
 			break;
 		}
 		if (_conn->input != NULL && _conn->input->stream_errno != 0) {
@@ -1592,11 +1684,11 @@ smtp_client_connection_connected(struct connection *_conn, bool success)
 
 	if (conn->ssl_mode == SMTP_CLIENT_SSL_MODE_IMMEDIATE) {
 		if (smtp_client_connection_ssl_init(conn, &error) < 0) {
-			e_error(conn->event, "connect(%s) failed: %s",
-				_conn->name, error);
+			error = t_strdup_printf("connect(%s) failed: %s",
+						_conn->name, error);
 			smtp_client_connection_fail(
 				conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
-				"Failed to connect to remote server");
+				error, SMTP_CLIENT_ERROR_TEXT_CONNECT_FAILED);
 		}
 	} else {
 		smtp_client_connection_established(conn);
@@ -1609,28 +1701,27 @@ smtp_client_connection_connect_timeout(struct smtp_client_connection *conn)
 {
 	switch (conn->state) {
 	case SMTP_CLIENT_CONNECTION_STATE_CONNECTING:
-		e_error(conn->event, "connect(%s) failed: "
-			"Connection timed out after %u seconds",
-			conn->conn.name,
-			conn->set.connect_timeout_msecs/1000);
 		smtp_client_connection_fail(
 			conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
+			t_strdup_printf(
+				"Connection timed out after %u seconds",
+				conn->set.connect_timeout_msecs/1000),
 			"Connect timed out");
 		break;
 	case SMTP_CLIENT_CONNECTION_STATE_HANDSHAKING:
-		e_error(conn->event,
-			"SMTP handshake timed out after %u seconds",
-			conn->set.connect_timeout_msecs/1000);
 		smtp_client_connection_fail(
 			conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
+			t_strdup_printf(
+				"SMTP handshake timed out after %u seconds",
+				conn->set.connect_timeout_msecs/1000),
 			"Handshake timed out");
 		break;
 	case SMTP_CLIENT_CONNECTION_STATE_AUTHENTICATING:
-		e_error(conn->event,
-			"Authentication timed out after %u seconds",
-			conn->set.connect_timeout_msecs/1000);
 		smtp_client_connection_fail(
 			conn, SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED,
+			t_strdup_printf(
+				"Authentication timed out after %u seconds",
+				conn->set.connect_timeout_msecs/1000),
 			"Authentication timed out");
 		break;
 	default:
@@ -1647,9 +1738,9 @@ smtp_client_connection_delayed_connect_error(
 	timeout_remove(&conn->to_connect);
 	errno = conn->connect_errno;
 	smtp_client_connection_connected(&conn->conn, FALSE);
-	smtp_client_connection_fail(conn,
-		SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
-		"Failed to connect to remote server");
+	smtp_client_connection_fail(
+		conn, SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED,
+		NULL, SMTP_CLIENT_ERROR_TEXT_CONNECT_FAILED);
 }
 
 static void
@@ -1667,8 +1758,8 @@ smtp_client_connection_do_connect(struct smtp_client_connection *conn)
 	if (connection_client_connect(&conn->conn) < 0) {
 		conn->connect_errno = errno;
 		e_debug(conn->event, "Connect failed: %m");
-		conn->to_connect = timeout_add_short(0,
-			smtp_client_connection_delayed_connect_error, conn);
+		conn->to_connect = timeout_add_short(
+			0, smtp_client_connection_delayed_connect_error, conn);
 		return;
 	}
 
@@ -1684,8 +1775,7 @@ smtp_client_connection_do_connect(struct smtp_client_connection *conn)
 	}
 }
 
-static bool
-smtp_client_connection_last_ip(struct smtp_client_connection *conn)
+static bool smtp_client_connection_last_ip(struct smtp_client_connection *conn)
 {
 	i_assert(conn->prev_connect_idx < conn->ips_count);
 	return (conn->prev_connect_idx + 1) % conn->ips_count == 0;
@@ -1739,7 +1829,7 @@ smtp_client_connection_delayed_host_lookup_failure(
 	timeout_remove(&conn->to_connect);
 	smtp_client_connection_fail(
 		conn, SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED,
-		"Failed to lookup remote server");
+		NULL, "Failed to lookup remote server");
 }
 
 static void
@@ -1971,8 +2061,7 @@ void smtp_client_connection_disconnect(struct smtp_client_connection *conn)
 	ssl_iostream_destroy(&conn->ssl_iostream);
 	if (conn->ssl_ctx != NULL)
 		ssl_iostream_context_unref(&conn->ssl_ctx);
-	if (conn->sasl_client != NULL)
-		dsasl_client_free(&conn->sasl_client);
+	smtp_client_connection_auth_deinit(conn);
 
 	o_stream_destroy(&conn->dot_output);
 
@@ -2016,8 +2105,10 @@ smtp_client_connection_do_create(struct smtp_client *client, const char *name,
 	if (set != NULL) {
 		if (set->my_ip.family != 0)
 			conn->set.my_ip = set->my_ip;
-		if (set->my_hostname != NULL && *set->my_hostname != '\0')
-			conn->set.my_hostname = p_strdup(pool, set->my_hostname);
+		if (set->my_hostname != NULL && *set->my_hostname != '\0') {
+			conn->set.my_hostname =
+				p_strdup(pool, set->my_hostname);
+		}
 
 		conn->set.forced_capabilities |= set->forced_capabilities;
 		if (set->extra_capabilities != NULL) {
@@ -2025,16 +2116,24 @@ smtp_client_connection_do_create(struct smtp_client *client, const char *name,
 				p_strarray_dup(pool, set->extra_capabilities);
 		}
 
-		if (set->rawlog_dir != NULL && *set->rawlog_dir != '\0')
-			conn->set.rawlog_dir = p_strdup_empty(pool, set->rawlog_dir);
+		if (set->rawlog_dir != NULL && *set->rawlog_dir != '\0') {
+			conn->set.rawlog_dir =
+				p_strdup_empty(pool, set->rawlog_dir);
+		}
 
-		if (set->ssl != NULL)
-			conn->set.ssl = ssl_iostream_settings_dup(pool, set->ssl);
+		if (set->ssl != NULL) {
+			conn->set.ssl =
+				ssl_iostream_settings_dup(pool, set->ssl);
+		}
 
-		if (set->master_user != NULL && *set->master_user != '\0')
-			conn->set.master_user = p_strdup_empty(pool, set->master_user);
-		if (set->username != NULL && *set->username != '\0')
-			conn->set.username = p_strdup_empty(pool, set->username);
+		if (set->master_user != NULL && *set->master_user != '\0') {
+			conn->set.master_user =
+				p_strdup_empty(pool, set->master_user);
+		}
+		if (set->username != NULL && *set->username != '\0') {
+			conn->set.username =
+				p_strdup_empty(pool, set->username);
+		}
 		if (set->password != NULL && *set->password != '\0') {
 			conn->password = p_strdup(pool, set->password);
 			conn->set.password = conn->password;
@@ -2048,21 +2147,33 @@ smtp_client_connection_do_create(struct smtp_client *client, const char *name,
 		}
 		conn->set.remember_password = set->remember_password;
 
-		if (set->command_timeout_msecs > 0)
-			conn->set.command_timeout_msecs = set->command_timeout_msecs;
-		if (set->connect_timeout_msecs > 0)
-			conn->set.connect_timeout_msecs = set->connect_timeout_msecs;
+		if (set->command_timeout_msecs > 0) {
+			conn->set.command_timeout_msecs =
+				set->command_timeout_msecs;
+		}
+		if (set->connect_timeout_msecs > 0) {
+			conn->set.connect_timeout_msecs =
+				set->connect_timeout_msecs;
+		}
 		if (set->max_reply_size > 0)
 			conn->set.max_reply_size = set->max_reply_size;
-		if (set->max_data_chunk_size > 0)
-			conn->set.max_data_chunk_size = set->max_data_chunk_size;
-		if (set->max_data_chunk_pipeline > 0)
-			conn->set.max_data_chunk_pipeline = set->max_data_chunk_pipeline;
+		if (set->max_data_chunk_size > 0) {
+			conn->set.max_data_chunk_size =
+				set->max_data_chunk_size;
+		}
+		if (set->max_data_chunk_pipeline > 0) {
+			conn->set.max_data_chunk_pipeline =
+				set->max_data_chunk_pipeline;
+		}
 
-		if (set->socket_send_buffer_size > 0)
-			conn->set.socket_send_buffer_size = set->socket_send_buffer_size;
-		if (set->socket_recv_buffer_size > 0)
-			conn->set.socket_recv_buffer_size = set->socket_recv_buffer_size;
+		if (set->socket_send_buffer_size > 0) {
+			conn->set.socket_send_buffer_size =
+				set->socket_send_buffer_size;
+		}
+		if (set->socket_recv_buffer_size > 0) {
+			conn->set.socket_recv_buffer_size =
+				set->socket_recv_buffer_size;
+		}
 		conn->set.debug = conn->set.debug || set->debug;
 
 		smtp_proxy_data_merge(conn->pool, &conn->set.proxy_data,
@@ -2071,8 +2182,11 @@ smtp_client_connection_do_create(struct smtp_client *client, const char *name,
 		conn->set.peer_trusted = set->peer_trusted;
 
 		conn->set.mail_send_broken_path = set->mail_send_broken_path;
-	}
 
+		conn->set.verbose_user_errors =
+			conn->set.verbose_user_errors ||
+			set->verbose_user_errors;
+	}
 
 	if (set != NULL && set->extra_capabilities != NULL) {
 		const char *const *extp;
@@ -2089,7 +2203,7 @@ smtp_client_connection_do_create(struct smtp_client *client, const char *name,
 	}
 
 	i_assert(conn->set.my_hostname != NULL &&
-		*conn->set.my_hostname != '\0');
+		 *conn->set.my_hostname != '\0');
 
 	conn->caps.standard = conn->set.forced_capabilities;
 	conn->cap_pool = pool_alloconly_create(

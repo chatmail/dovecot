@@ -10,7 +10,7 @@
 #include "smtp-client-transaction.h"
 #include "smtp-client-connection.h"
 
-#define SMTP_CLIENT_BASE_LINE_LENGTH_LIMIT 512
+#define SMTP_CLIENT_BASE_LINE_LENGTH_LIMIT (512 - 2)
 #define SMTP_CLIENT_DATA_CHUNK_SIZE IO_BLOCK_SIZE
 
 struct smtp_client_command {
@@ -195,7 +195,11 @@ struct smtp_client_connection {
 	unsigned int xclient_replies_expected;
 
 	struct dns_lookup *dns_lookup;
+
 	struct dsasl_client *sasl_client;
+	char *sasl_ir;
+	struct smtp_client_command *cmd_auth;
+
 	struct timeout *to_connect, *to_trans, *to_commands, *to_cmd_fail;
 	struct io *io_cmd_payload;
 
@@ -305,7 +309,8 @@ struct connection_list *smtp_client_connection_list_init(void);
 void smtp_client_connection_send_xclient(struct smtp_client_connection *conn);
 
 void smtp_client_connection_fail(struct smtp_client_connection *conn,
-				 unsigned int status, const char *error);
+				 unsigned int status, const char *error,
+				 const char *user_error) ATTR_NULL(3);
 
 void smtp_client_connection_handle_output_error(
 	struct smtp_client_connection *conn);

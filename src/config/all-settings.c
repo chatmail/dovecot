@@ -832,10 +832,10 @@ static const struct setting_define mail_storage_setting_defines[] = {
 	DEF(STR, mail_never_cache_fields),
 	DEF(STR, mail_server_comment),
 	DEF(STR, mail_server_admin),
-	DEF(UINT, mail_cache_min_mail_count),
 	DEF(TIME_HIDDEN, mail_cache_unaccessed_field_drop),
 	DEF(SIZE_HIDDEN, mail_cache_record_max_size),
 	DEF(SIZE_HIDDEN, mail_cache_max_size),
+	DEF(UINT_HIDDEN, mail_cache_min_mail_count),
 	DEF(SIZE_HIDDEN, mail_cache_purge_min_size),
 	DEF(UINT_HIDDEN, mail_cache_purge_delete_percentage),
 	DEF(UINT_HIDDEN, mail_cache_purge_continued_percentage),
@@ -1587,12 +1587,20 @@ struct submission_settings {
 };
 /* ../../src/submission-login/submission-login-settings.h */
 extern const struct setting_parser_info *submission_login_setting_roots[];
+/* <settings checks> */
+enum submission_login_client_workarounds {
+	SUBMISSION_LOGIN_WORKAROUND_IMPLICIT_AUTH_EXTERNAL	= BIT(0),
+};
+/* </settings checks> */
 struct submission_login_settings {
 	const char *hostname;
 
 	/* submission: */
 	uoff_t submission_max_mail_size;
+	const char *submission_client_workarounds;
 	const char *submission_backend_capabilities;
+
+	enum submission_login_client_workarounds parsed_workarounds;
 };
 /* ../../src/stats/stats-settings.h */
 extern const struct setting_parser_info stats_setting_parser_info;
@@ -1861,6 +1869,7 @@ struct lmtp_settings {
 	bool lmtp_save_to_detail_mailbox;
 	bool lmtp_rcpt_check_quota;
 	bool lmtp_add_received_header;
+	bool lmtp_verbose_replies;
 	unsigned int lmtp_user_concurrency_limit;
 	const char *lmtp_hdr_delivery_address;
 	const char *lmtp_rawlog_dir;
@@ -2176,12 +2185,17 @@ struct submission_client_workaround_list {
 	enum submission_client_workarounds num;
 };
 
+/* These definitions need to be kept in sync with equivalent definitions present
+   in src/submission-login/submission-login-settings.c. Workarounds that are not
+   relevant to the submission service are defined as 0 here to prevent "Unknown
+   workaround" errors below. */
 static const struct submission_client_workaround_list
 submission_client_workaround_list[] = {
 	{ "whitespace-before-path",
 	  SUBMISSION_WORKAROUND_WHITESPACE_BEFORE_PATH },
 	{ "mailbox-for-path",
 	  SUBMISSION_WORKAROUND_MAILBOX_FOR_PATH },
+	{ "implicit-auth-external", 0 },
 	{ NULL, 0 }
 };
 
@@ -2370,6 +2384,69 @@ static buffer_t submission_login_inet_listeners_buf = {
 };
 
 /* </settings checks> */
+/* <settings checks> */
+struct submission_login_client_workaround_list {
+	const char *name;
+	enum submission_login_client_workarounds num;
+};
+
+/* These definitions need to be kept in sync with equivalent definitions present
+   in src/submission/submission-settings.c. Workarounds that are not relevant
+   to the submission-login service are defined as 0 here to prevent "Unknown
+   workaround" errors below. */
+static const struct submission_login_client_workaround_list
+submission_login_client_workaround_list[] = {
+	{ "whitespace-before-path", 0},
+	{ "mailbox-for-path", 0 },
+	{ "implicit-auth-external",
+	  SUBMISSION_LOGIN_WORKAROUND_IMPLICIT_AUTH_EXTERNAL },
+	{ NULL, 0 }
+};
+
+static int
+submission_login_settings_parse_workarounds(
+	struct submission_login_settings *set, const char **error_r)
+{
+	enum submission_login_client_workarounds client_workarounds = 0;
+        const struct submission_login_client_workaround_list *list;
+	const char *const *str;
+
+        str = t_strsplit_spaces(set->submission_client_workarounds, " ,");
+	for (; *str != NULL; str++) {
+		list = submission_login_client_workaround_list;
+		for (; list->name != NULL; list++) {
+			if (strcasecmp(*str, list->name) == 0) {
+				client_workarounds |= list->num;
+				break;
+			}
+		}
+		if (list->name == NULL) {
+			*error_r = t_strdup_printf(
+				"submission_client_workarounds: "
+				"Unknown workaround: %s", *str);
+			return -1;
+		}
+	}
+	set->parsed_workarounds = client_workarounds;
+	return 0;
+}
+
+static bool
+submission_login_settings_check(void *_set, pool_t pool ATTR_UNUSED,
+				const char **error_r)
+{
+	struct submission_login_settings *set = _set;
+
+	if (submission_login_settings_parse_workarounds(set, error_r) < 0)
+		return FALSE;
+
+#ifndef CONFIG_BINARY
+	if (*set->hostname == '\0')
+		set->hostname = p_strdup(pool, my_hostdomain());
+#endif
+	return TRUE;
+}
+/* </settings checks> */
 struct service_settings submission_login_service_settings = {
 	.name = "submission-login",
 	.protocol = "submission",
@@ -2402,6 +2479,7 @@ static const struct setting_define submission_login_setting_defines[] = {
 	DEF(STR, hostname),
 
 	DEF(SIZE, submission_max_mail_size),
+	DEF(STR, submission_client_workarounds),
 	DEF(STR, submission_backend_capabilities),
 
 	SETTING_DEFINE_LIST_END
@@ -2410,6 +2488,7 @@ static const struct submission_login_settings submission_login_default_settings 
 	.hostname = "",
 
 	.submission_max_mail_size = 0,
+	.submission_client_workarounds = "",
 	.submission_backend_capabilities = NULL
 };
 static const struct setting_parser_info *submission_login_setting_dependencies[] = {
@@ -2425,9 +2504,7 @@ const struct setting_parser_info submission_login_setting_parser_info = {
 	.struct_size = sizeof(struct submission_login_settings),
 	.parent_offset = SIZE_MAX,
 
-#ifndef CONFIG_BINARY
 	.check_func = submission_login_settings_check,
-#endif
 	.dependencies = submission_login_setting_dependencies
 };
 const struct setting_parser_info *submission_login_setting_roots[] = {
@@ -2446,10 +2523,12 @@ extern const struct setting_parser_info stats_exporter_setting_parser_info;
 static struct file_listener_settings stats_unix_listeners_array[] = {
 	{ "stats-reader", 0600, "", "" },
 	{ "stats-writer", 0660, "", "$default_internal_group" },
+	{ "login/stats-writer", 0600, "$default_login_user", "" },
 };
 static struct file_listener_settings *stats_unix_listeners[] = {
 	&stats_unix_listeners_array[0],
 	&stats_unix_listeners_array[1],
+	&stats_unix_listeners_array[2],
 };
 static buffer_t stats_unix_listeners_buf = {
 	{ { stats_unix_listeners, sizeof(stats_unix_listeners) } }
@@ -4114,7 +4193,7 @@ static const struct login_settings login_default_settings = {
 	.login_proxy_max_reconnects = 3,
 	.login_proxy_max_disconnect_delay = 0,
 	.login_proxy_rawlog_dir = "",
-	.director_username_hash = "%u",
+	.director_username_hash = "%Lu",
 
 	.auth_ssl_require_client_cert = FALSE,
 	.auth_ssl_username_from_cert = FALSE,
@@ -4288,6 +4367,7 @@ static const struct setting_define lmtp_setting_defines[] = {
 	DEF(BOOL, lmtp_save_to_detail_mailbox),
 	DEF(BOOL, lmtp_rcpt_check_quota),
 	DEF(BOOL, lmtp_add_received_header),
+	DEF(BOOL, lmtp_verbose_replies),
 	DEF(UINT, lmtp_user_concurrency_limit),
 	DEF(ENUM, lmtp_hdr_delivery_address),
 	DEF(STR_VARS, lmtp_rawlog_dir),
@@ -4308,6 +4388,7 @@ static const struct lmtp_settings lmtp_default_settings = {
 	.lmtp_save_to_detail_mailbox = FALSE,
 	.lmtp_rcpt_check_quota = FALSE,
 	.lmtp_add_received_header = TRUE,
+	.lmtp_verbose_replies = FALSE,
 	.lmtp_user_concurrency_limit = 0,
 	.lmtp_hdr_delivery_address = "final:none:original",
 	.lmtp_rawlog_dir = "",

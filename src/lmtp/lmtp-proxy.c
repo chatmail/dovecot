@@ -87,6 +87,7 @@ struct lmtp_proxy {
 	struct istream *data_input;
 
 	unsigned int max_timeout_msecs;
+	unsigned int proxy_session_seq;
 
 	bool finished:1;
 };
@@ -126,6 +127,9 @@ lmtp_proxy_init(struct client *client,
 					      &lmtp_set.proxy_data);
 	lmtp_set.proxy_data.source_ip = client->remote_ip;
 	lmtp_set.proxy_data.source_port = client->remote_port;
+	/* This initial session_id is used only locally by lib-smtp. Each LMTP
+	   proxy connection gets a more specific updated session_id. */
+	lmtp_set.proxy_data.session = trans->id;
 	if (lmtp_set.proxy_data.ttl_plus_1 == 0)
 		lmtp_set.proxy_data.ttl_plus_1 = LMTP_PROXY_DEFAULT_TTL + 1;
 	else
@@ -137,8 +141,7 @@ lmtp_proxy_init(struct client *client,
 	return proxy;
 }
 
-static void
-lmtp_proxy_connection_deinit(struct lmtp_proxy_connection *conn)
+static void lmtp_proxy_connection_deinit(struct lmtp_proxy_connection *conn)
 {
 	if (conn->lmtp_trans != NULL)
 		smtp_client_transaction_destroy(&conn->lmtp_trans);
@@ -175,8 +178,7 @@ lmtp_proxy_mail_cb(const struct smtp_reply *proxy_reply ATTR_UNUSED,
 	/* nothing */
 }
 
-static void
-lmtp_proxy_connection_finish(struct lmtp_proxy_connection *conn)
+static void lmtp_proxy_connection_finish(struct lmtp_proxy_connection *conn)
 {
 	conn->finished = TRUE;
 	conn->lmtp_trans = NULL;
@@ -230,6 +232,7 @@ lmtp_proxy_get_connection(struct lmtp_proxy *proxy,
 	};
 	struct smtp_client_settings lmtp_set;
 	struct smtp_server_transaction *trans = proxy->trans;
+	struct client *client = proxy->client;
 	struct lmtp_proxy_connection *conn;
 	enum smtp_client_connection_ssl_mode ssl_mode;
 	struct ssl_iostream_settings ssl_set;
@@ -266,6 +269,7 @@ lmtp_proxy_get_connection(struct lmtp_proxy *proxy,
 	lmtp_set.peer_trusted = !conn->set.proxy_not_trusted;
 	lmtp_set.forced_capabilities = SMTP_CAPABILITY__ORCPT;
 	lmtp_set.mail_send_broken_path = TRUE;
+	lmtp_set.verbose_user_errors = client->lmtp_set->lmtp_verbose_replies;
 
 	if (conn->set.hostip.family != 0) {
 		conn->lmtp_conn = smtp_client_connection_create_ip(
@@ -278,6 +282,11 @@ lmtp_proxy_get_connection(struct lmtp_proxy *proxy,
 			conn->set.host, conn->set.port,
 			ssl_mode, &lmtp_set);
 	}
+	struct smtp_proxy_data proxy_data = {
+		.session = t_strdup_printf("%s:P%u", proxy->trans->id,
+					   ++proxy->proxy_session_seq),
+	};
+	smtp_client_connection_update_proxy_data(conn->lmtp_conn, &proxy_data);
 	smtp_client_connection_accept_extra_capability(conn->lmtp_conn,
 						       &cap_rcpt_forward);
 	smtp_client_connection_connect(conn->lmtp_conn, NULL, NULL);
@@ -294,46 +303,62 @@ lmtp_proxy_get_connection(struct lmtp_proxy *proxy,
 	return conn;
 }
 
+static void
+lmtp_proxy_handle_connection_error(struct lmtp_proxy_recipient *lprcpt,
+				   const struct smtp_reply *reply)
+{
+	struct lmtp_recipient *lrcpt = lprcpt->rcpt;
+	struct client *client = lrcpt->client;
+	struct smtp_server_recipient *rcpt = lrcpt->rcpt;
+	const char *detail = "";
+
+	if (client->lmtp_set->lmtp_verbose_replies) {
+		smtp_server_command_fail(rcpt->cmd->cmd, 451, "4.4.0",
+					 "Proxy failed: %s (session=%s)",
+					 smtp_reply_log(reply),
+					 lrcpt->session_id);
+		return;
+	}
+
+	switch (reply->status) {
+	case SMTP_CLIENT_COMMAND_ERROR_ABORTED:
+		break;
+	case SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED:
+		detail = "DNS lookup, ";
+		break;
+	case SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED:
+	case SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED:
+		detail = "connect, ";
+		break;
+	case SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST:
+	case SMTP_CLIENT_COMMAND_ERROR_CONNECTION_CLOSED:
+		detail = "connection lost, ";
+		break;
+	case SMTP_CLIENT_COMMAND_ERROR_BAD_REPLY:
+		detail = "bad reply, ";
+		break;
+	case SMTP_CLIENT_COMMAND_ERROR_TIMED_OUT:
+		detail = "timed out, ";
+		break;
+	default:
+		break;
+	}
+
+	smtp_server_command_fail(rcpt->cmd->cmd, 451, "4.4.0",
+				 "Proxy failed (%ssession=%s)",
+				 detail, lrcpt->session_id);
+}
+
 static bool
 lmtp_proxy_handle_reply(struct lmtp_proxy_recipient *lprcpt,
 			const struct smtp_reply *reply,
 			struct smtp_reply *reply_r)
 {
-	struct smtp_server_recipient *rcpt = lprcpt->rcpt->rcpt;
-
 	*reply_r = *reply;
 
 	if (!smtp_reply_is_remote(reply) ||
-		reply->status == SMTP_CLIENT_COMMAND_ERROR_CONNECTION_CLOSED) {
-		const char *detail = "";
-
-		switch (reply->status) {
-		case SMTP_CLIENT_COMMAND_ERROR_ABORTED:
-			break;
-		case SMTP_CLIENT_COMMAND_ERROR_HOST_LOOKUP_FAILED:
-			detail = " (DNS lookup)";
-			break;
-		case SMTP_CLIENT_COMMAND_ERROR_CONNECT_FAILED:
-		case SMTP_CLIENT_COMMAND_ERROR_AUTH_FAILED:
-			detail = " (connect)";
-			break;
-		case SMTP_CLIENT_COMMAND_ERROR_CONNECTION_LOST:
-		case SMTP_CLIENT_COMMAND_ERROR_CONNECTION_CLOSED:
-			detail = " (connection lost)";
-			break;
-		case SMTP_CLIENT_COMMAND_ERROR_BAD_REPLY:
-			detail = " (bad reply)";
-			break;
-		case SMTP_CLIENT_COMMAND_ERROR_TIMED_OUT:
-			detail = " (timed out)";
-			break;
-		default:
-			break;
-		}
-
-		smtp_server_command_fail(rcpt->cmd->cmd, 451, "4.4.0",
-					 "Remote server not answering%s",
-					 detail);
+	    reply->status == SMTP_CLIENT_COMMAND_ERROR_CONNECTION_CLOSED) {
+		lmtp_proxy_handle_connection_error(lprcpt, reply);
 		return FALSE;
 	}
 
@@ -717,7 +742,8 @@ lmtp_proxy_data_cb(const struct smtp_reply *proxy_reply,
 		   struct lmtp_proxy_recipient *lprcpt)
 {
 	struct lmtp_proxy_connection *conn = lprcpt->conn;
-	struct smtp_server_recipient *rcpt = lprcpt->rcpt->rcpt;
+	struct lmtp_recipient *lrcpt = lprcpt->rcpt;
+	struct smtp_server_recipient *rcpt = lrcpt->rcpt;
 	struct lmtp_proxy *proxy = conn->proxy;
 	struct smtp_server_transaction *trans = proxy->trans;
 	struct smtp_address *address = lprcpt->address;
@@ -729,7 +755,7 @@ lmtp_proxy_data_cb(const struct smtp_reply *proxy_reply,
 
 	/* Compose log message */
 	msg = t_str_new(128);
-	str_printfa(msg, "%s: ", trans->id);
+	str_printfa(msg, "<%s>: ", lrcpt->session_id);
 	if (smtp_reply_is_success(proxy_reply))
 		str_append(msg, "Sent message to");
 	else
@@ -747,7 +773,7 @@ lmtp_proxy_data_cb(const struct smtp_reply *proxy_reply,
 		e_info(rcpt->event, "%s", str_c(msg));
 
 		/* Substitute our own success message */
-		smtp_reply_printf(&reply, 250, "%s Saved", trans->id);
+		smtp_reply_printf(&reply, 250, "%s Saved", lrcpt->session_id);
 		/* Do let the enhanced code through */
 		if (!smtp_reply_has_enhanced_code(proxy_reply))
 			reply.enhanced_code = SMTP_REPLY_ENH_CODE(2, 0, 0);

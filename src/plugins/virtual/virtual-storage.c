@@ -193,9 +193,6 @@ static int virtual_backend_box_alloc(struct virtual_mailbox *mbox,
 	ns = mail_namespace_find(user->namespaces, mailbox);
 	bbox->box = mailbox_alloc(ns->list, mailbox, flags);
 	MODULE_CONTEXT_SET(bbox->box, virtual_storage_module, bbox);
-	mailbox_set_reason(bbox->box, mbox->box.reason == NULL ?
-		t_strdup_printf("virtual mailbox %s", mailbox_get_vname(&mbox->box)) :
-		t_strdup_printf("virtual mailbox %s: %s", mailbox_get_vname(&mbox->box), mbox->box.reason));
 
 	if (bbox == mbox->save_bbox) {
 		/* Assume that the save_bbox exists, whether or not it truly
@@ -860,11 +857,13 @@ static bool virtual_is_inconsistent(struct mailbox *box)
 static int
 virtual_list_index_has_changed(struct mailbox *box ATTR_UNUSED,
 			       struct mail_index_view *list_view ATTR_UNUSED,
-			       uint32_t seq ATTR_UNUSED, bool quick ATTR_UNUSED)
+			       uint32_t seq ATTR_UNUSED, bool quick ATTR_UNUSED,
+			       const char **reason_r)
 {
 	/* we don't have any quick and easy optimizations for tracking
 	   virtual folders. ideally we'd completely disable mailbox list
 	   indexes for them, but this is the easiest way to do it for now. */
+	*reason_r = "Virtual indexes always change";
 	return 1;
 }
 
@@ -930,6 +929,7 @@ struct mailbox virtual_mailbox = {
 		virtual_search_deinit,
 		virtual_search_next_nonblock,
 		virtual_search_next_update_seq,
+		index_storage_search_next_match_mail,
 		virtual_save_alloc,
 		virtual_save_begin,
 		virtual_save_continue,

@@ -1091,13 +1091,6 @@ mailbox_alloc_for_user(struct mail_user *user, const char *mname,
 	return box;
 }
 
-void mailbox_set_reason(struct mailbox *box, const char *reason)
-{
-	i_assert(reason != NULL);
-
-	box->reason = p_strdup(box->pool, reason);
-}
-
 bool mailbox_is_autocreated(struct mailbox *box)
 {
 	if (box->inbox_user)
@@ -1462,14 +1455,9 @@ mailbox_open_full(struct mailbox *box, struct istream *input)
 	if (box->opened)
 		return 0;
 
-	if (box->reason != NULL) {
-		e_debug(box->event,
-			"Mailbox opened because: %s",
-			box->reason);
-	}
-
 	switch (box->open_error) {
 	case 0:
+		e_debug(box->event, "Mailbox opened");
 		break;
 	case MAIL_ERROR_NOTFOUND:
 		mail_storage_set_error(box->storage, MAIL_ERROR_NOTFOUND,
@@ -1723,7 +1711,6 @@ static void mailbox_copy_cache_decisions_from_inbox(struct mailbox *box)
 
 	/* this should be NoSelect but since inbox can never be
 	   NoSelect we use EXISTENCE_NONE to avoid creating inbox by accident */
-	mailbox_set_reason(inbox, "copy caching decisions");
 	if (mailbox_exists(inbox, FALSE, &existence) == 0 &&
 	    existence != MAILBOX_EXISTENCE_NONE &&
 	    mailbox_open(inbox) == 0 &&
@@ -1743,6 +1730,8 @@ int mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 	if (mailbox_verify_create_name(box) < 0)
 		return -1;
 
+	struct event_reason *reason = event_reason_begin("mailbox:create");
+
 	/* Avoid race conditions by keeping mailbox list locked during changes.
 	   This especially fixes a race during INBOX creation with LAYOUT=index
 	   because it scans for missing mailboxes if INBOX doesn't exist. The
@@ -1750,6 +1739,7 @@ int mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 	   causing the first process to become confused. */
 	if (mailbox_list_lock(box->list) < 0) {
 		mail_storage_copy_list_error(box->storage, box->list);
+		event_reason_end(&reason);
 		return -1;
 	}
 	box->creating = TRUE;
@@ -1771,6 +1761,7 @@ int mailbox_create(struct mailbox *box, const struct mailbox_update *update,
 		mailbox_close(box);
 		mail_storage_last_error_pop(box->storage);
 	}
+	event_reason_end(&reason);
 	return ret;
 }
 
@@ -1784,9 +1775,12 @@ int mailbox_update(struct mailbox *box, const struct mailbox_update *update)
 
 	if (mailbox_verify_existing_name(box) < 0)
 		return -1;
+
+	struct event_reason *reason = event_reason_begin("mailbox:update");
 	ret = box->v.update_box(box, update);
 	if (!guid_128_is_empty(update->mailbox_guid))
 		box->list->guid_cache_invalidated = TRUE;
+	event_reason_end(&reason);
 	return ret;
 }
 
@@ -1858,11 +1852,15 @@ static int mailbox_delete_real(struct mailbox *box)
 		return -1;
 	}
 
+	struct event_reason *reason = event_reason_begin("mailbox:delete");
+
 	box->deleting = TRUE;
 	if (mailbox_open(box) < 0) {
 		if (mailbox_get_last_mail_error(box) != MAIL_ERROR_NOTFOUND &&
-		    !box->mailbox_deleted)
+		    !box->mailbox_deleted) {
+			event_reason_end(&reason);
 			return -1;
+		}
 		/* might be a \noselect mailbox, so continue deletion */
 	}
 
@@ -1889,6 +1887,7 @@ static int mailbox_delete_real(struct mailbox *box)
 	/* if mailbox is reopened, its path may be different with
 	   LAYOUT=index */
 	mailbox_close_reset_path(box);
+	event_reason_end(&reason);
 	return ret;
 }
 
@@ -2069,22 +2068,33 @@ int mailbox_rename(struct mailbox *src, struct mailbox *dest)
 {
 	 int ret;
 	 T_BEGIN {
+		 struct event_reason *reason =
+			 event_reason_begin("mailbox:rename");
 		 ret = mailbox_rename_real(src, dest);
+		 event_reason_end(&reason);
 	 } T_END;
 	 return ret;
 }
 
 int mailbox_set_subscribed(struct mailbox *box, bool set)
 {
+	int ret;
+
 	if (mailbox_verify_name(box) < 0)
 		return -1;
+
+	struct event_reason *reason =
+		event_reason_begin(set ? "mailbox:subscribe" :
+				   "mailbox:unsubscribe");
 	if (mailbox_list_iter_subscriptions_refresh(box->list) < 0) {
 		mail_storage_copy_list_error(box->storage, box->list);
-		return -1;
-	}
-	if (mailbox_is_subscribed(box) == set)
-		return 0;
-	return box->v.set_subscribed(box, set);
+		ret = -1;
+	} else if (mailbox_is_subscribed(box) == set)
+		ret = 0;
+	else
+		ret = box->v.set_subscribed(box, set);
+	event_reason_end(&reason);
+	return ret;
 }
 
 bool mailbox_is_subscribed(struct mailbox *box)
@@ -2442,11 +2452,19 @@ int mailbox_transaction_commit_get_changes(
 	struct mailbox_transaction_context *t = *_t;
 	struct mailbox *box = t->box;
 	unsigned int save_count = t->save_count;
+	struct event_reason *reason = NULL;
 	int ret;
 
 	changes_r->pool = NULL;
 
 	*_t = NULL;
+
+	if (t->itrans->attribute_updates != NULL &&
+	    t->itrans->attribute_updates->used > 0) {
+		/* attribute changes are also done directly via lib-index
+		   by ACL and Sieve */
+		reason = event_reason_begin("mailbox:attributes_changed");
+	}
 	T_BEGIN {
 		ret = box->v.transaction_commit(t, changes_r);
 	} T_END;
@@ -2461,6 +2479,7 @@ int mailbox_transaction_commit_get_changes(
 	   don't see transaction_count=0 until the parent transaction is fully
 	   finished */
 	box->transaction_count--;
+	event_reason_end(&reason);
 	if (ret < 0 && changes_r->pool != NULL)
 		pool_unref(&changes_r->pool);
 	return ret;

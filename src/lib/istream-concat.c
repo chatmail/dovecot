@@ -2,6 +2,7 @@
 
 #include "lib.h"
 #include "buffer.h"
+#include "memarea.h"
 #include "istream-private.h"
 #include "istream-concat.h"
 
@@ -95,8 +96,12 @@ static void i_stream_concat_read_next(struct concat_istream *cstream)
 
 	/* we already verified that the data size is less than the
 	   maximum buffer size */
+	cstream->istream.skip = 0;
 	cstream->istream.pos = 0;
 	if (data_size > 0) {
+		if (cstream->istream.memarea != NULL &&
+		    memarea_get_refcount(cstream->istream.memarea) > 1)
+			i_stream_memarea_detach(&cstream->istream);
 		if (!i_stream_try_alloc(&cstream->istream, data_size, &size))
 			i_unreached();
 		i_assert(size >= data_size);
@@ -164,7 +169,10 @@ static ssize_t i_stream_concat_read(struct istream_private *stream)
 	else {
 		/* need to read more - NOTE: Can't use i_stream_read_memarea()
 		   here, because our stream->buffer may point to the parent
-		   istream. */
+		   istream. Implementing explicit snapshot function to avoid
+		   this isn't easy for seekable concat-istreams, because due to
+		   seeking it's not necessarily the cur_input that needs to be
+		   snapshotted. */
 		i_assert(cur_data_pos == data_size);
 		ret = i_stream_read(cstream->cur_input);
 		if (ret == -2 || ret == 0)
@@ -379,6 +387,5 @@ struct istream *i_stream_create_concat(struct istream *input[])
 	cstream->istream.istream.readable_fd = FALSE;
 	cstream->istream.istream.blocking = blocking;
 	cstream->istream.istream.seekable = seekable;
-	return i_stream_create(&cstream->istream, NULL, -1,
-			       ISTREAM_CREATE_FLAG_NOOP_SNAPSHOT);
+	return i_stream_create(&cstream->istream, NULL, -1, 0);
 }

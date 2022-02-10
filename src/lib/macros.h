@@ -27,7 +27,7 @@
 	((const void *) (((uintptr_t) (ptr)) + ((size_t) (offset))))
 
 #define container_of(ptr, type, name) \
-	(type *)((uintptr_t)(ptr) - (uintptr_t)offsetof(type, name) + \
+	(type *)((char *)(ptr) - offsetof(type, name) + \
 		 COMPILE_ERROR_IF_TYPES_NOT_COMPATIBLE(ptr, &((type *) 0)->name))
 
 /* Don't use simply MIN/MAX, as they're often defined elsewhere in include
@@ -182,7 +182,8 @@
 #  define CALLBACK_TYPECHECK(callback, type) 0
 #endif
 
-#if (__GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 0)) && !defined(__cplusplus)
+#if (__GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 0)) && \
+	!defined(__cplusplus) && !defined(STATIC_CHECKER)
 #  define COMPILE_ERROR_IF_TRUE(condition) \
 	(sizeof(char[1 - 2 * ((condition) ? 1 : 0)]) > 0 ? FALSE : FALSE)
 #else
@@ -223,27 +224,20 @@
 #ifdef DISABLE_ASSERTS
 #  define i_assert(expr)
 #else
-
-#define i_assert(expr)			STMT_START{			\
+#  define i_assert(expr)			STMT_START{			\
      if (unlikely(!(expr)))						\
        i_panic("file %s: line %d (%s): assertion failed: (%s)",		\
 		__FILE__,						\
 		__LINE__,						\
 		__func__,					\
 		#expr);			}STMT_END
-
 #endif
 
-#define i_unreached() \
-	i_panic("file %s: line %d: unreached", __FILE__, __LINE__)
-
-/* Convenience macros to test the versions of dovecot. */
-#if defined DOVECOT_VERSION_MAJOR && defined DOVECOT_VERSION_MINOR
-#  define DOVECOT_PREREQ(maj, min) \
-          ((DOVECOT_VERSION_MAJOR << 16) + DOVECOT_VERSION_MINOR >= ((maj) << 16) + (min))
-#else
-#  define DOVECOT_PREREQ(maj, min) 0
-#endif
+/* Convenience macro to test the versions of dovecot. */
+#define DOVECOT_PREREQ(maj, min, micro) \
+	((DOVECOT_VERSION_MAJOR << 24) + \
+	 (DOVECOT_VERSION_MINOR << 16) + \
+	 DOVECOT_VERSION_MICRO >= ((maj) << 24) + ((min) << 16) + (micro))
 
 #ifdef __cplusplus
 #  undef STATIC_ARRAY
@@ -268,8 +262,6 @@
 	 ST_MTIME_NSEC(st_a) != ST_MTIME_NSEC(st_b) || \
 	 (st_a).st_size != (st_b).st_size || \
 	 (st_a).st_ino != (st_b).st_ino)
-
-#endif
 
 #ifdef HAVE_UNDEFINED_SANITIZER
 # define ATTR_NO_SANITIZE(x) __attribute__((no_sanitize((x))))
@@ -305,4 +297,6 @@
 /* clang scan-build keeps complaining about x > 2147483647 case, so disable the
    sizeof check. */
 #  define ENUM_NEGATE(x) ((unsigned int)(~(x)))
+#endif
+
 #endif
