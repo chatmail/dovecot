@@ -343,8 +343,14 @@ test_auth_handshake_auth_plain(struct server_connection *conn, unsigned int id,
 		return FALSE;
 	}
 
-	if (authenid == NULL)
-		authenid = authid;
+	i_assert(authenid != NULL);
+	if (strcmp(authid, "supremelordoftheuniverse") != 0) {
+		/* unexpected authorization ID */
+		o_stream_nsend_str(
+			conn->conn.output,
+			t_strdup_printf("FAIL\t%u\tuser=%s\n", id, authenid));
+		return TRUE;
+	}
 	if (strcmp(authenid, "harrie") == 0 && strcmp(pass, "frop") == 0) {
 		o_stream_nsend_str(
 			conn->conn.output,

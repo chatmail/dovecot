@@ -298,7 +298,6 @@ static int cmd_force_resync_box(struct doveadm_mail_cmd_context *_ctx,
 		flags |= MAILBOX_FLAG_FSCK;
 
 	box = mailbox_alloc(info->ns->list, info->vname, flags);
-	mailbox_set_reason(box, _ctx->cmd->name);
 	if (mailbox_open(box) < 0) {
 		i_error("Opening mailbox %s failed: %s", info->vname,
 			mailbox_get_last_internal_error(box, NULL));
@@ -458,12 +457,18 @@ doveadm_mail_next_user(struct doveadm_mail_cmd_context *ctx,
 		return ret;
 	}
 
+	struct event_reason *reason =
+		event_reason_begin(event_reason_code_prefix("doveadm", "cmd_",
+							    ctx->cmd->name));
 	T_BEGIN {
 		if (ctx->v.run(ctx, ctx->cur_mail_user) < 0) {
 			i_assert(ctx->exit_code != 0);
 		}
 	} T_END;
 	mail_user_deinit(&ctx->cur_mail_user);
+	/* user deinit may still do some work, so finish the reason after it */
+	event_reason_end(&reason);
+
 	mail_storage_service_user_unref(&ctx->cur_service_user);
 	return 1;
 }

@@ -2,8 +2,8 @@ AC_PREREQ([2.59])
 
 # Be sure to update ABI version also if anything changes that might require
 # recompiling plugins. Most importantly that means if any structs are changed.
-AC_INIT([Dovecot],[2.3.17.1],[dovecot@dovecot.org])
-AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.3.ABIv17($PACKAGE_VERSION)", [Dovecot ABI version])
+AC_INIT([Dovecot],[2.3.18],[dovecot@dovecot.org])
+AC_DEFINE_UNQUOTED([DOVECOT_ABI_VERSION], "2.3.ABIv18($PACKAGE_VERSION)", [Dovecot ABI version])
 
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_MACRO_DIR([m4])
@@ -293,6 +293,19 @@ AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", [Dovecot version])
 
 AC_DEFINE([DOVECOT_VERSION_MAJOR], regexp(AC_PACKAGE_VERSION, [^\([0-9]+\)\.\([0-9]+\)], [\1]), [Dovecot major version])
 AC_DEFINE([DOVECOT_VERSION_MINOR], regexp(AC_PACKAGE_VERSION, [^\([0-9]+\)\.\([0-9]+\)], [\2]), [Dovecot minor version])
+AC_DEFINE([DOVECOT_VERSION_MICRO], regexp(AC_PACKAGE_VERSION, [^\([0-9]+\)\.\([0-9]+\).\([0-9]+\)], [\3]), [Dovecot micro version])
+
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
+],[
+#if DOVECOT_VERSION_MICRO > 0
+#endif
+])], [], AC_DEFINE([DOVECOT_VERSION_MICRO], [0], [Dovecot micro version]))
+
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([
+],[
+#if DOVECOT_VERSION_MAJOR > 0 && DOVECOT_VERSION_MINOR > 0
+#endif
+])], [], AC_MSG_ERROR([Version macros broken]))
 
 AC_CHECK_HEADERS(strings.h stdint.h unistd.h dirent.h malloc.h \
   sys/uio.h sys/sysmacros.h sys/resource.h sys/select.h libgen.h \

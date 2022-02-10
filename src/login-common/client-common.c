@@ -224,6 +224,7 @@ client_alloc(int fd, pool_t pool,
 	event_add_int(client->event, "local_port", conn->local_port);
 	event_add_str(client->event, "remote_ip", net_ip2addr(&conn->remote_ip));
 	event_add_int(client->event, "remote_port", conn->remote_port);
+	event_add_str(client->event, "service", login_binary->protocol);
 	event_set_log_message_callback(client->event, client_log_msg_callback,
 				       client);
 
@@ -282,12 +283,21 @@ void client_disconnect(struct client *client, const char *reason,
 	if (client->output != NULL)
 		o_stream_uncork(client->output);
 	if (!client->login_success) {
+		bool unref = FALSE;
+
 		io_remove(&client->io);
 		ssl_iostream_destroy(&client->ssl_iostream);
-		iostream_proxy_unref(&client->iostream_fd_proxy);
+		if (client->iostream_fd_proxy != NULL) {
+			iostream_proxy_unref(&client->iostream_fd_proxy);
+			unref = TRUE;
+		}
 		i_stream_close(client->input);
 		o_stream_close(client->output);
 		i_close_fd(&client->fd);
+		if (unref) {
+			i_assert(client->refcount > 1);
+			client_unref(&client);
+		}
 	} else {
 		/* Login was successful. We may now be proxying the connection,
 		   so don't disconnect the client until client_unref(). */
@@ -324,6 +334,8 @@ void client_destroy(struct client *client, const char *reason)
 	client_disconnect(client, reason, !client->login_success);
 
 	pool_unref(&client->preproxy_pool);
+	client->forward_fields = NULL;
+	client->client_id = NULL;
 
 	if (client->master_tag != 0) {
 		i_assert(client->auth_request == NULL);
@@ -351,8 +363,7 @@ void client_destroy(struct client *client, const char *reason)
 		i_free_and_null(client->proxy_password);
 	}
 
-	if (client->proxy_sasl_client != NULL)
-		dsasl_client_free(&client->proxy_sasl_client);
+	dsasl_client_free(&client->proxy_sasl_client);
 	if (client->login_proxy != NULL)
 		login_proxy_free(&client->login_proxy);
 	if (client->v.destroy != NULL)
@@ -760,6 +771,10 @@ const char *client_get_session_id(struct client *client)
 	return client->session_id;
 }
 
+/* increment index if new proper login variables are added
+ * make sure the aliases stay in the current order */
+#define VAR_EXPAND_ALIAS_INDEX_START 27
+
 static struct var_expand_table login_var_expand_empty_tab[] = {
 	{ 'u', NULL, "user" },
 	{ 'n', NULL, "username" },
@@ -833,13 +848,18 @@ get_var_expand_table(struct client *client)
 		get_var_expand_users(tab, client->virtual_user);
 	tab[3].value = login_binary->protocol;
 	tab[4].value = getenv("HOME");
-	tab[27].value = tab[5].value = net_ip2addr(&client->local_ip);
-	tab[28].value = tab[6].value = net_ip2addr(&client->ip);
+	tab[VAR_EXPAND_ALIAS_INDEX_START].value = tab[5].value =
+		net_ip2addr(&client->local_ip);
+	tab[VAR_EXPAND_ALIAS_INDEX_START + 1].value = tab[6].value =
+		net_ip2addr(&client->ip);
 	tab[7].value = my_pid;
-	tab[35].value = tab[8].value = client->auth_mech_name == NULL ? NULL :
-		str_sanitize(client->auth_mech_name, MAX_MECH_NAME);
-	tab[29].value = tab[9].value = dec2str(client->local_port);
-	tab[30].value = tab[10].value = dec2str(client->remote_port);
+	tab[VAR_EXPAND_ALIAS_INDEX_START + 8].value = tab[8].value =
+		client->auth_mech_name == NULL ? NULL :
+			str_sanitize(client->auth_mech_name, MAX_MECH_NAME);
+	tab[VAR_EXPAND_ALIAS_INDEX_START + 2].value = tab[9].value =
+		dec2str(client->local_port);
+	tab[VAR_EXPAND_ALIAS_INDEX_START + 3].value = tab[10].value =
+		dec2str(client->remote_port);
 	if (!client->tls) {
 		tab[11].value = client->secured ? "secured" : NULL;
 		tab[12].value = "";
@@ -861,16 +881,20 @@ get_var_expand_table(struct client *client)
 	tab[13].value = client->mail_pid == 0 ? "" :
 		dec2str(client->mail_pid);
 	tab[14].value = client_get_session_id(client);
-	tab[31].value = tab[15].value = net_ip2addr(&client->real_local_ip);
-	tab[32].value = tab[16].value = net_ip2addr(&client->real_remote_ip);
-	tab[33].value = tab[17].value = dec2str(client->real_local_port);
-	tab[34].value = tab[18].value = dec2str(client->real_remote_port);
+	tab[VAR_EXPAND_ALIAS_INDEX_START + 4].value = tab[15].value =
+		net_ip2addr(&client->real_local_ip);
+	tab[VAR_EXPAND_ALIAS_INDEX_START + 5].value = tab[16].value =
+		net_ip2addr(&client->real_remote_ip);
+	tab[VAR_EXPAND_ALIAS_INDEX_START + 6].value = tab[17].value =
+		dec2str(client->real_local_port);
+	tab[VAR_EXPAND_ALIAS_INDEX_START + 7].value = tab[18].value =
+		dec2str(client->real_remote_port);
 	if (client->virtual_user_orig != NULL)
 		get_var_expand_users(tab+19, client->virtual_user_orig);
 	else {
-		tab[36].value = tab[19].value = tab[0].value;
-		tab[37].value = tab[20].value = tab[1].value;
-		tab[38].value = tab[21].value = tab[2].value;
+		tab[VAR_EXPAND_ALIAS_INDEX_START + 9].value = tab[19].value = tab[0].value;
+		tab[VAR_EXPAND_ALIAS_INDEX_START + 10].value = tab[20].value = tab[1].value;
+		tab[VAR_EXPAND_ALIAS_INDEX_START + 11].value = tab[21].value = tab[2].value;
 	}
 	if (client->virtual_auth_user != NULL)
 		get_var_expand_users(tab+22, client->virtual_auth_user);

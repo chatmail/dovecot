@@ -1,12 +1,39 @@
-2021-11-30 12:50:17 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (a1a0b892)
+2022-02-02 09:19:35 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (0bc28b32)
 
-    Release v0.5.17.1
+    NEWS: Change release date
 
 
 M	NEWS
+
+2022-01-12 12:54:05 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (2232a7dc)
+
+    NEWS: Add news for 0.5.18
+
+
+M	NEWS
+
+2021-11-30 12:50:17 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (e27e7ba7)
+
+    NEWS: Add news for 0.5.17.1
+
+
+M	NEWS
+
+2021-09-28 12:57:33 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (2ea0955f)
+
+    NEWS: Add news for 0.5.17
+
+
+M	NEWS
+
+2022-01-12 10:43:44 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (12a51191)
+
+    configure: Set version to 0.5.18
+
+
 M	configure.ac
 
-2021-12-03 09:05:16 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (2e3f79bb)
+2021-12-03 09:05:16 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (df7907ae)
 
     lib-sieve-tool: Sieve tools do not need SSL settings
 
@@ -14,7 +41,76 @@ M	configure.ac
 
 M	src/lib-sieve-tool/sieve-tool.c
 
-2021-11-04 10:46:57 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (44945af4)
+2019-10-06 19:36:32 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (e8af1162)
+
+    lib-sieve: sieve-stringlist - Assert that index for the index stringlist is
+    not 0.
+
+
+M	src/lib-sieve/sieve-stringlist.c
+
+2019-10-06 20:42:54 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (8c6a3928)
+
+    lib-sieve: index extension: Do not accept :index tag with zero value.
+
+
+M	src/lib-sieve/plugins/index/tag-index.c
+M	tests/extensions/index/errors.svtest
+M	tests/extensions/index/errors/syntax.sieve
+
+2019-10-06 20:59:43 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (a46bb1a9)
+
+    lib-sieve: plugins: index: Reformat tag-index.c.
+
+
+M	src/lib-sieve/plugins/index/tag-index.c
+
+2021-10-22 21:54:43 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (3e2a8df4)
+
+    managesieve-login: Pass forward_ passdb args using XCLIENT command.
+
+
+M	src/managesieve-login/managesieve-proxy.c
+
+2021-10-22 21:51:08 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (a869b1a8)
+
+    managesieve-login: Add FORWARD for XCLIENT.
+
+    This allows passing passdb variables. They are prefixed with forward_ when 
+    imported to extra fields.
+
+M	src/managesieve-login/client.c
+
+2021-11-03 23:49:09 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (a1b4cea5)
+
+    managesieve-login: managesieve-proxy - Fix pipelining beyond AUTHENTICATE.
+
+    Upon login success, the next line was erroneously skipped.
+
+M	src/managesieve-login/managesieve-proxy.c
+
+2021-06-22 17:06:58 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (b5e69c08)
+
+    managesieve-login: Reformat managesieve-proxy.c.
+
+
+M	src/managesieve-login/managesieve-proxy.c
+
+2021-06-22 16:21:20 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (a38436fc)
+
+    managesieve-login: Reformat client.h.
+
+
+M	src/managesieve-login/client.h
+
+2021-06-22 16:18:49 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (d92ad7b1)
+
+    managesieve-login: Reformat client.c.
+
+
+M	src/managesieve-login/client.c
+
+2021-11-04 10:46:57 +0100 Stephan Bosch <stephan.bosch@open-xchange.com> (cbc1c489)
 
     lib-sieve: util: edit-mail - Fix returning buffer-full condition when data
     was read.
@@ -29,28 +125,28 @@ M	src/lib-sieve-tool/sieve-tool.c
 M	src/lib-sieve/util/edit-mail.c
 M	src/lib-sieve/util/test-edit-mail.c
 
-2020-08-26 00:38:15 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (bff239ff)
+2020-08-26 00:38:15 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (b7b4d24d)
 
     lib-sieve: util: Reformat test-edit-mail.c.
 
 
 M	src/lib-sieve/util/test-edit-mail.c
 
-2020-08-26 00:00:04 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (9311a4a2)
+2020-08-26 00:00:04 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (ecc70828)
 
     lib-sieve: util: Reformat edit-mail.h.
 
 
 M	src/lib-sieve/util/edit-mail.h
 
-2020-08-25 23:55:28 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (b3d979a4)
+2020-08-25 23:55:28 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (a4a22309)
 
     lib-sieve: util: Reformat edit-mail.c.
 
 
 M	src/lib-sieve/util/edit-mail.c
 
-2021-11-02 09:54:08 -0400 Timo Sirainen <timo.sirainen@open-xchange.com> (07583f7b)
+2021-11-02 09:54:08 -0400 Timo Sirainen <timo.sirainen@open-xchange.com> (29750ba5)
 
     managesieve: Use MASTER_SERVICE_FLAG_DISABLE_SSL_SET when dumping capability
 
@@ -58,7 +154,7 @@ M	src/lib-sieve/util/edit-mail.c
 
 M	src/managesieve/main.c
 
-2021-10-28 00:40:58 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (67d6bee9)
+2021-10-28 00:40:58 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (0b5e7b1a)
 
     lib-sieve: sieve-result - Fix panic occurring upon temp fail after committed
     keep-equivalent action.
@@ -83,47 +179,41 @@ M	src/managesieve/main.c
 
 M	src/lib-sieve/sieve-result.c
 
-2021-10-28 00:45:15 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (0aacbf5c)
+2021-10-28 00:45:15 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (d1c44652)
 
     lib-sieve: sieve-result - Move finalize debug message for implicit keep.
 
 
 M	src/lib-sieve/sieve-result.c
 
-2021-09-28 12:57:33 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (054dddfa)
+2021-09-20 22:09:48 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (27ab897f)
 
-    NEWS: Add news for 0.5.17
+    plugins: imapsieve: imap-sieve-storage - Make sure mail_set_uid() is never
+    called with uid=0.
 
 
-M	NEWS
+M	src/plugins/imapsieve/imap-sieve-storage.c
 
-2021-08-04 13:06:23 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (8d1f74d0)
+2021-08-04 13:06:23 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (c6d3cabf)
 
     NEWS: Add news for 0.5.16
 
 
 M	NEWS
 
-2021-06-11 11:58:05 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (e481c344)
+2021-06-11 11:58:05 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (216e41c2)
 
     NEWS: Update release date
 
 
 M	NEWS
 
-2021-04-22 15:20:32 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (4ff7f14c)
+2021-04-22 15:20:32 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (ab56f331)
 
     NEWS: Add news for 0.5.15
 
 
 M	NEWS
-
-2021-09-28 12:42:01 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (6ee9c114)
-
-    configure: Set version to 0.5.17
-
-
-M	configure.ac
 
 2021-09-17 11:40:41 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (837bd100)
 

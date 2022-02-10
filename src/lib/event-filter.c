@@ -39,17 +39,6 @@ struct event_filter_query_internal {
 	void *context;
 };
 
-struct event_filter {
-	struct event_filter *prev, *next;
-
-	pool_t pool;
-	int refcount;
-	ARRAY(struct event_filter_query_internal) queries;
-
-	bool fragment;
-	bool named_queries_only;
-};
-
 static struct event_filter *event_filters = NULL;
 
 static struct event_filter *event_filter_create_real(pool_t pool, bool fragment)
@@ -149,6 +138,23 @@ static void add_node(pool_t pool, struct event_filter_node **root,
 	*root = parent;
 }
 
+static bool filter_node_requires_event_name(struct event_filter_node *node)
+{
+	switch (node->op) {
+	case EVENT_FILTER_OP_NOT:
+		return filter_node_requires_event_name(node->children[0]);
+	case EVENT_FILTER_OP_AND:
+		return filter_node_requires_event_name(node->children[0]) ||
+			filter_node_requires_event_name(node->children[1]);
+	case EVENT_FILTER_OP_OR:
+		return filter_node_requires_event_name(node->children[0]) &&
+			filter_node_requires_event_name(node->children[1]);
+	default:
+		return node->type == EVENT_FILTER_NODE_TYPE_EVENT_NAME_WILDCARD ||
+			node->type == EVENT_FILTER_NODE_TYPE_EVENT_NAME_EXACT;
+	}
+}
+
 int event_filter_parse(const char *str, struct event_filter *filter,
 		       const char **error_r)
 {
@@ -178,7 +184,8 @@ int event_filter_parse(const char *str, struct event_filter *filter,
 		add_node(filter->pool, &int_query->expr, state.output,
 			 EVENT_FILTER_OP_OR);
 
-		filter->named_queries_only = filter->named_queries_only && state.has_event_name;
+		filter->named_queries_only = filter->named_queries_only &&
+			filter_node_requires_event_name(state.output);
 	} else if (ret != 0) {
 		/* error */
 		i_assert(state.error != NULL);
@@ -469,7 +476,62 @@ event_has_category(struct event *event, struct event_filter_node *node,
 		/* try also the parent events */
 		event = event_get_parent(event);
 	}
+	/* check also the global event and its parents */
+	event = event_get_global();
+	while (event != NULL) {
+		if (event_has_category_nonrecursive(event, wanted_category))
+			return TRUE;
+		event = event_get_parent(event);
+	}
 	return FALSE;
+}
+
+static bool
+event_match_strlist_recursive(struct event *event,
+			      const struct event_field *wanted_field,
+			      bool use_strcmp, bool *seen)
+{
+	const char *wanted_value = wanted_field->value.str;
+	const struct event_field *field;
+	const char *value;
+	bool match;
+
+	if (event == NULL)
+		return FALSE;
+
+	field = event_find_field_nonrecursive(event, wanted_field->key);
+	if (field != NULL) {
+		i_assert(field->value_type == EVENT_FIELD_VALUE_TYPE_STRLIST);
+		array_foreach_elem(&field->value.strlist, value) {
+			*seen = TRUE;
+			match = use_strcmp ? strcmp(value, wanted_value) == 0 :
+				wildcard_match_icase(value, wanted_value);
+			if (match)
+				return TRUE;
+		}
+	}
+	return event_match_strlist_recursive(event->parent, wanted_field,
+					     use_strcmp, seen);
+}
+
+static bool
+event_match_strlist(struct event *event, const struct event_field *wanted_field,
+		    bool use_strcmp)
+{
+	bool seen = FALSE;
+
+	if (event_match_strlist_recursive(event, wanted_field,
+					  use_strcmp, &seen))
+		return TRUE;
+	if (event_match_strlist_recursive(event_get_global(),
+					  wanted_field, use_strcmp, &seen))
+		return TRUE;
+	if (wanted_field->value.str[0] == '\0' && !seen) {
+		/* strlist="" matches nonexistent strlist */
+		return TRUE;
+	}
+	return FALSE;
+
 }
 
 static bool
@@ -535,6 +597,12 @@ event_match_field(struct event *event, const struct event_field *wanted_field,
 	case EVENT_FIELD_VALUE_TYPE_TIMEVAL:
 		/* there's no point to support matching exact timestamps */
 		return FALSE;
+	case EVENT_FIELD_VALUE_TYPE_STRLIST:
+		/* check if the value is (or is not) on the list,
+		   only string matching makes sense here. */
+		if (op != EVENT_FILTER_OP_CMP_EQ)
+			return FALSE;
+		return event_match_strlist(event, wanted_field, use_strcmp);
 	}
 	i_unreached();
 }

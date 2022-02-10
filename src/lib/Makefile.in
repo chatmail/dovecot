@@ -256,6 +256,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-istream-unix.$(OBJEXT) \
 	test_lib-test-json-parser.$(OBJEXT) \
 	test_lib-test-json-tree.$(OBJEXT) \
+	test_lib-test-lib-event.$(OBJEXT) \
 	test_lib-test-lib-signals.$(OBJEXT) \
 	test_lib-test-llist.$(OBJEXT) \
 	test_lib-test-log-throttle.$(OBJEXT) \
@@ -442,6 +443,7 @@ am__depfiles_remade = ./$(DEPDIR)/aqueue.Plo ./$(DEPDIR)/array.Plo \
 	./$(DEPDIR)/test_lib-test-istream.Po \
 	./$(DEPDIR)/test_lib-test-json-parser.Po \
 	./$(DEPDIR)/test_lib-test-json-tree.Po \
+	./$(DEPDIR)/test_lib-test-lib-event.Po \
 	./$(DEPDIR)/test_lib-test-lib-signals.Po \
 	./$(DEPDIR)/test_lib-test-lib.Po \
 	./$(DEPDIR)/test_lib-test-llist.Po \
@@ -1199,6 +1201,7 @@ test_lib_SOURCES = \
 	test-istream-unix.c \
 	test-json-parser.c \
 	test-json-tree.c \
+	test-lib-event.c \
 	test-lib-signals.c \
 	test-llist.c \
 	test-log-throttle.c \
@@ -1514,6 +1517,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-istream.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-json-parser.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-json-tree.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-lib-event.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-lib-signals.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-lib.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-llist.Po@am__quote@ # am--include-marker
@@ -2361,6 +2365,20 @@ test_lib-test-json-tree.obj: test-json-tree.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-json-tree.c' object='test_lib-test-json-tree.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-json-tree.obj `if test -f 'test-json-tree.c'; then $(CYGPATH_W) 'test-json-tree.c'; else $(CYGPATH_W) '$(srcdir)/test-json-tree.c'; fi`
+
+test_lib-test-lib-event.o: test-lib-event.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-lib-event.o -MD -MP -MF $(DEPDIR)/test_lib-test-lib-event.Tpo -c -o test_lib-test-lib-event.o `test -f 'test-lib-event.c' || echo '$(srcdir)/'`test-lib-event.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-lib-event.Tpo $(DEPDIR)/test_lib-test-lib-event.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-lib-event.c' object='test_lib-test-lib-event.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-lib-event.o `test -f 'test-lib-event.c' || echo '$(srcdir)/'`test-lib-event.c
+
+test_lib-test-lib-event.obj: test-lib-event.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-lib-event.obj -MD -MP -MF $(DEPDIR)/test_lib-test-lib-event.Tpo -c -o test_lib-test-lib-event.obj `if test -f 'test-lib-event.c'; then $(CYGPATH_W) 'test-lib-event.c'; else $(CYGPATH_W) '$(srcdir)/test-lib-event.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-lib-event.Tpo $(DEPDIR)/test_lib-test-lib-event.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-lib-event.c' object='test_lib-test-lib-event.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-lib-event.obj `if test -f 'test-lib-event.c'; then $(CYGPATH_W) 'test-lib-event.c'; else $(CYGPATH_W) '$(srcdir)/test-lib-event.c'; fi`
 
 test_lib-test-lib-signals.o: test-lib-signals.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-lib-signals.o -MD -MP -MF $(DEPDIR)/test_lib-test-lib-signals.Tpo -c -o test_lib-test-lib-signals.o `test -f 'test-lib-signals.c' || echo '$(srcdir)/'`test-lib-signals.c
@@ -3241,6 +3259,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/test_lib-test-istream.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-json-parser.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-json-tree.Po
+	-rm -f ./$(DEPDIR)/test_lib-test-lib-event.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-lib-signals.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-lib.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-llist.Po
@@ -3536,6 +3555,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/test_lib-test-istream.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-json-parser.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-json-tree.Po
+	-rm -f ./$(DEPDIR)/test_lib-test-lib-event.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-lib-signals.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-lib.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-llist.Po

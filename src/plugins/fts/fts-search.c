@@ -9,6 +9,7 @@
 #include "fts-search-args.h"
 #include "fts-search-serialize.h"
 #include "fts-storage.h"
+#include "hash.h"
 
 static void
 uid_range_to_seqs(struct fts_search_context *fctx,
@@ -336,7 +337,7 @@ static void fts_search_merge_scores(struct fts_search_context *fctx)
 				      TRUE, &fctx->scores->score_map);
 }
 
-void fts_search_lookup(struct fts_search_context *fctx)
+static void fts_search_try_lookup(struct fts_search_context *fctx)
 {
 	uint32_t last_uid, seq1, seq2;
 
@@ -351,6 +352,11 @@ void fts_search_lookup(struct fts_search_context *fctx)
 			      &seq1, &seq2);
 	fctx->first_unindexed_seq = seq1 != 0 ? seq1 : (uint32_t)-1;
 
+	if (fctx->virtual_mailbox) {
+		hash_table_clear(fctx->last_indexed_virtual_uids, TRUE);
+		fctx->next_unindexed_seq = fctx->first_unindexed_seq;
+	}
+
 	if ((fctx->backend->flags & FTS_BACKEND_FLAG_TOKENIZED_INPUT) != 0) {
 		if (fts_search_args_expand(fctx->backend, fctx->args) < 0)
 			return;
@@ -364,4 +370,11 @@ void fts_search_lookup(struct fts_search_context *fctx)
 
 	fts_search_deserialize(fctx->args->args, fctx->orig_matches);
 	fts_backend_lookup_done(fctx->backend);
+}
+
+void fts_search_lookup(struct fts_search_context *fctx)
+{
+	struct event_reason *reason = event_reason_begin("fts:lookup");
+	fts_search_try_lookup(fctx);
+	event_reason_end(&reason);
 }

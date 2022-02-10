@@ -91,6 +91,7 @@ host_triplet = @host@
 pkglibexec_PROGRAMS = rawlog$(EXEEXT) script$(EXEEXT) \
 	script-login$(EXEEXT) $(am__EXEEXT_1) gdbhelper$(EXEEXT) \
 	maildirlock$(EXEEXT)
+noinst_PROGRAMS = test-fs$(EXEEXT)
 subdir = src/util
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -153,7 +154,7 @@ CONFIG_CLEAN_VPATH_FILES =
 @TCPWRAPPERS_TRUE@am__EXEEXT_1 = tcpwrap$(EXEEXT)
 am__installdirs = "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(bindir)" \
 	"$(DESTDIR)$(pkglibexecdir)"
-PROGRAMS = $(pkglibexec_PROGRAMS)
+PROGRAMS = $(noinst_PROGRAMS) $(pkglibexec_PROGRAMS)
 am_gdbhelper_OBJECTS = gdbhelper.$(OBJEXT)
 gdbhelper_OBJECTS = $(am_gdbhelper_OBJECTS)
 am__DEPENDENCIES_1 =
@@ -173,6 +174,8 @@ am__tcpwrap_SOURCES_DIST = tcpwrap.c tcpwrap-settings.c
 @TCPWRAPPERS_TRUE@am_tcpwrap_OBJECTS = tcpwrap.$(OBJEXT) \
 @TCPWRAPPERS_TRUE@	tcpwrap-settings.$(OBJEXT)
 tcpwrap_OBJECTS = $(am_tcpwrap_OBJECTS)
+am_test_fs_OBJECTS = test-fs.$(OBJEXT)
+test_fs_OBJECTS = $(am_test_fs_OBJECTS)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -220,7 +223,8 @@ am__depfiles_remade = ./$(DEPDIR)/gdbhelper.Po \
 	./$(DEPDIR)/health-check-settings.Po \
 	./$(DEPDIR)/maildirlock.Po ./$(DEPDIR)/rawlog.Po \
 	./$(DEPDIR)/script-login.Po ./$(DEPDIR)/script.Po \
-	./$(DEPDIR)/tcpwrap-settings.Po ./$(DEPDIR)/tcpwrap.Po
+	./$(DEPDIR)/tcpwrap-settings.Po ./$(DEPDIR)/tcpwrap.Po \
+	./$(DEPDIR)/test-fs.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -242,10 +246,10 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(gdbhelper_SOURCES) $(maildirlock_SOURCES) \
 	$(rawlog_SOURCES) $(script_SOURCES) $(script_login_SOURCES) \
-	$(tcpwrap_SOURCES)
+	$(tcpwrap_SOURCES) $(test_fs_SOURCES)
 DIST_SOURCES = $(gdbhelper_SOURCES) $(maildirlock_SOURCES) \
 	$(rawlog_SOURCES) $(script_SOURCES) $(script_login_SOURCES) \
-	$(am__tcpwrap_SOURCES_DIST)
+	$(am__tcpwrap_SOURCES_DIST) $(test_fs_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -495,6 +499,7 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-auth \
 	-I$(top_srcdir)/src/lib-dict \
+	-I$(top_srcdir)/src/lib-fs \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-master \
 	-I$(top_srcdir)/src/lib-mail \
@@ -506,6 +511,11 @@ AM_CPPFLAGS = \
 	-DPKG_RUNDIR=\""$(rundir)"\" \
 	$(BINARY_CFLAGS)
 
+test_fs_SOURCES = test-fs.c
+test_fs_LDADD = $(LIBDOVECOT) \
+	$(BINARY_LDFLAGS)
+
+test_fs_DEPENDENCIES = $(LIBDOVECOT_DEPS)
 rawlog_LDADD = $(LIBDOVECOT) \
 	$(BINARY_LDFLAGS)
 
@@ -594,6 +604,15 @@ $(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
 install-pkglibexecPROGRAMS: $(pkglibexec_PROGRAMS)
 	@$(NORMAL_INSTALL)
 	@list='$(pkglibexec_PROGRAMS)'; test -n "$(pkglibexecdir)" || list=; \
@@ -667,6 +686,10 @@ script-login$(EXEEXT): $(script_login_OBJECTS) $(script_login_DEPENDENCIES) $(EX
 tcpwrap$(EXEEXT): $(tcpwrap_OBJECTS) $(tcpwrap_DEPENDENCIES) $(EXTRA_tcpwrap_DEPENDENCIES) 
 	@rm -f tcpwrap$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(tcpwrap_OBJECTS) $(tcpwrap_LDADD) $(LIBS)
+
+test-fs$(EXEEXT): $(test_fs_OBJECTS) $(test_fs_DEPENDENCIES) $(EXTRA_test_fs_DEPENDENCIES) 
+	@rm -f test-fs$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_fs_OBJECTS) $(test_fs_LDADD) $(LIBS)
 install-binSCRIPTS: $(bin_SCRIPTS)
 	@$(NORMAL_INSTALL)
 	@list='$(bin_SCRIPTS)'; test -n "$(bindir)" || list=; \
@@ -752,6 +775,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/script.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tcpwrap-settings.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tcpwrap.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-fs.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -910,8 +934,8 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-libtool clean-pkglibexecPROGRAMS \
-	mostlyclean-am
+clean-am: clean-generic clean-libtool clean-noinstPROGRAMS \
+	clean-pkglibexecPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/gdbhelper.Po
@@ -922,6 +946,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/script.Po
 	-rm -f ./$(DEPDIR)/tcpwrap-settings.Po
 	-rm -f ./$(DEPDIR)/tcpwrap.Po
+	-rm -f ./$(DEPDIR)/test-fs.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -976,6 +1001,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/script.Po
 	-rm -f ./$(DEPDIR)/tcpwrap-settings.Po
 	-rm -f ./$(DEPDIR)/tcpwrap.Po
+	-rm -f ./$(DEPDIR)/test-fs.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -998,14 +1024,15 @@ uninstall-am: uninstall-binSCRIPTS uninstall-pkglibexecPROGRAMS \
 .MAKE: install-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-am clean \
-	clean-generic clean-libtool clean-pkglibexecPROGRAMS \
-	cscopelist-am ctags ctags-am distclean distclean-compile \
-	distclean-generic distclean-libtool distclean-tags distdir dvi \
-	dvi-am html html-am info info-am install install-am \
-	install-binSCRIPTS install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-pkglibexecPROGRAMS \
+	clean-generic clean-libtool clean-noinstPROGRAMS \
+	clean-pkglibexecPROGRAMS cscopelist-am ctags ctags-am \
+	distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-binSCRIPTS \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-pkglibexecPROGRAMS \
 	install-pkglibexecSCRIPTS install-ps install-ps-am \
 	install-strip installcheck installcheck-am installdirs \
 	maintainer-clean maintainer-clean-generic mostlyclean \

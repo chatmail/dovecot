@@ -296,12 +296,20 @@ void client_proxy_finish_destroy_client(struct client *client)
 
 	/* Include hostname in the log message in case it's different from the
 	   IP address in the prefix. */
-	str_printfa(str, "Started proxying to %s",
-		    login_proxy_get_host(client->login_proxy));
+	const char *ip_str = login_proxy_get_ip_str(client->login_proxy);
+	const char *host = login_proxy_get_host(client->login_proxy);
+	str_printfa(str, "Started proxying to <%s>",
+		    login_proxy_get_ip_str(client->login_proxy));
+	if (strcmp(ip_str, host) != 0)
+		str_printfa(str, " (<%s>)", host);
+
 	client_proxy_append_conn_info(str, client);
 
+	struct event *proxy_event = login_proxy_get_event(client->login_proxy);
 	login_proxy_append_success_log_info(client->login_proxy, str);
-	e_info(login_proxy_get_event(client->login_proxy), "%s", str_c(str));
+	struct event_passthrough *e = event_create_passthrough(proxy_event)->
+		set_name("proxy_session_established");
+	e_info(e->event(), "%s", str_c(str));
 	login_proxy_detach(client->login_proxy);
 	client_destroy_success(client, NULL);
 }
@@ -384,8 +392,7 @@ void client_common_proxy_failed(struct client *client,
 				const char *reason ATTR_UNUSED,
 				bool reconnecting)
 {
-	if (client->proxy_sasl_client != NULL)
-		dsasl_client_free(&client->proxy_sasl_client);
+	dsasl_client_free(&client->proxy_sasl_client);
 	if (reconnecting) {
 		client->v.proxy_reset(client);
 		return;
@@ -508,13 +515,6 @@ static int proxy_start(struct client *client,
 		"proxy(%s,%s:%u): ", client->virtual_user,
 		net_ip2addr(&proxy_set.ip), proxy_set.port));
 
-	if (login_proxy_new(client, event, &proxy_set, proxy_input,
-			    client->v.proxy_failed) < 0) {
-		event_unref(&event);
-		return -1;
-	}
-	event_unref(&event);
-
 	client->proxy_mech = sasl_mech;
 	client->proxy_user = i_strdup(reply->destuser);
 	client->proxy_master_user = i_strdup(reply->master_user);
@@ -522,6 +522,13 @@ static int proxy_start(struct client *client,
 	client->proxy_noauth = reply->proxy_noauth;
 	client->proxy_nopipelining = reply->proxy_nopipelining;
 	client->proxy_not_trusted = reply->proxy_not_trusted;
+
+	if (login_proxy_new(client, event, &proxy_set, proxy_input,
+			    client->v.proxy_failed) < 0) {
+		event_unref(&event);
+		return -1;
+	}
+	event_unref(&event);
 
 	/* disable input until authentication is finished */
 	io_remove(&client->io);
@@ -833,7 +840,8 @@ sasl_callback(struct client *client, enum sasl_server_reply sasl_reply,
 
 static int
 client_auth_begin_common(struct client *client, const char *mech_name,
-			 bool private, const char *init_resp)
+			 enum sasl_server_auth_flags auth_flags,
+			 const char *init_resp)
 {
 	if (!client->secured && strcmp(client->ssl_set->ssl, "required") == 0) {
 		if (client->set->auth_verbose) {
@@ -850,7 +858,7 @@ client_auth_begin_common(struct client *client, const char *mech_name,
 	client_ref(client);
 	client->auth_initializing = TRUE;
 	sasl_server_auth_begin(client, login_binary->protocol, mech_name,
-			       private, init_resp, sasl_callback);
+			       auth_flags, init_resp, sasl_callback);
 	client->auth_initializing = FALSE;
 	if (!client->authenticating)
 		return 1;
@@ -864,13 +872,23 @@ client_auth_begin_common(struct client *client, const char *mech_name,
 int client_auth_begin(struct client *client, const char *mech_name,
 		      const char *init_resp)
 {
-	return client_auth_begin_common(client, mech_name, FALSE, init_resp);
+	return client_auth_begin_common(client, mech_name, 0, init_resp);
 }
 
 int client_auth_begin_private(struct client *client, const char *mech_name,
 			      const char *init_resp)
 {
-	return client_auth_begin_common(client, mech_name, TRUE, init_resp);
+	return client_auth_begin_common(client, mech_name,
+					SASL_SERVER_AUTH_FLAG_PRIVATE,
+					init_resp);
+}
+
+int client_auth_begin_implicit(struct client *client, const char *mech_name,
+			       const char *init_resp)
+{
+	return client_auth_begin_common(client, mech_name,
+					SASL_SERVER_AUTH_FLAG_IMPLICIT,
+					init_resp);
 }
 
 bool client_check_plaintext_auth(struct client *client, bool pass_sent)

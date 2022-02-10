@@ -457,7 +457,6 @@ int client_init_mailbox(struct client *client, const char **error_r)
 	if (!client->set->pop3_no_flag_updates)
 		flags |= MAILBOX_FLAG_DROP_RECENT;
 	client->mailbox = mailbox_alloc(client->inbox_ns->list, "INBOX", flags);
-	mailbox_set_reason(client->mailbox, "POP3 INBOX");
 	if (mailbox_open(client->mailbox) < 0) {
 		*error_r = t_strdup_printf("Couldn't open INBOX: %s",
 			mailbox_get_last_internal_error(client->mailbox, NULL));
@@ -745,8 +744,13 @@ bool client_handle_input(struct client *client)
 			*args++ = '\0';
 
 		T_BEGIN {
+			const char *reason_code =
+				event_reason_code_prefix("pop3", "cmd_", line);
+			struct event_reason *reason =
+				event_reason_begin(reason_code);
 			ret = client_command_execute(client, line,
 						     args != NULL ? args : "");
+			event_reason_end(&reason);
 		} T_END;
 		if (ret >= 0) {
 			client->bad_counter = 0;

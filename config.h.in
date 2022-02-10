@@ -72,6 +72,9 @@
 /* Dovecot major version */
 #undef DOVECOT_VERSION_MAJOR
 
+/* Dovecot micro version */
+#undef DOVECOT_VERSION_MICRO
+
 /* Dovecot minor version */
 #undef DOVECOT_VERSION_MINOR
 

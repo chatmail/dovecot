@@ -184,10 +184,9 @@ buffer_t *buffer_create_dynamic_max(pool_t pool, size_t init_size,
 
 void buffer_free(buffer_t **_buf)
 {
-	struct real_buffer *buf = container_of(*_buf, struct real_buffer, buf);
-
-	if (buf == NULL)
+	if (*_buf == NULL)
 		return;
+	struct real_buffer *buf = container_of(*_buf, struct real_buffer, buf);
 
 	*_buf = NULL;
 	if (buf->alloced)
@@ -477,7 +476,7 @@ buffer_truncate_rshift_bits(buffer_t *buf, size_t bits)
 
 	if (bits > 0) {
 		/* truncate it to closest byte boundary */
-		size_t bytes = ((bits + 7) & -8U)/8;
+		size_t bytes = ((bits + 7) & ~(size_t)7) / 8;
 		/* remaining bits */
 		bits = bits % 8;
 		buffer_set_used_size(buf, I_MIN(bytes, buf->used));
