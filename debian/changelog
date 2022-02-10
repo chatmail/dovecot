@@ -1,3 +1,11 @@
+dovecot (1:2.3.18+dfsg1-1) unstable; urgency=medium
+
+  [ Noah Meyerhans ]
+  * [36966c8] New upstream version 2.3.18+dfsg1
+  * [042bda4] Refresh patches for 1:2.3.18+dfsg1-1
+
+ -- "Noah Meyerhans" <noahm@debian.org>  Thu, 10 Feb 2022 20:05:50 +0000
+
 dovecot (1:2.3.17.1+dfsg1-1) unstable; urgency=medium
 
   [ Christian Göttsche ]
