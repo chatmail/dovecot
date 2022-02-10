@@ -14,11 +14,11 @@ Found by Lintian
  src/lib-storage/index/index-sync-pvt.c        | 2 +-
  8 files changed, 10 insertions(+), 10 deletions(-)
 
-diff --git a/ChangeLog b/ChangeLog
-index 3ff7ec1..3167053 100644
---- a/ChangeLog
-+++ b/ChangeLog
-@@ -67473,7 +67473,7 @@ M	src/lib-storage/index/index-mail.c
+Index: dovecot/ChangeLog
+===================================================================
+--- dovecot.orig/ChangeLog
++++ dovecot/ChangeLog
+@@ -70625,7 +70625,7 @@ M	src/lib-storage/index/index-mail.c
      lib-index: Add mail_cache_close_mail() to smartly drop cached data with
      INDEX=MEMORY
  
@@ -27,7 +27,7 @@ index 3ff7ec1..3167053 100644
      just drop mails have have been marked closed with mail_cache_close_mail(). 
      If that's not enough, continue deleting forcibly until the buffer is below 
      256 kB.
-@@ -87373,7 +87373,7 @@ M	src/lib-storage/index/dbox-single/sdbox-storage.c
+@@ -90525,7 +90525,7 @@ M	src/lib-storage/index/dbox-single/sdbo
  
  2016-09-21 20:50:24 +0300 Timo Sirainen <timo.sirainen@dovecot.fi> (2e5e2047af)
  
@@ -36,7 +36,7 @@ index 3ff7ec1..3167053 100644
  
      Broken by c8eb8314a, which moved adding num_waiting_connections earlier. 
      After that it was never 0 at the check time.
-@@ -104315,7 +104315,7 @@ M	src/login-common/ssl-proxy-openssl.c
+@@ -107467,7 +107467,7 @@ M	src/login-common/ssl-proxy-openssl.c
  
  2015-12-07 11:29:29 +0200 Timo Sirainen <tss@iki.fi> (975c2cdc1b)
  
@@ -45,11 +45,11 @@ index 3ff7ec1..3167053 100644
      commands in a single process. This means commands run with doveadm batch or
      multiple commands in a single doveadm-server connection.
  
-diff --git a/NEWS b/NEWS
-index 70efcf9..216f2ea 100644
---- a/NEWS
-+++ b/NEWS
-@@ -1910,7 +1910,7 @@ v2.2.26 2016-10-27  Timo Sirainen <tss@iki.fi>
+Index: dovecot/NEWS
+===================================================================
+--- dovecot.orig/NEWS
++++ dovecot/NEWS
+@@ -2010,7 +2010,7 @@ v2.2.26 2016-10-27  Timo Sirainen <tss@i
  	- zlib, IMAP BINARY: Fixed internal caching when accessing multiple
  	  newly created mails. They all had UID=0 and the next mail could have
  	  wrongly used the previously cached mail.
@@ -58,11 +58,11 @@ index 70efcf9..216f2ea 100644
  	- auth_stats=yes: Don't update num_logins, since it doubles them when
  	  using with mail stats.
  	- quota count: Fixed deadlocks when updating vsize header.
-diff --git a/pigeonhole/src/lib-sieve/sieve-address.c b/pigeonhole/src/lib-sieve/sieve-address.c
-index f9456f8..c0d982a 100644
---- a/pigeonhole/src/lib-sieve/sieve-address.c
-+++ b/pigeonhole/src/lib-sieve/sieve-address.c
-@@ -449,7 +449,7 @@ parse_mailbox_address(struct sieve_message_address_parser *ctx,
+Index: dovecot/pigeonhole/src/lib-sieve/sieve-address.c
+===================================================================
+--- dovecot.orig/pigeonhole/src/lib-sieve/sieve-address.c
++++ dovecot/pigeonhole/src/lib-sieve/sieve-address.c
+@@ -449,7 +449,7 @@ parse_mailbox_address(struct sieve_messa
  	if (ctx->parser.data != ctx->parser.end) {
  		if (*ctx->parser.data == ',') {
  			sieve_address_error(
@@ -71,11 +71,11 @@ index f9456f8..c0d982a 100644
  		} else {
  			sieve_address_error(
  				ctx, "address ends in invalid characters");
-diff --git a/src/director/director-connection.c b/src/director/director-connection.c
-index d563cda..2ad8bc0 100644
---- a/src/director/director-connection.c
-+++ b/src/director/director-connection.c
-@@ -896,7 +896,7 @@ static bool director_cmd_director(struct director_connection *conn,
+Index: dovecot/src/director/director-connection.c
+===================================================================
+--- dovecot.orig/src/director/director-connection.c
++++ dovecot/src/director/director-connection.c
+@@ -896,7 +896,7 @@ static bool director_cmd_director(struct
  
  		/* already have this. just reset its last_network_failure
  		   timestamp, since it might be up now, but only if this
@@ -84,11 +84,11 @@ index d563cda..2ad8bc0 100644
  		   timestamp could cause us to rapidly keep trying to connect
  		   to it) */
  		if (conn->handshake_received)
-diff --git a/src/lib-index/mail-index-transaction-finish.c b/src/lib-index/mail-index-transaction-finish.c
-index 360e597..d39cbe2 100644
---- a/src/lib-index/mail-index-transaction-finish.c
-+++ b/src/lib-index/mail-index-transaction-finish.c
-@@ -53,7 +53,7 @@ ext_reset_update_atomic(struct mail_index_transaction *t,
+Index: dovecot/src/lib-index/mail-index-transaction-finish.c
+===================================================================
+--- dovecot.orig/src/lib-index/mail-index-transaction-finish.c
++++ dovecot/src/lib-index/mail-index-transaction-finish.c
+@@ -53,7 +53,7 @@ ext_reset_update_atomic(struct mail_inde
  
  	array_idx_set(&t->ext_reset_ids, ext_id, &reset_id);
  
@@ -97,11 +97,11 @@ index 360e597..d39cbe2 100644
  	if (array_is_created(&t->ext_resets)) {
  		reset = array_idx_modifiable(&t->ext_resets, ext_id);
  		if (reset->new_reset_id == (uint32_t)-1)
-diff --git a/src/lib-index/mail-index.h b/src/lib-index/mail-index.h
-index 4a397f4..68b1dd4 100644
---- a/src/lib-index/mail-index.h
-+++ b/src/lib-index/mail-index.h
-@@ -384,7 +384,7 @@ void mail_index_set_lock_method(struct mail_index *index,
+Index: dovecot/src/lib-index/mail-index.h
+===================================================================
+--- dovecot.orig/src/lib-index/mail-index.h
++++ dovecot/src/lib-index/mail-index.h
+@@ -384,7 +384,7 @@ void mail_index_set_lock_method(struct m
     use the default. */
  void mail_index_set_optimization_settings(struct mail_index *index,
  	const struct mail_index_optimization_settings *set);
@@ -110,11 +110,11 @@ index 4a397f4..68b1dd4 100644
     extension header data immediately to it. */
  void mail_index_set_ext_init_data(struct mail_index *index, uint32_t ext_id,
  				  const void *data, size_t size);
-diff --git a/src/lib-index/mail-transaction-log-file.c b/src/lib-index/mail-transaction-log-file.c
-index 753cb65..b6abbde 100644
---- a/src/lib-index/mail-transaction-log-file.c
-+++ b/src/lib-index/mail-transaction-log-file.c
-@@ -760,7 +760,7 @@ mail_transaction_log_file_create2(struct mail_transaction_log_file *file,
+Index: dovecot/src/lib-index/mail-transaction-log-file.c
+===================================================================
+--- dovecot.orig/src/lib-index/mail-transaction-log-file.c
++++ dovecot/src/lib-index/mail-transaction-log-file.c
+@@ -760,7 +760,7 @@ mail_transaction_log_file_create2(struct
  		return -1;
  
  	if (reset) {
@@ -123,11 +123,11 @@ index 753cb65..b6abbde 100644
  		   indexes we'll probably want to keep uidvalidity and in such
  		   cases we really don't want to shrink modseqs. */
  		file->hdr.prev_file_seq = 0;
-diff --git a/src/lib-storage/index/index-sync-pvt.c b/src/lib-storage/index/index-sync-pvt.c
-index 92eb4e8..358eb1a 100644
---- a/src/lib-storage/index/index-sync-pvt.c
-+++ b/src/lib-storage/index/index-sync-pvt.c
-@@ -185,7 +185,7 @@ index_mailbox_sync_pvt_index(struct index_mailbox_sync_pvt_context *ctx,
+Index: dovecot/src/lib-storage/index/index-sync-pvt.c
+===================================================================
+--- dovecot.orig/src/lib-storage/index/index-sync-pvt.c
++++ dovecot/src/lib-storage/index/index-sync-pvt.c
+@@ -185,7 +185,7 @@ index_mailbox_sync_pvt_index(struct inde
  	} else {
  		/* mailbox created/recreated */
  		reset = TRUE;

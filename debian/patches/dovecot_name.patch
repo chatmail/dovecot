@@ -18,10 +18,10 @@ Last-Update: 2020-05-23
  src/submission/submission-settings.c | 2 +-
  6 files changed, 13 insertions(+), 8 deletions(-)
 
-diff --git a/configure.ac b/configure.ac
-index 8b0d8f3..f8b3e3b 100644
---- a/configure.ac
-+++ b/configure.ac
+Index: dovecot/configure.ac
+===================================================================
+--- dovecot.orig/configure.ac
++++ dovecot/configure.ac
 @@ -287,7 +287,12 @@ AM_ICONV
  # SIZE_MAX is missing without this
  CXXFLAGS="$CXXFLAGS -D__STDC_LIMIT_MACROS"
@@ -36,11 +36,11 @@ index 8b0d8f3..f8b3e3b 100644
  AC_DEFINE_UNQUOTED(DOVECOT_STRING, "$PACKAGE_STRING", [Dovecot string])
  AC_DEFINE_UNQUOTED(DOVECOT_VERSION, "$PACKAGE_VERSION", [Dovecot version])
  
-diff --git a/src/config/all-settings.c b/src/config/all-settings.c
-index 231100f..c1896b2 100644
---- a/src/config/all-settings.c
-+++ b/src/config/all-settings.c
-@@ -2306,7 +2306,7 @@ static const struct submission_settings submission_default_settings = {
+Index: dovecot/src/config/all-settings.c
+===================================================================
+--- dovecot.orig/src/config/all-settings.c
++++ dovecot/src/config/all-settings.c
+@@ -2320,7 +2320,7 @@ static const struct submission_settings
  
  	.hostname = "",
  
@@ -49,7 +49,7 @@ index 231100f..c1896b2 100644
  	.login_trusted_networks = "",
  
  	.recipient_delimiter = "+",
-@@ -4103,7 +4103,7 @@ static const struct setting_define login_setting_defines[] = {
+@@ -4182,7 +4182,7 @@ static const struct setting_define login
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
@@ -58,7 +58,7 @@ index 231100f..c1896b2 100644
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
-@@ -4315,7 +4315,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+@@ -4396,7 +4396,7 @@ static const struct lmtp_settings lmtp_d
  
  	.lmtp_client_workarounds = "",
  
@@ -67,11 +67,11 @@ index 231100f..c1896b2 100644
  	.login_trusted_networks = "",
  
  	.mail_plugins = "",
-diff --git a/src/lib-smtp/smtp-server.c b/src/lib-smtp/smtp-server.c
-index f48b60a..3f8cee4 100644
---- a/src/lib-smtp/smtp-server.c
-+++ b/src/lib-smtp/smtp-server.c
-@@ -47,7 +47,7 @@ struct smtp_server *smtp_server_init(const struct smtp_server_settings *set)
+Index: dovecot/src/lib-smtp/smtp-server.c
+===================================================================
+--- dovecot.orig/src/lib-smtp/smtp-server.c
++++ dovecot/src/lib-smtp/smtp-server.c
+@@ -49,7 +49,7 @@ struct smtp_server *smtp_server_init(con
  	if (set->login_greeting != NULL && *set->login_greeting != '\0')
  		server->set.login_greeting = p_strdup(pool, set->login_greeting);
  	else
@@ -80,11 +80,11 @@ index f48b60a..3f8cee4 100644
  	if (set->capabilities == 0) {
  		server->set.capabilities = SMTP_SERVER_DEFAULT_CAPABILITIES;
  	} else  {
-diff --git a/src/lmtp/lmtp-settings.c b/src/lmtp/lmtp-settings.c
-index 5cec2be..8e018f7 100644
---- a/src/lmtp/lmtp-settings.c
-+++ b/src/lmtp/lmtp-settings.c
-@@ -91,7 +91,7 @@ static const struct lmtp_settings lmtp_default_settings = {
+Index: dovecot/src/lmtp/lmtp-settings.c
+===================================================================
+--- dovecot.orig/src/lmtp/lmtp-settings.c
++++ dovecot/src/lmtp/lmtp-settings.c
+@@ -93,7 +93,7 @@ static const struct lmtp_settings lmtp_d
  
  	.lmtp_client_workarounds = "",
  
@@ -93,11 +93,11 @@ index 5cec2be..8e018f7 100644
  	.login_trusted_networks = "",
  
  	.mail_plugins = "",
-diff --git a/src/login-common/login-settings.c b/src/login-common/login-settings.c
-index bc8020e..8d2b123 100644
---- a/src/login-common/login-settings.c
-+++ b/src/login-common/login-settings.c
-@@ -51,7 +51,7 @@ static const struct setting_define login_setting_defines[] = {
+Index: dovecot/src/login-common/login-settings.c
+===================================================================
+--- dovecot.orig/src/login-common/login-settings.c
++++ dovecot/src/login-common/login-settings.c
+@@ -51,7 +51,7 @@ static const struct setting_define login
  static const struct login_settings login_default_settings = {
  	.login_trusted_networks = "",
  	.login_source_ips = "",
@@ -106,11 +106,11 @@ index bc8020e..8d2b123 100644
  	.login_log_format_elements = "user=<%u> method=%m rip=%r lip=%l mpid=%e %c session=<%{session}>",
  	.login_log_format = "%$: %s",
  	.login_access_sockets = "",
-diff --git a/src/submission/submission-settings.c b/src/submission/submission-settings.c
-index c4dd3db..5b3e00d 100644
---- a/src/submission/submission-settings.c
-+++ b/src/submission/submission-settings.c
-@@ -103,7 +103,7 @@ static const struct submission_settings submission_default_settings = {
+Index: dovecot/src/submission/submission-settings.c
+===================================================================
+--- dovecot.orig/src/submission/submission-settings.c
++++ dovecot/src/submission/submission-settings.c
+@@ -103,7 +103,7 @@ static const struct submission_settings
  
  	.hostname = "",
  
