@@ -14,3 +14,4 @@ Fix-32bit-sign-comparisons.patch
 Improve-cross-compile-support.patch
 Silence-LTO-related-compiler-warning.patch
 md4-md5-disable-optimization-causing-unaligned-access.patch
+Support-openssl-3.0.patch
