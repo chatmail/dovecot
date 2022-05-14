@@ -22,8 +22,6 @@ dovecot-core [armel]: library-not-linked-against-libc usr/lib/dovecot/modules/li
 # ignore internal libraries without dependency information
 dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/lib20_listescape_plugin.so
 dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/settings/libpigeonhole_settings.so
-# this is a nasty hack, hopefully to be removed at some point (see #696382)
-dovecot-core: uses-dpkg-database-directly postinst
 # ignore extra man pages
 dovecot-core: spare-manual-page usr/share/man/man1/deliver.1.gz
 # keep all man pages in section 1 for now

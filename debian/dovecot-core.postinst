@@ -67,20 +67,12 @@ if [ "$1" = "configure" ]; then
   # SSL configuration
   # Use the ssl-cert-snakeoil certificate in the following cases:
   # - On new installations
-  # - On upgrades from versions that did not enable SSL by default
   if [ -z "$2" ]; then
     if [ ! -e /etc/dovecot/private/dovecot.key ] && \
        [ ! -e /etc/dovecot/private/dovecot.pem ]; then
       ln -s /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/dovecot/private/dovecot.pem
       ln -s /etc/ssl/private/ssl-cert-snakeoil.key /etc/dovecot/private/dovecot.key
     fi
-  fi
-
-  # Remove the old dovecot-common.postrm (if it's still around for some
-  # reason), as purging dovecot-common will remove /etc/dovecot/dovecot.conf.
-  # See #696382.
-  if [ -f "/var/lib/dpkg/info/dovecot-common.postrm" ]; then
-    rm -f /var/lib/dpkg/info/dovecot-common.postrm
   fi
 fi
 
