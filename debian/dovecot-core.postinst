@@ -69,7 +69,9 @@ if [ "$1" = "configure" ]; then
   # - On new installations
   if [ -z "$2" ]; then
     if [ ! -e /etc/dovecot/private/dovecot.key ] && \
-       [ ! -e /etc/dovecot/private/dovecot.pem ]; then
+       [ ! -e /etc/dovecot/private/dovecot.pem ] && \
+       [ -e /etc/ssl/certs/ssl-cert-snakeoil.pem ] && \
+       [ -e /etc/ssl/private/ssl-cert-snakeoil.key ]; then
       ln -s /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/dovecot/private/dovecot.pem
       ln -s /etc/ssl/private/ssl-cert-snakeoil.key /etc/dovecot/private/dovecot.key
     fi
