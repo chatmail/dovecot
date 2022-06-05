@@ -1,3 +1,20 @@
+dovecot (1:2.3.19+dfsg1-1) unstable; urgency=medium
+
+  [ Christian Göttsche ]
+  * [0d29e45] d/rules: enable LTO via DEB_BUILD_MAINT_OPTIONS instead of custom flags
+  * [560cceb] d/source/lintian-overrides: update very-long-line-length-in-source-file overrides
+  * [b99d09e] d/copyright: update years
+  * [9ee8271] d/dovecot-core.prerm: drop as superseded by debhelper
+  * [907f85c] d/maintscripts: update
+  * [2b38240] d/dovecot-core.postinst: drop support for version skips
+  * [dcb76d1] d/dovecot-core.postinst: only link certs if existent (Closes: #1009872)
+  * [d223bbd] d/patches: add patch to support openssl 3.0 (Closes: #996273)
+
+  [ Noah Meyerhans ]
+  * [9f3175e] New upstream version 2.3.19+dfsg1
+
+ -- Noah Meyerhans <noahm@debian.org>  Sun, 05 Jun 2022 18:29:18 +0000
+
 dovecot (1:2.3.18+dfsg1-1) unstable; urgency=medium
 
   [ Noah Meyerhans ]
