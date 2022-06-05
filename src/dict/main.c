@@ -25,6 +25,7 @@
 static struct module *modules;
 static struct timeout *to_proctitle;
 static bool proctitle_updated;
+static struct ioloop *main_ioloop;
 
 static void
 add_stats_string(string_t *str, struct stats_dist *stats, const char *name)
@@ -69,7 +70,7 @@ void dict_proctitle_update_later(void)
 		return;
 
 	if (to_proctitle == NULL)
-		to_proctitle = timeout_add(1000, dict_proctitle_update, NULL);
+		to_proctitle = timeout_add_to(main_ioloop, 1000, dict_proctitle_update, NULL);
 	proctitle_updated = TRUE;
 }
 
@@ -129,8 +130,6 @@ static void main_init(void)
 
 static void main_deinit(void)
 {
-	timeout_remove(&to_proctitle);
-
 	/* wait for all dict operations to finish */
 	dict_init_cache_wait_all();
 	/* connections should no longer have any extra refcounts */
@@ -143,6 +142,7 @@ static void main_deinit(void)
 	module_dir_unload(&modules);
 
 	sql_drivers_deinit();
+	timeout_remove(&to_proctitle);
 }
 
 int main(int argc, char *argv[])
@@ -167,6 +167,7 @@ int main(int argc, char *argv[])
 	main_preinit();
 	master_service_set_die_callback(master_service, dict_die);
 
+	main_ioloop = current_ioloop;
 	main_init();
 	master_service_init_finish(master_service);
 	master_service_run(master_service, client_connected);

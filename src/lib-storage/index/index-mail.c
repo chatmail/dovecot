@@ -162,6 +162,12 @@ static bool get_cached_parts(struct index_mail *mail)
 
 	if (mail->data.parts != NULL)
 		return TRUE;
+	if (mail->data.parser_ctx != NULL) {
+		/* Message is already being parsed. Get the message parts by
+		   finishing its parsing, so there won't be any confusion about
+		   whether e.g. data->parsed_bodystructure=TRUE match data->parts  */
+		return FALSE;
+	}
 
 	T_BEGIN {
 		part = get_unserialized_parts(mail);
@@ -1142,6 +1148,13 @@ static int index_mail_write_body_snippet(struct index_mail *mail)
 	return ret;
 }
 
+void index_mail_parts_reset(struct index_mail *mail)
+{
+	mail->data.parts = NULL;
+	mail->data.parsed_bodystructure_header = FALSE;
+	mail->data.parsed_bodystructure = FALSE;
+}
+
 static int
 index_mail_parse_body_finish(struct index_mail *mail,
 			     enum index_cache_field field, bool success)
@@ -1191,8 +1204,7 @@ index_mail_parse_body_finish(struct index_mail *mail,
 			i_assert(error != NULL);
 			index_mail_set_message_parts_corrupted(&mail->mail.mail, error);
 		}
-		mail->data.parts = NULL;
-		mail->data.parsed_bodystructure = FALSE;
+		index_mail_parts_reset(mail);
 		if (mail->data.save_bodystructure_body)
 			mail->data.save_bodystructure_header = TRUE;
 		if (mail->data.header_parser_initialized)
@@ -2524,19 +2536,19 @@ void index_mail_set_cache_corrupted(struct mail *mail,
 		field_name = "physical size";
 		imail->data.physical_size = UOFF_T_MAX;
 		imail->data.virtual_size = UOFF_T_MAX;
-		imail->data.parts = NULL;
+		index_mail_parts_reset(imail);
 		index_mail_reset_vsize_ext(mail);
 		break;
 	case MAIL_FETCH_VIRTUAL_SIZE:
 		field_name = "virtual size";
 		imail->data.physical_size = UOFF_T_MAX;
 		imail->data.virtual_size = UOFF_T_MAX;
-		imail->data.parts = NULL;
+		index_mail_parts_reset(imail);
 		index_mail_reset_vsize_ext(mail);
 		break;
 	case MAIL_FETCH_MESSAGE_PARTS:
 		field_name = "MIME parts";
-		imail->data.parts = NULL;
+		index_mail_parts_reset(imail);
 		break;
 	case MAIL_FETCH_IMAP_BODY:
 		field_name = "IMAP BODY";

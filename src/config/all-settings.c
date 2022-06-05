@@ -401,6 +401,7 @@ struct master_service_settings {
 	const char *log_timestamp;
 	const char *log_debug;
 	const char *log_core_filter;
+	const char *process_shutdown_filter;
 	const char *syslog_facility;
 	const char *import_environment;
 	const char *stats_writer_socket_path;
@@ -1590,6 +1591,7 @@ extern const struct setting_parser_info *submission_login_setting_roots[];
 /* <settings checks> */
 enum submission_login_client_workarounds {
 	SUBMISSION_LOGIN_WORKAROUND_IMPLICIT_AUTH_EXTERNAL	= BIT(0),
+	SUBMISSION_LOGIN_WORKAROUND_EXOTIC_BACKEND		= BIT(1),
 };
 /* </settings checks> */
 struct submission_login_settings {
@@ -2196,6 +2198,7 @@ submission_client_workaround_list[] = {
 	{ "mailbox-for-path",
 	  SUBMISSION_WORKAROUND_MAILBOX_FOR_PATH },
 	{ "implicit-auth-external", 0 },
+	{ "exotic-backend", 0 },
 	{ NULL, 0 }
 };
 
@@ -2400,6 +2403,8 @@ submission_login_client_workaround_list[] = {
 	{ "mailbox-for-path", 0 },
 	{ "implicit-auth-external",
 	  SUBMISSION_LOGIN_WORKAROUND_IMPLICIT_AUTH_EXTERNAL },
+	{ "exotic-backend",
+	  SUBMISSION_LOGIN_WORKAROUND_EXOTIC_BACKEND },
 	{ NULL, 0 }
 };
 

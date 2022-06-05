@@ -46,6 +46,7 @@ static const struct setting_define master_service_setting_defines[] = {
 	DEF(STR, log_timestamp),
 	DEF(STR, log_debug),
 	DEF(STR, log_core_filter),
+	DEF(STR, process_shutdown_filter),
 	DEF(STR, syslog_facility),
 	DEF(STR, import_environment),
 	DEF(STR, stats_writer_socket_path),
@@ -83,6 +84,7 @@ static const struct master_service_settings master_service_default_settings = {
 	.log_timestamp = DEFAULT_FAILURE_STAMP_FORMAT,
 	.log_debug = "",
 	.log_core_filter = "",
+	.process_shutdown_filter = "",
 	.syslog_facility = "mail",
 	.import_environment = "TZ CORE_OUTOFMEM CORE_ERROR" ENV_SYSTEMD ENV_GDB,
 	.stats_writer_socket_path = "stats-writer",
@@ -109,23 +111,33 @@ const struct setting_parser_info master_service_setting_parser_info = {
 
 /* <settings checks> */
 static bool
-log_filter_parse(const char *set_name, const char *set_value,
-		 struct event_filter **filter_r, const char **error_r)
+setting_filter_parse(const char *set_name, const char *set_value,
+		     void (*handle_filter)(struct event_filter *) ATTR_UNUSED,
+		     const char **error_r)
 {
+	struct event_filter *filter;
 	const char *error;
 
-	if (set_value[0] == '\0') {
-		*filter_r = NULL;
+	if (set_value[0] == '\0')
 		return TRUE;
-	}
 
-	*filter_r = event_filter_create();
-	if (event_filter_parse(set_value, *filter_r, &error) < 0) {
+	filter = event_filter_create();
+	if (event_filter_parse(set_value, filter, &error) < 0) {
 		*error_r = t_strdup_printf("Invalid %s: %s", set_name, error);
-		event_filter_unref(filter_r);
+		event_filter_unref(&filter);
 		return FALSE;
 	}
+#ifndef CONFIG_BINARY
+	handle_filter(filter);
+#endif
+	event_filter_unref(&filter);
 	return TRUE;
+}
+
+static void
+master_service_set_process_shutdown_filter_wrapper(struct event_filter *filter)
+{
+	master_service_set_process_shutdown_filter(master_service, filter);
 }
 
 static bool
@@ -145,25 +157,17 @@ master_service_settings_check(void *_set, pool_t pool ATTR_UNUSED,
 		return FALSE;
 	}
 
-	struct event_filter *filter;
-	if (!log_filter_parse("log_debug", set->log_debug, &filter, error_r))
+	if (!setting_filter_parse("log_debug", set->log_debug,
+				  event_set_global_debug_log_filter, error_r))
 		return FALSE;
-	if (filter != NULL) {
-#ifndef CONFIG_BINARY
-		event_set_global_debug_log_filter(filter);
-#endif
-		event_filter_unref(&filter);
-	}
-
-	if (!log_filter_parse("log_core_filter", set->log_core_filter,
-			      &filter, error_r))
+	if (!setting_filter_parse("log_core_filter", set->log_core_filter,
+				  event_set_global_core_log_filter, error_r))
 		return FALSE;
-	if (filter != NULL) {
-#ifndef CONFIG_BINARY
-		event_set_global_core_log_filter(filter);
-#endif
-		event_filter_unref(&filter);
-	}
+	if (!setting_filter_parse("process_shutdown_filter",
+				  set->process_shutdown_filter,
+				  master_service_set_process_shutdown_filter_wrapper,
+				  error_r))
+		return FALSE;
 	return TRUE;
 }
 /* </settings checks> */

@@ -1,37 +1,73 @@
-2022-02-02 09:19:35 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (0bc28b32)
+2022-05-04 15:04:01 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (4eae2f79)
 
-    NEWS: Change release date
+    NEWS: Update date for 2.3.19 news
 
 
 M	NEWS
 
-2022-01-12 12:54:05 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (2232a7dc)
+2022-04-26 09:45:26 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (d0e82ef9)
+
+    NEWS: Add news for 0.5.19
+
+
+M	NEWS
+
+2022-01-12 12:54:05 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (d9023d0c)
 
     NEWS: Add news for 0.5.18
 
 
 M	NEWS
 
-2021-11-30 12:50:17 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (e27e7ba7)
+2022-04-26 09:34:49 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (963ed291)
+
+    configure: Update version
+
+
+M	configure.ac
+
+2022-02-05 17:14:16 +0200 Martti Rannanjärvi <martti.rannanjarvi@open-xchange.com> (7927a415)
+
+    managesieve-login: managesieve_proxy_parse_auth_reply() - Free input istream
+
+
+M	src/managesieve-login/managesieve-proxy.c
+
+2022-01-21 12:31:43 +0200 Martti Rannanjärvi <martti.rannanjarvi@open-xchange.com> (ede85010)
+
+    configure.ac: Set pigeonhole version to 0.5.100
+
+    This is to match the version 2.3.100 used in core.
+
+M	configure.ac
+
+2022-01-19 19:48:48 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (aba35b74)
+
+    configure.ac: Fix version to 2.3 dovecot
+
+
+M	configure.ac
+
+2022-01-19 17:14:03 +0100 Timo Sirainen <timo.sirainen@open-xchange.com> (ca2cb5fb)
+
+    configure: Update version to 0.5.devel
+
+
+M	configure.ac
+
+2021-11-30 12:50:17 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (c0951f32)
 
     NEWS: Add news for 0.5.17.1
 
 
 M	NEWS
 
-2021-09-28 12:57:33 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (2ea0955f)
+2021-09-28 12:57:33 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (8bf12bb7)
 
     NEWS: Add news for 0.5.17
 
 
 M	NEWS
-
-2022-01-12 10:43:44 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (12a51191)
-
-    configure: Set version to 0.5.18
-
-
-M	configure.ac
 
 2021-12-03 09:05:16 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (df7907ae)
 
