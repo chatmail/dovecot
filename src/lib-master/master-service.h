@@ -47,11 +47,11 @@ enum master_service_flags {
 };
 
 struct master_service_connection_proxy {
-        /* only set if ssl is TRUE */
-        const char *hostname;
-        const char *cert_common_name;
-        const unsigned char *alpn;
-        unsigned int alpn_size;
+	/* only set if ssl is TRUE */
+	const char *hostname;
+	const char *cert_common_name;
+	const unsigned char *alpn;
+	unsigned int alpn_size;
 
 	bool ssl:1;
 	bool ssl_client_cert:1;
@@ -252,5 +252,11 @@ bool version_string_verify(const char *line, const char *service_name,
 bool version_string_verify_full(const char *line, const char *service_name,
 				unsigned major_version,
 				unsigned int *minor_version_r);
+
+/* Sets process shutdown filter */
+void master_service_set_process_shutdown_filter(struct master_service *service,
+						struct event_filter *filter);
+/* Unsets process shutdown filter, if it exists */
+void master_service_unset_process_shutdown_filter(struct master_service *service);
 
 #endif

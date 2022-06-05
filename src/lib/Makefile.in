@@ -190,13 +190,14 @@ am_liblib_la_OBJECTS = array.lo aqueue.lo askpass.lo \
 	ostream-failure-at.lo ostream-file.lo ostream-hash.lo \
 	ostream-multiplex.lo ostream-null.lo ostream-rawlog.lo \
 	ostream-unix.lo ostream-wrapper.lo path-util.lo pkcs5.lo \
-	primes.lo printf-format-fix.lo process-title.lo priorityq.lo \
-	randgen.lo rand.lo read-full.lo restrict-access.lo \
-	restrict-process-size.lo safe-memset.lo safe-mkdir.lo \
-	safe-mkstemp.lo sendfile-util.lo seq-range-array.lo sha1.lo \
-	sha2.lo sha3.lo sleep.lo sort.lo stats-dist.lo str.lo \
-	str-find.lo str-sanitize.lo str-table.lo strescape.lo \
-	strfuncs.lo strnum.lo time-util.lo unix-socket-create.lo \
+	primes.lo printf-format-fix.lo process-stat.lo \
+	process-title.lo priorityq.lo randgen.lo rand.lo read-full.lo \
+	restrict-access.lo restrict-process-size.lo safe-memset.lo \
+	safe-mkdir.lo safe-mkstemp.lo sendfile-util.lo \
+	seq-range-array.lo seq-set-builder.lo sha1.lo sha2.lo sha3.lo \
+	sleep.lo sort.lo stats-dist.lo str.lo str-find.lo \
+	str-sanitize.lo str-table.lo strescape.lo strfuncs.lo \
+	strnum.lo time-util.lo unix-socket-create.lo \
 	unlink-directory.lo unlink-old-files.lo unichar.lo uri-util.lo \
 	utc-offset.lo utc-mktime.lo var-expand.lo var-expand-if.lo \
 	wildcard-match.lo write-full.lo
@@ -279,6 +280,7 @@ am_test_lib_OBJECTS = test_lib-test-lib.$(OBJEXT) \
 	test_lib-test-priorityq.$(OBJEXT) \
 	test_lib-test-random.$(OBJEXT) \
 	test_lib-test-seq-range-array.$(OBJEXT) \
+	test_lib-test-seq-set-builder.$(OBJEXT) \
 	test_lib-test-stats-dist.$(OBJEXT) test_lib-test-str.$(OBJEXT) \
 	test_lib-test-strescape.$(OBJEXT) \
 	test_lib-test-strfuncs.$(OBJEXT) \
@@ -376,13 +378,15 @@ am__depfiles_remade = ./$(DEPDIR)/aqueue.Plo ./$(DEPDIR)/array.Plo \
 	./$(DEPDIR)/ostream-wrapper.Plo ./$(DEPDIR)/ostream.Plo \
 	./$(DEPDIR)/path-util.Plo ./$(DEPDIR)/pkcs5.Plo \
 	./$(DEPDIR)/primes.Plo ./$(DEPDIR)/printf-format-fix.Plo \
-	./$(DEPDIR)/priorityq.Plo ./$(DEPDIR)/process-title.Plo \
-	./$(DEPDIR)/rand.Plo ./$(DEPDIR)/randgen.Plo \
-	./$(DEPDIR)/read-full.Plo ./$(DEPDIR)/restrict-access.Plo \
+	./$(DEPDIR)/priorityq.Plo ./$(DEPDIR)/process-stat.Plo \
+	./$(DEPDIR)/process-title.Plo ./$(DEPDIR)/rand.Plo \
+	./$(DEPDIR)/randgen.Plo ./$(DEPDIR)/read-full.Plo \
+	./$(DEPDIR)/restrict-access.Plo \
 	./$(DEPDIR)/restrict-process-size.Plo \
 	./$(DEPDIR)/safe-memset.Plo ./$(DEPDIR)/safe-mkdir.Plo \
 	./$(DEPDIR)/safe-mkstemp.Plo ./$(DEPDIR)/sendfile-util.Plo \
-	./$(DEPDIR)/seq-range-array.Plo ./$(DEPDIR)/sha1.Plo \
+	./$(DEPDIR)/seq-range-array.Plo \
+	./$(DEPDIR)/seq-set-builder.Plo ./$(DEPDIR)/sha1.Plo \
 	./$(DEPDIR)/sha2.Plo ./$(DEPDIR)/sha3.Plo \
 	./$(DEPDIR)/sleep.Plo ./$(DEPDIR)/sort.Plo \
 	./$(DEPDIR)/stats-dist.Plo ./$(DEPDIR)/str-find.Plo \
@@ -468,6 +472,7 @@ am__depfiles_remade = ./$(DEPDIR)/aqueue.Plo ./$(DEPDIR)/array.Plo \
 	./$(DEPDIR)/test_lib-test-priorityq.Po \
 	./$(DEPDIR)/test_lib-test-random.Po \
 	./$(DEPDIR)/test_lib-test-seq-range-array.Po \
+	./$(DEPDIR)/test_lib-test-seq-set-builder.Po \
 	./$(DEPDIR)/test_lib-test-stats-dist.Po \
 	./$(DEPDIR)/test_lib-test-str-find.Po \
 	./$(DEPDIR)/test_lib-test-str-sanitize.Po \
@@ -942,6 +947,7 @@ liblib_la_SOURCES = \
 	pkcs5.c \
 	primes.c \
 	printf-format-fix.c \
+	process-stat.c \
 	process-title.c \
 	priorityq.c \
 	randgen.c \
@@ -954,6 +960,7 @@ liblib_la_SOURCES = \
 	safe-mkstemp.c \
 	sendfile-util.c \
 	seq-range-array.c \
+	seq-set-builder.c \
 	sha1.c \
 	sha2.c \
 	sha3.c \
@@ -1099,6 +1106,7 @@ headers = \
 	pkcs5.h \
 	primes.h \
 	printf-format-fix.h \
+	process-stat.h \
 	process-title.h \
 	priorityq.h \
 	randgen.h \
@@ -1110,6 +1118,7 @@ headers = \
 	safe-mkstemp.h \
 	sendfile-util.h \
 	seq-range-array.h \
+	seq-set-builder.h \
 	sha-common.h \
 	sha1.h \
 	sha2.h \
@@ -1225,6 +1234,7 @@ test_lib_SOURCES = \
 	test-priorityq.c \
 	test-random.c \
 	test-seq-range-array.c \
+	test-seq-set-builder.c \
 	test-stats-dist.c \
 	test-str.c \
 	test-strescape.c \
@@ -1439,6 +1449,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/primes.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/printf-format-fix.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/priorityq.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/process-stat.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/process-title.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/rand.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/randgen.Plo@am__quote@ # am--include-marker
@@ -1450,6 +1461,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/safe-mkstemp.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sendfile-util.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seq-range-array.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/seq-set-builder.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sha1.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sha2.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sha3.Plo@am__quote@ # am--include-marker
@@ -1542,6 +1554,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-priorityq.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-random.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-seq-range-array.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-seq-set-builder.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-stats-dist.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-str-find.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_lib-test-str-sanitize.Po@am__quote@ # am--include-marker
@@ -2702,6 +2715,20 @@ test_lib-test-seq-range-array.obj: test-seq-range-array.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-seq-range-array.obj `if test -f 'test-seq-range-array.c'; then $(CYGPATH_W) 'test-seq-range-array.c'; else $(CYGPATH_W) '$(srcdir)/test-seq-range-array.c'; fi`
 
+test_lib-test-seq-set-builder.o: test-seq-set-builder.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-seq-set-builder.o -MD -MP -MF $(DEPDIR)/test_lib-test-seq-set-builder.Tpo -c -o test_lib-test-seq-set-builder.o `test -f 'test-seq-set-builder.c' || echo '$(srcdir)/'`test-seq-set-builder.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-seq-set-builder.Tpo $(DEPDIR)/test_lib-test-seq-set-builder.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-seq-set-builder.c' object='test_lib-test-seq-set-builder.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-seq-set-builder.o `test -f 'test-seq-set-builder.c' || echo '$(srcdir)/'`test-seq-set-builder.c
+
+test_lib-test-seq-set-builder.obj: test-seq-set-builder.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-seq-set-builder.obj -MD -MP -MF $(DEPDIR)/test_lib-test-seq-set-builder.Tpo -c -o test_lib-test-seq-set-builder.obj `if test -f 'test-seq-set-builder.c'; then $(CYGPATH_W) 'test-seq-set-builder.c'; else $(CYGPATH_W) '$(srcdir)/test-seq-set-builder.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-seq-set-builder.Tpo $(DEPDIR)/test_lib-test-seq-set-builder.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-seq-set-builder.c' object='test_lib-test-seq-set-builder.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_lib-test-seq-set-builder.obj `if test -f 'test-seq-set-builder.c'; then $(CYGPATH_W) 'test-seq-set-builder.c'; else $(CYGPATH_W) '$(srcdir)/test-seq-set-builder.c'; fi`
+
 test_lib-test-stats-dist.o: test-stats-dist.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_lib_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_lib-test-stats-dist.o -MD -MP -MF $(DEPDIR)/test_lib-test-stats-dist.Tpo -c -o test_lib-test-stats-dist.o `test -f 'test-stats-dist.c' || echo '$(srcdir)/'`test-stats-dist.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_lib-test-stats-dist.Tpo $(DEPDIR)/test_lib-test-stats-dist.Po
@@ -3181,6 +3208,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/primes.Plo
 	-rm -f ./$(DEPDIR)/printf-format-fix.Plo
 	-rm -f ./$(DEPDIR)/priorityq.Plo
+	-rm -f ./$(DEPDIR)/process-stat.Plo
 	-rm -f ./$(DEPDIR)/process-title.Plo
 	-rm -f ./$(DEPDIR)/rand.Plo
 	-rm -f ./$(DEPDIR)/randgen.Plo
@@ -3192,6 +3220,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/safe-mkstemp.Plo
 	-rm -f ./$(DEPDIR)/sendfile-util.Plo
 	-rm -f ./$(DEPDIR)/seq-range-array.Plo
+	-rm -f ./$(DEPDIR)/seq-set-builder.Plo
 	-rm -f ./$(DEPDIR)/sha1.Plo
 	-rm -f ./$(DEPDIR)/sha2.Plo
 	-rm -f ./$(DEPDIR)/sha3.Plo
@@ -3284,6 +3313,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/test_lib-test-priorityq.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-random.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-seq-range-array.Po
+	-rm -f ./$(DEPDIR)/test_lib-test-seq-set-builder.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-stats-dist.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-str-find.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-str-sanitize.Po
@@ -3477,6 +3507,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/primes.Plo
 	-rm -f ./$(DEPDIR)/printf-format-fix.Plo
 	-rm -f ./$(DEPDIR)/priorityq.Plo
+	-rm -f ./$(DEPDIR)/process-stat.Plo
 	-rm -f ./$(DEPDIR)/process-title.Plo
 	-rm -f ./$(DEPDIR)/rand.Plo
 	-rm -f ./$(DEPDIR)/randgen.Plo
@@ -3488,6 +3519,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/safe-mkstemp.Plo
 	-rm -f ./$(DEPDIR)/sendfile-util.Plo
 	-rm -f ./$(DEPDIR)/seq-range-array.Plo
+	-rm -f ./$(DEPDIR)/seq-set-builder.Plo
 	-rm -f ./$(DEPDIR)/sha1.Plo
 	-rm -f ./$(DEPDIR)/sha2.Plo
 	-rm -f ./$(DEPDIR)/sha3.Plo
@@ -3580,6 +3612,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/test_lib-test-priorityq.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-random.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-seq-range-array.Po
+	-rm -f ./$(DEPDIR)/test_lib-test-seq-set-builder.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-stats-dist.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-str-find.Po
 	-rm -f ./$(DEPDIR)/test_lib-test-str-sanitize.Po

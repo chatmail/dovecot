@@ -49,6 +49,8 @@
 #  define LDAP_OPT_SUCCESS LDAP_SUCCESS
 #endif
 
+#define DB_LDAP_REQUEST_MAX_ATTEMPT_COUNT 3
+
 static const char *LDAP_ESCAPE_CHARS = "*,\\#+<>;\"()= ";
 
 struct db_ldap_result {
@@ -172,6 +174,11 @@ db_ldap_result_iterate_init_full(struct ldap_connection *conn,
 				 struct ldap_request_search *ldap_request,
 				 LDAPMessage *res, bool skip_null_values,
 				 bool iter_dn_values);
+static bool db_ldap_abort_requests(struct ldap_connection *conn,
+				   unsigned int max_count,
+				   unsigned int timeout_secs,
+				   bool error, const char *reason);
+static void db_ldap_request_free(struct ldap_request *request);
 
 static int deref2str(const char *str, int *ref_r)
 {
@@ -399,18 +406,28 @@ static bool db_ldap_request_queue_next(struct ldap_connection *conn)
 		break;
 	}
 
-	switch (request->type) {
-	case LDAP_REQUEST_TYPE_BIND:
-		ret = db_ldap_request_bind(conn, request);
-		break;
-	case LDAP_REQUEST_TYPE_SEARCH:
-		ret = db_ldap_request_search(conn, request);
-		break;
+	if (request->send_count >= DB_LDAP_REQUEST_MAX_ATTEMPT_COUNT) {
+		/* Enough many times retried. Server just keeps disconnecting
+		   whenever attempting to send the request. */
+		ret = 0;
+	} else {
+		/* clear away any partial results saved before reconnecting */
+		db_ldap_request_free(request);
+
+		switch (request->type) {
+		case LDAP_REQUEST_TYPE_BIND:
+			ret = db_ldap_request_bind(conn, request);
+			break;
+		case LDAP_REQUEST_TYPE_SEARCH:
+			ret = db_ldap_request_search(conn, request);
+			break;
+		}
 	}
 
 	if (ret > 0) {
 		/* success */
 		i_assert(request->msgid != -1);
+		request->send_count++;
 		conn->pending_count++;
 		return TRUE;
 	} else if (ret < 0) {
@@ -425,7 +442,7 @@ static bool db_ldap_request_queue_next(struct ldap_connection *conn)
 }
 
 static void
-db_ldap_check_hanging(struct ldap_connection *conn, struct ldap_request *request)
+db_ldap_check_hanging(struct ldap_connection *conn)
 {
 	struct ldap_request *first_request;
 	unsigned int count;
@@ -439,8 +456,8 @@ db_ldap_check_hanging(struct ldap_connection *conn, struct ldap_request *request
 				       aqueue_idx(conn->request_queue, 0));
 	secs_diff = ioloop_time - first_request->create_time;
 	if (secs_diff > DB_LDAP_REQUEST_LOST_TIMEOUT_SECS) {
-		e_error(authdb_event(request->auth_request),
-			"Connection appears to be hanging, reconnecting");
+		db_ldap_abort_requests(conn, UINT_MAX, 0, TRUE,
+				       "LDAP connection appears to be hanging");
 		ldap_conn_reconnect(conn);
 	}
 }
@@ -453,7 +470,7 @@ void db_ldap_request(struct ldap_connection *conn,
 	request->msgid = -1;
 	request->create_time = ioloop_time;
 
-	db_ldap_check_hanging(conn, request);
+	db_ldap_check_hanging(conn);
 
 	aqueue_append(conn->request_queue, &request);
 	(void)db_ldap_request_queue_next(conn);
@@ -496,13 +513,14 @@ static void db_ldap_default_bind_finished(struct ldap_connection *conn,
 	}
 }
 
-static void db_ldap_abort_requests(struct ldap_connection *conn,
+static bool db_ldap_abort_requests(struct ldap_connection *conn,
 				   unsigned int max_count,
 				   unsigned int timeout_secs,
 				   bool error, const char *reason)
 {
 	struct ldap_request *request;
 	time_t diff;
+	bool aborts = FALSE;
 
 	while (aqueue_count(conn->request_queue) > 0 && max_count > 0) {
 		request = array_idx_elem(&conn->request_array,
@@ -528,7 +546,9 @@ static void db_ldap_abort_requests(struct ldap_connection *conn,
 		}
 		request->callback(conn, request, NULL);
 		max_count--;
+		aborts = TRUE;
 	}
+	return aborts;
 }
 
 static struct ldap_request *
@@ -841,9 +861,10 @@ db_ldap_handle_request_result(struct ldap_connection *conn,
 
 	if (idx > 0) {
 		/* see if there are timed out requests */
-		db_ldap_abort_requests(conn, idx,
-				       DB_LDAP_REQUEST_LOST_TIMEOUT_SECS,
-				       TRUE, "Request lost");
+		if (db_ldap_abort_requests(conn, idx,
+					   DB_LDAP_REQUEST_LOST_TIMEOUT_SECS,
+					   TRUE, "Request lost"))
+			ldap_conn_reconnect(conn);
 	}
 	return TRUE;
 }
@@ -876,7 +897,8 @@ db_ldap_request_free(struct ldap_request *request)
 				if (named_res->result != NULL)
 					db_ldap_result_unref(&named_res->result);
 			}
-			array_clear(&srequest->named_results);
+			array_free(&srequest->named_results);
+			srequest->name_idx = 0;
 		}
 	}
 }
@@ -898,6 +920,7 @@ db_ldap_handle_result(struct ldap_connection *conn, struct db_ldap_result *res)
 	request = db_ldap_find_request(conn, msgid, &idx);
 	if (request == NULL) {
 		e_error(conn->event, "Reply with unknown msgid %d", msgid);
+		ldap_conn_reconnect(conn);
 		return;
 	}
 	/* request is allocated from auth_request's pool */

@@ -132,7 +132,7 @@ sig_state_changed(const siginfo_t *si ATTR_UNUSED, void *context)
 static bool
 master_service_event_callback(struct event *event,
 			      enum event_callback_type type,
-			      struct failure_context *ctx ATTR_UNUSED,
+			      struct failure_context *ctx,
 			      const char *fmt ATTR_UNUSED,
 			      va_list args ATTR_UNUSED)
 {
@@ -142,6 +142,12 @@ master_service_event_callback(struct event *event,
 		   inherit the category from them. */
 		event_add_category(event, &master_service_category);
 	}
+	/* This callback may be called while still in master_service_init().
+	   In that case master_service is NULL. */
+	if (type == EVENT_CALLBACK_TYPE_SEND && master_service != NULL &&
+	    event_filter_match(master_service->process_shutdown_filter,
+			       event, ctx))
+		master_service_stop_new_connections(master_service);
 	return TRUE;
 }
 
@@ -478,7 +484,7 @@ master_service_try_init_log(struct master_service *service,
 					  &facility))
 			facility = LOG_MAIL;
 		i_set_failure_syslog(service->set->instance_name, LOG_NDELAY,
-		                     facility);
+				     facility);
 		i_set_failure_prefix("%s", prefix);
 
 		if (strcmp(service->set->log_path, "syslog") != 0) {
@@ -665,7 +671,7 @@ void master_service_init_finish(struct master_service *service)
 	/* set default signal handlers */
 	if ((service->flags & MASTER_SERVICE_FLAG_STANDALONE) == 0)
 		sigint_flags |= LIBSIG_FLAG_RESTART;
-        lib_signals_set_handler(SIGINT, sigint_flags, sig_die, service);
+	lib_signals_set_handler(SIGINT, sigint_flags, sig_die, service);
 	lib_signals_set_handler(SIGTERM, LIBSIG_FLAG_DELAYED, sig_die, service);
 	if ((service->flags & MASTER_SERVICE_FLAG_TRACK_LOGIN_STATE) != 0) {
 		lib_signals_set_handler(SIGUSR1, LIBSIG_FLAGS_SAFE,
@@ -866,7 +872,7 @@ void master_service_run(struct master_service *service,
 
 void master_service_stop(struct master_service *service)
 {
-        io_loop_stop(service->ioloop);
+	io_loop_stop(service->ioloop);
 }
 
 void master_service_stop_new_connections(struct master_service *service)
@@ -1015,7 +1021,7 @@ void master_service_client_connection_destroyed(struct master_service *service)
 
 	if (service->service_count_left == service->total_available_count) {
 		service->total_available_count--;
-                service->service_count_left--;
+		service->service_count_left--;
 	} else {
 		if (service->service_count_left != UINT_MAX)
 			service->service_count_left--;
@@ -1133,6 +1139,7 @@ static void master_service_deinit_real(struct master_service **_service)
 	i_free(master_service_category_name);
 	master_service_category.name = NULL;
 	event_unregister_callback(master_service_event_callback);
+	master_service_unset_process_shutdown_filter(service);
 }
 
 static void master_service_free(struct master_service *service)
@@ -1525,4 +1532,17 @@ bool version_string_verify_full(const char *line, const char *service_name,
 		}
 	} T_END;
 	return ret;
+}
+
+void master_service_set_process_shutdown_filter(struct master_service *service,
+						struct event_filter *filter)
+{
+	master_service_unset_process_shutdown_filter(service);
+	service->process_shutdown_filter = filter;
+	event_filter_ref(service->process_shutdown_filter);
+}
+
+void master_service_unset_process_shutdown_filter(struct master_service *service)
+{
+	event_filter_unref(&service->process_shutdown_filter);
 }

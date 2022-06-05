@@ -188,8 +188,8 @@ am__installdirs = "$(DESTDIR)$(pkglibdir)" \
 LTLIBRARIES = $(pkglib_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 am_libdovecot_lua_la_OBJECTS = dlua-script.lo dlua-pushstring.lo \
-	dlua-error.lo dlua-dovecot.lo dlua-compat.lo dlua-resume.lo \
-	dlua-table.lo dlua-thread.lo
+	dlua-error.lo dlua-dovecot.lo dlua-dovecot-http.lo \
+	dlua-compat.lo dlua-resume.lo dlua-table.lo dlua-thread.lo
 libdovecot_lua_la_OBJECTS = $(am_libdovecot_lua_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -222,11 +222,11 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/dlua-compat.Plo \
-	./$(DEPDIR)/dlua-dovecot.Plo ./$(DEPDIR)/dlua-error.Plo \
-	./$(DEPDIR)/dlua-pushstring.Plo ./$(DEPDIR)/dlua-resume.Plo \
-	./$(DEPDIR)/dlua-script.Plo ./$(DEPDIR)/dlua-table.Plo \
-	./$(DEPDIR)/dlua-thread.Plo ./$(DEPDIR)/test-dict-lua.Po \
-	./$(DEPDIR)/test_lua-test-lua.Po
+	./$(DEPDIR)/dlua-dovecot-http.Plo ./$(DEPDIR)/dlua-dovecot.Plo \
+	./$(DEPDIR)/dlua-error.Plo ./$(DEPDIR)/dlua-pushstring.Plo \
+	./$(DEPDIR)/dlua-resume.Plo ./$(DEPDIR)/dlua-script.Plo \
+	./$(DEPDIR)/dlua-table.Plo ./$(DEPDIR)/dlua-thread.Plo \
+	./$(DEPDIR)/test-dict-lua.Po ./$(DEPDIR)/test_lua-test-lua.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -499,6 +499,9 @@ AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
 	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-dict \
+	-I$(top_srcdir)/src/lib-http \
+	-I$(top_srcdir)/src/lib-ssl-iostream \
+	-I$(top_srcdir)/src/lib-master \
 	$(LUA_CFLAGS)
 
 pkglib_LTLIBRARIES = libdovecot-lua.la
@@ -507,6 +510,7 @@ libdovecot_lua_la_SOURCES = \
 	dlua-pushstring.c \
 	dlua-error.c \
 	dlua-dovecot.c \
+	dlua-dovecot-http.c \
 	dlua-compat.c \
 	dlua-resume.c \
 	dlua-table.c \
@@ -642,6 +646,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-compat.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-dovecot-http.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-dovecot.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-error.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlua-pushstring.Plo@am__quote@ # am--include-marker
@@ -850,6 +855,7 @@ clean-am: clean-generic clean-libtool clean-noinstPROGRAMS \
 
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/dlua-compat.Plo
+	-rm -f ./$(DEPDIR)/dlua-dovecot-http.Plo
 	-rm -f ./$(DEPDIR)/dlua-dovecot.Plo
 	-rm -f ./$(DEPDIR)/dlua-error.Plo
 	-rm -f ./$(DEPDIR)/dlua-pushstring.Plo
@@ -905,6 +911,7 @@ installcheck-am:
 
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/dlua-compat.Plo
+	-rm -f ./$(DEPDIR)/dlua-dovecot-http.Plo
 	-rm -f ./$(DEPDIR)/dlua-dovecot.Plo
 	-rm -f ./$(DEPDIR)/dlua-error.Plo
 	-rm -f ./$(DEPDIR)/dlua-pushstring.Plo
