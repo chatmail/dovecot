@@ -8,13 +8,13 @@ Source: https://github.com/dovecot/core
 Files-Excluded-pigeonhole: doc/rfc
 
 Files: *
-Copyright: (c) 2001-2021 Dovecot authors
+Copyright: (c) 2001-2022 Dovecot authors
 Comment: see AUTHORS
 License: LGPL-2.1
 
 Files: src/lib/*
        src/lib-sql/*
-Copyright: (c) 2001-2021 Dovecot authors
+Copyright: (c) 2001-2022 Dovecot authors
 Comment: see AUTHORS
 License: MIT
 

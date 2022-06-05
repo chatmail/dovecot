@@ -9,9 +9,9 @@ if [ "$1" = "configure" ]; then
     # Tell ucf that the file in /usr/share/dovecot is the latest
     # maintainer version, and let it handle how to manage the real
     # configuration file in /etc/dovecot.
-    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
+    ucf --three-way "/usr/share/dovecot/$conffile" "/etc/dovecot/$conffile"
     # Use --force to allow hijacking the file from dovecot-submission
-    ucfr --force dovecot-submissiond /etc/dovecot/$conffile
+    ucfr --force dovecot-submissiond "/etc/dovecot/$conffile"
   done
 
   if [ -f /usr/share/dovecot/protocols.d/submission.protocol ]; then

@@ -42,20 +42,20 @@ if [ "$1" = "configure" ]; then
     # Tell ucf that the file in /usr/share/dovecot is the latest
     # maintainer version, and let it handle how to manage the real
     # configuration file in /etc/dovecot.
-    ucf --three-way /usr/share/dovecot/$conffile /etc/dovecot/$conffile
-    ucfr dovecot-core /etc/dovecot/$conffile
+    ucf --three-way "/usr/share/dovecot/$conffile" "/etc/dovecot/$conffile"
+    ucfr dovecot-core "/etc/dovecot/$conffile"
     if [ "$conffile" != "dovecot.conf" ] && [ -f "/etc/dovecot/$conffile" ] &&
-		[ `echo $conffile | cut -b -7` != "conf.d/" ]; then
-      chmod 0640 /etc/dovecot/$conffile
-      chgrp dovecot /etc/dovecot/$conffile
+		[ "$(echo "$conffile" | cut -b -7)" != "conf.d/" ]; then
+      chmod 0640 "/etc/dovecot/$conffile"
+      chgrp dovecot "/etc/dovecot/$conffile"
     fi
   done
 
   for oldconffile in $OLD_CONFFILES ; do
-    if [ -e /etc/dovecot/$oldconffile ]; then
+    if [ -e "/etc/dovecot/$oldconffile" ]; then
       echo "Configuration file '/etc/dovecot/$oldconffile' is obsolete. Please remove."
-      ucf --purge /etc/dovecot/$conffile
-      ucfr --purge dovecot-core /etc/dovecot/$conffile
+      ucf --purge "/etc/dovecot/$conffile"
+      ucfr --purge dovecot-core "/etc/dovecot/$conffile"
     fi
   done
 
@@ -67,20 +67,14 @@ if [ "$1" = "configure" ]; then
   # SSL configuration
   # Use the ssl-cert-snakeoil certificate in the following cases:
   # - On new installations
-  # - On upgrades from versions that did not enable SSL by default
   if [ -z "$2" ]; then
     if [ ! -e /etc/dovecot/private/dovecot.key ] && \
-       [ ! -e /etc/dovecot/private/dovecot.pem ]; then
+       [ ! -e /etc/dovecot/private/dovecot.pem ] && \
+       [ -e /etc/ssl/certs/ssl-cert-snakeoil.pem ] && \
+       [ -e /etc/ssl/private/ssl-cert-snakeoil.key ]; then
       ln -s /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/dovecot/private/dovecot.pem
       ln -s /etc/ssl/private/ssl-cert-snakeoil.key /etc/dovecot/private/dovecot.key
     fi
-  fi
-
-  # Remove the old dovecot-common.postrm (if it's still around for some
-  # reason), as purging dovecot-common will remove /etc/dovecot/dovecot.conf.
-  # See #696382.
-  if [ -f "/var/lib/dpkg/info/dovecot-common.postrm" ]; then
-    rm -f /var/lib/dpkg/info/dovecot-common.postrm
   fi
 fi
 
