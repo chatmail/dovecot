@@ -1,0 +1,65 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Mon, 6 Jun 2022 17:24:19 +0200
+Subject: Debug flaky unit test
+
+See #1007744
+---
+ src/lib-smtp/test-smtp-server-errors.c | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/src/lib-smtp/test-smtp-server-errors.c b/src/lib-smtp/test-smtp-server-errors.c
+index d3e528c..5240d30 100644
+--- a/src/lib-smtp/test-smtp-server-errors.c
++++ b/src/lib-smtp/test-smtp-server-errors.c
+@@ -3712,13 +3712,14 @@ static void server_connection_accept(void *context ATTR_UNUSED)
+ 
+ static void test_server_timeout(void *context ATTR_UNUSED)
+ {
+-	i_fatal("Server timed out");
++	i_fatal("Server timed out [current_ioloop=%p ioloop=%p]", current_ioloop, ioloop);
+ }
+ 
+ static void test_server_run(const struct smtp_server_settings *smtp_set)
+ {
+ 	struct timeout *to;
+ 
++	i_debug("Adding timeout to server [current_ioloop=%p ioloop=%p]", current_ioloop, ioloop);
+ 	to = timeout_add(SERVER_MAX_TIMEOUT_MSECS,
+ 			 test_server_timeout, NULL);
+ 
+@@ -3729,8 +3730,7 @@ static void test_server_run(const struct smtp_server_settings *smtp_set)
+ 
+ 	io_loop_run(ioloop);
+ 
+-	if (debug)
+-		i_debug("Server finished");
++	i_debug("Server finished [current_ioloop=%p ioloop=%p]", current_ioloop, ioloop);
+ 
+ 	/* close server socket */
+ 	io_remove(&io_listen);
+@@ -3770,9 +3770,12 @@ static int test_run_client(struct test_client_data *data)
+ 	/* wait a little for server setup */
+ 	i_sleep_msecs(100);
+ 
++	i_debug("test_run_client: pre create [current_ioloop=%p ioloop=%p]", current_ioloop, ioloop);
+ 	ioloop = io_loop_create();
++	i_debug("test_run_client: post create [current_ioloop=%p ioloop=%p]", current_ioloop, ioloop);
+ 	data->client_test(data->index);
+ 	io_loop_destroy(&ioloop);
++	i_debug("test_run_client: post destroy [current_ioloop=%p ioloop=%p]", current_ioloop, ioloop);
+ 
+ 	if (debug)
+ 		i_debug("Terminated");
+@@ -3794,9 +3797,12 @@ test_run_server(const struct smtp_server_settings *server_set,
+ 	i_zero(&server_callbacks);
+ 
+ 	server_pending = client_tests_count;
++	i_debug("test_run_server: pre create [current_ioloop=%p ioloop=%p]", current_ioloop, ioloop);
+ 	ioloop = io_loop_create();
++	i_debug("test_run_server: post create [current_ioloop=%p ioloop=%p]", current_ioloop, ioloop);
+ 	server_test(server_set);
+ 	io_loop_destroy(&ioloop);
++	i_debug("test_run_server: post destroy create [current_ioloop=%p ioloop=%p]", current_ioloop, ioloop);
+ 
+ 	if (debug)
+ 		i_debug("Terminated");
