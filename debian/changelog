@@ -1,3 +1,15 @@
+dovecot (1:2.3.19.1+dfsg1-1) unstable; urgency=medium
+
+  [ Christian Göttsche ]
+  * [e40f93f] d/patches: avoid usage of PATH_MAX not available on hurd
+  * [19e00cd] d/rules: enable backtrace generation
+  * [5bf1c43] d/patches: debug flaky unit test
+
+  [ Noah Meyerhans ]
+  * [b73422f] New upstream version 2.3.19.1+dfsg1
+
+ -- Noah Meyerhans <noahm@debian.org>  Tue, 21 Jun 2022 07:41:44 -0700
+
 dovecot (1:2.3.19+dfsg1-1) unstable; urgency=medium
 
   [ Christian Göttsche ]
