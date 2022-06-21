@@ -16,3 +16,4 @@ Silence-LTO-related-compiler-warning.patch
 md4-md5-disable-optimization-causing-unaligned-access.patch
 Support-openssl-3.0.patch
 Debug-flaky-unit-test.patch
+Avoid-usage-of-PATH_MAX-not-available-on-hurd.patch

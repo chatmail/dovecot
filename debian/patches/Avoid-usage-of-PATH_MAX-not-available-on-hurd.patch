@@ -1,0 +1,21 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Mon, 6 Jun 2022 15:29:38 +0200
+Subject: Avoid usage of PATH_MAX not available on hurd
+
+---
+ src/lib/test-net.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/lib/test-net.c b/src/lib/test-net.c
+index fb19d5b..28398fe 100644
+--- a/src/lib/test-net.c
++++ b/src/lib/test-net.c
+@@ -145,7 +145,7 @@ static void test_net_unix_long_paths(void)
+ 
+ 	test_begin("net_*_unix() - long paths");
+ 
+-	char path[PATH_MAX];
++	char path[4096];
+ 	memset(path, 'x', sizeof(path)-1);
+ 	path[sizeof(path)-1] = '\0';
+ 
