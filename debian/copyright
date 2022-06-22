@@ -105,6 +105,8 @@ Copyright: (c) 2006-2016 Jaldhar H. Vyas <jaldhar@debian.org>
            (c) 2011-2013 Micah Anderson <micah@debian.org>
            (c) 2014-2015 Jelmer Vernooij <jelmer@debian.org>
            (c) 2016-2018 Apollon Oikonomopoulos <apoikos@debian.org>
+	   (c) 2020-2022 Noah Meyerhans <noahm@debian.org>
+	   (c) 2020-2022 Christian Göttsche <cgzones@googlemail.com>
 License: GPL-2+
 
 Files: pigeonhole/*
