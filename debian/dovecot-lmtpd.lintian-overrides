@@ -1,2 +1,0 @@
-# ignore executable-in-usr-lib, maybe move to libexec at some point
-dovecot-lmtpd: executable-in-usr-lib usr/lib/dovecot/lmtp

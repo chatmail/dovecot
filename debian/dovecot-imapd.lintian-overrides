@@ -1,9 +1,0 @@
-# hardening flags are set and blhc succeeds; might need some investigation
-dovecot-imapd: hardening-no-fortify-functions [usr/lib/dovecot/imap]
-# ignore executable-in-usr-lib, maybe move to libexec at some point
-dovecot-imapd: executable-in-usr-lib usr/lib/dovecot/imap
-dovecot-imapd: executable-in-usr-lib usr/lib/dovecot/imap-hibernate
-dovecot-imapd: executable-in-usr-lib usr/lib/dovecot/imap-login
-dovecot-imapd: executable-in-usr-lib usr/lib/dovecot/imap-urlauth
-dovecot-imapd: executable-in-usr-lib usr/lib/dovecot/imap-urlauth-login
-dovecot-imapd: executable-in-usr-lib usr/lib/dovecot/imap-urlauth-worker

@@ -1,7 +1,1 @@
-dovecot-managesieved: hardening-no-fortify-functions [usr/lib/dovecot/modules/settings/libmanagesieve_login_settings.so]
-# ignore internal library without dependency information
-dovecot-managesieved: shared-library-lacks-prerequisites usr/lib/dovecot/modules/settings/libmanagesieve_settings.so
-# ignore executable-in-usr-lib, maybe move to libexec at some point
-dovecot-managesieved: executable-in-usr-lib usr/lib/dovecot/managesieve
-dovecot-managesieved: executable-in-usr-lib usr/lib/dovecot/managesieve-login
-dovecot-managesieved [armel]: library-not-linked-against-libc usr/lib/dovecot/modules/settings/libmanagesieve_settings.so
+dovecot-managesieved: shared-library-lacks-prerequisites [usr/lib/dovecot/modules/settings/libmanagesieve_settings.so]

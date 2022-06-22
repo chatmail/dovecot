@@ -13,62 +13,62 @@ dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/quota-status]
 dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/script-login]
 dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/script]
 dovecot-core: hardening-no-fortify-functions [usr/lib/dovecot/xml2text]
-dovecot-core: package-contains-empty-directory usr/share/dovecot/protocols.d/
-dovecot-core: package-contains-empty-directory usr/lib/dovecot/modules/dict/
-dovecot-core: spelling-error-in-readme-debian dovenull dovenull (duplicate word) dovenull
-dovecot-core: library-not-linked-against-libc usr/lib/dovecot/modules/old-stats/libold_stats_mail.so
-dovecot-core: library-not-linked-against-libc usr/lib/dovecot/modules/old-stats/libstats_auth.so
+dovecot-core: package-contains-empty-directory [usr/share/dovecot/protocols.d/]
+dovecot-core: package-contains-empty-directory [usr/lib/dovecot/modules/dict/]
+dovecot-core: spelling-error-in-readme-debian dovenull dovenull (duplicate word) dovenull [usr/share/doc/dovecot-core/README.Debian]
+dovecot-core: library-not-linked-against-libc [usr/lib/dovecot/modules/old-stats/libold_stats_mail.so]
+dovecot-core: library-not-linked-against-libc [usr/lib/dovecot/modules/old-stats/libstats_auth.so]
 dovecot-core [armel]: library-not-linked-against-libc usr/lib/dovecot/modules/lib20_listescape_plugin.so
 # ignore internal libraries without dependency information
-dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/lib20_listescape_plugin.so
-dovecot-core: shared-library-lacks-prerequisites usr/lib/dovecot/modules/settings/libpigeonhole_settings.so
+dovecot-core: shared-library-lacks-prerequisites [usr/lib/dovecot/modules/lib20_listescape_plugin.so]
+dovecot-core: shared-library-lacks-prerequisites [usr/lib/dovecot/modules/settings/libpigeonhole_settings.so]
 # ignore extra man pages
-dovecot-core: spare-manual-page usr/share/man/man1/deliver.1.gz
+dovecot-core: spare-manual-page [usr/share/man/man1/deliver.1.gz]
 # keep all man pages in section 1 for now
-dovecot-core: manual-page-for-system-command usr/sbin/dovecot
+dovecot-core: manual-page-for-system-command [usr/sbin/dovecot]
 # ignore executable-in-usr-lib, maybe move to libexec at some point
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/aggregator
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/anvil
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/auth
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/checkpassword-reply
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/config
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/dict
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/director
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/dns-client
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/doveadm-server
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/dovecot-lda
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/gdbhelper
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/health-check.sh
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/indexer
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/indexer-worker
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/ipc
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/log
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/maildirlock
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/old-stats
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/quota-status
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/rawlog
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/replicator
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/script
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/script-login
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/stats
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/tcpwrap
-dovecot-core: executable-in-usr-lib usr/lib/dovecot/xml2text
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/aggregator]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/anvil]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/auth]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/checkpassword-reply]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/config]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/dict]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/director]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/dns-client]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/doveadm-server]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/dovecot-lda]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/gdbhelper]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/health-check.sh]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/indexer]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/indexer-worker]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/ipc]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/log]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/maildirlock]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/old-stats]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/quota-status]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/rawlog]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/replicator]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/script]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/script-login]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/stats]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/tcpwrap]
+dovecot-core: executable-in-usr-lib [usr/lib/dovecot/xml2text]
 # ignore equal stub files
 dovecot-core: duplicate-files usr/share/doc/dovecot-core/wiki/Pigeonhole.ManageSieve.Install.txt usr/share/doc/dovecot-core/wiki/Plugins.Stats.txt
 # ignore stopwords txt files not in /usr/share/doc
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_da.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_de.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_en.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_es.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_fi.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_fr.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_it.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_nl.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_no.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_pt.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_ro.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_ru.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_sv.txt
-dovecot-core: package-contains-documentation-outside-usr-share-doc usr/share/dovecot/stopwords/stopwords_tr.txt
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_da.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_de.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_en.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_es.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_fi.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_fr.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_it.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_nl.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_no.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_pt.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_ro.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_ru.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_sv.txt]
+dovecot-core: package-contains-documentation-outside-usr-share-doc [usr/share/dovecot/stopwords/stopwords_tr.txt]
 # ulimit -c might be specified but is supported by bash and dash
 dovecot-core: bash-term-in-posix-shell '| ulimit' [etc/init.d/dovecot:43]

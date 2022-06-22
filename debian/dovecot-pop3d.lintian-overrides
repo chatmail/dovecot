@@ -1,3 +1,0 @@
-# ignore executable-in-usr-lib, maybe move to libexec at some point
-dovecot-pop3d: executable-in-usr-lib usr/lib/dovecot/pop3
-dovecot-pop3d: executable-in-usr-lib usr/lib/dovecot/pop3-login
