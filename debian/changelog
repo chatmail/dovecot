@@ -7,8 +7,11 @@ dovecot (1:2.3.19.1+dfsg1-1) unstable; urgency=medium
 
   [ Noah Meyerhans ]
   * [b73422f] New upstream version 2.3.19.1+dfsg1
+  * [c88bfc0] Update changelog for 1:2.3.19.1+dfsg1-1 release
+  * [ca59548] Update lintian overrides
+  * [d6406c2] d/copyright: update declarations for current maintainers
 
- -- Noah Meyerhans <noahm@debian.org>  Tue, 21 Jun 2022 07:41:44 -0700
+ -- Noah Meyerhans <noahm@debian.org>  Wed, 22 Jun 2022 09:27:01 -0700
 
 dovecot (1:2.3.19+dfsg1-1) unstable; urgency=medium
 
