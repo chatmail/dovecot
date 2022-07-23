@@ -1,0 +1,33 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Sat, 23 Jul 2022 16:38:23 +0200
+Subject: Fix uninitialized read in doveadm-oldstats
+
+The third argument to doveadm_cmd_param_bool() is only set on a return
+value of TRUE.
+Since disk_input_field and disk_output_field should be set if the value
+of show-disk-io is specified and specified to true, fix the condition.
+
+    doveadm-oldstats.c: In function 'cmd_stats_top':
+    doveadm-oldstats.c:551:63: warning: 'b' may be used uninitialized [-Wmaybe-uninitialized]
+      551 |         if (!doveadm_cmd_param_bool(cctx, "show-disk-io", &b) && b) {
+          |                                                               ^
+    doveadm-oldstats.c:545:14: note: 'b' was declared here
+      545 |         bool b;
+          |              ^
+---
+ src/doveadm/doveadm-oldstats.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/doveadm/doveadm-oldstats.c b/src/doveadm/doveadm-oldstats.c
+index 4be575e..ff6dcf5 100644
+--- a/src/doveadm/doveadm-oldstats.c
++++ b/src/doveadm/doveadm-oldstats.c
+@@ -548,7 +548,7 @@ static void cmd_stats_top(struct doveadm_cmd_context *cctx)
+ 		path = t_strconcat(doveadm_settings->base_dir,
+ 				   "/old-stats", NULL);
+ 	}
+-	if (!doveadm_cmd_param_bool(cctx, "show-disk-io", &b) && b) {
++	if (doveadm_cmd_param_bool(cctx, "show-disk-io", &b) && b) {
+ 		disk_input_field = "read_bytes";
+ 		disk_output_field = "write_bytes";
+ 	}
