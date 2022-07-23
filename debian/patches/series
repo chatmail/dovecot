@@ -17,3 +17,5 @@ md4-md5-disable-optimization-causing-unaligned-access.patch
 Support-openssl-3.0.patch
 Debug-flaky-unit-test.patch
 Avoid-usage-of-PATH_MAX-not-available-on-hurd.patch
+auth-Fix-handling-passdbs-with-identical-driver-args-but-.patch
+auth-Add-a-comment-about-updating-userdb_find.patch
