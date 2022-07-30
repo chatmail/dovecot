@@ -1,3 +1,13 @@
+dovecot (1:2.3.19.1+dfsg1-2) unstable; urgency=medium
+
+  [ Christian Göttsche ]
+  * [281fb2c] d/patches: cherry-pick fix for CVE-2022-30550 (Closes: #1016351)
+  * [9c58e71] d/patches: fix uninitialized read in doveadm-oldstats
+  * [a76a24d] d/control: bump to standards version 4.6.1 (no further changes)
+  * [4aaaa8b] Update Lintian overrides
+
+ -- Noah Meyerhans <noahm@debian.org>  Fri, 29 Jul 2022 19:58:28 -0700
+
 dovecot (1:2.3.19.1+dfsg1-1) unstable; urgency=medium
 
   [ Christian Göttsche ]
