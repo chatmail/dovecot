@@ -6,3 +6,4 @@ include:
 variables:
   SALSA_CI_LINTIAN_FAIL_WARNING: 1
   SALSA_CI_DISABLE_REPROTEST: 1
+  RELEASE: 'bullseye'
