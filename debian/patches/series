@@ -18,3 +18,5 @@ Fix-32-bit-test-case.patch
 Improve-cross-compile-support.patch
 CVE-2021-29157.patch
 CVE-2021-33515.patch
+auth-Fix-handling-passdbs-with-identical-driver-args-but-.patch
+auth-Add-a-comment-about-updating-userdb_find.patch

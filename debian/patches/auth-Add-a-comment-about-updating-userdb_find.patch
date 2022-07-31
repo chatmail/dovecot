@@ -1,0 +1,22 @@
+From: Timo Sirainen <timo.sirainen@open-xchange.com>
+Date: Mon, 16 May 2022 14:58:45 +0200
+Subject: auth: Add a comment about updating userdb_find()
+
+---
+ src/auth/userdb.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+Index: dovecot/src/auth/userdb.c
+===================================================================
+--- dovecot.orig/src/auth/userdb.c
++++ dovecot/src/auth/userdb.c
+@@ -162,7 +162,8 @@ userdb_preinit(pool_t pool, const struct
+ 	userdb->id = ++auth_userdb_id;
+ 	userdb->iface = iface;
+ 	userdb->args = p_strdup(pool, set->args);
+-
++	/* NOTE: if anything else than driver & args are added here,
++	   userdb_find() also needs to be updated. */
+ 	array_push_back(&userdb_modules, &userdb);
+ 	return userdb;
+ }
