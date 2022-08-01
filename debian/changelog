@@ -1,3 +1,10 @@
+dovecot (1:2.3.13+dfsg1-2+deb11u1) bullseye; urgency=medium
+
+  * [4b5dac8] d/patches: cherry-pick fix for CVE-2022-30550 (Closes: #1016351)
+  * [597ba7f] salsa-ci: build with bullseye
+
+ -- Noah Meyerhans <noahm@debian.org>  Sun, 31 Jul 2022 17:47:06 -0700
+
 dovecot (1:2.3.13+dfsg1-2) unstable; urgency=high
 
   * Import upstream fixes for security issues (Closes: #990566):
