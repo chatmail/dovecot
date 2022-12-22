@@ -1,0 +1,57 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Thu, 22 Dec 2022 17:00:53 +0100
+Subject: Use _FORTIFY_SOURCE level 3
+
+---
+ m4/dovecot.m4            | 6 +++---
+ pigeonhole/m4/dovecot.m4 | 6 +++---
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/m4/dovecot.m4 b/m4/dovecot.m4
+index 8092bf5..558aee4 100644
+--- a/m4/dovecot.m4
++++ b/m4/dovecot.m4
+@@ -9,7 +9,7 @@ dnl modifications, as long as this notice is preserved.
+ # serial 34
+ 
+ dnl
+-dnl Check for support for D_FORTIFY_SOURCE=2
++dnl Check for support for D_FORTIFY_SOURCE=3
+ dnl
+ 
+ AC_DEFUN([AC_CC_D_FORTIFY_SOURCE],[
+@@ -17,8 +17,8 @@ AC_DEFUN([AC_CC_D_FORTIFY_SOURCE],[
+     AS_IF([test "$enable_hardening" = yes], [
+       case "$host" in
+         *)
+-          gl_COMPILER_OPTION_IF([-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2], [
+-            CFLAGS="$CFLAGS -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2"
++          gl_COMPILER_OPTION_IF([-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3], [
++            CFLAGS="$CFLAGS -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3"
+             ],
+             [],
+             [AC_LANG_PROGRAM()]
+diff --git a/pigeonhole/m4/dovecot.m4 b/pigeonhole/m4/dovecot.m4
+index 037d5e4..a3e0883 100644
+--- a/pigeonhole/m4/dovecot.m4
++++ b/pigeonhole/m4/dovecot.m4
+@@ -9,7 +9,7 @@ dnl modifications, as long as this notice is preserved.
+ # serial 34
+ 
+ dnl
+-dnl Check for support for D_FORTIFY_SOURCE=2
++dnl Check for support for D_FORTIFY_SOURCE=3
+ dnl
+ 
+ AC_DEFUN([AC_CC_D_FORTIFY_SOURCE],[
+@@ -17,8 +17,8 @@ AC_DEFUN([AC_CC_D_FORTIFY_SOURCE],[
+     AS_IF([test "$enable_hardening" = yes], [
+       case "$host" in
+         *)
+-          gl_COMPILER_OPTION_IF([-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2], [
+-            CFLAGS="$CFLAGS -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2"
++          gl_COMPILER_OPTION_IF([-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3], [
++            CFLAGS="$CFLAGS -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3"
+             ],
+             [],
+             [AC_LANG_PROGRAM()]
