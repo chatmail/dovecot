@@ -25,6 +25,12 @@ ifneq ($(filter armel armhf hppa mips64el mipsel riscv64 sparc64, $(DEB_HOST_ARC
   DOV_DEB_CXXFLAGS += -funwind-tables
 endif
 
+# Extra hardening flags
+DOV_DEB_CFLAGS += -fstack-clash-protection
+DOV_DEB_CXXFLAGS += -fstack-clash-protection
+DOV_DEB_LDFLAGS += -fstack-clash-protection
+
+
 export DEB_CFLAGS_MAINT_APPEND = $(DOV_DEB_CFLAGS)
 export DEB_CXXFLAGS_MAINT_APPEND = $(DOV_DEB_CXXFLAGS)
 export DEB_LDFLAGS_MAINT_APPEND = $(DOV_DEB_LDFLAGS)
