@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-import crypt
 import grp
 import imaplib
 import os
@@ -12,6 +11,8 @@ import string
 import subprocess
 import sys
 import unittest
+
+from passlib.hash import des_crypt
 
 
 def random_string(length):
@@ -57,7 +58,7 @@ class TestUser:
 
         self.salt = random_string(2)
         self.password = random_string(8)
-        self.crypted = crypt.crypt(self.password, self.salt)
+        self.crypted = des_crypt.using(salt=self.salt).hash(self.password)
 
         subprocess.check_call(['useradd', '-p', self.crypted, '-m', login])
 
