@@ -1,9 +1,10 @@
-dovecot (1:2.3.19.1+dfsg1-3) UNRELEASED; urgency=medium
+dovecot (1:2.3.19.1+dfsg1-2.1) unstable; urgency=medium
 
+  * Non-maintainer upload.
   * [b02ebc9] Don't use deprecated crypt module.
     (closes: #1028513)
 
- -- Bas Couwenberg <sebastic@debian.org>  Fri, 20 Jan 2023 07:00:17 +0100
+ -- Bas Couwenberg <sebastic@debian.org>  Fri, 20 Jan 2023 07:01:26 +0100
 
 dovecot (1:2.3.19.1+dfsg1-2) unstable; urgency=medium
 
