@@ -1,30 +1,37 @@
-2022-05-04 15:04:01 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (4eae2f79)
+2022-11-23 09:58:38 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (149edcf2)
+
+    configure: Set version to 0.5.20
+
+
+M	configure.ac
+
+2022-11-23 09:58:17 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (b3be0f58)
+
+    NEWS: Add news for 2.3.20
+
+
+M	NEWS
+
+2022-05-04 15:04:01 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (68ccbf50)
 
     NEWS: Update date for 2.3.19 news
 
 
 M	NEWS
 
-2022-04-26 09:45:26 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (d0e82ef9)
+2022-04-26 09:45:26 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (a254ae47)
 
     NEWS: Add news for 0.5.19
 
 
 M	NEWS
 
-2022-01-12 12:54:05 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (d9023d0c)
+2022-01-12 12:54:05 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (cf9d3352)
 
     NEWS: Add news for 0.5.18
 
 
 M	NEWS
-
-2022-04-26 09:34:49 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (963ed291)
-
-    configure: Update version
-
-
-M	configure.ac
 
 2022-02-05 17:14:16 +0200 Martti Rannanjärvi <martti.rannanjarvi@open-xchange.com> (7927a415)
 

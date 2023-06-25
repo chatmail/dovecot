@@ -678,29 +678,22 @@ static const flex_int16_t yy_chk[70] =
         result = event_filter_parser_input_proc(buf, max_size, yyscanner)
 static size_t event_filter_parser_input_proc(char *buf, size_t size, yyscan_t scanner);
 
-#ifdef __clang__
-#pragma clang diagnostic push
-/* ignore "unknown warning" warning if we're using unpatched clang */
-#pragma clang diagnostic ignored "-Wunknown-warning-option"
-/* ignore strict bool warnings in generated code */
-#pragma clang diagnostic ignored "-Wstrict-bool"
-/* ignore sign comparison errors (buggy flex) */
-#pragma clang diagnostic ignored "-Wsign-compare"
-/* ignore unused functions */
-#pragma clang diagnostic ignored "-Wunused-function"
-/* ignore unused parameters */
-#pragma clang diagnostic ignored "-Wunused-parameter"
-#else
-/* and same for gcc */
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-compare"
-#pragma GCC diagnostic ignored "-Wunused-function"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
+
+/* ignore strict bool warnings in generated code */
+#ifdef HAVE_STRICT_BOOL
+#  pragma GCC diagnostic ignored "-Wstrict-bool"
 #endif
+/* ignore sign comparison errors (buggy flex) */
+#pragma GCC diagnostic ignored "-Wsign-compare"
+/* ignore unused functions */
+#pragma GCC diagnostic ignored "-Wunused-function"
+/* ignore unused parameters */
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 
-#line 702 "event-filter-lexer.c"
+#line 695 "event-filter-lexer.c"
 
-#line 704 "event-filter-lexer.c"
+#line 697 "event-filter-lexer.c"
 
 #define INITIAL 0
 #define string 1
@@ -973,12 +966,12 @@ YY_DECL
 		}
 
 	{
-#line 51 "event-filter-lexer.l"
+#line 44 "event-filter-lexer.l"
 
-#line 53 "event-filter-lexer.l"
+#line 46 "event-filter-lexer.l"
 	string_t *str_buf = NULL;
 
-#line 982 "event-filter-lexer.c"
+#line 975 "event-filter-lexer.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1033,7 +1026,7 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 55 "event-filter-lexer.l"
+#line 48 "event-filter-lexer.l"
 {
 					BEGIN(string);
 
@@ -1042,7 +1035,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 60 "event-filter-lexer.l"
+#line 53 "event-filter-lexer.l"
 {
 					yylval->str = str_c(str_buf);
 					BEGIN(INITIAL);
@@ -1053,58 +1046,58 @@ YY_RULE_SETUP
 case 3:
 /* rule 3 can match eol */
 YY_RULE_SETUP
-#line 66 "event-filter-lexer.l"
+#line 59 "event-filter-lexer.l"
 { str_append(str_buf, yytext); }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 67 "event-filter-lexer.l"
+#line 60 "event-filter-lexer.l"
 { str_append_c(str_buf, '\\'); }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 68 "event-filter-lexer.l"
+#line 61 "event-filter-lexer.l"
 { str_append_c(str_buf, '"'); }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 69 "event-filter-lexer.l"
+#line 62 "event-filter-lexer.l"
 { str_append(str_buf, yytext); }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 71 "event-filter-lexer.l"
+#line 64 "event-filter-lexer.l"
 { return AND; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 72 "event-filter-lexer.l"
+#line 65 "event-filter-lexer.l"
 { return OR; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 73 "event-filter-lexer.l"
+#line 66 "event-filter-lexer.l"
 { return NOT; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 74 "event-filter-lexer.l"
+#line 67 "event-filter-lexer.l"
 { return *yytext; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 75 "event-filter-lexer.l"
+#line 68 "event-filter-lexer.l"
 { yylval->str = t_strdup(yytext); return TOKEN; }
 	YY_BREAK
 case 12:
 /* rule 12 can match eol */
 YY_RULE_SETUP
-#line 76 "event-filter-lexer.l"
+#line 69 "event-filter-lexer.l"
 { /* ignore */ }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 77 "event-filter-lexer.l"
+#line 70 "event-filter-lexer.l"
 {
 					/*
 					 * We simply return the char to the
@@ -1134,10 +1127,10 @@ YY_RULE_SETUP
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 103 "event-filter-lexer.l"
+#line 96 "event-filter-lexer.l"
 ECHO;
 	YY_BREAK
-#line 1141 "event-filter-lexer.c"
+#line 1134 "event-filter-lexer.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(string):
 	yyterminate();
@@ -2253,11 +2246,10 @@ static int yy_flex_strlen (const char * s , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 103 "event-filter-lexer.l"
+#line 96 "event-filter-lexer.l"
 
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
+
+#pragma GCC diagnostic pop
 
 void *yyalloc(size_t bytes, void* yyscanner ATTR_UNUSED)
 {

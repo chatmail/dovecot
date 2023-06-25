@@ -1968,6 +1968,7 @@ extern const struct setting_parser_info doveadm_setting_parser_info;
 /* <settings checks> */
 enum dsync_features {
 	DSYNC_FEATURE_EMPTY_HDR_WORKAROUND = 0x1,
+	DSYNC_FEATURE_NO_HEADER_HASHES = 0x2,
 };
 /* </settings checks> */
 struct doveadm_settings {
@@ -1999,7 +2000,7 @@ struct doveadm_settings {
 /* ../../src/director/director-settings.h */
 extern const struct setting_parser_info director_setting_parser_info;
 struct director_settings {
-	const char *master_user_separator;
+	const char *auth_master_user_separator;
 
 	const char *director_servers;
 	const char *director_mail_servers;
@@ -5060,6 +5061,7 @@ struct dsync_feature_list {
 
 static const struct dsync_feature_list dsync_feature_list[] = {
 	{ "empty-header-workaround", DSYNC_FEATURE_EMPTY_HDR_WORKAROUND },
+	{ "no-header-hashes", DSYNC_FEATURE_NO_HEADER_HASHES },
 	{ NULL, 0 }
 };
 
@@ -5321,7 +5323,7 @@ struct service_settings director_service_settings = {
 #define DEF(type, name) \
 	SETTING_DEFINE_STRUCT_##type(#name, name, struct director_settings)
 static const struct setting_define director_setting_defines[] = {
-	DEF(STR, master_user_separator),
+	DEF(STR, auth_master_user_separator),
 
 	DEF(STR, director_servers),
 	DEF(STR, director_mail_servers),
@@ -5338,7 +5340,7 @@ static const struct setting_define director_setting_defines[] = {
 	SETTING_DEFINE_LIST_END
 };
 const struct director_settings director_default_settings = {
-	.master_user_separator = "",
+	.auth_master_user_separator = "",
 
 	.director_servers = "",
 	.director_mail_servers = "",

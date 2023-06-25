@@ -46,7 +46,7 @@ static int client_input_status_overview(struct doveadm_connection *client)
 	while ((user = replicator_queue_iter_next(iter)) != NULL) {
 		if (user->priority != REPLICATION_PRIORITY_NONE)
 			pending_counts[user->priority]++;
-		else if (replicator_queue_want_sync_now(queue, user, &next_secs)) {
+		else if (replicator_queue_want_sync_now(user, &next_secs)) {
 			if (user->last_sync_failed)
 				pending_failed_count++;
 			else
@@ -84,6 +84,7 @@ client_input_status(struct doveadm_connection *client, const char *const *args)
 	struct replicator_queue_iter *iter;
 	struct replicator_user *user;
 	const char *mask = args[0];
+	unsigned int next_secs;
 	string_t *str = t_str_new(128);
 
 	if (mask == NULL)
@@ -98,11 +99,14 @@ client_input_status(struct doveadm_connection *client, const char *const *args)
 		str_append_tabescaped(str, user->username);
 		str_append_c(str, '\t');
 		str_append(str, replicator_priority_to_str(user->priority));
-		str_printfa(str, "\t%lld\t%lld\t%d\t%lld\n",
+		if (replicator_queue_want_sync_now(user, &next_secs))
+			next_secs = 0;
+		str_printfa(str, "\t%lld\t%lld\t%d\t%lld\t%u\n",
 			    (long long)user->last_fast_sync,
 			    (long long)user->last_full_sync,
 			    user->last_sync_failed ? 1 : 0,
-			    (long long)user->last_successful_sync);
+			    (long long)user->last_successful_sync,
+			    next_secs);
 		o_stream_nsend(client->conn.output, str_data(str), str_len(str));
 	}
 	replicator_queue_iter_deinit(&iter);
@@ -172,9 +176,12 @@ client_input_replicate(struct doveadm_connection *client, const char *const *arg
 	full = strchr(args[1], 'f') != NULL;
 	usermask = args[2];
 	if (strchr(usermask, '*') == NULL && strchr(usermask, '?') == NULL) {
-		user = replicator_queue_add(queue, usermask, priority);
+		struct replicator_user *user =
+			replicator_queue_get(queue, usermask);
 		if (full)
 			user->force_full_sync = TRUE;
+		replicator_queue_update(queue, user, priority);
+		replicator_queue_add(queue, user);
 		o_stream_nsend_str(client->conn.output, "+1\n");
 		return 0;
 	}
@@ -184,9 +191,10 @@ client_input_replicate(struct doveadm_connection *client, const char *const *arg
 	while ((user = replicator_queue_iter_next(iter)) != NULL) {
 		if (!wildcard_match(user->username, usermask))
 			continue;
-		user = replicator_queue_add(queue, user->username, priority);
 		if (full)
 			user->force_full_sync = TRUE;
+		replicator_queue_update(queue, user, priority);
+		replicator_queue_add(queue, user);
 		match_count++;
 	}
 	replicator_queue_iter_deinit(&iter);
@@ -210,8 +218,9 @@ client_input_add(struct doveadm_connection *client, const char *const *args)
 	}
 
 	if (strchr(args[0], '*') == NULL && strchr(args[0], '?') == NULL) {
-		(void)replicator_queue_add(queue, args[0],
-					   REPLICATION_PRIORITY_NONE);
+		struct replicator_user *user =
+			replicator_queue_get(queue, args[0]);
+		replicator_queue_add(queue, user);
 	} else {
 		replicator_queue_add_auth_users(queue, set->auth_socket_path,
 						args[0], ioloop_time);
@@ -255,11 +264,12 @@ client_input_notify(struct doveadm_connection *client, const char *const *args)
 		return -1;
 	}
 
-	user = replicator_queue_add(queue, args[0], REPLICATION_PRIORITY_NONE);
+	user = replicator_queue_get(queue, args[0]);
 	if (args[1][0] == 'f')
 		user->last_full_sync = ioloop_time;
 	user->last_fast_sync = ioloop_time;
 	user->last_update = ioloop_time;
+	replicator_queue_add(queue, user);
 
 	if (args[2][0] != '\0') {
 		i_free(user->state);
