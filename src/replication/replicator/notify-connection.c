@@ -72,9 +72,12 @@ notify_connection_input_line(struct notify_connection *conn, const char *line)
 		i_error("notify client sent invalid priority: %s", args[2]);
 		return -1;
 	}
-	if (priority != REPLICATION_PRIORITY_SYNC)
-		(void)replicator_queue_add(conn->queue, args[1], priority);
-	else if (args[3] == NULL || str_to_uint(args[3], &id) < 0) {
+	if (priority != REPLICATION_PRIORITY_SYNC) {
+		struct replicator_user *user =
+			replicator_queue_get(conn->queue, args[1]);
+		replicator_queue_update(conn->queue, user, priority);
+		replicator_queue_add(conn->queue, user);
+	} else if (args[3] == NULL || str_to_uint(args[3], &id) < 0) {
 		i_error("notify client sent invalid sync id: %s", line);
 		return -1;
 	} else {
@@ -82,8 +85,13 @@ notify_connection_input_line(struct notify_connection *conn, const char *line)
 		request->conn = conn;
 		request->id = id;
 		notify_connection_ref(conn);
-		replicator_queue_add_sync(conn->queue, args[1],
-					  notify_sync_callback, request);
+		struct replicator_user *user =
+			replicator_queue_get(conn->queue, args[1]);
+		replicator_queue_update(conn->queue, user,
+					REPLICATION_PRIORITY_SYNC);
+		replicator_queue_add_sync_callback(conn->queue, user,
+						   notify_sync_callback,
+						   request);
 	}
 	return 0;
 }

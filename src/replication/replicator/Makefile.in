@@ -89,6 +89,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 pkglibexec_PROGRAMS = replicator$(EXEEXT)
+noinst_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/replication/replicator
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_checktype2.m4 \
@@ -149,8 +150,9 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
+am__EXEEXT_1 = test-replicator-queue$(EXEEXT)
 am__installdirs = "$(DESTDIR)$(pkglibexecdir)"
-PROGRAMS = $(pkglibexec_PROGRAMS)
+PROGRAMS = $(noinst_PROGRAMS) $(pkglibexec_PROGRAMS)
 am_replicator_OBJECTS = doveadm-connection.$(OBJEXT) \
 	dsync-client.$(OBJEXT) replicator.$(OBJEXT) \
 	replicator-brain.$(OBJEXT) replicator-queue.$(OBJEXT) \
@@ -165,6 +167,9 @@ am__v_lt_1 =
 replicator_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(replicator_LDFLAGS) $(LDFLAGS) -o $@
+am_test_replicator_queue_OBJECTS = replicator-queue.$(OBJEXT) \
+	replicator-settings.$(OBJEXT) test-replicator-queue.$(OBJEXT)
+test_replicator_queue_OBJECTS = $(am_test_replicator_queue_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -185,7 +190,8 @@ am__depfiles_remade = ./$(DEPDIR)/doveadm-connection.Po \
 	./$(DEPDIR)/replicator-brain.Po \
 	./$(DEPDIR)/replicator-queue-auth.Po \
 	./$(DEPDIR)/replicator-queue.Po \
-	./$(DEPDIR)/replicator-settings.Po ./$(DEPDIR)/replicator.Po
+	./$(DEPDIR)/replicator-settings.Po ./$(DEPDIR)/replicator.Po \
+	./$(DEPDIR)/test-replicator-queue.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -205,8 +211,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(replicator_SOURCES)
-DIST_SOURCES = $(replicator_SOURCES)
+SOURCES = $(replicator_SOURCES) $(test_replicator_queue_SOURCES)
+DIST_SOURCES = $(replicator_SOURCES) $(test_replicator_queue_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -455,6 +461,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/lib \
+	-I$(top_srcdir)/src/lib-test \
 	-I$(top_srcdir)/src/lib-settings \
 	-I$(top_srcdir)/src/lib-auth \
 	-I$(top_srcdir)/src/lib-master \
@@ -485,6 +492,21 @@ noinst_HEADERS = \
 	replicator-settings.h \
 	notify-connection.h
 
+test_programs = \
+	test-replicator-queue
+
+test_libs = \
+	../../lib-test/libtest.la \
+	../../lib/liblib.la
+
+test_deps = $(test_libs)
+test_replicator_queue_SOURCES = \
+	replicator-queue.c \
+	replicator-settings.c \
+	test-replicator-queue.c
+
+test_replicator_queue_LDADD = $(test_libs)
+test_replicator_queue_DEPENDENCIES = $(test_deps)
 all: all-am
 
 .SUFFIXES:
@@ -518,6 +540,15 @@ $(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
 install-pkglibexecPROGRAMS: $(pkglibexec_PROGRAMS)
 	@$(NORMAL_INSTALL)
 	@list='$(pkglibexec_PROGRAMS)'; test -n "$(pkglibexecdir)" || list=; \
@@ -572,6 +603,10 @@ replicator$(EXEEXT): $(replicator_OBJECTS) $(replicator_DEPENDENCIES) $(EXTRA_re
 	@rm -f replicator$(EXEEXT)
 	$(AM_V_CCLD)$(replicator_LINK) $(replicator_OBJECTS) $(replicator_LDADD) $(LIBS)
 
+test-replicator-queue$(EXEEXT): $(test_replicator_queue_OBJECTS) $(test_replicator_queue_DEPENDENCIES) $(EXTRA_test_replicator_queue_DEPENDENCIES) 
+	@rm -f test-replicator-queue$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_replicator_queue_OBJECTS) $(test_replicator_queue_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -586,6 +621,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/replicator-queue.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/replicator-settings.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/replicator.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-replicator-queue.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -706,6 +742,7 @@ distdir-am: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-am
 all-am: Makefile $(PROGRAMS) $(HEADERS)
 installdirs:
@@ -744,8 +781,8 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-am
 
-clean-am: clean-generic clean-libtool clean-pkglibexecPROGRAMS \
-	mostlyclean-am
+clean-am: clean-generic clean-libtool clean-noinstPROGRAMS \
+	clean-pkglibexecPROGRAMS mostlyclean-am
 
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/doveadm-connection.Po
@@ -756,6 +793,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/replicator-queue.Po
 	-rm -f ./$(DEPDIR)/replicator-settings.Po
 	-rm -f ./$(DEPDIR)/replicator.Po
+	-rm -f ./$(DEPDIR)/test-replicator-queue.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -809,6 +847,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/replicator-queue.Po
 	-rm -f ./$(DEPDIR)/replicator-settings.Po
 	-rm -f ./$(DEPDIR)/replicator.Po
+	-rm -f ./$(DEPDIR)/test-replicator-queue.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -827,25 +866,31 @@ ps-am:
 
 uninstall-am: uninstall-pkglibexecPROGRAMS
 
-.MAKE: install-am install-strip
+.MAKE: check-am install-am install-strip
 
-.PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-am clean \
-	clean-generic clean-libtool clean-pkglibexecPROGRAMS \
-	cscopelist-am ctags ctags-am distclean distclean-compile \
-	distclean-generic distclean-libtool distclean-tags distdir dvi \
-	dvi-am html html-am info info-am install install-am \
-	install-data install-data-am install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-info install-info-am install-man install-pdf \
-	install-pdf-am install-pkglibexecPROGRAMS install-ps \
-	install-ps-am install-strip installcheck installcheck-am \
-	installdirs maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-pkglibexecPROGRAMS
+.PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-am \
+	check-local clean clean-generic clean-libtool \
+	clean-noinstPROGRAMS clean-pkglibexecPROGRAMS cscopelist-am \
+	ctags ctags-am distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-data \
+	install-data-am install-dvi install-dvi-am install-exec \
+	install-exec-am install-html install-html-am install-info \
+	install-info-am install-man install-pdf install-pdf-am \
+	install-pkglibexecPROGRAMS install-ps install-ps-am \
+	install-strip installcheck installcheck-am installdirs \
+	maintainer-clean maintainer-clean-generic mostlyclean \
+	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+	pdf pdf-am ps ps-am tags tags-am uninstall uninstall-am \
+	uninstall-pkglibexecPROGRAMS
 
 .PRECIOUS: Makefile
 
+
+check-local:
+	for bin in $(test_programs); do \
+	  if ! $(RUN_TEST) ./$$bin; then exit 1; fi; \
+	done
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

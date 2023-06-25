@@ -589,6 +589,9 @@
 /* Define to 1 if you have the `stricmp' function. */
 #undef HAVE_STRICMP
 
+/* we have strict bool */
+#undef HAVE_STRICT_BOOL
+
 /* Define to 1 if you have the <strings.h> header file. */
 #undef HAVE_STRINGS_H
 
