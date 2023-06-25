@@ -1,3 +1,15 @@
+dovecot (1:2.3.20+dfsg1-1) unstable; urgency=medium
+
+  [ Christian Göttsche ]
+  * [fb2a5b7] d/rules: enable stack clash protection
+  * [2666970] d/patches: bump _FORTIFY_SOURCE to level 3
+
+  [ Noah Meyerhans ]
+  * [eab5171] New upstream version 2.3.20+dfsg1
+  * [d6135a4] Drop dependency on obsolete lsb-base package
+
+ -- Noah Meyerhans <noahm@debian.org>  Sun, 25 Jun 2023 16:17:56 -0700
+
 dovecot (1:2.3.19.1+dfsg1-2.1) unstable; urgency=medium
 
   * Non-maintainer upload.
