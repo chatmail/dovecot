@@ -46,7 +46,6 @@ Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: adduser,
          libpam-runtime,
-         lsb-base,
          openssl,
          ssl-cert,
          ucf,
