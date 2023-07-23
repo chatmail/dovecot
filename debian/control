@@ -12,7 +12,6 @@ Build-Depends: debhelper-compat (= 13),
                libapparmor-dev [linux-any],
                libbz2-dev,
                libcap-dev [linux-any],
-               libclucene-dev,
                libdb-dev,
                libexpat-dev,
                libexttextcat-dev,
@@ -55,7 +54,6 @@ Suggests: dovecot-gssapi,
           dovecot-imapd,
           dovecot-ldap,
           dovecot-lmtpd,
-          dovecot-lucene,
           dovecot-managesieved,
           dovecot-mysql,
           dovecot-pgsql,
@@ -254,18 +252,6 @@ Description: secure POP3/IMAP server - Solr support
  fast, extensible, and portable.
  .
  This package provides Solr full text search support for Dovecot.
-
-Package: dovecot-lucene
-Architecture: any
-Depends: dovecot-core (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
-Description: secure POP3/IMAP server - Lucene support
- Dovecot is a mail server whose major goals are security and extreme
- reliability. It tries very hard to handle all error conditions and verify
- that all data is valid, making it nearly impossible to crash. It supports
- mbox/Maildir and its own dbox/mdbox formats, and should also be pretty
- fast, extensible, and portable.
- .
- This package provides Lucene full text search support for Dovecot.
 
 Package: dovecot-submissiond
 Architecture: any

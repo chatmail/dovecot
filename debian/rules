@@ -96,8 +96,6 @@ sieve_files = usr/bin/sieve* \
 
 solr_files = usr/lib/dovecot/modules/lib??_fts_solr_*
 
-lucene_files = usr/lib/dovecot/modules/lib??_fts_lucene_*
-
 dev_files = usr/include/* \
 	    usr/lib/dovecot/dovecot-config \
 	    usr/share/aclocal/*.m4
@@ -121,7 +119,7 @@ override_dh_auto_configure:
 	            --with-ioloop=best \
 		    --with-icu \
 	            --with-libwrap \
-	            --with-lucene \
+	            --without-lucene \
 		    $(CONFIGURE_APPARMOR) \
 		    --with-lz4 \
 		    --with-lua=plugin \
