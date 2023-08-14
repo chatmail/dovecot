@@ -21,3 +21,4 @@ auth-Fix-handling-passdbs-with-identical-driver-args-but-.patch
 auth-Add-a-comment-about-updating-userdb_find.patch
 Fix-uninitialized-read-in-doveadm-oldstats.patch
 Use-_FORTIFY_SOURCE-level-3.patch
+Cleanup-temporary-build-files.patch
