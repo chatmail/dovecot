@@ -1,0 +1,2 @@
+# hardening flags are set and blhc succeeds; might need some investigation
+dovecot-imapd: hardening-no-fortify-functions [usr/lib/dovecot/imap]
