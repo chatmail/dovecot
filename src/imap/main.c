@@ -71,12 +71,16 @@ void imap_refresh_proctitle(void)
 #define IMAP_PROCTITLE_PREFERRED_LEN 80
 	struct client *client;
 	struct client_command_context *cmd;
-	string_t *title = t_str_new(128);
 	bool wait_output;
 
 	if (!verbose_proctitle)
 		return;
+	if (imap_client_count == 0) {
+		if (imap_master_clients_refresh_proctitle())
+			return;
+	}
 
+	string_t *title = t_str_new(128);
 	str_append_c(title, '[');
 	switch (imap_client_count) {
 	case 0:
@@ -236,7 +240,7 @@ client_add_input_finalize(struct client *client)
 }
 
 int client_create_from_input(const struct mail_storage_service_input *input,
-			     int fd_in, int fd_out,
+			     int fd_in, int fd_out, bool unhibernated,
 			     struct client **client_r, const char **error_r)
 {
 	struct mail_storage_service_input service_input;
@@ -294,7 +298,7 @@ int client_create_from_input(const struct mail_storage_service_input *input,
 		return -1;
 	}
 
-	client = client_create(fd_in, fd_out,
+	client = client_create(fd_in, fd_out, unhibernated,
 			       event, mail_user, user, imap_set, smtp_set);
 	client->userdb_fields = input->userdb_fields == NULL ? NULL :
 		p_strarray_dup(client->pool, input->userdb_fields);
@@ -323,7 +327,7 @@ static void main_stdio_run(const char *username)
 		(void)net_addr2ip(value, &input.local_ip);
 
 	if (client_create_from_input(&input, STDIN_FILENO, STDOUT_FILENO,
-				     &client, &error) < 0)
+				     FALSE, &client, &error) < 0)
 		i_fatal("%s", error);
 
 	input_base64 = getenv("CLIENT_INPUT");
@@ -381,7 +385,7 @@ login_client_connected(const struct master_login_client *login_client,
 					&request);
 
 	if (client_create_from_input(&input, login_client->fd, login_client->fd,
-				     &client, &error) < 0) {
+				     FALSE, &client, &error) < 0) {
 		int fd = login_client->fd;
 		struct ostream *output =
 			o_stream_create_fd_autoclose(&fd, IO_BLOCK_SIZE);
@@ -528,6 +532,9 @@ int main(int argc, char *argv[])
 	imap_features_init();
 	clients_init();
 	imap_master_clients_init();
+	/* this is needed before settings are read */
+	verbose_proctitle = !IS_STANDALONE() &&
+		getenv(MASTER_VERBOSE_PROCTITLE_ENV) != NULL;
 
 	const char *error;
 	if (t_abspath(auth_socket_path, &login_set.auth_socket_path, &error) < 0)
@@ -539,6 +546,8 @@ int main(int argc, char *argv[])
 	}
 	login_set.callback = login_client_connected;
 	login_set.failure_callback = login_client_failed;
+	login_set.update_proctitle = verbose_proctitle &&
+		master_service_get_client_limit(master_service) == 1;
 
 	if (!IS_STANDALONE())
 		master_login = master_login_init(master_service, &login_set);

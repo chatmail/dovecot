@@ -8,6 +8,7 @@
 #include "str.h"
 #include "strescape.h"
 #include "time-util.h"
+#include "process-title.h"
 #include "master-service-private.h"
 #include "master-login.h"
 #include "master-login-auth.h"
@@ -55,11 +56,29 @@ struct master_login {
 	char *postlogin_socket_path;
 	unsigned int postlogin_timeout_secs;
 
+	bool update_proctitle:1;
 	bool stopping:1;
 };
 
 static void master_login_conn_close(struct master_login_connection *conn);
 static void master_login_conn_unref(struct master_login_connection **_conn);
+
+static void login_server_proctitle_refresh(struct master_login *login)
+{
+	if (!login->update_proctitle)
+		return;
+	/* This function assumes that client_limit=1. With a higher limit
+	   it just returns the first client's state, which isn't too bad
+	   either. */
+	if (login->conns == NULL)
+		process_title_set("[idling]");
+	else if (login->conns->clients == NULL)
+		process_title_set("[waiting on client]");
+	else if (login->conns->clients->postlogin_client == NULL)
+		process_title_set("[auth lookup]");
+	else
+		process_title_set("[post-login script]");
+}
 
 struct master_login *
 master_login_init(struct master_service *service,
@@ -78,6 +97,7 @@ master_login_init(struct master_service *service,
 					     set->request_auth_token);
 	login->postlogin_socket_path = i_strdup(set->postlogin_socket_path);
 	login->postlogin_timeout_secs = set->postlogin_timeout_secs;
+	login->update_proctitle = set->update_proctitle;
 
 	i_assert(service->login == NULL);
 	service->login = login;
@@ -87,6 +107,7 @@ master_login_init(struct master_service *service,
 void master_login_deinit(struct master_login **_login)
 {
 	struct master_login *login = *_login;
+	struct master_login_connection *conn, *next;
 
 	*_login = NULL;
 
@@ -94,11 +115,16 @@ void master_login_deinit(struct master_login **_login)
 	login->service->login = NULL;
 
 	master_login_auth_deinit(&login->auth);
-	while (login->conns != NULL) {
-		struct master_login_connection *conn = login->conns;
-
-		master_login_conn_close(conn);
-		master_login_conn_unref(&conn);
+	for (conn = login->conns; conn != NULL; conn = next) {
+		next = conn->next;
+		if (!master_login_conn_is_closed(conn)) {
+			master_login_conn_close(conn);
+			master_login_conn_unref(&conn);
+		} else {
+			/* FIXME: auth request or post-login script is still
+			   running - we don't currently support aborting them */
+			i_assert(conn->clients != NULL);
+		}
 	}
 	i_free(login->postlogin_socket_path);
 	i_free(login);
@@ -350,6 +376,9 @@ static int master_login_postlogin(struct master_login_client *client,
 	int fd;
 	ssize_t ret;
 
+	if (login->update_proctitle)
+		process_title_set("[post-login script]");
+
 	fd = net_connect_unix_with_retries(socket_path, 1000);
 	if (fd == -1) {
 		conn_error(client->conn, "net_connect_unix(%s) failed: %m%s",
@@ -393,6 +422,8 @@ static int master_login_postlogin(struct master_login_client *client,
 
 	i_assert(client->postlogin_client == NULL);
 	client->postlogin_client = pl;
+
+	login_server_proctitle_refresh(login);
 	return 0;
 }
 
@@ -498,6 +529,7 @@ static void master_login_conn_input(struct master_login_connection *conn)
 	memcpy(client->data, data+i, req.data_size);
 	conn->refcount++;
 	DLLIST_PREPEND(&conn->clients, client);
+	login_server_proctitle_refresh(login);
 
 	master_login_auth_request(login->auth, &req,
 				  master_login_auth_callback, client);
@@ -517,6 +549,7 @@ void master_login_add(struct master_login *login, int fd)
 	o_stream_set_no_error_handling(conn->output, TRUE);
 
 	DLLIST_PREPEND(&login->conns, conn);
+	login_server_proctitle_refresh(login);
 
 	/* NOTE: currently there's a separate connection for each request. */
 }
@@ -525,8 +558,6 @@ static void master_login_conn_close(struct master_login_connection *conn)
 {
 	if (master_login_conn_is_closed(conn))
 		return;
-
-	DLLIST_REMOVE(&conn->login->conns, conn);
 
 	io_remove(&conn->io);
 	o_stream_close(conn->output);
@@ -548,6 +579,9 @@ static void master_login_conn_unref(struct master_login_connection **_conn)
 	i_assert(conn->clients == NULL);
 	master_login_conn_close(conn);
 	o_stream_unref(&conn->output);
+
+	DLLIST_REMOVE(&conn->login->conns, conn);
+	login_server_proctitle_refresh(conn->login);
 
 	if (!conn->login_success)
 		master_service_client_connection_destroyed(conn->login->service);

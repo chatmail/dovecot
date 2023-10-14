@@ -110,7 +110,7 @@ static bool user_has_special_use_mailboxes(struct mail_user *user)
 	return FALSE;
 }
 
-struct client *client_create(int fd_in, int fd_out,
+struct client *client_create(int fd_in, int fd_out, bool unhibernated,
 			     struct event *event, struct mail_user *user,
 			     struct mail_storage_service_user *service_user,
 			     const struct imap_settings *set,
@@ -131,6 +131,7 @@ struct client *client_create(int fd_in, int fd_out,
 	client->v = imap_client_vfuncs;
 	client->event = event;
 	event_ref(client->event);
+	client->unhibernated = unhibernated;
 	client->set = set;
 	client->smtp_set = smtp_set;
 	client->service_user = service_user;
@@ -371,8 +372,12 @@ static const char *client_get_last_command_status(struct client *client)
 {
 	if (client->logged_out)
 		return "";
-	if (client->last_cmd_name == NULL)
-		return " (No commands sent)";
+	if (client->last_cmd_name == NULL) {
+		if (client->unhibernated)
+			return " (No commands sent after unhibernation)";
+		else
+			return " (No commands sent)";
+	}
 
 	/* client disconnected without sending LOGOUT. if the last command
 	   took over 1 second to run, log it. */

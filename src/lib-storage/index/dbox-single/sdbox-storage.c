@@ -335,15 +335,14 @@ static int sdbox_mailbox_open(struct mailbox *box)
 	struct sdbox_mailbox *mbox = SDBOX_MAILBOX(box);
 	struct sdbox_index_header hdr;
 	bool need_resize;
-	time_t path_ctime;
 
-	if (dbox_mailbox_check_existence(box, &path_ctime) < 0)
+	if (dbox_mailbox_check_existence(box) < 0)
 		return -1;
 
 	if (sdbox_mailbox_alloc_index(mbox) < 0)
 		return -1;
 
-	if (dbox_mailbox_open(box, path_ctime) < 0)
+	if (dbox_mailbox_open(box) < 0)
 		return -1;
 
 	if (box->creating) {
@@ -376,7 +375,9 @@ static void sdbox_mailbox_close(struct mailbox *box)
 
 	if (mbox->corrupted_rebuild_count != 0)
 		(void)sdbox_sync(mbox, 0);
-	index_storage_mailbox_close(box);
+
+	dbox_mailbox_close_cleanup(box);
+	dbox_mailbox_close(box);
 }
 
 static int

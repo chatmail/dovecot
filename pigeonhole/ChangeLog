@@ -1,30 +1,68 @@
-2022-11-23 09:58:38 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (149edcf2)
+2023-08-30 15:48:42 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (f6cd4b8e)
 
-    configure: Set version to 0.5.20
+    configure: Set version to 0.5.21
 
 
 M	configure.ac
 
-2022-11-23 09:58:17 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (b3be0f58)
+2023-08-30 15:46:29 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (bf473e5c)
+
+    NEWS: Add news for 0.5.21
+
+
+M	NEWS
+
+2022-11-23 09:58:17 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (4d6323e5)
 
     NEWS: Add news for 2.3.20
 
 
 M	NEWS
 
-2022-05-04 15:04:01 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (68ccbf50)
+2022-05-04 15:04:01 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (65e5508b)
 
     NEWS: Update date for 2.3.19 news
 
 
 M	NEWS
 
-2022-04-26 09:45:26 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (a254ae47)
+2022-04-26 09:45:26 +0300 Aki Tuomi <aki.tuomi@open-xchange.com> (6c340655)
 
     NEWS: Add news for 0.5.19
 
 
 M	NEWS
+
+2023-05-09 07:29:46 +0000 Marco Bettini <marco.bettini@open-xchange.com> (bea54d46)
+
+    lib-sieve: act_redirect_execute() - Pick Message-id even if invalid
+
+    This avoids adding another Message-id if one is already present but of bad
+    quality.
+
+M	src/lib-sieve/cmd-redirect.c
+
+2023-06-20 01:13:08 +0200 Stephan Bosch <stephan.bosch@open-xchange.com> (8c3df357)
+
+    lib-sieve: util: edit-mail - Fix assert occurring when bad header is
+    encountered.
+
+    In that case, the header name and middle are empty, causing:
+
+    Panic: file edit-mail.c: line 820 (edit_mail_headers_parse): assertion
+    failed: (body_offset > 0)
+
+    Fixed by skipping the bad header for parsing altogether.
+
+M	src/lib-sieve/util/edit-mail.c
+
+2023-03-30 01:58:09 +0300 Timo Sirainen <timo.sirainen@open-xchange.com> (ad58bdd4)
+
+    managesieve: Disable debug logging while dumping capability
+
+    It only causes confusing output.
+
+M	src/managesieve/main.c
 
 2022-01-12 12:54:05 +0200 Aki Tuomi <aki.tuomi@open-xchange.com> (cf9d3352)
 

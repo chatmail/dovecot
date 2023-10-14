@@ -345,7 +345,8 @@ void client_destroy(struct client *client, const char *reason)
 		master_auth_request_abort(master_auth, client->master_tag);
 		client->refcount--;
 	} else if (client->auth_request != NULL ||
-		   client->anvil_query != NULL) {
+		   client->anvil_query != NULL ||
+		   client->final_response) {
 		i_assert(client->authenticating);
 		sasl_server_auth_abort(client);
 	}
@@ -866,7 +867,7 @@ get_var_expand_table(struct client *client)
 	} else if (client->proxied_ssl) {
 		tab[11].value = "TLS";
 		tab[12].value = "(proxied)";
-	} else {
+	} else if (client->ssl_iostream != NULL) {
 		const char *ssl_state =
 			ssl_iostream_is_handshaked(client->ssl_iostream) ?
 			"TLS" : "TLS handshaking";
@@ -877,6 +878,9 @@ get_var_expand_table(struct client *client)
 			t_strdup_printf("%s: %s", ssl_state, ssl_error);
 		tab[12].value =
 			ssl_iostream_get_security_string(client->ssl_iostream);
+	} else {
+		tab[11].value = "TLS";
+		tab[12].value = "";
 	}
 	tab[13].value = client->mail_pid == 0 ? "" :
 		dec2str(client->mail_pid);
