@@ -1,0 +1,28 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Mon, 14 Aug 2023 16:25:09 +0200
+Subject: Cleanup temporary build files
+
+Forwarded: https://github.com/dovecot/core/pull/207
+
+Support building twice:
+
+    dpkg-source: info: local changes detected, the modified files are:
+     source/src/plugins/quota/rquota.h.tmp
+     source/src/plugins/quota/rquota_xdr.c.tmp
+---
+ src/plugins/quota/Makefile.am | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/plugins/quota/Makefile.am b/src/plugins/quota/Makefile.am
+index ad08d50..d8bd86d 100644
+--- a/src/plugins/quota/Makefile.am
++++ b/src/plugins/quota/Makefile.am
+@@ -127,7 +127,7 @@ clean-generic:
+ 	if [ "$(top_srcdir)" != "$(top_builddir)" ]; then \
+ 	  rm -f $(top_builddir)/src/plugins/quota/rquota.x; \
+ 	fi; \
+-	rm -f rquota_xdr.c rquota.h
++	rm -f rquota_xdr.c rquota_xdr.c.tmp rquota.h rquota.h.tmp
+ 
+ test_programs = \
+ 	test-quota-util

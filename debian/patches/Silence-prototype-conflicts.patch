@@ -1,0 +1,67 @@
+From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Fri, 15 Sep 2023 14:08:56 +0200
+Subject: Silence prototype conflicts
+
+Forwarded: https://github.com/dovecot/core/pull/206
+
+    program-client.c:705:5: warning: conflicting types for 'program_client_run' due to enum/integer mismatch; have 'int(struct program_client *)' [-Wenum-int-mismatch]
+      705 | int program_client_run(struct program_client *pclient)
+          |     ^~~~~~~~~~~~~~~~~~
+    In file included from program-client-private.h:4,
+                     from program-client.c:17:
+    program-client.h:93:1: note: previous declaration of 'program_client_run' with type 'enum program_client_exit_status(struct program_client *)'
+       93 | program_client_run(struct program_client *pclient);
+          | ^~~~~~~~~~~~~~~~~~
+
+    db-lua.c:599:1: warning: conflicting types for 'auth_lua_call_password_verify' due to enum/integer mismatch; have 'enum passdb_result(struct dlua_script *, struct auth_request *, const char *, const char **)' [-Wenum-int-mismatch]
+      599 | auth_lua_call_password_verify(struct dlua_script *script,
+          | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    In file included from db-lua.c:28:
+    db-lua.h:14:5: note: previous declaration of 'auth_lua_call_password_verify' with type 'int(struct dlua_script *, struct auth_request *, const char *, const char **)'
+       14 | int auth_lua_call_password_verify(struct dlua_script *script,
+          |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---
+ src/auth/db-lua.h                       | 7 ++++---
+ src/lib-program-client/program-client.c | 4 ++--
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/src/auth/db-lua.h b/src/auth/db-lua.h
+index ebb697a..cf859fb 100644
+--- a/src/auth/db-lua.h
++++ b/src/auth/db-lua.h
+@@ -11,9 +11,10 @@ struct dlua_script;
+ 
+ int auth_lua_script_init(struct dlua_script *script, const char **error_r);
+ 
+-int auth_lua_call_password_verify(struct dlua_script *script,
+-				  struct auth_request *req, const char *password,
+-				  const char **error_r);
++enum passdb_result
++auth_lua_call_password_verify(struct dlua_script *script,
++			      struct auth_request *req, const char *password,
++			      const char **error_r);
+ 
+ enum passdb_result
+ auth_lua_call_passdb_lookup(struct dlua_script *script,
+diff --git a/src/lib-program-client/program-client.c b/src/lib-program-client/program-client.c
+index c6c6ff6..cf55a6f 100644
+--- a/src/lib-program-client/program-client.c
++++ b/src/lib-program-client/program-client.c
+@@ -702,7 +702,7 @@ program_client_run_callback(int result, int *context)
+ 	io_loop_stop(current_ioloop);
+ }
+ 
+-int program_client_run(struct program_client *pclient)
++enum program_client_exit_status program_client_run(struct program_client *pclient)
+ {
+ 	int ret = -2;
+ 	struct ioloop *prev_ioloop = current_ioloop;
+@@ -722,7 +722,7 @@ int program_client_run(struct program_client *pclient)
+ 	io_loop_destroy(&ioloop);
+ 
+ 	if (pclient->error != PROGRAM_CLIENT_ERROR_NONE)
+-		return -1;
++		return PROGRAM_CLIENT_EXIT_STATUS_INTERNAL_FAILURE;
+ 
+ 	return pclient->exit_status;
+ }

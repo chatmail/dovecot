@@ -2,6 +2,7 @@ From: =?utf-8?q?Christian_G=C3=B6ttsche?= <cgzones@googlemail.com>
 Date: Mon, 6 Jun 2022 15:29:38 +0200
 Subject: Avoid usage of PATH_MAX not available on hurd
 
+Forwarded: https://github.com/dovecot/core/pull/208
 ---
  src/lib/test-net.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
