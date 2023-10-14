@@ -260,6 +260,8 @@ service_process_setup_environment(struct service *service, unsigned int uid,
 	env_put(MY_HOSTNAME_ENV, my_hostname);
 	env_put(MY_HOSTDOMAIN_ENV, hostdomain);
 
+	if (service_set->verbose_proctitle)
+		env_put(MASTER_VERBOSE_PROCTITLE_ENV, "1");
 	if (!service->set->master_set->version_ignore)
 		env_put(MASTER_DOVECOT_VERSION_ENV, PACKAGE_VERSION);
 
@@ -370,10 +372,13 @@ struct service_process *service_process_create(struct service *service)
 	}
 
 	process->available_count = service->client_limit;
+	process->idle_start = ioloop_time;
 	service->process_count_total++;
 	service->process_count++;
 	service->process_avail++;
-	DLLIST_PREPEND(&service->processes, process);
+	service->process_idling++;
+	DLLIST2_APPEND(&service->idle_processes_head,
+		       &service->idle_processes_tail, process);
 
 	service_list_ref(service->list);
 	hash_table_insert(service_pids, POINTER_CAST(process->pid), process);
@@ -388,16 +393,29 @@ void service_process_destroy(struct service_process *process)
 	struct service *service = process->service;
 	struct service_list *service_list = service->list;
 
-	DLLIST_REMOVE(&service->processes, process);
+	if (process->idle_start == 0)
+		DLLIST_REMOVE(&service->busy_processes, process);
+	else {
+		DLLIST2_REMOVE(&service->idle_processes_head,
+			       &service->idle_processes_tail, process);
+		i_assert(service->process_idling > 0);
+		service->process_idling--;
+		service->process_idling_lowwater_since_kills =
+			I_MIN(service->process_idling_lowwater_since_kills,
+			      service->process_idling);
+	}
 	hash_table_remove(service_pids, POINTER_CAST(process->pid));
 
-	if (process->available_count > 0)
+	if (process->available_count > 0) {
+		i_assert(service->process_avail > 0);
 		service->process_avail--;
+	}
+	i_assert(service->process_count > 0);
 	service->process_count--;
 	i_assert(service->process_avail <= service->process_count);
 
 	timeout_remove(&process->to_status);
-	timeout_remove(&process->to_idle);
+	timeout_remove(&process->to_idle_kill);
 	if (service->list->log_byes != NULL)
 		service_process_notify_add(service->list->log_byes, process);
 

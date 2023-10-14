@@ -83,7 +83,6 @@ static int parse_jwt_token(struct oauth2_request *req, const char *token,
 	struct oauth2_settings set;
 
 	i_zero(&set);
-	set.scope = "mail";
 	set.key_dict = keys_dict;
 	set.key_cache = key_cache;
 	i_zero(req);
@@ -388,15 +387,11 @@ static void test_jwt_broken_token(void)
 			.is_jwt = FALSE
 		},
 		{ /* no alg field */
-			.token = "eyJ0eXAiOiAiSldUIn0",
-			.is_jwt = FALSE
-		},
-		{ /* no typ field */
-			.token = "eyJhbGciOiAiSFMyNTYifQ",
+			.token = "eyJ0eXAiOiAiSldUIn0.e30.e30",
 			.is_jwt = FALSE
 		},
 		{ /* typ field is wrong */
-			.token = "eyJ0eXAiOiAiand0IiwgImFsZyI6ICJIUzI1NiJ9."
+			.token = "e3R5cDogamtzLCBhbGc6IEhTMjU2fQ."
 				 "eyJhbGdvIjogIldURiIsICJ0eXAiOiAiSldUIn0."
 				 "q2wwwWWJVJxqw-J3uQ0DdlIyWfoZ7Z0QrdzvMW_B-jo",
 			.is_jwt = FALSE
@@ -430,6 +425,11 @@ static void test_jwt_broken_token(void)
 				 "q2wwwWWJVJxqw-J3uQ0DdlIyWfoZ7Z0QrdzvMW_B-jo",
 			.is_jwt = TRUE
 		},
+		{ /* algorithm is 'none' */
+			.token = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0."
+				 "eyJleHAiOjE1ODEzMzA3OTN9.",
+			.is_jwt = TRUE
+		}
 	};
 
 	test_begin("JWT broken tokens");

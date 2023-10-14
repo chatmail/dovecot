@@ -721,6 +721,8 @@ mail_storage_service_init_post(struct mail_storage_service_ctx *ctx,
 	mail_user->userdb_fields = user->input.userdb_fields == NULL ? NULL :
 		p_strarray_dup(mail_user->pool, user->input.userdb_fields);
 	
+	mail_user_add_event_fields(mail_user);
+
 	string_t *str = t_str_new(64);
 
 	str_printfa(str, "Effective uid=%s, gid=%s, home=%s",
@@ -1222,7 +1224,7 @@ mail_storage_service_lookup_real(struct mail_storage_service_ctx *ctx,
 	enum mail_storage_service_flags flags;
 	struct mail_storage_service_user *user;
 	const char *username = input->username;
-	const struct setting_parser_info *user_info;
+	const struct setting_parser_info *user_info = NULL;
 	const struct mail_user_settings *user_set;
 	const char *const *userdb_fields, *error;
 	struct auth_user_reply reply;
@@ -1242,9 +1244,11 @@ mail_storage_service_lookup_real(struct mail_storage_service_ctx *ctx,
 		mail_storage_service_seteuid_root();
 	}
 
-	if (mail_storage_service_read_settings(ctx, input, user_pool,
-					       &user_info, &set_parser,
-					       error_r) < 0) {
+	if (input->unexpanded_set_parser != NULL)
+		set_parser = input->unexpanded_set_parser;
+	else if (mail_storage_service_read_settings(ctx, input, user_pool,
+						    &user_info, &set_parser,
+						    error_r) < 0) {
 		if (ctx->config_permission_denied) {
 			/* just restart and maybe next time we will open the
 			   config socket before dropping privileges */

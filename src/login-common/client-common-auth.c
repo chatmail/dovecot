@@ -238,6 +238,12 @@ static void client_auth_parse_args(struct client *client, bool success,
 			}
 		} else if (str_begins(key, "forward_")) {
 			/* these are passed to upstream */
+		} else if (str_begins(key, "event_")) {
+			/* add name to event */
+			event_add_str(client->event, key + 6, value);
+		} else if (strcmp(key, "resp") == 0) {
+			/* ignore final response */
+			continue;
 		} else
 			e_debug(event_auth, "Ignoring unknown passdb extra field: %s", key);
 	}
@@ -702,6 +708,13 @@ void client_auth_parse_response(struct client *client)
 {
 	if (client_auth_read_line(client) <= 0)
 		return;
+
+	/* This has to happen before * handling, otherwise
+	   client can abort failed request. */
+	if (client->final_response) {
+		sasl_server_auth_delayed_final(client);
+		return;
+	}
 
 	if (strcmp(str_c(client->auth_response), "*") == 0) {
 		sasl_server_auth_abort(client);

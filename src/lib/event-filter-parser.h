@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.3.2.  */
+/* A Bison parser, made by GNU Bison 3.7.5.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2021 Free Software Foundation,
    Inc.
 
    This program is free software: you can redistribute it and/or modify
@@ -31,8 +31,9 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-/* Undocumented macros, especially those whose name start with YY_,
-   are private implementation details.  Do not rely on them.  */
+/* DO NOT RELY ON FEATURES THAT ARE NOT DOCUMENTED in the manual,
+   especially those whose name start with YY_ or yy_.  They are
+   private implementation details that can be changed or removed.  */
 
 #ifndef YY_EVENT_FILTER_PARSER_EVENT_FILTER_PARSER_H_INCLUDED
 # define YY_EVENT_FILTER_PARSER_EVENT_FILTER_PARSER_H_INCLUDED
@@ -52,33 +53,37 @@
 extern int event_filter_parser_debug;
 #endif
 
-/* Token type.  */
+/* Token kinds.  */
 #ifndef EVENT_FILTER_PARSER_TOKENTYPE
 # define EVENT_FILTER_PARSER_TOKENTYPE
   enum event_filter_parser_tokentype
   {
-    TOKEN = 258,
-    STRING = 259,
-    AND = 260,
-    OR = 261,
-    NOT = 262
+    EVENT_FILTER_PARSER_EMPTY = -2,
+    EVENT_FILTER_PARSER_EOF = 0,   /* "end of file"  */
+    EVENT_FILTER_PARSER_error = 256, /* error  */
+    EVENT_FILTER_PARSER_UNDEF = 257, /* "invalid token"  */
+    TOKEN = 258,                   /* TOKEN  */
+    STRING = 259,                  /* STRING  */
+    AND = 260,                     /* AND  */
+    OR = 261,                      /* OR  */
+    NOT = 262                      /* NOT  */
   };
+  typedef enum event_filter_parser_tokentype event_filter_parser_token_kind_t;
 #endif
 
 /* Value type.  */
 #if ! defined EVENT_FILTER_PARSER_STYPE && ! defined EVENT_FILTER_PARSER_STYPE_IS_DECLARED
-
 union EVENT_FILTER_PARSER_STYPE
 {
-#line 139 "event-filter-parser.y" /* yacc.c:1921  */
+#line 139 "event-filter-parser.y"
 
 	const char *str;
 	enum event_filter_node_op op;
 	struct event_filter_node *node;
 
-#line 80 "event-filter-parser.h" /* yacc.c:1921  */
-};
+#line 85 "event-filter-parser.h"
 
+};
 typedef union EVENT_FILTER_PARSER_STYPE EVENT_FILTER_PARSER_STYPE;
 # define EVENT_FILTER_PARSER_STYPE_IS_TRIVIAL 1
 # define EVENT_FILTER_PARSER_STYPE_IS_DECLARED 1

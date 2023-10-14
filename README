@@ -1,21 +1,12 @@
-
-
-INSTALLATION
-
+Installation
 
 See INSTALL.md file.
 
-
-
-CONFIGURATION
-
+Configuration
 
 See doc/documentation.txt or http://wiki2.dovecot.org/
 
-
-
-RFCS CONFORMED
-
+RFCs conformed
 
 email
 
@@ -26,7 +17,6 @@ email
 -   RFC2047 - Multipurpose Internet Mail Extensions (MIME) (part 3)
 -   RFC2048 - Multipurpose Internet Mail Extensions (MIME) (part 4)
 -   RFC2049 - Multipurpose Internet Mail Extensions (MIME) (part 5)
-
 
 Auth
 
@@ -40,7 +30,6 @@ Auth
     Mechanisms for OAuth
 -   Google XOAUTH2 protocol
 
-
 POP3
 
 -   RFC1939 - Post Office Protocol - Version 3
@@ -50,14 +39,12 @@ POP3
 -   RFC5034 - The Post Office Protocol (POP3) - Simple Authentication
     and Security Layer (SASL) Authentication Mechanism
 
-
 IMAP base
 
 -   RFC3501 - IMAP4rev1
 -   RFC2180 - IMAP4 Multi-Accessed Mailbox Practice
 -   RFC2595 - Using TLS with IMAP, POP3 and ACAP
 -   RFC2683 - IMAP4 Implementation Recommendations
-
 
 IMAP extensions
 
@@ -110,7 +97,6 @@ IMAP extensions
     Attribute
 -   RFC8970 - IMAP4 Extension: Message Preview Generation
 
-
 SMTP/LMTP base
 
 -   RFC821 - Simple Mail Transfer Protocol
@@ -118,7 +104,6 @@ SMTP/LMTP base
 -   RFC5321 - Simple Mail Transfer Protocol (updated RFC2821)
 -   RFC2033 - Local Mail Transfer Protocol
 -   RFC6409 - Message Submission for Mail
-
 
 SMTP/LMTP extensions
 
@@ -133,10 +118,7 @@ SMTP/LMTP extensions
 -   RFC4954 - SMTP Service Extension for Authentication
 -   RFC6152 - SMTP Service Extension for 8-bit MIME Transport
 
-
-
-CONTACT INFO
-
+Contact info
 
 Timo Sirainen tss@iki.fi, http://www.dovecot.org/
 

@@ -187,32 +187,6 @@ auth_client_request_new(struct auth_client *client,
 	return request;
 }
 
-void auth_client_request_continue(struct auth_client_request *request,
-                                  const char *data_base64)
-{
-	struct const_iovec iov[3];
-	const char *prefix;
-
-	prefix = t_strdup_printf("CONT\t%u\t", request->id);
-
-	iov[0].iov_base = prefix;
-	iov[0].iov_len = strlen(prefix);
-	iov[1].iov_base = data_base64;
-	iov[1].iov_len = strlen(data_base64);
-	iov[2].iov_base = "\n";
-	iov[2].iov_len = 1;
-
-	struct event_passthrough *e =
-		event_create_passthrough(request->event)->
-		set_name("auth_client_request_continued");
-	e_debug(e->event(), "Continue request");
-
-	if (o_stream_sendv(request->conn->conn.output, iov, 3) < 0) {
-		e_error(request->event,
-			"Error sending continue request to auth server: %m");
-	}
-}
-
 static void ATTR_NULL(3, 4)
 call_callback(struct auth_client_request *request,
 	      enum auth_request_status status,
@@ -292,6 +266,32 @@ static void args_parse_user(struct auth_client_request *request, const char *arg
 		event_add_str(request->event, "auth_user", arg + 10);
 }
 
+void auth_client_request_continue(struct auth_client_request *request,
+                                  const char *data_base64)
+{
+	struct const_iovec iov[3];
+	const char *prefix;
+
+	prefix = t_strdup_printf("CONT\t%u\t", request->id);
+
+	iov[0].iov_base = prefix;
+	iov[0].iov_len = strlen(prefix);
+	iov[1].iov_base = data_base64;
+	iov[1].iov_len = strlen(data_base64);
+	iov[2].iov_base = "\n";
+	iov[2].iov_len = 1;
+
+	struct event_passthrough *e =
+		event_create_passthrough(request->event)->
+		set_name("auth_client_request_continued");
+	e_debug(e->event(), "Continue request");
+
+	if (o_stream_sendv(request->conn->conn.output, iov, 3) < 0) {
+		e_error(request->event,
+			"Error sending continue request to auth server: %m");
+	}
+}
+
 void auth_client_request_server_input(struct auth_client_request *request,
 				      enum auth_request_status status,
 				      const char *const *args)
@@ -318,6 +318,13 @@ void auth_client_request_server_input(struct auth_client_request *request,
 	for (tmp = args; *tmp != NULL; tmp++) {
 		if (str_begins(*tmp, "resp=")) {
 			base64_data = *tmp + 5;
+		} else if (str_begins(*tmp, "event_")) {
+			const char *key = *tmp + 6;
+			const char *value = strchr(key, '=');
+			if (value != NULL) {
+				event_add_str(request->event,
+					      t_strdup_until(key, value), value+1);
+			}
 		}
 		args_parse_user(request, *tmp);
 	}

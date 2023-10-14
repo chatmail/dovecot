@@ -181,7 +181,7 @@ stats_event_write(struct stats_client *client,
 	event_export(merged_event, str);
 	str_append_c(str, '\n');
 	event_unref(&merged_event);
-	if (flush_output) {
+	if (flush_output || str_len(str) >= IO_BLOCK_SIZE) {
 		o_stream_nsend(client->conn.output, str_data(str), str_len(str));
 		str_truncate(str, 0);
 	}
@@ -212,8 +212,12 @@ stats_client_send_event(struct stats_client *client, struct event *event,
 	o_stream_nsend(client->conn.output, str_data(str), str_len(str));
 
 	i_assert(recursion > 0);
-	if (--recursion == 0)
-		o_stream_uncork(client->conn.output);
+	if (--recursion == 0) {
+		if (o_stream_uncork_flush(client->conn.output) < 0) {
+			e_error(client->conn.event, "write() failed: %s",
+				o_stream_get_error(client->conn.output));
+		}
+	}
 }
 
 static void
@@ -234,7 +238,7 @@ stats_event_callback(struct event *event, enum event_callback_type type,
 		return TRUE;
 	struct stats_client *client =
 		(struct stats_client *)stats_clients->connections;
-	if (client->conn.output == NULL)
+	if (client->conn.output == NULL || client->conn.output->closed)
 		return TRUE;
 
 	switch (type) {
@@ -297,7 +301,7 @@ static void stats_client_timeout(struct stats_client *client)
 	io_loop_stop(client->ioloop);
 }
 
-static void stats_client_wait_handshake(struct stats_client *client)
+static void stats_client_wait(struct stats_client *client)
 {
 	struct ioloop *prev_ioloop = current_ioloop;
 	struct timeout *to;
@@ -335,7 +339,7 @@ static void stats_client_connect(struct stats_client *client)
 		/* read the handshake so the global debug filter is updated */
 		stats_client_send_registered_categories(client);
 		if (!client->handshake_received_at_least_once)
-			stats_client_wait_handshake(client);
+			stats_client_wait(client);
 	} else if (!client->silent_notfound_errors ||
 		   (errno != ENOENT && errno != ECONNREFUSED)) {
 		i_error("net_connect_unix(%s) failed: %m", client->conn.name);
@@ -357,11 +361,33 @@ stats_client_init(const char *path, bool silent_notfound_errors)
 	return client;
 }
 
+static int stats_client_deinit_callback(struct connection *conn)
+{
+	struct ostream *output = conn->output;
+	int ret = o_stream_flush(output);
+	if (ret < 0) {
+		e_error(conn->event, "write() failed: %s",
+			o_stream_get_error(output));
+	}
+	if (ret != 0)
+		io_loop_stop(current_ioloop);
+	return ret;
+}
+
 void stats_client_deinit(struct stats_client **_client)
 {
 	struct stats_client *client = *_client;
 
 	*_client = NULL;
+
+	if (client->conn.output != NULL && !client->conn.output->closed &&
+	    o_stream_get_buffer_used_size(client->conn.output) > 0) {
+		o_stream_set_flush_callback(client->conn.output,
+					    stats_client_deinit_callback,
+					    &client->conn);
+		o_stream_uncork(client->conn.output);
+		stats_client_wait(client);
+	}
 
 	event_filter_unref(&client->filter);
 	connection_deinit(&client->conn);
