@@ -1,3 +1,18 @@
+dovecot (1:2.3.21+dfsg1-1) unstable; urgency=medium
+
+  [ Noah Meyerhans ]
+  * [753b4fe] Don't build the unmaintained lucene fts plugin (Closes: #1040884)
+  * [5597486] New upstream version 2.3.21+dfsg1
+
+  [ Christian Göttsche ]
+  * [b8017f1] Cleanup temporary build files
+  * [35e1afe] Silence prototype conflicts
+  * [8dda8b9] Update Lintian overrides
+  * [6bae82f] Bump to standards version 4.6.2 (no further changes)
+  * [1f973d2] Mark hurd patch forwarded
+
+ -- Noah Meyerhans <noahm@debian.org>  Sat, 14 Oct 2023 08:52:10 -0700
+
 dovecot (1:2.3.20+dfsg1-1) unstable; urgency=medium
 
   [ Christian Göttsche ]
