@@ -9,8 +9,9 @@ Set default protocols value as empty and enable each
 protocol in its own configuration file
 ---
  doc/example-config/dovecot.conf | 4 ++--
+ src/config/all-settings.c       | 2 +-
  src/master/master-settings.c    | 2 +-
- 2 files changed, 3 insertions(+), 3 deletions(-)
+ 3 files changed, 4 insertions(+), 4 deletions(-)
 
 diff --git a/doc/example-config/dovecot.conf b/doc/example-config/dovecot.conf
 index b67e9eb..7e9953f 100644
@@ -27,6 +28,19 @@ index b67e9eb..7e9953f 100644
  
  # A comma separated list of IPs or hosts where to listen in for connections. 
  # "*" listens in all IPv4 interfaces, "::" listens in all IPv6 interfaces.
+diff --git a/src/config/all-settings.c b/src/config/all-settings.c
+index a76242c..fbac595 100644
+--- a/src/config/all-settings.c
++++ b/src/config/all-settings.c
+@@ -4100,7 +4100,7 @@ struct master_settings master_default_settings = {
+ 	.state_dir = PKG_STATEDIR,
+ 	.libexec_dir = PKG_LIBEXECDIR,
+ 	.instance_name = PACKAGE,
+-	.protocols = "imap pop3 lmtp",
++	.protocols = "",
+ 	.listen = "*, ::",
+ 	.ssl = "yes:no:required",
+ 	.default_internal_user = "dovecot",
 diff --git a/src/master/master-settings.c b/src/master/master-settings.c
 index 7cfaa35..48a9121 100644
 --- a/src/master/master-settings.c
