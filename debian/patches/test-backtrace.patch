@@ -4,15 +4,24 @@ Subject: Updates the symbol to check for in the backtrace unit tests
 
 Updates the symbol to check for in the backtrace unit tests to
 something that appears in all the traces on the platforms we support.
+
+Also dump the actual backtrace for debugging buildd failures.
 ---
- src/lib/test-backtrace.c | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ src/lib/test-backtrace.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
 
 diff --git a/src/lib/test-backtrace.c b/src/lib/test-backtrace.c
-index fdebe0f..640dc5b 100644
+index fdebe0f..78492c7 100644
 --- a/src/lib/test-backtrace.c
 +++ b/src/lib/test-backtrace.c
-@@ -17,8 +17,8 @@ static void test_backtrace_append(void)
+@@ -11,14 +11,15 @@ static void test_backtrace_append(void)
+ 	/* Check that there's a usable function in the backtrace.
+ 	   Note that this function may be inlined, so don't check for
+ 	   test_backtrace_get() */
++	i_debug("backtrace: '%s'", str_c(bt));
+ 	test_assert(strstr(str_c(bt), "test_backtrace") != NULL);
+ 	/* make sure the backtrace_append is not */
+ 	test_assert(strstr(str_c(bt), " backtrace_append") == NULL);
  #elif (defined(HAVE_BACKTRACE_SYMBOLS) && defined(HAVE_EXECINFO_H)) || \
        (defined(HAVE_WALKCONTEXT) && defined(HAVE_UCONTEXT_H))
  	test_assert(backtrace_append(bt) == 0);
@@ -23,7 +32,15 @@ index fdebe0f..640dc5b 100644
  #else
  	/* should not work in this context */
  	test_assert(backtrace_append(bt) == -1);
-@@ -41,8 +41,8 @@ static void test_backtrace_get(void)
+@@ -35,14 +36,15 @@ static void test_backtrace_get(void)
+ 	/* Check that there's a usable function in the backtrace.
+ 	   Note that this function may be inlined, so don't check for
+ 	   test_backtrace_get() */
+-        test_assert(strstr(bt, "test_backtrace") != NULL);
++	i_debug("backtrace: '%s'", bt);
++	test_assert(strstr(bt, "test_backtrace") != NULL);
+ 	/* make sure the backtrace_get is not */
+ 	test_assert(strstr(bt, " backtrace_get") == NULL);
  #elif (defined(HAVE_BACKTRACE_SYMBOLS) && defined(HAVE_EXECINFO_H)) || \
        (defined(HAVE_WALKCONTEXT) && defined(HAVE_UCONTEXT_H))
  	test_assert(backtrace_get(&bt) == 0);
