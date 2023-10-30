@@ -1,3 +1,13 @@
+dovecot (1:2.3.21+dfsg1-2) unstable; urgency=medium
+
+  [ Christian Göttsche ]
+  * [a2fbc2f] split-protocols.patch: patch all-settings.c to successfully build twice (Closes: #1044797)
+
+  [ Noah Meyerhans ]
+  * [70e4426] Drop arm64 from libunwind builddep arch list
+
+ -- Noah Meyerhans <noahm@debian.org>  Mon, 30 Oct 2023 13:40:35 -0700
+
 dovecot (1:2.3.21+dfsg1-1) unstable; urgency=medium
 
   [ Noah Meyerhans ]
