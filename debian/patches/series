@@ -23,3 +23,4 @@ Fix-uninitialized-read-in-doveadm-oldstats.patch
 Use-_FORTIFY_SOURCE-level-3.patch
 Cleanup-temporary-build-files.patch
 Silence-prototype-conflicts.patch
+remove-500ms-idle-debounce.patch
