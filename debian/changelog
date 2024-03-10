@@ -1,3 +1,9 @@
+dovecot (1:2.3.21+dfsg1-3) unstable; urgency=medium
+
+  * [883dc1a] Add libtirpc-dev to build-depends (Closes: #1065213)
+
+ -- Noah Meyerhans <noahm@debian.org>  Sat, 09 Mar 2024 22:31:22 -0800
+
 dovecot (1:2.3.21+dfsg1-2) unstable; urgency=medium
 
   [ Christian Göttsche ]
