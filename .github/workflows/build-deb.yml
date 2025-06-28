@@ -18,6 +18,8 @@ jobs:
 
       - name: build and upload .deb files
         run: |
+          ls -la
+          ls -la ..
           echo "MIRRORSITE=http://deb.debian.org/debian" > /etc/pbuilderrc
           apt update
           apt install -y git-buildpackage build-essential debhelper-compat default-libmysqlclient-dev krb5-multidev libapparmor-dev libbz2-dev libcap-dev libdb-dev libexpat-dev libexttextcat-dev libicu-dev libldap2-dev liblua5.4-dev liblz4-dev liblzma-dev libpam0g-dev libpq-dev libsasl2-dev libsodium-dev libsqlite3-dev libssl-dev libstemmer-dev libsystemd-dev libwrap0-dev libzstd-dev pkg-config zlib1g-dev
