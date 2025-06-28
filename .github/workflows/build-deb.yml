@@ -10,8 +10,33 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: [ubuntu-latest, ubuntu-24.04-arm]
+  build-amd64:
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - name: install dependencies
+        run: |
+          echo "MIRRORSITE=http://deb.debian.org/debian" > /etc/pbuilderrc
+          apt update
+          apt install -y git-buildpackage build-essential debhelper-compat default-libmysqlclient-dev krb5-multidev libapparmor-dev libbz2-dev libcap-dev libdb-dev libexpat-dev libexttextcat-dev libicu-dev libldap2-dev liblua5.4-dev liblz4-dev liblzma-dev libpam0g-dev libpq-dev libsasl2-dev libsodium-dev libsqlite3-dev libssl-dev libstemmer-dev libsystemd-dev libwrap0-dev libzstd-dev pkg-config zlib1g-dev git libunwind-dev rsync
+
+      - name: clone repository
+        run: git clone https://github.com/chatmail/dovecot
+
+      - name: build
+        run: |
+          cd dovecot
+          DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-no-pristine-tar -us -uc
+
+      - name: upload .deb files
+        run: |
+          mkdir -p "$HOME/.ssh"
+          echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
+          chmod 600 "$HOME/.ssh/key"
+          rsync -rILvh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" $GITHUB_WORKSPACE/build-area/ "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/"
+
+  build-arm:
+    runs-on: ubuntu-24.04-arm
     container: debian:12
     steps:
       - name: install dependencies
