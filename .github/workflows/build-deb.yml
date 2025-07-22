@@ -20,12 +20,19 @@ jobs:
           apt update
           apt install -y git-buildpackage build-essential debhelper-compat default-libmysqlclient-dev krb5-multidev libapparmor-dev libbz2-dev libcap-dev libdb-dev libexpat-dev libexttextcat-dev libicu-dev libldap2-dev liblua5.4-dev liblz4-dev liblzma-dev libpam0g-dev libpq-dev libsasl2-dev libsodium-dev libsqlite3-dev libssl-dev libstemmer-dev libsystemd-dev libwrap0-dev libzstd-dev pkg-config zlib1g-dev git libunwind-dev rsync
 
-      - name: clone repository
-        run: git clone https://github.com/chatmail/dovecot
+      - uses: actions/checkout@v4
+        with:
+          path: dovecot
+          show-progress: false
+          fetch-depth: 0
 
       - name: build
         run: |
           cd dovecot
+          git rm -r .github
+          git config --local user.name "test"
+          git config --local user.email "test@example.org"
+          git commit -am "CI: remove .github directory before building"
           DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-no-pristine-tar -us -uc
 
       - name: upload .deb files
@@ -45,12 +52,19 @@ jobs:
           apt update
           apt install -y git-buildpackage build-essential debhelper-compat default-libmysqlclient-dev krb5-multidev libapparmor-dev libbz2-dev libcap-dev libdb-dev libexpat-dev libexttextcat-dev libicu-dev libldap2-dev liblua5.4-dev liblz4-dev liblzma-dev libpam0g-dev libpq-dev libsasl2-dev libsodium-dev libsqlite3-dev libssl-dev libstemmer-dev libsystemd-dev libwrap0-dev libzstd-dev pkg-config zlib1g-dev git libunwind-dev rsync
 
-      - name: clone repository
-        run: git clone https://github.com/chatmail/dovecot
+      - uses: actions/checkout@v4
+        with:
+          path: dovecot
+          show-progress: false
+          fetch-depth: 0
 
       - name: build
         run: |
           cd dovecot
+          git rm -r .github
+          git config --local user.name "test"
+          git config --local user.email "test@example.org"
+          git commit -am "CI: remove .github directory before building"
           DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-no-pristine-tar -us -uc
 
       - name: upload .deb files
