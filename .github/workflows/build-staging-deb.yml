@@ -26,6 +26,10 @@ jobs:
       - name: build
         run: |
           cd dovecot
+          git rm -r .github
+          git config --local user.name "test"
+          git config --local user.email "test@example.org"
+          git commit -am "CI: remove .github directory before building"
           DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-no-pristine-tar --git-ignore-branch -us -uc
 
       - name: upload .deb files
@@ -33,7 +37,9 @@ jobs:
           mkdir -p "$HOME/.ssh"
           echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
           chmod 600 "$HOME/.ssh/key"
-          rsync -rILvh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" $GITHUB_WORKSPACE/build-area/ "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/"
+          export branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          mv $GITHUB_WORKSPACE/build-area staging-$branch
+          rsync -rILvh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" staging-$branch "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/"
 
   staging-arm:
     runs-on: ubuntu-24.04-arm
@@ -54,6 +60,10 @@ jobs:
       - name: build
         run: |
           cd dovecot
+          git rm -r .github
+          git config --local user.name "test"
+          git config --local user.email "test@example.org"
+          git commit -am "CI: remove .github directory before building"
           DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-no-pristine-tar --git-ignore-branch -us -uc
 
       - name: upload .deb files
@@ -61,6 +71,7 @@ jobs:
           mkdir -p "$HOME/.ssh"
           echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
           chmod 600 "$HOME/.ssh/key"
-          mv $GITHUB_WORKSPACE/build-area staging-$GITHUB_REF_NAME
-          rsync -rILvh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" staging-$GITHUB_REF_NAME "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/"
+          export branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          mv $GITHUB_WORKSPACE/build-area staging-$branch
+          rsync -rILvh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" staging-$branch "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/"
 
