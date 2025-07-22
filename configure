@@ -1709,7 +1709,6 @@ Optional Packages:
   --with-stemmer          Build with libstemmer support (for FTS) (auto)
   --with-textcat          Build with libtextcat support (for FTS) (auto)
   --with-icu              Build with libicu support (for FTS normalization)
-                          (auto)
   --with-solr             Build with Solr full text search support
   --with-sodium           Build with libsodium support (enables argon2,
                           default: auto)
@@ -4252,7 +4251,7 @@ fi
 if test "${with_icu+set}" = set; then :
   withval=$with_icu; want_icu=$withval
 else
-  want_icu=auto
+  want_icu=no
 fi
 
 
