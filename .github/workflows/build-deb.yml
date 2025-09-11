@@ -3,7 +3,7 @@ name: build
 on:
   push:
     branches:
-      - main
+      - master
       - github-ci
 
   # Allows you to run this workflow manually from the Actions tab
