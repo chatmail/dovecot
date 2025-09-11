@@ -33,7 +33,7 @@ jobs:
           git config --local user.name "test"
           git config --local user.email "test@example.org"
           git commit -am "CI: remove .github directory before building"
-          DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-no-pristine-tar -us -uc
+          DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-ignore-branch --git-no-pristine-tar -us -uc
 
       - name: upload .deb files
         run: |
