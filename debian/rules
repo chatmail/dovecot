@@ -117,7 +117,7 @@ override_dh_auto_configure:
 	            --with-gssapi=plugin \
 	            --with-solr \
 	            --with-ioloop=best \
-		    --with-icu \
+		    --without-icu \
 	            --with-libwrap \
 	            --without-lucene \
 		    $(CONFIGURE_APPARMOR) \
