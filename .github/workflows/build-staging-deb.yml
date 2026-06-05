@@ -7,15 +7,30 @@ on:
   workflow_dispatch:
 
 jobs:
-  staging-amd64:
-    runs-on: ubuntu-latest
-    container: debian:12
+  staging:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            container: debian:12
+            distro: bookworm
+          - runner: ubuntu-24.04-arm
+            container: debian:12
+            distro: bookworm
+          - runner: ubuntu-latest
+            container: debian:13
+            distro: trixie
+          - runner: ubuntu-24.04-arm
+            container: debian:13
+            distro: trixie
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
     steps:
       - name: install dependencies
         run: |
           echo "MIRRORSITE=http://deb.debian.org/debian" > /etc/pbuilderrc
           apt update
-          apt install -y git-buildpackage build-essential debhelper-compat default-libmysqlclient-dev krb5-multidev libapparmor-dev libbz2-dev libcap-dev libdb-dev libexpat-dev libexttextcat-dev libicu-dev libldap2-dev liblua5.4-dev liblz4-dev liblzma-dev libpam0g-dev libpq-dev libsasl2-dev libsodium-dev libsqlite3-dev libssl-dev libstemmer-dev libsystemd-dev libwrap0-dev libzstd-dev pkg-config zlib1g-dev git libunwind-dev rsync
+          apt install -y git-buildpackage build-essential debhelper-compat default-libmysqlclient-dev krb5-multidev libapparmor-dev libbz2-dev libcap-dev libdb-dev libexpat-dev libexttextcat-dev libicu-dev libldap2-dev liblua5.4-dev liblz4-dev liblzma-dev libpam0g-dev libpq-dev libsasl2-dev libsodium-dev libsqlite3-dev libssl-dev libstemmer-dev libsystemd-dev libtirpc-dev libwrap0-dev libzstd-dev pkg-config zlib1g-dev git libunwind-dev rsync
 
       - uses: actions/checkout@v4
         with:
@@ -37,41 +52,9 @@ jobs:
           mkdir -p "$HOME/.ssh"
           echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
           chmod 600 "$HOME/.ssh/key"
-          export branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
-          mv $GITHUB_WORKSPACE/build-area staging-$branch
-          rsync -rILvh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" staging-$branch "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/"
-
-  staging-arm:
-    runs-on: ubuntu-24.04-arm
-    container: debian:12
-    steps:
-      - name: install dependencies
-        run: |
-          echo "MIRRORSITE=http://deb.debian.org/debian" > /etc/pbuilderrc
-          apt update
-          apt install -y git-buildpackage build-essential debhelper-compat default-libmysqlclient-dev krb5-multidev libapparmor-dev libbz2-dev libcap-dev libdb-dev libexpat-dev libexttextcat-dev libicu-dev libldap2-dev liblua5.4-dev liblz4-dev liblzma-dev libpam0g-dev libpq-dev libsasl2-dev libsodium-dev libsqlite3-dev libssl-dev libstemmer-dev libsystemd-dev libwrap0-dev libzstd-dev pkg-config zlib1g-dev git libunwind-dev rsync
-
-      - uses: actions/checkout@v4
-        with:
-          path: dovecot
-          show-progress: false
-          fetch-depth: 0
-
-      - name: build
-        run: |
-          cd dovecot
-          git rm -r .github
-          git config --local user.name "test"
-          git config --local user.email "test@example.org"
-          git commit -am "CI: remove .github directory before building"
-          DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-no-pristine-tar --git-ignore-branch -us -uc
-
-      - name: upload .deb files
-        run: |
-          mkdir -p "$HOME/.ssh"
-          echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
-          chmod 600 "$HOME/.ssh/key"
-          export branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
-          mv $GITHUB_WORKSPACE/build-area staging-$branch
-          rsync -rILvh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" staging-$branch "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/"
-
+          branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          safe_branch=$(echo "$branch" | tr '/' '-')
+          rsync -rILvh --mkpath \
+            -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" \
+            $GITHUB_WORKSPACE/build-area/ \
+            "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/staging/${safe_branch}/${{ matrix.distro }}/"
