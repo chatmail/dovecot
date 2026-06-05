@@ -11,13 +11,12 @@ jobs:
     strategy:
       matrix:
         include:
-          # TODO: re-enable bookworm once trixie builds good
-          # - runner: ubuntu-latest
-          #   container: debian:12
-          #   dir_suffix: ""
-          # - runner: ubuntu-24.04-arm
-          #   container: debian:12
-          #   dir_suffix: ""
+          - runner: ubuntu-latest
+            container: debian:12
+            dir_suffix: ""
+          - runner: ubuntu-24.04-arm
+            container: debian:12
+            dir_suffix: ""
           - runner: ubuntu-latest
             container: debian:13
             dir_suffix: -trixie
@@ -48,12 +47,11 @@ jobs:
           git commit -am "CI: remove .github directory before building"
           DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-no-pristine-tar --git-ignore-branch -us -uc
 
-      # TODO: uncomment once trixie builds good
-      # - name: upload .deb files
-      #   run: |
-      #     mkdir -p "$HOME/.ssh"
-      #     echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
-      #     chmod 600 "$HOME/.ssh/key"
-      #     export branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
-      #     mv $GITHUB_WORKSPACE/build-area staging-$branch${{ matrix.dir_suffix }}
-      #     rsync -rILvh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" staging-$branch${{ matrix.dir_suffix }} "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/"
+      - name: upload .deb files
+        run: |
+          mkdir -p "$HOME/.ssh"
+          echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
+          chmod 600 "$HOME/.ssh/key"
+          export branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          mv $GITHUB_WORKSPACE/build-area staging-$branch${{ matrix.dir_suffix }}
+          rsync -rILvh -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" staging-$branch${{ matrix.dir_suffix }} "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/"
