@@ -34,9 +34,6 @@ jobs:
       - name: install dependencies
         run: |
           echo "MIRRORSITE=http://deb.debian.org/debian" > /etc/pbuilderrc
-          mkdir -p -m 755 /etc/apt/keyrings
-          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
           apt-get update -q
           apt-get install -y gh git-buildpackage build-essential debhelper-compat default-libmysqlclient-dev krb5-multidev libapparmor-dev libbz2-dev libcap-dev libdb-dev libexpat-dev libexttextcat-dev libicu-dev libldap2-dev liblua5.4-dev liblz4-dev liblzma-dev libpam0g-dev libpq-dev libsasl2-dev libsodium-dev libsqlite3-dev libssl-dev libstemmer-dev libsystemd-dev libtirpc-dev libwrap0-dev libzstd-dev pkg-config zlib1g-dev git libunwind-dev rsync
 
