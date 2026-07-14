@@ -1,60 +1,52 @@
-name: staging
+name: ci
 
+# Build Dovecot .deb via the reusable pipeline (build -> test ->
+# autopkgtest -> reprotest)
+# See ../../README-chatmail.md for reference
+
+# Runs on PRs, specified branches, master, and release tags; 
+# a separate release workflow publishes tag builds after this completes.
 on:
   pull_request:
 
-  # Allows you to run this workflow manually from the Actions tab
+  push:
+    branches:
+      - master
+      - github-ci
+    tags:
+      - 'upstream/*'
+
+  # Allow manual dispatch from the Actions tab
   workflow_dispatch:
 
+# Cancel superseded runs of the same branch/PR
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  staging:
+  # One reusable-workflow instance per distro/arch leg. Each leg runs its full
+  # build -> autopkgtest -> reprotest sequence independently (the needs chain
+  # lives inside pipeline.yml), so a hung leg (e.g. the amd64 LTO build stall)
+  # never blocks another arch from going all the way through for a PR.
+  #
+  # name: overrides GitHub's default "<job-id> (<matrix csv>)" check label so
+  # each leg reads as "<distro>/<arch> / <inner job>" (e.g. bookworm/amd64 /
+  # build) instead of repeating the runner+container, which are derivable.
+  leg:
+    name: ${{ matrix.distro }}/${{ matrix.arch }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
-            container: debian:12
-            distro: bookworm
-          - runner: ubuntu-24.04-arm
-            container: debian:12
-            distro: bookworm
-          - runner: ubuntu-latest
-            container: debian:13
-            distro: trixie
-          - runner: ubuntu-24.04-arm
-            container: debian:13
-            distro: trixie
-    runs-on: ${{ matrix.runner }}
-    container: ${{ matrix.container }}
-    steps:
-      - name: install dependencies
-        run: |
-          echo "MIRRORSITE=http://deb.debian.org/debian" > /etc/pbuilderrc
-          apt update
-          apt install -y git-buildpackage build-essential debhelper-compat default-libmysqlclient-dev krb5-multidev libapparmor-dev libbz2-dev libcap-dev libdb-dev libexpat-dev libexttextcat-dev libicu-dev libldap2-dev liblua5.4-dev liblz4-dev liblzma-dev libpam0g-dev libpq-dev libsasl2-dev libsodium-dev libsqlite3-dev libssl-dev libstemmer-dev libsystemd-dev libtirpc-dev libwrap0-dev libzstd-dev pkg-config zlib1g-dev git libunwind-dev rsync
-
-      - uses: actions/checkout@v4
-        with:
-          path: dovecot
-          show-progress: false
-          fetch-depth: 0
-
-      - name: build
-        run: |
-          cd dovecot
-          git rm -r .github
-          git config --local user.name "test"
-          git config --local user.email "test@example.org"
-          git commit -am "CI: remove .github directory before building"
-          DEB_BUILD_OPTIONS=nocheck gbp buildpackage --git-no-pristine-tar --git-ignore-branch -us -uc
-
-      - name: upload .deb files
-        run: |
-          mkdir -p "$HOME/.ssh"
-          echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
-          chmod 600 "$HOME/.ssh/key"
-          branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
-          safe_branch=$(echo "$branch" | tr '/' '-')
-          rsync -rILvh --mkpath \
-            -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" \
-            $GITHUB_WORKSPACE/build-area/ \
-            "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/staging/${safe_branch}/${{ matrix.distro }}/"
+          - { runner: ubuntu-latest,    container: 'debian:12', distro: bookworm, arch: amd64 }
+          - { runner: ubuntu-24.04-arm, container: 'debian:12', distro: bookworm, arch: arm64 }
+          - { runner: ubuntu-latest,    container: 'debian:13', distro: trixie,   arch: amd64 }
+          - { runner: ubuntu-24.04-arm, container: 'debian:13', distro: trixie,   arch: arm64 }
+    uses: ./.github/workflows/pipeline.yml
+    with:
+      runner: ${{ matrix.runner }}
+      container: ${{ matrix.container }}
+      distro: ${{ matrix.distro }}
+      arch: ${{ matrix.arch }}
+    secrets: inherit

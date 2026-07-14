@@ -1,0 +1,70 @@
+name: release
+
+# Publish built packages to download.delta.chat and GitHub releases after the
+# CI workflow completes successfully on a tagged commit.
+
+on:
+  workflow_run:
+    workflows: ["ci"]
+    types: [completed]
+
+jobs:
+  publish:
+    # Only publish on successful CI runs for upstream/* tags
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'upstream/')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { distro: bookworm, arch: amd64 }
+          - { distro: bookworm, arch: arm64 }
+          - { distro: trixie,   arch: amd64 }
+          - { distro: trixie,   arch: arm64 }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          show-progress: false
+
+      - name: download built packages
+        uses: actions/download-artifact@v8
+        with:
+          name: build-area-${{ matrix.distro }}-${{ matrix.arch }}
+          path: build-area
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: upload .deb files to download.delta.chat
+        run: |
+          mkdir -p "$HOME/.ssh"
+          echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
+          chmod 600 "$HOME/.ssh/key"
+          version=$(dpkg-parsechangelog -l build-area/dovecot_*.dsc -Sversion | sed 's/^1://')
+          rsync -rLvh --ignore-existing --mkpath \
+            -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" \
+            build-area/ \
+            "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/${{ matrix.distro }}/${version}/"
+
+      - name: upload to github release
+        run: |
+          apt-get update -q
+          apt-get install -y --no-install-recommends gh
+          version=$(dpkg-parsechangelog -l build-area/dovecot_*.dsc -Sversion | sed 's/^1://')
+          tag="upstream/${version}"
+          for f in build-area/dovecot-core_*.deb \
+                   build-area/dovecot-imapd_*.deb \
+                   build-area/dovecot-lmtpd_*.deb; do
+            mv "$f" "${f%.deb}_${{ matrix.distro }}.deb"
+          done
+          for f in build-area/dovecot_*.buildinfo; do
+            mv "$f" "${f%.buildinfo}_${{ matrix.distro }}.buildinfo"
+          done
+          gh release create "$tag" --title "$tag" || true
+          gh release upload "$tag" --clobber \
+            build-area/dovecot-core_*_${{ matrix.distro }}.deb \
+            build-area/dovecot-imapd_*_${{ matrix.distro }}.deb \
+            build-area/dovecot-lmtpd_*_${{ matrix.distro }}.deb \
+            build-area/dovecot_*_${{ matrix.distro }}.buildinfo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

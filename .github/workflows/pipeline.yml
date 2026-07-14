@@ -1,0 +1,342 @@
+name: deb pipeline
+
+# This pipeline mirrors how Debian builds and checks dovecot package builds; see
+# ../../README-chatmail.md reference.
+#
+# Reusable per-arch pipeline: build -> autopkgtest (+ reprotest on amd64), so
+# each distro/arch combination runs its full sequence independently. Called
+# from build-staging-deb.yml.
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      container:
+        required: true
+        type: string
+      distro:
+        required: true
+        type: string
+      arch:
+        required: true
+        type: string
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  build:
+    name: build with tests
+    timeout-minutes: 120
+    runs-on: ${{ inputs.runner }}
+    container: ${{ inputs.container }}
+    # Mapped here so the upload step can be conditional on the secret's presence via `env`
+    env:
+      UPLOAD_SSH_KEY: ${{ secrets.KEY }}
+    steps:
+      # debian:12 without a preseeded mirror.
+      - name: install packaging tools
+        run: |
+          apt-get update -q
+          apt-get install -y --no-install-recommends ca-certificates git git-buildpackage build-essential fakeroot rsync openssh-client
+
+      - uses: actions/checkout@v7
+        with:
+          path: dovecot
+          show-progress: false
+          fetch-depth: 0
+
+      - name: install build dependencies
+        run: apt-get build-dep -y --no-install-recommends ./dovecot
+
+      # Build as an unprivileged user, defer tests to separate
+      # step below. This avoids failing the build step on timing-flaky tests such
+      # as test-smtp-client-errors.
+      - name: build (nocheck)
+        run: |
+          useradd --create-home builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          cat > /tmp/ci-build.sh <<'EOF'
+          set -ex
+          export HOME=/home/builder
+          cd "$GITHUB_WORKSPACE/dovecot"
+          git config --global user.name "test"
+          git config --global user.email "test@example.org"
+          # Remove .github and README-chatmail.md before building as they are not part of the original package
+          git rm -rq .github README-chatmail.md
+          git commit -qam "CI: remove non-upstream files before building"
+
+          # If the upstream/<version> tag that gbp would use for the orig
+          # tarball is missing, generate the tarball from the branch itself
+          # minus debian/ (SLOPPY).
+          uversion=$(dpkg-parsechangelog -SVersion | sed -e 's/^[0-9]*://' -e 's/-[^-]*$//')
+          tree_opt=""
+          if ! git rev-parse -q --verify "upstream/${uversion}^{commit}" >/dev/null; then
+            echo "tag upstream/${uversion} not found, using --git-upstream-tree=SLOPPY"
+            tree_opt="--git-upstream-tree=SLOPPY"
+          fi
+
+          # Build on amd64 hung repeatedly at LTO link time (last log:
+          # -flto=auto compiles), cap amd64 at parallel=2 to avoid thrashing
+          # swap and add a timeout as last safety net so we can capture logs.
+          if [ "$(dpkg --print-architecture)" = amd64 ]; then par=2; else par=$(nproc); fi
+
+          # actions/checkout leaves a detached HEAD with no local `master`
+          # ref, so gbp's default --git-debian-branch=master fails SLOPPY's
+          # `git ls-tree master^{tree}`, point it at the checked-out commit.
+          branch="--git-ignore-branch --git-debian-branch=HEAD $tree_opt"
+
+          # --git-no-purge: keep export tree (build-area/dovecot-*)
+          # after a successful build for test step further on
+          DEB_BUILD_OPTIONS="parallel=$par nocheck" timeout -k 60 75m gbp buildpackage --git-no-pristine-tar --git-no-purge $branch -us -uc
+          EOF
+          runuser -u builder -- bash /tmp/ci-build.sh
+
+      # Unit tests as separate step, run `make check` in the gbp build tree 
+      # Must run as unprivileged user, test-buffer-istream fails as root
+      #
+      # make check has no per-test timeout, so a deadlocked test can hang the
+      # whole step and only get killed by the global job timout, hindering
+      # diagnostics. Thus, we use an inactivity watchdog: run make check in
+      # its own process group, stream output streamed to a log; if the log goes
+      # silent for STALL seconds the group is killed after dumping the tail of the log.
+      # The test run is retried up to three times, both a silent hang (the
+      # watchdog returns with code 124) and any non-zero end the attempt. The
+      # Github CI seems to sometimes make timing-sensitive tests flaky, so this
+      # is a cheap hack to allow testing of a mostly stable codebase more reliably.
+      - name: run unit tests
+        timeout-minutes: 45
+        run: |
+          cat > /tmp/ci-test.sh <<'EOF'
+          set -e
+          export HOME=/home/builder
+          srcdir=$(echo "$GITHUB_WORKSPACE/build-area"/dovecot-*/)
+          if [ ! -d "$srcdir" ]; then
+            echo "built source tree not found under build-area/ (got: $srcdir)" >&2
+            exit 1
+          fi
+          cd "$srcdir"
+
+          # dpkg-buildpackage unapplies all quilt patches after the build, 
+          # re-apply them to restore the exact tree we built from.
+          dpkg-source --before-build .
+
+          STALL=300   # kill make check if logs go silent for this many seconds
+
+          run_check() {
+            log="$1"
+            : > "$log"
+            # New session/process group so the whole test-binary tree can be
+            # signalled at once; exec so the group leader is make and stdbuf (-oL, -eL)
+            # so output is line-buffered and log mtime indicates real progress
+            setsid bash -c 'exec stdbuf -oL -eL make -j"$(nproc)" check VERBOSE=1' \
+              > "$log" 2>&1 &
+            pid=$!
+            tail -f --pid="$pid" "$log" &   # mirror to the job console; exits with make
+            tailpid=$!
+            while kill -0 "$pid" 2>/dev/null; do
+              sleep 15
+              idle=$(( $(date +%s) - $(stat -c %Y "$log") ))
+              if [ "$idle" -ge "$STALL" ]; then
+                echo ">>> no test output for ${idle}s; treating make check as stalled"
+                echo ">>> last 40 log lines before kill:"
+                tail -40 "$log" || true
+                kill -TERM -"$pid" 2>/dev/null || true
+                sleep 10
+                kill -KILL -"$pid" 2>/dev/null || true
+                wait "$pid" 2>/dev/null || true
+                kill "$tailpid" 2>/dev/null || true
+                return 124
+              fi
+            done
+            rc=0
+            wait "$pid" || rc=$?
+            kill "$tailpid" 2>/dev/null || true
+            return "$rc"
+          }
+
+          # Retry up to three times
+          n=1
+          MAX=3
+          while true; do
+            rc=0
+            run_check "/tmp/make-check.$n.log" || rc=$?
+            [ "$rc" -eq 0 ] && exit 0
+            if [ "$rc" -eq 124 ]; then
+              reason="stalled"
+            else
+              reason="failed (exit $rc)"
+            fi
+            if [ "$n" -ge "$MAX" ]; then
+              echo "make check $reason on all $n attempts, considering it a real test failure"
+              exit "$rc"
+            fi
+            echo "make check $reason (attempt $n/$MAX), retrying..."
+            n=$((n+1))
+          done
+          EOF
+          runuser -u builder -- bash /tmp/ci-test.sh
+
+      - name: upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-area-${{ inputs.distro }}-${{ inputs.arch }}
+          path: build-area/
+          if-no-files-found: error
+
+      - name: upload .deb files
+        # Push per-branch staging debs to download.delta.chat if UPLOAD_SSH_KEY is present
+        if: ${{ env.UPLOAD_SSH_KEY != '' }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          echo "${{ secrets.KEY }}" > "$HOME/.ssh/key"
+          chmod 600 "$HOME/.ssh/key"
+          branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          safe_branch=$(echo "$branch" | tr '/' '-')
+          rsync -rILvh --mkpath \
+            -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" \
+            $GITHUB_WORKSPACE/build-area/ \
+            "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/staging/${safe_branch}/${{ inputs.distro }}/"
+
+  # Run the debian/tests suite with autopkgtest, integration testing of the
+  # installed package against a running system (doveadm/systemd/config) and 
+  # has no arch-specific behaviour, so run once per distro on amd64.
+  autopkgtest:
+    needs: build
+    if: ${{ inputs.arch == 'amd64' }}
+    timeout-minutes: 60
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: download built packages
+        uses: actions/download-artifact@v8
+        with:
+          name: build-area-${{ inputs.distro }}-${{ inputs.arch }}
+          path: build-area
+
+      # ci.debian.net uses lxc system containers with systemd as init; we mirror
+      # that with Incus whose system containers boot systemd natively and need no
+      # --init hack.
+      - name: install autopkgtest and incus
+        run: |
+          sudo mkdir -p /etc/apt/keyrings
+          sudo curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
+          . /etc/os-release
+          echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable ${VERSION_CODENAME} main" \
+            | sudo tee /etc/apt/sources.list.d/zabbly-incus.list
+          sudo apt-get update -q
+          sudo apt-get install -y autopkgtest incus-base=1:7.2* incus-client=1:7.2*
+          incus --version
+
+      - name: initialise incus
+        run: |
+          # Use cmlxc's runner bootstrap for GitHub runners that come with Docker
+          # and problematic iptables rules. 
+          sudo systemctl stop docker.socket docker || true
+          sudo iptables -P FORWARD ACCEPT
+          sudo sysctl -w fs.inotify.max_user_instances=65535
+          sudo sysctl -w fs.inotify.max_user_watches=65535
+          sudo incus admin init --auto
+          # Allow running as unprivileged user
+          sudo chmod 666 /var/lib/incus/unix.socket
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/.config"
+
+      - name: build systemd-enabled testbed image
+        run: |
+          autopkgtest-build-incus images:debian/${{ inputs.distro }}
+          # autopkgtest-build-incus publishes the customized testbed under the
+          # alias autopkgtest/<distro>/<release>/<arch>, capture it
+          # instead of constructing it manually
+          img=$(incus image list --format csv -c l \
+            | tr ',' '\n' | grep '^autopkgtest/' | head -1)
+          if [ -z "$img" ]; then
+            echo "::error::no autopkgtest testbed image alias found after build"
+            incus image list
+            exit 1
+          fi
+          echo "INCUS_IMAGE=$img" >> "$GITHUB_ENV"
+          echo "Using testbed image: $img"
+
+      # Run all tests from debian/tests/control in a single autopkgtest invocation.
+      # Incus snapshots and reverts the testbed between tests, giving each test a
+      # fresh environment while avoiding the overhead of launching separate containers.
+      - name: run autopkgtests
+        run: |
+          autopkgtest --no-built-binaries \
+            --output-dir="autopkgtest-out" \
+            build-area/dovecot_*.changes \
+            -- incus "$INCUS_IMAGE"
+
+      - name: upload autopkgtest logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: autopkgtest-logs-${{ inputs.distro }}-${{ inputs.arch }}
+          path: autopkgtest-out/
+
+  # Verify the build is reproducible with reprotest.
+  # This mirrors the salsa-ci defaults: -time (faketime is flaky), -build_path
+  # (buildds use fixed /build/reproducible-path/...), -user_group/-domain_host
+  # (need sudo), -fileordering (disorderfs needs FUSE, unavailable in
+  # unprivileged containers), -aslr (an extra setarch personality toggle we do
+  # not need).
+  #
+  # reprotest wraps every build (including the control) in setarch/linux64
+  # to normalise the kernel personality bit; as the personality() syscall is
+  # blocked by the default docker seccomp profile, run this job's container
+  # with seccomp unconfined. 
+  #
+  # Reproducibility is arch-independent, so run once per distro on amd64.
+  reprotest:
+    needs: build
+    if: ${{ inputs.arch == 'amd64' }}
+    timeout-minutes: 120
+    runs-on: ${{ inputs.runner }}
+    container:
+      image: ${{ inputs.container }}
+      options: --security-opt seccomp=unconfined
+    steps:
+      - name: download built source package
+        uses: actions/download-artifact@v8
+        with:
+          name: build-area-${{ inputs.distro }}-${{ inputs.arch }}
+          path: build-area
+
+      - name: install reprotest and build dependencies
+        run: |
+          apt-get update -q
+          apt-get install -y --no-install-recommends reprotest locales-all dpkg-dev fakeroot
+          dpkg-source -x build-area/dovecot_*.dsc /tmp/dovecot-src
+          apt-get build-dep -y --no-install-recommends /tmp/dovecot-src
+
+      - name: run reprotest
+        run: |
+          useradd --create-home builder
+          install -d -o builder -g builder /build/reproducible-path
+          cp build-area/dovecot_*.dsc build-area/dovecot_*.tar.* /build/reproducible-path/
+          chown builder:builder /build/reproducible-path/*
+          cd /build/reproducible-path
+          runuser -u builder -- env HOME=/home/builder \
+            DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" \
+            reprotest --verbosity=1 --no-diffoscope \
+              --store-dir=/home/builder/reprotest-out \
+              --vary=-time \
+              --vary=-build_path \
+              --vary=-user_group \
+              --vary=-domain_host \
+              --vary=-fileordering \
+              --vary=-aslr \
+              dovecot_*.dsc -- null
+
+      - name: diffoscope on failure
+        if: failure()
+        run: |
+          apt-get install -y diffoscope-minimal
+          diffoscope --text - /home/builder/reprotest-out/control /home/builder/reprotest-out/experiment-1 || true
+
+      - name: upload reprotest output on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reprotest-${{ inputs.distro }}
+          path: /home/builder/reprotest-out/
