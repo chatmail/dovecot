@@ -1,3 +1,15 @@
+dovecot (1:2.3.21+dfsg1-3+chatmail1) unstable; urgency=medium
+
+  * Introduce subversion for chatmail relay downstream rebuild of Debian's
+    2.3.21 dovecot, (Debian bookworm stays at 2.3.19)
+  * CI now mirrors Debian's build/test process: upstream unit tests,
+    debian/tests autopkgtest in Incus system containers, and reprotest
+    reproducibility check.
+  * d/p/Skip-flaky-cpu-limit-tests.patch: disable the whole cpu-limit test-lib
+    suite as it exhibited indefinite stalls on Github CI.
+
+ -- j4n <j4n@systemli.org>  Tue, 14 Jul 2026 09:43:42 +0200
+
 dovecot (1:2.3.21+dfsg1-3) unstable; urgency=medium
 
   * [883dc1a] Add libtirpc-dev to build-depends (Closes: #1065213)
