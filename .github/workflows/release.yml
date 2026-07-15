@@ -44,7 +44,7 @@ jobs:
           rsync -rLvh --ignore-existing --mkpath \
             -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" \
             build-area/ \
-            "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/${{ matrix.distro }}/${version}/"
+            "${{ secrets.USERNAME }}@download.delta.chat:${{ matrix.distro }}/${version}/"
 
       - name: upload to github release
         run: |

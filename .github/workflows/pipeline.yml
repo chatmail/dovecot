@@ -186,7 +186,9 @@ jobs:
           if-no-files-found: error
 
       - name: upload .deb files
-        # Push per-branch staging debs to download.delta.chat if UPLOAD_SSH_KEY is present
+        # Push per-branch staging artifacts to download.delta.chat if UPLOAD_SSH_KEY is present.
+        # The remote uses rrsync which has a per-directory lock, creating a race between
+        # two arches of the same distro that target the same staging/<branch>/<distro>/ dir, retry 3x
         if: ${{ env.UPLOAD_SSH_KEY != '' }}
         run: |
           mkdir -p "$HOME/.ssh"
@@ -194,10 +196,24 @@ jobs:
           chmod 600 "$HOME/.ssh/key"
           branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
           safe_branch=$(echo "$branch" | tr '/' '-')
-          rsync -rILvh --mkpath \
-            -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" \
-            $GITHUB_WORKSPACE/build-area/ \
-            "${{ secrets.USERNAME }}@download.delta.chat:/var/www/html/download/dovecot/staging/${safe_branch}/${{ inputs.distro }}/"
+          for attempt in 1 2 3; do
+            if rsync -Lvh --mkpath \
+                -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" \
+                "$GITHUB_WORKSPACE"/build-area/dovecot-core_*.deb \
+                "$GITHUB_WORKSPACE"/build-area/dovecot-imapd_*.deb \
+                "$GITHUB_WORKSPACE"/build-area/dovecot-lmtpd_*.deb \
+                "$GITHUB_WORKSPACE"/build-area/dovecot_*.dsc \
+                "$GITHUB_WORKSPACE"/build-area/dovecot_*.tar.* \
+                "$GITHUB_WORKSPACE"/build-area/*.changes \
+                "$GITHUB_WORKSPACE"/build-area/*.buildinfo \
+                "${{ secrets.USERNAME }}@download.delta.chat:staging/${safe_branch}/${{ inputs.distro }}/"; then
+              exit 0
+            fi
+            echo "rsync attempt $attempt failed (rrsync dir busy?), retrying in 15s..."
+            sleep 15
+          done
+          echo "rsync failed after 3 attempts" >&2
+          exit 1
 
   # Run the debian/tests suite with autopkgtest, integration testing of the
   # installed package against a running system (doveadm/systemd/config) and 
