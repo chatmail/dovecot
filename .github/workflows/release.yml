@@ -82,3 +82,18 @@ jobs:
             build-area/dovecot_*_${{ matrix.distro }}.buildinfo
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Sources are byte-identical across the matrix (dpkg-source is
+      # deterministic on the same tag), so only one job uploads them to
+      # avoid the other three racing on the same object names.
+      - name: upload source to github release
+        if: matrix.distro == 'trixie' && matrix.arch == 'amd64'
+        run: |
+          version=$(dpkg-parsechangelog -l build-area/dovecot_*.dsc -Sversion | sed 's/^1://')
+          tag="upstream/${version}"
+          gh release upload "$tag" --clobber \
+            build-area/dovecot_*.dsc \
+            build-area/dovecot_*.orig.tar.* \
+            build-area/dovecot_*.debian.tar.*
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
