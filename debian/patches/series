@@ -28,3 +28,4 @@ Skip-flaky-cpu-limit-tests.patch
 CVE-2024-23184.patch
 CVE-2024-23185.patch
 CVE-2025-59031.patch
+CVE-2025-59032.patch
