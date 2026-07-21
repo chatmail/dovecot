@@ -6,9 +6,13 @@ Tests: systemd
 Depends: dovecot-core, systemd-sysv
 
 Test-Command: run-parts --report --exit-on-error debian/tests/usage
-Depends: dovecot-imapd, dovecot-pop3d, python3
+Depends: dovecot-imapd, dovecot-pop3d, dovecot-managesieved, sieve-connect, python3
 Restrictions: needs-root, breaks-testbed, allow-stderr
 
 Tests: testmails
 Restrictions: needs-root, breaks-testbed
 Depends: dovecot-imapd, dovecot-pop3d, lsb-release, python3, python3-passlib
+
+Tests: debian_bug_1134464
+Restrictions: needs-root, breaks-testbed, allow-stderr
+Depends: dovecot-imapd
