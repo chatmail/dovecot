@@ -1,0 +1,8 @@
+#!/usr/bin/bash
+# Validate managesieved authentication
+
+user=dep8
+pass=test
+
+sieve-connect --notlsverify --debug -s localhost \
+	      -p 4190 -u "$user" --list --passwordfd 3 3< <(echo "$pass")

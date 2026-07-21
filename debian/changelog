@@ -1,7 +1,48 @@
 dovecot (1:2.3.21+dfsg1-3+chatmail2) UNRELEASED; urgency=medium
 
-  * Backport Debian security fixes from bookworm-security (2.3.19.1 base,
-    deb12u1-u6) onto our 2.3.21 rebuild.
+  * Backport 14 Debian security fixes from bookworm-security (2.3.19.1
+    base, deb12u1-u6, tip b0beae072) onto our 2.3.21 rebuild, which shared no
+    history with the backport work and previously carried none of them. The
+    deb12u3/u4 regression fixes and deb12u5 corrections are already folded
+    into the copied files (single CVE-2025-59032.patch; CVE-2026-0394-2.patch
+    is the passwd-file regression fix; -27855-4 and -27857-5 are the u5
+    corrections). All 26 patch files apply to 2.3.21 with offsets only, no
+    fuzz and no rejects. 
+    - CVE-2024-23184: many address headers cause excessive CPU use during
+      message parsing. (deb12u1)
+    - CVE-2024-23185: oversized headers cause excessive memory/CPU use in the
+      header parser. (deb12u1)
+    - CVE-2025-59031: remove the FTS decode2text.sh helper; we shipped it only
+      as a doc example, and d/rules and d/dovecot-core.examples are updated to
+      drop the now-missing file. (deb12u2)
+    - CVE-2025-59032: managesieve-login crash on an unfinished command
+      pre-auth. (deb12u2)
+    - CVE-2026-0394: passwd-file passdb path normalization. (deb12u2)
+    - CVE-2026-27855: auth cache used the untranslated username when removing
+      an entry; align it with the lookup/insert paths, plus supporting passdb
+      event-lifecycle refactor and an empty-update_query guard. (deb12u2)
+    - CVE-2026-27856: doveadm HTTP/TCP API-key comparison timing side channel.
+      (deb12u2)
+    - CVE-2026-27857: unbounded IMAP parser list nesting is a pre-auth memory
+      DoS; add imap_parser_params.list_count_limit and cap the pre-login
+      parser to one open list. (deb12u2)
+    - CVE-2026-27858: managesieve-login accepted an unverified SASL initial
+      response. (deb12u2)
+    - CVE-2026-27859: RFC2231 continuation-parameter parsing DoS. (deb12u2)
+    - CVE-2026-33603: login-common accepted non-base64 bytes (e.g. TAB) in a
+      SASL continuation response, injecting fields into the auth protocol.
+      (deb12u6)
+    - CVE-2026-40016: Sieve :contains/:matches match could bypass the CPU
+      limit. (deb12u6)
+    - CVE-2026-40020: invalid ACL identifier handling in acl/imap-acl.
+      (deb12u6)
+    - CVE-2026-42006: the CVE-2026-27857 limit counted ')' not '('; move the
+      check into imap_parser_open_list() so it actually bounds nesting.
+      (deb12u6)
+  * d/tests: converge with bookworm-security, adding the regression tests that
+    ship with the fixes: usage/imap-cram-md5, usage/sieve, and the
+    debian_bug_1134464 passwd-file delivery test (guards CVE-2026-0394);
+    extend the usage Depends with dovecot-managesieved and sieve-connect.
   * CI: emit a distro-distinct package version per stable target. The base
     version here stays UNRELEASED; .github/workflows/pipeline.yml finalizes it
     to +deb12u1 (bookworm) or +deb13u1 (trixie) at build time.
