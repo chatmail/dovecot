@@ -41,10 +41,13 @@ render "$here/dovecot-dict-auth.conf.in" > "$run/dovecot-dict-auth.conf"
 cp "$here/push_notification.lua" "$run/push_notification.lua"
 
 # file dict: alternating key line / value line, JSON values (format = json).
+# Dovecot namespaces dict keys with a "shared/" prefix, so the "passdb/%u" key
+# in dovecot-dict-auth.conf is looked up as "shared/passdb/testuser" (confirmed
+# via auth_debug). The stored keys must carry that prefix or every lookup misses.
 cat > "$run/auth.dict" <<EOF
-passdb/testuser
+shared/passdb/testuser
 {"password":"testpass"}
-userdb/testuser
+shared/userdb/testuser
 {"uid":"$vmailuid","gid":"$vmailuid","home":"$run/mail/testuser"}
 EOF
 : > "$run/lastlogin.dict"
