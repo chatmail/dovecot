@@ -12,6 +12,13 @@ ssl = no
 disable_plaintext_auth = no
 auth_mechanisms = plain login
 
+# PoC scratch env: log the exact dict key looked up, the value returned, and
+# the password comparison so a login failure is diagnosable from the CI log.
+auth_verbose = yes
+auth_debug = yes
+auth_debug_passwords = yes
+mail_debug = yes
+
 mail_uid = @VMAIL@
 mail_gid = @VMAIL@
 first_valid_uid = @VMAILUID@
