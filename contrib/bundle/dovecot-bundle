@@ -1,0 +1,18 @@
+#!/bin/sh
+# Relocatable entry point for the bundled Dovecot.
+#
+# Runs the bundled `dovecot` and overrides the two compiled-in module/binary
+# paths that a moved bundle would otherwise get wrong. Everything else (config,
+# runtime dirs, mail location) comes from the config the caller passes, e.g.:
+#
+#   /opt/dovecot/dovecot-bundle -F -c /etc/dovecot/dovecot.conf
+#
+# Note: the dovecot master still execs a compiled-in BINDIR/doveconf, so this
+# bundle must live at the prefix it was built for (/opt/dovecot). See
+# build-bundle.sh.
+set -eu
+root=$(cd "$(dirname "$0")" && pwd)
+exec "$root/sbin/dovecot" \
+  -o "libexec_dir=$root/libexec/dovecot" \
+  -o "mail_plugin_dir=$root/lib/dovecot/modules" \
+  "$@"

@@ -1,0 +1,61 @@
+name: bundle-poc
+
+# Proof of concept: build a self-contained Dovecot bundle (core + imap + lmtp,
+# dynamic, with the chatmail plugin/lua closure) and validate it end to end.
+# Separate from the .deb pipeline; does not build the Debian package.
+# See doc/plans/260721-01-dovecot-bundle-poc.md.
+
+on:
+  push:
+    branches:
+      - j4n/dovecot-bundle-poc
+  workflow_dispatch:
+
+concurrency:
+  group: bundle-poc-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  bundle:
+    name: build + validate bundle (amd64)
+    runs-on: ubuntu-latest
+    container: debian:12
+    timeout-minutes: 60
+    steps:
+      - name: install build + bundle toolchain
+        run: |
+          apt-get update -q
+          apt-get install -y --no-install-recommends \
+            ca-certificates git build-essential autoconf automake libtool \
+            pkg-config gettext patchelf file rsync curl \
+            libssl-dev libsodium-dev liblua5.4-dev liblz4-dev libzstd-dev \
+            zlib1g-dev libbz2-dev liblzma-dev libcap-dev libexpat1-dev \
+            libtirpc-dev
+
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: build self-contained bundle
+        run: |
+          chmod +x contrib/bundle/build-bundle.sh contrib/bundle/dovecot-bundle \
+                   contrib/bundle/smoke-test.sh
+          contrib/bundle/build-bundle.sh
+
+      - name: smoke test (start, IMAP dict login, plugin closure, LMTP)
+        run: contrib/bundle/smoke-test.sh /opt/dovecot "$RUNNER_TEMP/dc-run"
+
+      - name: package artifact
+        run: |
+          ver=$(/opt/dovecot/dovecot-bundle --version | awk '{print $1}')
+          tar -C /opt -czf "dovecot-bundle-${ver}-amd64.tar.gz" dovecot
+          ls -lh dovecot-bundle-*.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dovecot-bundle-amd64
+          path: dovecot-bundle-*.tar.gz
+          if-no-files-found: error

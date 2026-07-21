@@ -1,0 +1,20 @@
+# dict passdb/userdb backend for the bundle PoC.
+# Rendered by smoke-test.sh. Points at a local file dict; the auth process
+# opens it in-process (no dict service, no chatmaild).
+
+uri = file:@RUN@/auth.dict
+default_pass_scheme = PLAIN
+iterate_disable = yes
+
+key passdb {
+  key = passdb/%u
+  format = json
+}
+key userdb {
+  key = userdb/%u
+  format = json
+}
+
+# JSON objects under these keys are expanded into passdb/userdb fields.
+passdb_objects = passdb
+userdb_objects = userdb

@@ -1,0 +1,64 @@
+# Dovecot bundle PoC validation config.
+# Rendered by smoke-test.sh (sed @VAR@ substitution) into a scratch runtime.
+# Exercises the dlopen plugin closure that the chatmail relay config uses.
+
+base_dir = @RUN@/run
+log_path = @RUN@/dovecot.log
+info_log_path = @RUN@/dovecot.log
+debug_log_path = @RUN@/dovecot.log
+
+protocols = imap lmtp
+ssl = no
+disable_plaintext_auth = no
+auth_mechanisms = plain login
+
+mail_uid = @VMAIL@
+mail_gid = @VMAIL@
+first_valid_uid = @VMAILUID@
+mail_location = maildir:@RUN@/mail/%u
+
+namespace inbox {
+  inbox = yes
+}
+
+# Real dict driver, backed by a small local file dict (no chatmaild needed).
+passdb {
+  driver = dict
+  args = @RUN@/dovecot-dict-auth.conf
+}
+userdb {
+  driver = dict
+  args = @RUN@/dovecot-dict-auth.conf
+}
+
+service imap-login {
+  inet_listener imap {
+    port = @IMAPPORT@
+  }
+  inet_listener imaps {
+    port = 0
+  }
+}
+
+service lmtp {
+  inet_listener lmtp {
+    port = @LMTPPORT@
+  }
+}
+
+protocol imap {
+  mail_plugins = quota zlib imap_quota last_login imap_zlib
+}
+
+protocol lmtp {
+  mail_plugins = quota zlib notify mail_lua push_notification push_notification_lua
+}
+
+plugin {
+  quota = maildir:User quota
+  quota_rule = *:storage=1G
+  zlib_save = gz
+  zlib_save_level = 6
+  last_login_dict = file:@RUN@/lastlogin.dict
+  push_notification_driver = lua:file=@RUN@/push_notification.lua
+}
