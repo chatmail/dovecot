@@ -96,12 +96,26 @@ echo "== collect non-glibc shared-library closure into extlib/ =="
   done
 
 echo "== rewrite RPATHs to \$ORIGIN =="
-# Binaries and modules: point at dovecot's own libs (lib/dovecot) and extlib.
+# Every directory in the bundle that holds shared objects: lib/dovecot itself,
+# each of its module subdirs, and extlib. Some internal libs are installed into
+# a subdir yet linked as a direct DT_NEEDED of a binary rather than dlopened,
+# e.g. libstats_auth.so lives in lib/dovecot/old-stats but the auth binary links
+# it (src/auth/Makefile.am). So each ELF's RPATH must search all of these dirs,
+# not just lib/dovecot, or the loader fails with "cannot open shared object".
+mapfile -t sodirs < <(
+  { printf '%s\n' "$libdir" "$extdir"
+    find "$libdir" -type f \( -name '*.so' -o -name '*.so.*' \) -printf '%h\n'
+  } | sort -u
+)
+# Binaries and modules: search dovecot's own lib dirs plus extlib, all relative.
 while IFS= read -r -d '' f; do
   d=$(dirname "$f")
-  r1=$(realpath --relative-to="$d" "$libdir")
-  r2=$(realpath --relative-to="$d" "$extdir")
-  patchelf --set-rpath "\$ORIGIN/$r1:\$ORIGIN/$r2" "$f" 2>/dev/null || true
+  rp=""
+  for sd in "${sodirs[@]}"; do
+    rel=$(realpath --relative-to="$d" "$sd")
+    rp="${rp:+$rp:}\$ORIGIN/$rel"
+  done
+  patchelf --set-rpath "$rp" "$f" 2>/dev/null || true
 done < <(elf_files)
 # Bundled third-party libs only need their siblings in the same dir.
 for f in "$extdir"/*; do
