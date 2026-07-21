@@ -39,13 +39,38 @@ jobs:
       - name: install packaging tools
         run: |
           apt-get update -q
-          apt-get install -y --no-install-recommends ca-certificates git git-buildpackage build-essential fakeroot rsync openssh-client
+          apt-get install -y --no-install-recommends ca-certificates git git-buildpackage devscripts build-essential fakeroot rsync openssh-client
 
       - uses: actions/checkout@v7
         with:
           path: dovecot
           show-progress: false
           fetch-depth: 0
+
+      # Add a distro-distinct version onto the changelog. The committed top
+      # entry is UNRELEASED with a distro-neutral base version (1:...+chatmail2);
+      # here dch finalizes it in place with a per-distro version and codename,
+      # so the bookworm and trixie build into separate versions and allow a
+      # combined release without a manual rename. Follow Debian's own security
+      # convention (+deb12uN / +deb13uN), which sorts above the neutral base
+      # and is necessary for dch to accept it as an upgrade. In the build step,
+      # the version extraction for the tarball is unaffected by this, and gbp
+      # picks up the version from the changelog for the build.
+      - name: finalize changelog for ${{ inputs.distro }}
+        working-directory: dovecot
+        env:
+          DEBFULLNAME: chatmail CI
+          DEBEMAIL: ci@chatmail.invalid
+        run: |
+          case "${{ inputs.distro }}" in
+            bookworm) suffix=deb12u1 ;;
+            trixie)   suffix=deb13u1 ;;
+            *) echo "unknown distro '${{ inputs.distro }}'" >&2; exit 1 ;;
+          esac
+          base=$(dpkg-parsechangelog -SVersion)
+          dch -v "${base}+${suffix}" --distribution "${{ inputs.distro }}" \
+              --force-distribution "Rebuild for ${{ inputs.distro }}."
+          dpkg-parsechangelog | sed -n '1,3p'
 
       - name: install build dependencies
         run: apt-get build-dep -y --no-install-recommends ./dovecot
