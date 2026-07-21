@@ -65,32 +65,30 @@ jobs:
           apt-get update -q
           apt-get install -y --no-install-recommends gh
           version=$(dpkg-parsechangelog -l build-area/dovecot_*.dsc -Sversion | sed 's/^1://')
-          tag="upstream/${version}"
-          for f in build-area/dovecot-core_*.deb \
-                   build-area/dovecot-imapd_*.deb \
-                   build-area/dovecot-lmtpd_*.deb; do
-            mv "$f" "${f%.deb}_${{ matrix.distro }}.deb"
-          done
-          for f in build-area/dovecot_*.buildinfo; do
-            mv "$f" "${f%.buildinfo}_${{ matrix.distro }}.buildinfo"
-          done
+          # The build stamps a distro-distinct version onto the changelog
+          # (+deb12u1 / +deb13u1). The GitHub release itself
+          # stays combined across the matrix, keyed on the neutral base
+          # version with that stamp stripped back off.
+          base_version=$(echo "$version" | sed -E 's/\+deb[0-9]+u[0-9]+$//')
+          tag="upstream/${base_version}"
           gh release create "$tag" --title "$tag" || true
           gh release upload "$tag" --clobber \
-            build-area/dovecot-core_*_${{ matrix.distro }}.deb \
-            build-area/dovecot-imapd_*_${{ matrix.distro }}.deb \
-            build-area/dovecot-lmtpd_*_${{ matrix.distro }}.deb \
-            build-area/dovecot_*_${{ matrix.distro }}.buildinfo
+            build-area/dovecot-core_*.deb \
+            build-area/dovecot-imapd_*.deb \
+            build-area/dovecot-lmtpd_*.deb \
+            build-area/dovecot_*.buildinfo
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Sources are byte-identical across the matrix (dpkg-source is
-      # deterministic on the same tag), so only one job uploads them to
-      # avoid the other three racing on the same object names.
+      # The changelog is stamped per-distro before the build so the source
+      # package differs and must be uploaded once per distro. Arch doesn't
+      # affect the source, so only one arch per distro uploads it.
       - name: upload source to github release
-        if: matrix.distro == 'trixie' && matrix.arch == 'amd64'
+        if: matrix.arch == 'amd64'
         run: |
           version=$(dpkg-parsechangelog -l build-area/dovecot_*.dsc -Sversion | sed 's/^1://')
-          tag="upstream/${version}"
+          base_version=$(echo "$version" | sed -E 's/\+deb[0-9]+u[0-9]+$//')
+          tag="upstream/${base_version}"
           gh release upload "$tag" --clobber \
             build-area/dovecot_*.dsc \
             build-area/dovecot_*.orig.tar.* \
