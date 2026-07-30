@@ -62,8 +62,8 @@ jobs:
 
       - name: upload to github release
         run: |
-          apt-get update -q
-          apt-get install -y --no-install-recommends gh
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends gh
           version=$(dpkg-parsechangelog -l build-area/dovecot_*.dsc -Sversion | sed 's/^1://')
           # The build stamps a distro-distinct version onto the changelog
           # (+deb12u1 / +deb13u1). The GitHub release itself
