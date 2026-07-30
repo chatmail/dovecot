@@ -4,14 +4,15 @@ name: ci
 # autopkgtest -> reprotest)
 # See ../../README-chatmail.md for reference
 
-# Runs on PRs, specified branches, master, and release tags; 
-# a separate release workflow publishes tag builds after this completes.
+# Runs on PRs, specified branches, and release tags; master itself is not
+# a trigger since every commit that lands there was already built as a PR,
+# and gets built again when tagged for release. A separate release workflow
+# publishes tag builds after this completes.
 on:
   pull_request:
 
   push:
     branches:
-      - master
       - github-ci
     tags:
       - 'upstream/*'
