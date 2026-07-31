@@ -1,22 +1,59 @@
 name: release
 
-# Publish built packages to download.delta.chat and GitHub releases after the
-# CI workflow completes successfully on a tagged commit.
-
+# Publish an already-built package to download.delta.chat and GitHub
+# releases when an upstream/* tag is pushed. 
 on:
-  workflow_run:
-    workflows: ["ci"]
-    types: [completed]
+  push:
+    tags:
+      - 'upstream/*'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: >
+          CI run_id to pull build-area artifacts from (e.g. for re-testing
+          this workflow itself without a tag push); must be a completed,
+          successful run.
+        required: true
+        type: string
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
+  # Resolve which ci run already built the tagged commit, so publish never
+  # rebuilds (workflow_dispatch supplies inputs.run_id directly).
+  find-build:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.find.outputs.run_id }}
+    steps:
+      - name: find the CI run that built ${{ github.sha }}
+        id: find
+        run: |
+          run_id=$(gh run list --repo "${{ github.repository }}" \
+            --workflow ci --commit "${{ github.sha }}" --status success \
+            --json databaseId --jq '.[0].databaseId')
+          if [ -z "$run_id" ]; then
+            echo "::error::No successful CI run found for commit ${{ github.sha }}" \
+                 "(tag ${{ github.ref_name }}). CI only builds on master pushes and PRs," \
+                 "push this commit to master first, then re-tag, " \
+                 "or use this workflow's own workflow_dispatch run_id input" \
+                 "once a build exists." >&2
+            exit 1
+          fi
+          echo "Found CI run $run_id for ${{ github.sha }}"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   publish:
-    # Only publish on successful CI runs for upstream/* tags
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'upstream/')
+    needs: [find-build]
+    # needs.find-build is skipped (not failed) on workflow_dispatch, avoid that
+    # this job would be skipped too:
+    if: |
+      always() && (github.event_name == 'workflow_dispatch' || needs.find-build.result == 'success')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -36,7 +73,7 @@ jobs:
         with:
           name: build-area-${{ matrix.distro }}-${{ matrix.arch }}
           path: build-area
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ needs.find-build.outputs.run_id || inputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: upload .deb files to download.delta.chat
