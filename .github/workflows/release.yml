@@ -8,6 +8,9 @@ on:
     workflows: ["ci"]
     types: [completed]
 
+permissions:
+  contents: write
+
 jobs:
   publish:
     # Only publish on successful CI runs for upstream/* tags
@@ -44,7 +47,11 @@ jobs:
           # dpkg-parsechangelog expects debian/changelog format, not the RFC822
           # control-stanza format .dsc files use -- read the Version field directly.
           version=$(grep -m1 '^Version:' build-area/dovecot_*.dsc | awk '{print $2}' | sed 's/^1://')
-          for attempt in 1 2 3; do
+          # 4 matrix jobs race to rsync into the same remote dir via rrsync,
+          # which only lets one instance in at a time. Give contending jobs
+          # generous room to queue up rather than risk failing out a 45min
+          # build over a lock that just needs to clear.
+          for attempt in 1 2 3 4 5 6; do
             if rsync -Lvh --mkpath \
                 -e "ssh -i $HOME/.ssh/key -o StrictHostKeyChecking=no" \
                 "$GITHUB_WORKSPACE"/build-area/dovecot-core_*.deb \
@@ -57,10 +64,10 @@ jobs:
                 "${{ secrets.USERNAME }}@download.delta.chat:${{ matrix.distro }}/${version}/"; then
               exit 0
             fi
-            echo "rsync attempt $attempt failed (rrsync dir busy?), retrying in 15s..."
-            sleep 15
+            echo "rsync attempt $attempt failed (rrsync dir busy?), retrying in 30s..."
+            sleep 30
           done
-          echo "rsync failed after 3 attempts" >&2
+          echo "rsync failed after 6 attempts" >&2
           exit 1
 
       - name: upload to github release
