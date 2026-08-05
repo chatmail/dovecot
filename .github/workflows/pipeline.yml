@@ -268,7 +268,7 @@ jobs:
           echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable ${VERSION_CODENAME} main" \
             | sudo tee /etc/apt/sources.list.d/zabbly-incus.list
           sudo apt-get update -q
-          sudo apt-get install -y autopkgtest incus-base=1:7.2* incus-client=1:7.2*
+          sudo apt-get install -y autopkgtest incus-base incus-client
           incus --version
 
       - name: initialise incus
