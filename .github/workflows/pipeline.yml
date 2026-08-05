@@ -39,13 +39,22 @@ jobs:
       - name: install packaging tools
         run: |
           apt-get update -q
-          apt-get install -y --no-install-recommends ca-certificates git git-buildpackage devscripts build-essential fakeroot rsync openssh-client
+          apt-get install -y --no-install-recommends ca-certificates git git-buildpackage devscripts build-essential fakeroot rsync openssh-client ccache
 
       - uses: actions/checkout@v7
         with:
           path: dovecot
           show-progress: false
           fetch-depth: 0
+
+      # Persist ccache across runs, keyed per distro/arch 
+      - name: cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ inputs.distro }}-${{ inputs.arch }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ inputs.distro }}-${{ inputs.arch }}-
 
       # Add a distro-distinct version onto the changelog. The committed top
       # entry is UNRELEASED with a distro-neutral base version (1:...+chatmail2);
@@ -112,9 +121,20 @@ jobs:
           # `git ls-tree master^{tree}`, point it at the checked-out commit.
           branch="--git-ignore-branch --git-debian-branch=HEAD $tree_opt"
 
+          # /usr/lib/ccache/bin holds gcc/cc/g++/c++ symlinks so the build can
+          # pick up caching without debian/rules changes
+          export PATH="/usr/lib/ccache/bin:$PATH"
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          # Look for ccache stats in CI log and tune accordingly
+          ccache --max-size=2G >/dev/null
+
           # --git-no-purge: keep export tree (build-area/dovecot-*)
           # after a successful build for test step further on
           DEB_BUILD_OPTIONS="parallel=$par nocheck" timeout -k 60 75m gbp buildpackage --git-no-pristine-tar --git-no-purge $branch -us -uc
+          echo "=== ccache stats ==="
+          ccache -s
+          du -sh "$CCACHE_DIR"
+          echo "===================="
           EOF
           runuser -u builder -- bash /tmp/ci-build.sh
 
@@ -345,10 +365,19 @@ jobs:
           name: build-area-${{ inputs.distro }}-${{ inputs.arch }}
           path: build-area
 
+      # Reuse build artifacts from amd64 leg
+      - name: cache ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ inputs.distro }}-amd64-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ inputs.distro }}-amd64-
+
       - name: install reprotest and build dependencies
         run: |
           apt-get update -q
-          apt-get install -y --no-install-recommends reprotest locales-all dpkg-dev fakeroot
+          apt-get install -y --no-install-recommends reprotest locales-all dpkg-dev fakeroot ccache
           dpkg-source -x build-area/dovecot_*.dsc /tmp/dovecot-src
           apt-get build-dep -y --no-install-recommends /tmp/dovecot-src
 
@@ -358,8 +387,12 @@ jobs:
           install -d -o builder -g builder /build/reproducible-path
           cp build-area/dovecot_*.dsc build-area/dovecot_*.tar.* /build/reproducible-path/
           chown builder:builder /build/reproducible-path/*
+          # Create/own cache dir it explicitly so the unprivileged builder can read/write
+          install -d -o builder -g builder "$GITHUB_WORKSPACE/.ccache"
           cd /build/reproducible-path
           runuser -u builder -- env HOME=/home/builder \
+            CCACHE_DIR="$GITHUB_WORKSPACE/.ccache" \
+            PATH="/usr/lib/ccache/bin:$PATH" \
             DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" \
             reprotest --verbosity=1 --no-diffoscope \
               --store-dir=/home/builder/reprotest-out \
@@ -370,6 +403,11 @@ jobs:
               --vary=-fileordering \
               --vary=-aslr \
               dovecot_*.dsc -- null
+          echo "=== ccache stats  ==="
+          runuser -u builder -- env CCACHE_DIR="$GITHUB_WORKSPACE/.ccache" \
+            PATH="/usr/lib/ccache/bin:$PATH" ccache -s
+          du -sh "$GITHUB_WORKSPACE/.ccache"
+          echo "=================-==="
 
       - name: diffoscope on failure
         if: failure()
