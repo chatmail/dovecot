@@ -98,7 +98,7 @@ jobs:
                 "$GITHUB_WORKSPACE"/build-area/dovecot_*.tar.* \
                 "$GITHUB_WORKSPACE"/build-area/*.changes \
                 "$GITHUB_WORKSPACE"/build-area/*.buildinfo \
-                "${{ secrets.USERNAME }}@download.delta.chat:${{ matrix.distro }}/${version}/"; then
+                "${{ secrets.USERNAME }}@download.delta.chat:"; then
               exit 0
             fi
             echo "rsync attempt $attempt failed (rrsync dir busy?), retrying in 30s..."

@@ -56,6 +56,10 @@ jobs:
       # and is necessary for dch to accept it as an upgrade. In the build step,
       # the version extraction for the tarball is unaffected by this, and gbp
       # picks up the version from the changelog for the build.
+      #
+      # Coupled to chatmail/relay cmdeploy/src/cmdeploy/dovecot/deployer.py,
+      # To respin one distro, bump the suffix here and give _stamped_version a
+      # per-release counter in the same change.
       - name: finalize changelog for ${{ inputs.distro }}
         working-directory: dovecot
         env:
@@ -233,7 +237,7 @@ jobs:
                 "$GITHUB_WORKSPACE"/build-area/dovecot_*.tar.* \
                 "$GITHUB_WORKSPACE"/build-area/*.changes \
                 "$GITHUB_WORKSPACE"/build-area/*.buildinfo \
-                "${{ secrets.USERNAME }}@download.delta.chat:staging/${safe_branch}/${{ inputs.distro }}/"; then
+                "${{ secrets.USERNAME }}@download.delta.chat:staging/${safe_branch}/"; then
               exit 0
             fi
             echo "rsync attempt $attempt failed (rrsync dir busy?), retrying in 15s..."
