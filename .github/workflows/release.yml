@@ -94,6 +94,7 @@ jobs:
                 "$GITHUB_WORKSPACE"/build-area/dovecot-core_*.deb \
                 "$GITHUB_WORKSPACE"/build-area/dovecot-imapd_*.deb \
                 "$GITHUB_WORKSPACE"/build-area/dovecot-lmtpd_*.deb \
+                "$GITHUB_WORKSPACE"/build-area/dovecot-auth-lua_*.deb \
                 "$GITHUB_WORKSPACE"/build-area/dovecot_*.dsc \
                 "$GITHUB_WORKSPACE"/build-area/dovecot_*.tar.* \
                 "$GITHUB_WORKSPACE"/build-area/*.changes \
@@ -123,6 +124,7 @@ jobs:
             build-area/dovecot-core_*.deb \
             build-area/dovecot-imapd_*.deb \
             build-area/dovecot-lmtpd_*.deb \
+            build-area/dovecot-auth-lua_*.deb \
             build-area/dovecot_*.buildinfo
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
