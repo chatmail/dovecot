@@ -291,7 +291,8 @@ jobs:
 
       - name: build systemd-enabled testbed image
         run: |
-          autopkgtest-build-incus images:debian/${{ inputs.distro }}
+          # Use --remote to avoid build-lxd.sh passing an empty remote argument which incus 7.6 rejects
+          autopkgtest-build-incus --remote local images:debian/${{ inputs.distro }}
           # autopkgtest-build-incus publishes the customized testbed under the
           # alias autopkgtest/<distro>/<release>/<arch>, capture it
           # instead of constructing it manually
