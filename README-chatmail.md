@@ -12,12 +12,12 @@ how Debian builds and checks this package:
 | Part                             | Function                                                      | Upstream Reference                                                                                                                                                      |
 |----------------------------------|---------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `build`                          | `gbp buildpackage`                                            | [git-buildpackage manual](https://gbp.sigxcpu.org/manual)                                                                                                               |
-| pipeline shape                   | (build → autopkgtest → reprotest)                             | [salsa-ci pipeline](https://salsa.debian.org/salsa-ci-team/pipeline) [`recipes/debian.yml`](https://salsa.debian.org/salsa-ci-team/pipeline/-/raw/master/salsa-ci.yml)) |
-| `autopkgtest`                    | `debian/tests` DEP-8 in tests in Incus systemd containers     | [`ci.debian.net`](https://ci.debian.net) / [debci](https://ci.debian.net) [autopkgtest](https://salsa.debian.org/ci-team/autopkgtest)                                   |
-| `autopkgtest-build-incus / -lxd` | testbed build, its alias format drives image lookup)          | [`tools/autopkgtest-build-lxd`](https://salsa.debian.org/ci-team/autopkgtest/-/raw/master/tools/autopkgtest-build-lxd)                                                  |
-| `reprotest`                      | [Reproducible Builds](https://reproducible-builds.org/) check | [reprotest](https://salsa.debian.org/reproducible-builds/reprotest] ([manpage](https://manpages.debian.org/unstable/reprotest/reprotest.1.en.html))                     |
+| pipeline shape                   | (build → autopkgtest → reprotest)                             | [salsa-ci pipeline](https://salsa.debian.org/salsa-ci-team/pipeline) [`recipes/debian.yml`](https://salsa.debian.org/salsa-ci-team/pipeline/-/raw/master/salsa-ci.yml)  |
+| `autopkgtest`                    | `debian/tests` DEP-8 tests in Incus systemd containers        | [`ci.debian.net`](https://ci.debian.net) / [debci](https://ci.debian.net) [autopkgtest](https://salsa.debian.org/ci-team/autopkgtest)                                   |
+| `autopkgtest-build-incus / -lxd` | testbed build, its alias format drives image lookup           | [`tools/autopkgtest-build-lxd`](https://salsa.debian.org/ci-team/autopkgtest/-/raw/master/tools/autopkgtest-build-lxd)                                                  |
+| `reprotest`                      | [Reproducible Builds](https://reproducible-builds.org/) check | [reprotest](https://salsa.debian.org/reproducible-builds/reprotest) ([manpage](https://manpages.debian.org/unstable/reprotest/reprotest.1.en.html))                     |
 | Incus                            | system containers                                             | [Incus](https://linuxcontainers.org/incus/docs/)                                                                                                                        |
-| Upstream                         | Package overview and uild history                             | [Debian dovecot packaging](https://salsa.debian.org/debian/dovecot) and [package tracker](https://tracker.debian.org/pkg/dovecot)                                       |
+| Upstream                         | Package overview and build history                            | [Debian dovecot packaging](https://salsa.debian.org/debian/dovecot) and [package tracker](https://tracker.debian.org/pkg/dovecot)                                       |
 
 ### reprotest: disabled upstream, enabled here
 
@@ -35,7 +35,7 @@ Since we build/run as unpriviledged user, we enabled the test.
 
 - **`ci`** (`build-staging-deb.yml`): runs on PRs, fans out a bookworm/trixie x amd64/arm64 matrix, each combination calling the reusable
   pipeline: 
-- **`deb pipeline`** (`pipeline.yml`): used through `workflow_call`; one distro/arch combination: `build (→ autopkgtest → reprotest)`, the latter two on only on amd64
+- **`deb pipeline`** (`pipeline.yml`): used through `workflow_call`; one distro/arch combination: `build (→ autopkgtest → reprotest)`, the latter two only on amd64
   as reproducibility is unlikely to depend on architecture.
 - **`release`** (`build-deb.yml`): runs on `master` and `upstream/*` tags; builds and publishes the `.deb`s and `.buildinfo` to download.delta.chat and GitHub Releases.
 
