@@ -51,3 +51,4 @@ CVE-2026-27857-3.patch
 CVE-2026-27857-4.patch
 CVE-2026-27857-5.patch
 CVE-2026-42006.patch
+lmtp-retry-expunged-first-saved-mail.patch
