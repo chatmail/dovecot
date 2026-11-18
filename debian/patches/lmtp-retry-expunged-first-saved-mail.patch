@@ -1,0 +1,46 @@
+Description: lmtp: retry from the raw mail when the first saved mail was expunged
+ With several local recipients LMTP copies the first recipient's saved mail
+ for the others. If a client expunged that mail meanwhile, the copy fails with
+ "Message was expunged" (with zlib_save, the received date cannot be read).
+ Retry that recipient once from the raw mail received over LMTP,
+ and take the raw mail right away for the recipients after it.
+Bug: https://github.com/chatmail/relay/issues/1064
+Forwarded: no
+---
+diff --git a/src/lmtp/lmtp-local.c b/src/lmtp/lmtp-local.c
+index c20b619..88982d3 100644
+--- a/src/lmtp/lmtp-local.c
++++ b/src/lmtp/lmtp-local.c
+@@ -531,6 +531,9 @@ lmtp_local_default_do_deliver(struct lmtp_local *local,
+ 					    lldctx->session_id);
+ 		return 0;
+ 	}
++	if (error_code == MAIL_DELIVER_ERROR_TEMPORARY &&
++	    dctx->src_mail != local->raw_mail && dctx->src_mail->expunged)
++		return -2;
+ 
+ 	switch (error_code) {
+ 	case MAIL_DELIVER_ERROR_NONE:
+@@ -578,6 +581,8 @@ int lmtp_local_default_deliver(struct client *client,
+ 	dinput.session_id = lldctx->session_id;
+ 	dinput.event_parent = event;
++	if (lldctx->src_mail != local->raw_mail && lldctx->src_mail->expunged)
++		lldctx->src_mail = local->raw_mail;
+ 	dinput.src_mail = lldctx->src_mail;
+ 
+ 	/* MAIL FROM */
+ 	dinput.mail_from = trans->mail_from;
+@@ -609,6 +614,13 @@ int lmtp_local_default_deliver(struct client *client,
+ 	mail_deliver_init(&dctx, &dinput);
+ 	ret = lmtp_local_default_do_deliver(local, llrcpt, lldctx, &dctx);
+ 	mail_deliver_deinit(&dctx);
++	if (ret == -2) {
++		e_info(event, "Source mail was expunged, retrying from the raw mail");
++		dinput.src_mail = local->raw_mail;
++		mail_deliver_init(&dctx, &dinput);
++		ret = lmtp_local_default_do_deliver(local, llrcpt, lldctx, &dctx);
++		mail_deliver_deinit(&dctx);
++	}
+ 	event_unref(&event);
+ 
+ 	return ret;
